@@ -1,0 +1,177 @@
+<document>
+<header>
+<title>Resin Change Log</title>
+</header>
+<body>
+
+<s1 title="Resin Change Log">
+
+<ul>
+<li><a href="changes-2.xtp">Resin 2.1 changes</a></li>
+<li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
+</ul>
+
+<s2 title="4.0.0 snapshot">
+<ul>
+<li>security: ClusterSingleSignon logging wrong class (rep by Scott Hernandez)</li>
+<li>thread pool: improve detection of illegal internal thread state (rep by Takahiro Fukuda)</li>
+<li>(2008-04-08) thread: ThreadPool initialization needs to be synchronized because of lazy-init (rep by Dannis Devota)</li>
+<li>jsp: BeanInfo vs introspection for tags (#3066, rep by Mike McNally)</li>
+<li>classloader: maven classloader replaces osgi</li>
+<li>jsp: trimDirectiveWhitespaces was ignored for tag files (#3386, rep by kvirkki)</li>
+<li>admin: PingMailer updated to Java Injection (#3257, rep by kenjrwalker)</li>
+<li>session: timeout/listener updates (#3116, rep by Richard Grantham)</li>
+<li>rewrite: &lt;dispatch> needs to change Invocation (#3067, rep by Leonid Geller)</li>
+<li>admin: sort_webapp duplicate error in /resin-admin (#3405, rep by c. whalley)</li>
+<li>ioc: add @Produces foo(InjectionPoint ij)</li>
+<li>jsp: UTF-8 BOM should not force text/html (#3062, rep by CnXiaowei)</li>
+<li>proxy-cache: Authorization header should not disable proxy caching (#3065, rep by Daniel Wigenfors)</li>
+<li>servlet: sendRedirect URL encoding to use iso-8859-1 when character encoding set (#3032, rep by bjopet)</li>
+<li>hessian: timeout on http connection clear needs to be short (#3039, rep by Jeff Porter)</li>
+<li>http: improve error message on chunked encoding (#3021, rep by e_rajasekar)</li>
+<li>error: allow custom error page for 400 bad request errors (#3008, rep by Vinod Mehra)</li>
+<li>jsp: error parsing should ignore encoding errors (#2967, rep by Takahiro Fukuda)</li>
+<li>load balance: dynamic servers (#2867, rep by Dana P'Simer)</li>
+<li>load balance: add green load balancing (#2831)</li>
+<li>admin: added URL to thread dump when available (#3194, rep by Keith Paulson)</li>
+<li>win32: O_BINARY required for configuation saving (#3337, rep by Takahiro Fukuda)</li>
+<li>log: non-gz/zip archiving now uses rename instead of copy</li>
+<li>log: added ${request}, ${session}, ${cookie} to log format (#3255, rep by Philippe Collard)</li>
+<li>log: multiline logs like thread dumps should not have extra timestamps (#3229, rep by Jamison Novak)</li>
+<li>rewrite: &lt;dispatch> should not modify uri unless it has a target (#3295, rep by Ethan Larson)</li>
+<li>distcache: distributed cache update times must be deltas because of clock skew (#3161, rep by Dushyanth Harinath)</li>
+<li>jms: commit() NPE check (#3287, rep by tyson weihs)</li>
+<li>rewrite: new rewrite rules allow custom dispatching (#3096, rep by Leonid Geller)</li>
+<li>rewrite: &lt;rewrite:SetHeader>,&lt;rewrite: Location> (#3381, rep by Andrea Sodomaco)</li>
+<li>rewrite: request-secure disabled access log (#3354, rep by Tamas Pinter)</li>
+<li>security: &lt;secure> interaction with auth-constraint (#3333, rep by stbu)</li>
+<li>servlet: add &lt;cron> syntax for servlet (#3188, rep by mate)</li>
+<li>boot: update setuid/setgid code (#3330, rep by tlandmann)</li>
+<li>quercus: charAt needs to check range (#3363, rep by gyvc)</li>
+<li>boot: improve bind error messages for failed binding (#3193, #3204, rep by sibyj)</li>
+<li>dist: init.d/resin.in distribution changes (#3374, rep by jkriesten)</li>
+<li>(2009-03-18) mod_caucho: only allow one thread to update config for worker model</li>
+<li>win32: truncate applied incorrect file mode for new file (#3382, rep by Kair Virkki)</li>
+<li>(2009-02-26) boot: windows machines can't add -server option automatically (#3331)</li>
+<li>inject: findByName needs to work during shutdown (#3334, rep by stbu)</li>
+<li>make: "make clean" not properly propagated in modules/c/src/Makefile (#3340, rep by copart)</li>
+<li>boot: add system-class-loader configuration (#3339, rep by toomasr)</li>
+<li>servlet: run-at race condition on web-app restart (rep by stbu, #3342)</li>
+<li>boot: update messages for Quercus Personal (#3352)</li>
+<li>quercus: $f($v) with foo(&amp;$v) declaration (#3351, rep by koreth)</li>
+<li>(2009-02-23) jms: btree split off-by-one issue (#3287, rep by tyson weihs)</li>
+<li>jms: file missing primary declaration (#3287, rep by tyson weihs)</li>
+<li>hessian: Annotation support</li>
+<li>hessian: AbstractSerializer changes to improve usability</li>
+<li>hessian: META-INF/hessian/serializers and deserializers</li>
+<li>server: sync performance with Encoding (#3226, rep by lookis)</li>
+<li>quercus: hmac performance (#3297, rep by koreth)</li>
+<li>server: cron syntax not properly handling day of week (#3248, rep by mate)</li>
+<li>mod_caucho: content-length not properly propagated (#2995, rep by uwe schaefer)</li>
+<li>(2009-01-27) inject: update packaging to latest Java Injection draft</li>
+<li>make: makefiles updated to use $(CC) instead of $(LD) (#3267, rep by dicr)</li>
+<li>admin: add &lt;resin-data-directory> to replace admin path</li>
+<li>remote: &lt;remote:BamService> replaces &lt;bam-service></li>
+<li>quercus: batch compiled files (#3261, rep by koreth)</li>
+<li>quercus: strtotime with date and not time needs to zero-out time (#3177, rep by dmaa)</li>
+<li>quercus: FilterIterator (#3214, rep by koreth)</li>
+<li>quercus: stub out CURLOPT_MAXREDIRS (#3126, rep by koreth)</li>
+<li>quercus: double printing needs to match php (#3279, rep by koreth)</li>
+<li>quercus: curl CURLOPT_POSTFIELDS needs to understand array (#3281, rep by koreth)</li>
+<li>quercus: microtime() was using System.nanos() incorrectly (#3280, rep by koreth)</li>
+<li>quercus: date() not using default timezone (#3273, rep by koreth)</li>
+<li>quercus: pwd not working properly in passthru (#3247, rep by mikhailb)</li>
+<li>quercus: get_object_vars must not use iterator (#3253, rep by haplo)</li>
+<li>quercus: Java interfaces not properly populating instanceof (#3230, rep by haplo)</li>
+<li>quercus: ArrayIterator constructor issues (#3239, #3253, rep by haplo)</li>
+<li>quercus: instanceof not working with Java classes (#3242, rep by haplo)</li>
+<li>quercus: static variables related to late static binding (#3225, rep by koreth)</li>
+<li>osgi: getLocalResource needs to check for loader null (#3236, rep by koreth)</li>
+<li>jsf: f:view not bound when using jsf:ri with xml syntax (#3102, rep by alex)</li>
+<li>(2008-01-05) quercus: instanceof issues with Exceptions (#3209, rep by koreth)</li>
+<li>quercus: regexp handling of /[\p{Arabic}]/ (#3131, rep by koreth)</li>
+<li>quercus: classes scope to the dynamic class, not static class (#3213, rep by koreth)</li>
+<li>quercus: abstract class not properly initialized in statement (#3216, rep by koreth)</li>
+<li>quercus: i18n issues with "set names" (#3203, rep by M Schmidt)</li>
+<li>quercus: array copyOnWrite issue with _var vs _value (#3210, rep by koreth)</li>
+<li>quercus: array return value from external call (#347b, rep by koreth)</li>
+<li>quercus: json_decode of '{}' not handled properly, cont (#3201, rep by koreth)</li>
+<li>(2008-12-29) quercus: json_decode of '{}' not handled properly (#3197, rep by koreth)</li>
+<li>quercus: add profile-probability="0.001" to QuercusServlet (#3200, rep by koreth)</li>
+<li>quercus: NPE for preg_match and "/^x|^x/" (#3198, rep by koreth)</li>
+<li>security: add WebBeans-style configuration, e.g. &lt;sec:FormLogin>, &lt;sec:XmlAuthenticator</li>
+<li>session: convert to TriplicateCache</li>
+<li>cluster: convert to ClusterTriad</li>
+<li>watchdog: convert to BAM</li>
+<li>quercus: regexp needs to handle anchor optim (#3195, rep by koreth)</li>
+<li>install: Mac OS X flags for 64 bit</li>
+<li>security: authentication generation of cookies should be optional (#3049, rep by Eric Bowman)</li>
+<li>gzip: if application sets Vary, do not add extra Vary (#3043, rep by Eric Bowman)</li>
+<li>config: Resin config vars like ${server} should not affect JSP EL (#3078, rep by Jan Kriesten)</li>
+<li>jmx: remove admin-dummy-root for remote service (#3087, rep by dicr)</li>
+<li>jstl: ${cookie.foo} with no cookies causes NPE (#3023, rep by vicsanca)</li>
+<li>session: SessionManager.createSession check for initialization (#3074, rep by dicr)</li>
+<li>boot: watchdog communication proxy not setting proper classloader (#3174, rep by koreth)</li>
+<li>amber: @ManyToOne issue with @JoinColumn not specifying name (#3081, rep by dicr)</li>
+<li>amber: @Version fixes for java.sql.Timestamp (#3080, rep by dicr)</li>
+<li>config: webApp.url should default to http://localhost instead of http://default (#3035, rep by skipper13)</li>
+<li>config: resin:import will throw config exception is include file exists bug is not readable (#3076, rep by dicr)</li>
+<li>server: reduce default BlockManager size (#3054, rep by Daniel Vydra)</li>
+<li>amber: @Entity wasn't allowing protected constructor (#3071, rep by dicr)</li>
+<li>admin: log-service default changed to 'warning' (#3084, rep by Bryant Harris)</li>
+<li>build: debian web user should be 'www-data' (#3124, rep by Geert Van Damme)</li>
+<li>quercus: $GLOBALS array regression (#3176, rep by koreth)</li>
+<li>quercus: compress.zlib parsing error (#3171, rep by koreth)</li>
+<li>quercus: $_SERVER and $HTTP_SERVER_VARS not identical (#3168, rep by koreth)</li>
+<li>quercus: stream_get_meta_data extra logging (#3170, rep by koreth)</li>
+<li>quercus: class static fields must be handled as mangled globals (#3155, #3165, rep by koreth)</li>
+<li>quercus: DoubleValue issues in assignments, e.g. for commas (#3163, rep by koreth)</li>
+<li>quercus: array copy-on-write issues with latest optimizations (#3160, rep by koreth)</li>
+<li>quercus: unset compilation issues with latest optimizations (#3157, rep by koreth)</li>
+<li>jsf: invalid input is not redisplayed in JSF UI Input (#3057, rep by freemant)</li>
+<li>quercus: resin_save_state()/resin_restore_state() (rep by koreth)</li>
+<li>server: 304 was not properly ignoring content (#3089, rep by Andrew Phillips)</li>
+<li>quercus: catch regexp stack overflow and log (rep by koreth)</li>
+<li>quercus: array_shift regression (#3150, rep by koreth)</li>
+<li>quercus: array($x = 3) compilation issue (#3139, rep by koreth)</li>
+<li>quercus: experimental lazy function classloading (rep by koreth)</li>
+<li>quercus: NPE with func_get_args (#3103, rep by koreth)</li>
+<li>core: added StreamSource for hessian serialization</li>
+<li>hessian: added AbstractStreamSerializer and AbstractStreamDeserializer</li>
+<li>hessian: added *HessianSerializer and *HessianDeserializer pattern</li>
+<li>jsf: Application MessageBundle fixes (#3056, rep by freemant)</li>
+<li>jsf: JSF State with Serializable ActionListener (#3058, rep by freemant)</li>
+<li>server: ThreadLocal removal/cleanup</li>
+<li>admin: change profile default to 10ms</li>
+<li>http: 304 should not return content-length (#3089, rep by Andrew Phillips)</li>
+<li>admin: changed log-service default logging level to WARNING (rep by Bryant Harris)</li>
+<li>memory: DispatchRequest._invocation needs to be cleared (rep by Mattias Jiderhamn)</li>
+<li>session: clustering triplicate='true' with only one server (rep by Mark Morgan)</li>
+<li>database: NPE in ConnectionPool.destroy() (#3070, rep by dicr)</li>
+<li>thread: thread pool load smoothing (rep by Martin Thompson)</li>
+<li>boot: watchdog kill NPE (#3009, rep by stbu)</li>
+<li>persistent-store: sessions larger than 4M were not properly persisted (#3025, rep by mate)</li>
+<li>memory: removed potential ThreadLocal leak with SecurityContext (#3031, rep by Mattias Jiderhamn)</li>
+<li>admin: OSGi bundles now registered as OsgiBundleMXBean</li>
+<li>admin: WebBeans now registered as WebBeanMXBean</li>
+<li>Servlet: various fixes for Servlet TCK</li>
+<li>JSP: various fixes for JSP TCK</li>
+<li>WebBeans: javax.webbeans.manager.Manager and Bean are new SPI for WebBeans</li>
+<li>WebBeans: @Current replaces @In as default @BindingType</li>
+<li>WebBeans: &lt;Deploy> enables @DeploymentType and establishes priority</li>
+<li>WebBeans: @DeploymentType replaces old @ComponentType</li>
+<li>WebBeans: @Named semantics changes for new draft - Named is no longer a @BindingType and no longer automatically names beans</li> 
+<li>WebBeans: move web-beans.xml to root from META_INF for new draft</li>
+<li>WebBeans: new XML web-beans.xml syntax for new draft</li>
+</ul>
+</s2>
+
+<p>
+<a href="changes-3.xtp">Resin 3 changes</a>
+<a href="changes-31.xtp">Resin 3.1 changes</a>
+<a href="changes-2.xtp">Resin 1.2 changes</a>
+<a href="changes-1.xtp">older changes</a>
+</p>
+</s1>
+</body>
+</document>
