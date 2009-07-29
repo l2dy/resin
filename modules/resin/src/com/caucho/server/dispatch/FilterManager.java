@@ -29,7 +29,6 @@
 package com.caucho.server.dispatch;
 
 import com.caucho.config.Config;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.util.L10N;
@@ -37,9 +36,9 @@ import com.caucho.util.L10N;
 import javax.annotation.PostConstruct;
 import javax.servlet.Filter;
 import javax.servlet.ServletException;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.Hashtable;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.InjectionTarget;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -54,10 +53,16 @@ public class FilterManager {
   private Hashtable<String,FilterConfigImpl> _filters
     = new Hashtable<String,FilterConfigImpl>();
 
-  private ComponentImpl _comp;
+  private InjectionTarget _comp;
   
   private Hashtable<String,Filter> _instances
     = new Hashtable<String,Filter>();
+
+  private Map<String, Set<String>> _urlPatterns
+    = new HashMap<String, Set<String>>();
+
+  private Map<String, Set<String>> _servletNames
+    = new HashMap<String, Set<String>>();
 
   /**
    * Adds a filter to the filter manager.
@@ -93,6 +98,43 @@ public class FilterManager {
     }
   }
 
+  public void addFilterMapping(FilterMapping filterMapping)
+  {
+    String pattern = filterMapping.getURLPattern();
+    if (pattern != null) {
+      Set<String> urls = _urlPatterns.get(filterMapping.getName());
+
+      if (urls == null) {
+        urls = new HashSet<String>();
+
+        _urlPatterns.put(filterMapping.getName(), urls);
+      }
+
+      urls.add(pattern);
+    }
+
+    List<String> servletNames = filterMapping.getServletNames();
+    if (servletNames != null && servletNames.size() > 0) {
+      Set<String> names = _servletNames.get(filterMapping.getName());
+
+      if (names == null) {
+        names = new HashSet<String>();
+
+        _servletNames.put(filterMapping.getName(), names);
+      }
+      
+      names.addAll(servletNames);
+    }
+  }
+
+  public Set<String> getUrlPatternMappings(String filterName) {
+    return _urlPatterns.get(filterName);
+  }
+
+  public Set<String> getServletNameMappings(String filterName){
+    return _servletNames.get(filterName);
+  }
+
   /**
    * Instantiates a filter given its configuration.
    *
@@ -123,11 +165,17 @@ public class FilterManager {
         if (filter != null)
           return filter;
 	
-	InjectManager webBeans = InjectManager.create();
+	InjectManager beanManager = InjectManager.create();
       
-	_comp = (ComponentImpl) webBeans.createTransient(filterClass);
-      
-	filter = (Filter) _comp.createNoInit();
+	_comp = beanManager.createInjectionTarget(filterClass);
+
+        filter = config.getFilter();
+
+	CreationalContext env = beanManager.createCreationalContext();
+        if (filter == null)
+	  filter = (Filter) _comp.produce(env);
+
+	_comp.inject(filter, env);
 
 	// InjectIntrospector.configure(filter);
 
@@ -137,7 +185,7 @@ public class FilterManager {
         if (init != null)
           init.configure(filter);
 
-	Config.init(filter);
+	_comp.postConstruct(filter);
 
         filter.init(config);
         
@@ -194,7 +242,7 @@ public class FilterManager {
 
       try {
 	if (_comp != null)
-	  _comp.destroy(filter);
+	  _comp.preDestroy(filter);
 
         filter.destroy();
       } catch (Throwable e) {

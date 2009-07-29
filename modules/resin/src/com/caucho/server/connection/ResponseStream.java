@@ -48,8 +48,8 @@ public class ResponseStream extends ToByteResponseStream {
   static final L10N L = new L10N(ResponseStream.class);
 
   private static final int _tailChunkedLength = 7;
-  private static final byte []_tailChunked =
-    new byte[] {'\r', '\n', '0', '\r', '\n', '\r', '\n'};
+  private static final byte []_tailChunked
+    = new byte[] {'\r', '\n', '0', '\r', '\n', '\r', '\n'};
   
   private AbstractHttpResponse _response;
   
@@ -93,6 +93,9 @@ public class ResponseStream extends ToByteResponseStream {
 
   public void init(WriteStream next)
   {
+    if (next == null)
+      throw new NullPointerException();
+    
     _next = next;
   }
   
@@ -249,7 +252,8 @@ public class ResponseStream extends ToByteResponseStream {
       _response.setHeaderWritten(false);
     }
 
-    _next.setBufferOffset(_bufferStartOffset);
+    if (_next != null)
+      _next.setBufferOffset(_bufferStartOffset);
   }
 
   /**
@@ -279,6 +283,7 @@ public class ResponseStream extends ToByteResponseStream {
   /**
    * Returns the byte buffer.
    */
+  /* hessian/3544
   @Override
   public void write(byte []buffer, int offset, int length)
     throws IOException
@@ -291,6 +296,7 @@ public class ResponseStream extends ToByteResponseStream {
     else
       super.write(buffer, offset, length);
   }
+  */
 
   /**
    * Returns the byte buffer.
@@ -396,7 +402,7 @@ public class ResponseStream extends ToByteResponseStream {
 	buffer = _next.nextBuffer(offset);
 	      
 	if (log.isLoggable(Level.FINE))
-	  log.fine(dbgId() + "write-chunk(" + offset + ")");
+	  log.fine(dbgId() + "write-chunk1(" + offset + ")");
 
 	_bufferStartOffset = 8 + _next.getBufferOffset();
 	_next.setBufferOffset(_bufferStartOffset);
@@ -411,7 +417,7 @@ public class ResponseStream extends ToByteResponseStream {
 	_bufferStartOffset = _next.getBufferOffset();
 	      
 	if (log.isLoggable(Level.FINE))
-	  log.fine(dbgId() + "write-chunk(" + offset + ")");
+	  log.fine(dbgId() + "write-chunk2(" + offset + ")");
 
 	return buffer;
       }
@@ -469,7 +475,7 @@ public class ResponseStream extends ToByteResponseStream {
     }
 
     if (log.isLoggable(Level.FINE))
-      log.fine(dbgId() +  "write-chunk(" + length + ")");
+      log.fine(dbgId() +  "write-chunk3(" + length + ")");
 
     if (! _isHead) {
       // server/051e
@@ -536,7 +542,7 @@ public class ResponseStream extends ToByteResponseStream {
 
       if (_next != null && ! _isHead) {
 	if (length > 0 && log.isLoggable(Level.FINE)) {
-	  log.fine(dbgId() +  "write-chunk(" + length + ")");
+	  log.fine(dbgId() +  "write-chunk4(" + length + ")");
 	}
 	
 	if (_chunkedEncoding) {
@@ -568,7 +574,7 @@ public class ResponseStream extends ToByteResponseStream {
 	      buffer = _next.nextBuffer(bufferOffset);
 	      
 	      if (log.isLoggable(Level.FINE))
-		log.fine(dbgId() + "write-chunk(" + bufferOffset + ")");
+		log.fine(dbgId() + "write-chunk5(" + bufferOffset + ")");
 	      
 	      bufferStart = _next.getBufferOffset() + 8;
 	      bufferOffset = bufferStart;
@@ -625,8 +631,8 @@ public class ResponseStream extends ToByteResponseStream {
       CauchoRequest request = _response.getRequest();
       ServletContext app = request.getWebApp();
       
-      Exception exn =
-	  new IllegalStateException(L.l("{0}: tried to write {1} bytes beyond the content-length header {2}.  Check that the Content-Length header correctly matches the expected bytes, and ensure that any filter which modifies the content also suppresses the content-length (to use chunked encoding).",
+      Exception exn
+	= new IllegalStateException(L.l("{0}: Can't write {1} extra bytes beyond the content-length header {2}.  Check that the Content-Length header correctly matches the expected bytes, and ensure that any filter which modifies the content also suppresses the content-length (to use chunked encoding).",
 					request.getRequestURL(),
 					"" + (length + _contentLength),
 					"" + contentLengthHeader));
@@ -800,13 +806,6 @@ public class ResponseStream extends ToByteResponseStream {
           log.fine(dbgId() + "finish/keepalive");
         }
       }
-      
-      /*
-      else if (flush) {
-        //_next.flush();
-        _next.flushBuffer();
-      }
-      */
     } catch (ClientDisconnectException e) {
       _response.clientDisconnect();
       
@@ -854,7 +853,7 @@ public class ResponseStream extends ToByteResponseStream {
       }
 
       if (log.isLoggable(Level.FINE))
-	log.fine(dbgId() + "write-chunk(" + _tailChunkedLength + ")");
+	log.fine(dbgId() + "write-chunk6(" + _tailChunkedLength + ")");
     }
   }
 

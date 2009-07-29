@@ -42,26 +42,26 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.*;
 
-import javax.inject.manager.Interceptor;
+import javax.enterprise.inject.spi.Interceptor;
 
 /**
  * Represents an introspected interceptor
  */
-public class InterceptorEntry {
+public class InterceptorEntry<X> {
   private static final Logger log
     = Logger.getLogger(InterceptorEntry.class.getName());
   private static final L10N L = new L10N(InterceptorEntry.class);
 
-  private Interceptor _interceptor;
+  private Interceptor<X> _interceptor;
   
   private ArrayList<Binding> _bindings
     = new ArrayList<Binding>();
 
-  public InterceptorEntry(Interceptor interceptor)
+  public InterceptorEntry(Interceptor<X> interceptor)
   {
     _interceptor = interceptor;
 
-    for (Annotation ann : interceptor.getInterceptorBindingTypes()) {
+    for (Annotation ann : interceptor.getInterceptorBindings()) {
       _bindings.add(new Binding(ann));
     }
 
@@ -71,7 +71,7 @@ public class InterceptorEntry {
     */
   }
 
-  public Interceptor getInterceptor()
+  public Interceptor<X> getInterceptor()
   {
     return _interceptor;
   }
@@ -95,5 +95,10 @@ public class InterceptorEntry {
     }
 
     return false;
+  }
+
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _interceptor + "," + _bindings + "]";
   }
 }

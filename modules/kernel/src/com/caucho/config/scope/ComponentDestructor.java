@@ -29,19 +29,20 @@
 
 package com.caucho.config.scope;
 
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.AbstractBean;
 
 import java.io.Closeable;
-
+import javax.enterprise.context.spi.CreationalContext;
 
 /**
  * The application scope value
  */
 public class ComponentDestructor implements Closeable {
-  private ComponentImpl _owner;
+  private AbstractBean _owner;
   private Object _value;
+  private CreationalContext _env;
 
-  public ComponentDestructor(ComponentImpl owner, Object value)
+  public ComponentDestructor(AbstractBean owner, Object value)
   {
     _owner = owner;
     _value = value;
@@ -49,7 +50,7 @@ public class ComponentDestructor implements Closeable {
 
   public void close()
   {
-    _owner.destroy(_value, null);
+    _owner.destroy(_value, _env);
   }
 
   public String toString()

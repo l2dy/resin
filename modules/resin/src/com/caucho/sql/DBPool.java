@@ -31,7 +31,10 @@ package com.caucho.sql;
 
 import com.caucho.config.CauchoDeployment;
 import com.caucho.config.ConfigException;
+import com.caucho.config.SerializeHandle;
 import com.caucho.config.Names;
+import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.SingletonBean;
 import com.caucho.config.types.InitParam;
 import com.caucho.config.types.Period;
@@ -44,18 +47,21 @@ import com.caucho.util.L10N;
 import com.caucho.config.inject.HandleAware;
 import com.caucho.config.inject.InjectManager;
 
-import javax.annotation.PostConstruct;
-import javax.resource.spi.ManagedConnectionFactory;
-import javax.sql.ConnectionPoolDataSource;
-import javax.sql.DataSource;
-import javax.sql.XADataSource;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.enterprise.inject.BindingType;
+import javax.resource.spi.ManagedConnectionFactory;
+import javax.sql.ConnectionPoolDataSource;
+import javax.sql.DataSource;
+import javax.sql.XADataSource;
 
 /**
  * Manages a pool of database connections.  In addition, DBPool configures
@@ -105,6 +111,7 @@ import java.util.logging.Logger;
  * that they will be removed and closed.  This reduces the load on the DB
  * and also protects against the database dropping old connections.
  */
+
 public class DBPool
   implements DataSource, java.io.Serializable, HandleAware
 {
@@ -122,6 +129,9 @@ public class DBPool
   private String _jndiName;
   private String _tmpName;
 
+  private ArrayList<Annotation> _bindingList
+    = new ArrayList<Annotation>();
+
   private ResourceManagerImpl _resourceManager;
   private ConnectionPool _connectionPool;
 
@@ -131,6 +141,8 @@ public class DBPool
 
   // serialization handle
   private Object _serializationHandle;
+
+  private QueryAdmin _queryAdmin = new QueryAdmin(this);
 
   /**
    * Null constructor for the Driver interface; called by the JNDI
@@ -197,6 +209,18 @@ public class DBPool
   }
 
   /**
+   * Adds an annotation
+   */
+  public void addAnnotation(Annotation ann)
+  {
+    if (ann.annotationType().isAnnotationPresent(BindingType.class)) {
+      _bindingList.add(ann);
+    }
+    else
+      throw new ConfigException(L.l("'{0}' is an unsupported annotation for <database>."));
+  }
+
+  /**
    * Sets a custom driver (or data source)
    */
   public DriverConfig createDriver()
@@ -212,6 +236,36 @@ public class DBPool
     throws ConfigException
   {
     return getPool().createBackupDriver();
+  }
+
+  /**
+   * Adds a preconfigured driver using Java Injection syntax.
+   */
+  public void add(DataSource dataSource)
+  {
+    DriverConfig config = createDriver();
+
+    config.setDriverObject(dataSource);
+  }
+
+  /**
+   * Adds a preconfigured driver using Java Injection syntax.
+   */
+  public void add(ConnectionPoolDataSource dataSource)
+  {
+    DriverConfig config = createDriver();
+
+    config.setDriverObject(dataSource);
+  }
+
+  /**
+   * Adds a preconfigured driver using Java Injection syntax.
+   */
+  public void add(XADataSource dataSource)
+  {
+    DriverConfig config = createDriver();
+
+    config.setDriverObject(dataSource);
   }
 
   /**
@@ -676,6 +730,9 @@ public class DBPool
       Jndi.bindDeepShort(name, this);
     }
 
+    InjectManager manager = InjectManager.create();
+    BeanFactory factory = manager.createBeanFactory(DataSource.class);
+
     String name = _name;
     
     if (name == null)
@@ -684,18 +741,22 @@ public class DBPool
     if (name == null)
       name = _var;
 
-    SingletonBean bean;
-    if (name != null) {
-      bean = new SingletonBean(this, CauchoDeployment.class, null,
-			       new Annotation[] { Names.create(name) },
-			       DataSource.class);
-    }
-    else {
-      bean = new SingletonBean(this, CauchoDeployment.class, null,
-			       DataSource.class);
-    }
+    Annotation []bindingList = null;
 
-    InjectManager.create().addBean(bean);
+    if (_bindingList.size() > 0) {
+      factory.binding(_bindingList);
+    }
+    else if (name != null)
+      factory.binding(Names.create(name));
+
+    if (name != null)
+      factory.name(name);
+
+    // factory.stereotype(CauchoDeployment.class);
+
+    manager.addBean(factory.singleton(this));
+
+    _queryAdmin.register();
  }
 
   /**

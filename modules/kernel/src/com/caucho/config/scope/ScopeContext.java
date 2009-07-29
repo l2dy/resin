@@ -31,10 +31,13 @@ package com.caucho.config.scope;
 
 import java.lang.annotation.Annotation;
 
-import javax.context.*;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.*;
+import javax.enterprise.context.spi.*;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
 
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.ConfigContext;
+import com.caucho.config.inject.HandleAware;
 
 /**
  * Context for a named EL bean scope
@@ -84,6 +87,10 @@ abstract public class ScopeContext implements Context {
     if (creationalContext == null)
       return null;
 
+    ConfigContext env = (ConfigContext) creationalContext;
+
+    env.setScope(this, bean);
+
     if (scopeMap == null)
       scopeMap = createScopeMap();
 
@@ -93,6 +100,13 @@ abstract public class ScopeContext implements Context {
     addDestructor(bean, instance);
     
     return instance;
+  }
+
+  public void put(Contextual bean, Object instance)
+  {
+    ScopeMap scopeMap = getScopeMap();
+    
+    scopeMap.put(bean, instance);
   }
 
   protected ScopeMap getScopeMap()

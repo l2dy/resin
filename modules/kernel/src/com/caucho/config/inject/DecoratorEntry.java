@@ -42,28 +42,32 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.logging.*;
 
-import javax.inject.manager.Decorator;
+import javax.enterprise.inject.spi.Decorator;
 
 /**
  * Represents an introspected Decorator
  */
-public class DecoratorEntry {
+public class DecoratorEntry<X> {
   private static final Logger log
     = Logger.getLogger(WebComponent.class.getName());
   private static final L10N L = new L10N(WebComponent.class);
 
   private static final Class []NULL_ARG = new Class[0];
 
-  private Decorator _decorator;
+  private Decorator<X> _decorator;
   
   private ArrayList<Binding> _bindings
     = new ArrayList<Binding>();
 
-  public DecoratorEntry(Decorator decorator)
+  private BaseType _delegateType;
+
+  public DecoratorEntry(Decorator<X> decorator,
+			BaseType delegateType)
   {
     _decorator = decorator;
+    _delegateType = delegateType;
 
-    for (Annotation ann : decorator.getDelegateBindingTypes()) {
+    for (Annotation ann : decorator.getDelegateBindings()) {
       _bindings.add(new Binding(ann));
     }
 
@@ -71,9 +75,14 @@ public class DecoratorEntry {
       _bindings.add(new Binding(new CurrentLiteral()));
   }
 
-  public Decorator getDecorator()
+  public Decorator<X> getDecorator()
   {
     return _decorator;
+  }
+
+  public BaseType getDelegateType()
+  {
+    return _delegateType;
   }
 
   public boolean isMatch(Annotation []bindingAnn)

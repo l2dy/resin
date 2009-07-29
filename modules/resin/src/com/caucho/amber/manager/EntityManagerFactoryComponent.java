@@ -29,11 +29,15 @@
 
 package com.caucho.amber.manager;
 
+import java.lang.reflect.Type;
+import java.util.Set;
+import java.util.HashSet;
+
 import javax.persistence.*;
 import javax.persistence.spi.*;
-import javax.context.ApplicationScoped;
-import javax.context.CreationalContext;
-import javax.inject.manager.InjectionPoint;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 import com.caucho.amber.cfg.*;
 import com.caucho.config.inject.*;
@@ -41,21 +45,24 @@ import com.caucho.config.inject.*;
 /**
  * The Entity manager webbeans component
  */
-public class EntityManagerFactoryComponent extends FactoryComponent {
+public class EntityManagerFactoryComponent extends AbstractBean {
   private final AmberContainer _amber;
   private final PersistenceProvider _provider;
   private final PersistenceUnitConfig _unit;
   private final String _unitName;
   private EntityManagerFactory _factory;
 
-  public EntityManagerFactoryComponent(AmberContainer amber,
+  private HashSet<Type> _types = new HashSet<Type>();
+
+  public EntityManagerFactoryComponent(InjectManager beanManager,
+				       AmberContainer amber,
                                        PersistenceProvider provider,
 				       PersistenceUnitConfig unit)
   {
-    super(EntityManagerFactory.class, unit.getName());
-    setScopeType(ApplicationScoped.class);
-    addBinding(CurrentLiteral.CURRENT);
-
+    super(beanManager);
+    
+    _types.add(EntityManagerFactory.class);
+    
     _amber = amber;
     _provider = provider;
     _unit = unit;
@@ -63,18 +70,13 @@ public class EntityManagerFactoryComponent extends FactoryComponent {
   }
 
   @Override
-  public Object create()
+  public Set<Type> getTypes()
   {
-    // jpa/2110
-    if (_factory == null)
-      _factory = _amber.getEntityManagerFactory(_unit.getName());
-    
-    return _factory;
+    return _types;
   }
 
   @Override
-  protected Object createNew(CreationalContext context,
-			     InjectionPoint ij)
+  public Object create(CreationalContext context)
   {
     if (_factory == null)
       _factory = _amber.getEntityManagerFactory(_unit.getName());

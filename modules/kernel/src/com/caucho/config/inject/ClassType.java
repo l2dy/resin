@@ -49,6 +49,8 @@ import javax.annotation.*;
  */
 public class ClassType extends BaseType
 {
+  public static final BaseType OBJECT_TYPE;
+  
   private static final HashMap<Class,Class> _boxTypeMap
     = new HashMap<Class,Class>();
     
@@ -69,9 +71,68 @@ public class ClassType extends BaseType
     return _type;
   }
   
+  public Type toType()
+  {
+    return _type;
+  }
+  
+  @Override
   public boolean isMatch(Type type)
   {
     return _type.equals(type);
+  }
+
+  @Override
+  public boolean isParamAssignableFrom(BaseType type)
+  {
+    if (_type.equals(type.getRawClass()))
+      return true;
+    else if (type.isWildcard())
+      return true;
+    else
+      return false;
+  }
+    
+  @Override
+  public boolean isAssignableFrom(BaseType type)
+  {
+    if (! _type.isAssignableFrom(type.getRawClass()))
+      return false;
+    else if (type.getParameters().length > 0) {
+      for (BaseType param : type.getParameters()) {
+	if (! OBJECT_TYPE.isParamAssignableFrom(param))
+	  return false;
+      }
+
+      return true;
+    }
+    else
+      return true;
+  }
+
+  @Override
+  public BaseType findClass(InjectManager manager, Class cl)
+  {
+    if (_type.equals(cl))
+      return this;
+
+    for (Type type : _type.getGenericInterfaces()) {
+      BaseType ifaceType = manager.createBaseType(type);
+
+      BaseType baseType = ifaceType.findClass(manager, cl);
+
+      if (baseType != null)
+	return baseType;
+    }
+
+    Class superclass = _type.getSuperclass();
+
+    if (superclass == null)
+      return null;
+
+    BaseType superType = manager.createBaseType(superclass);
+
+    return superType.findClass(manager, cl);
   }
 
   public int hashCode()
@@ -105,5 +166,7 @@ public class ClassType extends BaseType
     _boxTypeMap.put(float.class, Float.class);
     _boxTypeMap.put(double.class, Double.class);
     _boxTypeMap.put(char.class, Character.class);
+
+    OBJECT_TYPE = BaseType.create(Object.class, new HashMap());
   }
 }

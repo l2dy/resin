@@ -29,22 +29,26 @@
 
 package com.caucho.server.webbeans;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.scope.ApplicationScope;
 import com.caucho.config.scope.DestructionListener;
 import com.caucho.config.scope.ScopeContext;
+import com.caucho.config.scope.ContextContainer;
 import com.caucho.server.dispatch.ServletInvocation;
 
 import java.lang.annotation.Annotation;
 import javax.servlet.*;
-import javax.context.*;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.*;
+import javax.enterprise.context.spi.*;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * Configuration for the xml web bean component.
  */
 public class RequestScope extends ScopeContext
 {
+  private ScopeIdMap _idMap = new ScopeIdMap();
+  
   /**
    * Returns true if the scope is currently active.
    */
@@ -65,16 +69,24 @@ public class RequestScope extends ScopeContext
   
   public <T> T get(Contextual<T> bean)
   {
+    if (! (bean instanceof PassivationCapable))
+      return null;
+    
     ServletRequest request = ServletInvocation.getContextRequest();
 
     if (request == null)
       return null;
 
-    ComponentImpl comp = (ComponentImpl) bean;
+    ContextContainer context
+      = (ContextContainer) request.getAttribute("webbeans.resin");
 
-    Object result = request.getAttribute(comp.getScopeId());
+    if (context != null) {
+      String id = ((PassivationCapable) bean).getId();
+      
+      return (T) context.get(id);
+    }
 
-    return (T) result;
+    return null;
   }
   
   public <T> T get(Contextual<T> bean,
@@ -85,19 +97,47 @@ public class RequestScope extends ScopeContext
     if (request == null)
       return null;
 
-    ComponentImpl comp = (ComponentImpl) bean;
+    Bean comp = (Bean) bean;
 
-    Object result = request.getAttribute(comp.getScopeId());
+    String id = ((PassivationCapable) bean).getId();
+
+    ContextContainer context
+      = (ContextContainer) request.getAttribute("webbeans.resin");
+
+    if (context == null) {
+      context = new ContextContainer();
+      request.setAttribute("webbeans.resin", context);
+    }
+    
+    Object result = context.get(id);
 
     if (result != null || creationalContext == null)
       return (T) result;
     
     result = comp.create(creationalContext);
 
-    request.setAttribute(comp.getScopeId(), result);
+    context.put(id, result);
     
     return (T) result;
   }
+
+  /*
+  public <T> T get(InjectionTarget<T> bean)
+  {
+    ServletRequest request = ServletInvocation.getContextRequest();
+
+    if (request == null)
+      return null;
+
+    Bean comp = (Bean) bean;
+
+    String id = _idMap.getId(comp);
+
+    Object result = request.getAttribute(id);
+
+    return (T) result;
+  }
+  */
 
   @Override
   public boolean canInject(ScopeContext scope)
@@ -118,7 +158,7 @@ public class RequestScope extends ScopeContext
 	    || scopeType == Dependent.class);
   }
 
-  public void addDestructor(ComponentImpl comp, Object value)
+  public void addDestructor(Bean comp, Object value)
   {
     ServletRequest request = ServletInvocation.getContextRequest();
 
@@ -130,8 +170,9 @@ public class RequestScope extends ScopeContext
 	listener = new DestructionListener();
 	request.setAttribute("caucho.destroy", listener);
       }
-      
-      listener.addValue(comp, value);
+
+      // XXX:
+      // listener.addValue(comp, value);
     }
   }
 }

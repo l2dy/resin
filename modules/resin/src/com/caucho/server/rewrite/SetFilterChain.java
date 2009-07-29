@@ -44,7 +44,7 @@ import java.io.IOException;
 public class SetFilterChain
   extends ContinueMapFilterChain
 {
-  private final Boolean _requestSecure;
+  private final Boolean _isRequestSecure;
   private final String _requestCharacterEncoding;
   private final String _responseContentType;
   private String _responseCharacterEncoding;
@@ -54,14 +54,14 @@ public class SetFilterChain
 			FilterChain accept,
 			FilterChainMapper nextFilterChainMapper,
 			String requestCharacterEncoding,
-			Boolean requestSecure,
+			Boolean isRequestSecure,
 			String responseCharacterEncoding,
 			String responseContentType)
   {
     super(uri, queryString, accept, nextFilterChainMapper);
 
     _requestCharacterEncoding = requestCharacterEncoding;
-    _requestSecure = requestSecure;
+    _isRequestSecure = isRequestSecure;
     _responseCharacterEncoding = responseCharacterEncoding;
     _responseContentType = responseContentType;
   }
@@ -75,13 +75,14 @@ public class SetFilterChain
 
     CauchoRequest oldRequest = null;
     AbstractHttpResponse cauchoResponse = null;
-    if (_requestSecure != null) {
+    if (_isRequestSecure != null) {
       CauchoRequest cauchoRequest
-	= new SetRequestSecureFilterChain.SecureServletRequestWrapper((HttpServletRequest) request);
+	= new SetRequestSecureFilterChain.SecureServletRequestWrapper((HttpServletRequest) request,
+								      _isRequestSecure);
 
-      if (response instanceof AbstractHttpResponse
+      if (response instanceof CauchoResponse
 	  && cauchoRequest.getWebApp() != null) {
-	cauchoResponse = (AbstractHttpResponse) response;
+	cauchoResponse = ((CauchoResponse) response).getAbstractHttpResponse();
 
 	oldRequest = cauchoResponse.getRequest();
 	cauchoResponse.setRequest(cauchoRequest);

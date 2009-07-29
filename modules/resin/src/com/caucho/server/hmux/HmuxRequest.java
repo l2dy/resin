@@ -288,10 +288,11 @@ public class HmuxRequest extends AbstractHttpRequest
     _hmuxProtocol = protocol;
 
     _rawWrite = conn.getWriteStream();
-    _writeStream = new WriteStream();
-    _writeStream.setReuseBuffer(true);
 
-    _response = new HmuxResponse(this, _writeStream);
+    if (_writeStream == null) {
+      _writeStream = new WriteStream();
+      _writeStream.setReuseBuffer(true);
+    }
 
     // XXX: response.setIgnoreClientDisconnect(server.getIgnoreClientDisconnect());
 
@@ -341,6 +342,17 @@ public class HmuxRequest extends AbstractHttpRequest
     _lengthBuf = new byte[16];
 
     _filter = new ServletFilter();
+  }
+
+  @Override
+  protected HmuxResponse createResponse()
+  {
+    if (_writeStream == null) {
+      _writeStream = new WriteStream();
+      _writeStream.setReuseBuffer(true);
+    }
+    
+    return new HmuxResponse(this, _writeStream);
   }
 
   public boolean isWaitForRead()
@@ -409,6 +421,7 @@ public class HmuxRequest extends AbstractHttpRequest
     try {
       HttpBufferStore httpBuffer = HttpBufferStore.allocate((Server) _server);
       startRequest(httpBuffer);
+
       _response.startRequest(httpBuffer);
 
       startInvocation();
@@ -671,6 +684,7 @@ public class HmuxRequest extends AbstractHttpRequest
 
       if (_server.isDestroyed()) {
 	log.fine(dbgId() + " request after server close");
+        killKeepalive();
 	return false;
       }
 
@@ -678,6 +692,7 @@ public class HmuxRequest extends AbstractHttpRequest
       case -1:
         if (isLoggable)
           log.fine(dbgId() + "r: end of file");
+        killKeepalive();
         return false;
 
       case HMUX_CHANNEL:
@@ -1038,12 +1053,26 @@ public class HmuxRequest extends AbstractHttpRequest
 	}
 
       default:
-        len = (is.read() << 8) + is.read();
+        {
+          int d1 = is.read();
+          int d2 = is.read();
 
-	if (isLoggable)
-	  log.fine(dbgId() + (char) code + " " + len);
-	is.skip(len);
-	break;
+          if (d2 < 0) {
+            if (isLoggable)
+              log.fine(dbgId() + "r: unexpected end of file");
+
+            killKeepalive();
+            return false;
+          }
+          
+          len = (d1 << 8) + d2;
+
+          if (isLoggable)
+            log.fine(dbgId() + (char) code + " " + len);
+        
+          is.skip(len);
+          break;
+        }
       }
     }
 

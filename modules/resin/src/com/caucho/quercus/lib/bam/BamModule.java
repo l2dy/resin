@@ -99,8 +99,7 @@ public class BamModule extends AbstractQuercusModule
 
     // create a connection lazily
     if (connection == null) {
-      HempBroker broker = 
-        InjectManager.getCurrent().getInstanceByType(HempBroker.class);
+      HempBroker broker = HempBroker.getCurrent();
 
       String jid = "php@" + env.getGlobalVar("_SERVER").get(SERVER_NAME);
       String resource = env.getGlobalVar("_SERVER").get(PHP_SELF).toString();
@@ -210,8 +209,8 @@ public class BamModule extends AbstractQuercusModule
     child.setScript(path);
     // child.setBroker(manager.getBroker());
 
-    InjectManager container = InjectManager.getCurrent();
-    container.injectObject(child);
+    //InjectManager container = InjectManager.getCurrent();
+    //container.injectObject(child);
 
     manager.addChild(jid, child);
 
@@ -269,8 +268,8 @@ public class BamModule extends AbstractQuercusModule
 
     child.setScript(path);
 
-    InjectManager container = InjectManager.getCurrent();
-    container.injectObject(child);
+    //InjectManager container = InjectManager.getCurrent();
+    //container.injectObject(child);
 
     actor.addChild(jid, child);
 

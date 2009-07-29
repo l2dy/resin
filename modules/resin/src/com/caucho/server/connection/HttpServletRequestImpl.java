@@ -47,6 +47,7 @@ import javax.servlet.*;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
 
 /**
  * User facade for http requests.
@@ -62,15 +63,17 @@ public class HttpServletRequestImpl implements CauchoRequest
 
   private HttpServletResponseImpl _response;
 
+  private AsyncListenerNode _asyncListenerNode;
+  private long _asyncTimeout = 10000;
   private ConnectionCometController _comet;
 
   private boolean _isSuspend;
-  
+
   /**
    * Create a new Request.  Because the actual initialization occurs with
    * the start() method, this just allocates statics.
    *
-   * @param server the parent server
+   * @param request
    */
   public HttpServletRequestImpl(AbstractHttpRequest request)
   {
@@ -462,8 +465,10 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public void suspend()
   {
-    if (_comet == null)
+    if (_comet == null) {
       _comet = _request.getConnection().toComet(true, this, _response);
+      _comet.setAsyncListenerNode(_asyncListenerNode);
+    }
 
     _comet.suspend();
   }
@@ -550,7 +555,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getMethod();
   }
-  
+
   /**
    * Returns the entire request URI
    */
@@ -558,7 +563,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getRequestURI();
   }
-  
+
   /**
    * Reconstructs the URL the client used for the request.
    *
@@ -568,7 +573,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getRequestURL();
   }
-  
+
   /**
    * Returns the part of the URI corresponding to the application's
    * prefix.  The first part of the URI selects applications
@@ -581,7 +586,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getContextPath();
   }
-  
+
   /**
    * Returns the URI part corresponding to the selected servlet.
    * The URI is relative to the application.
@@ -598,7 +603,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getServletPath();
   }
-  
+
   /**
    * Returns the URI part after the selected servlet and null if there
    * is no suffix.
@@ -615,7 +620,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getPathInfo();
   }
-  
+
   /**
    * Returns the physical path name for the path info.
    *
@@ -627,7 +632,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getPathTranslated();
   }
-  
+
   /**
    * Returns the request's query string.  Form based servlets will use
    * <code>ServletRequest.getParameter()</code> to decode the form values.
@@ -638,7 +643,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getQueryString();
   }
-  
+
   /**
    * Returns the first value for a request header.
    *
@@ -655,7 +660,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getHeader(name);
   }
-  
+
   /**
    * Returns all the values for a request header.  In some rare cases,
    * like cookies, browsers may return multiple headers.
@@ -667,7 +672,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getHeaders(name);
   }
-  
+
   /**
    * Returns an enumeration of all headers sent by the client.
    */
@@ -675,7 +680,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getHeaderNames();
   }
-  
+
   /**
    * Converts a header value to an integer.
    *
@@ -686,7 +691,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getIntHeader(name);
   }
-  
+
   /**
    * Converts a date header to milliseconds since the epoch.
    *
@@ -701,7 +706,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getDateHeader(name);
   }
-  
+
   /**
    * Returns an array of all cookies sent by the client.
    */
@@ -709,7 +714,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getCookies();
   }
-  
+
   /**
    * Returns a session.  If no session exists and create is true, then
    * create a new session, otherwise return null.
@@ -720,7 +725,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getSession(create);
   }
-  
+
   /**
    * Returns the current session, creating one if necessary.
    * Sessions are a convenience for keeping user state
@@ -730,7 +735,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getSession();
   }
-  
+
   /**
    * Returns the session id.  Sessions are a convenience for keeping
    * user state across requests.
@@ -741,7 +746,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getRequestedSessionId();
   }
-  
+
   /**
    * Returns true if the session is valid.
    */
@@ -749,7 +754,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isRequestedSessionIdValid();
   }
-  
+
   /**
    * Returns true if the session came from a cookie.
    */
@@ -757,7 +762,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isRequestedSessionIdFromCookie();
   }
-  
+
   /**
    * Returns true if the session came URL-encoding.
    */
@@ -765,7 +770,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isRequestedSessionIdFromURL();
   }
-  
+
   /**
    * Returns the auth type, i.e. BASIC, CLIENT-CERT, DIGEST, or FORM.
    */
@@ -773,7 +778,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getAuthType();
   }
-  
+
   /**
    * Returns the remote user if authenticated.
    */
@@ -781,7 +786,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getRemoteUser();
   }
-  
+
   /**
    * Returns true if the user is in the given role.
    */
@@ -789,7 +794,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isUserInRole(role);
   }
-  
+
   /**
    * Returns the equivalent principal object for the authenticated user.
    */
@@ -797,7 +802,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getUserPrincipal();
   }
-  
+
   /**
    * @deprecated
    */
@@ -814,22 +819,22 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getPageURI();
   }
-  
+
   public String getPageContextPath()
   {
     return _request.getPageContextPath();
   }
-  
+
   public String getPageServletPath()
   {
     return _request.getPageServletPath();
   }
-  
+
   public String getPagePathInfo()
   {
     return _request.getPagePathInfo();
   }
-  
+
   public String getPageQueryString()
   {
     return _request.getPageQueryString();
@@ -839,38 +844,38 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getWebApp();
   }
-  
+
   public ReadStream getStream()
     throws IOException
   {
     return _request.getStream();
   }
-  
+
   public int getRequestDepth(int depth)
   {
     return _request.getRequestDepth(depth);
   }
-  
+
   public void setHeader(String key, String value)
   {
     _request.setHeader(key, value);
   }
-  
+
   public boolean getVaryCookies()
   {
     return _request.getVaryCookies();
   }
-  
+
   public String getVaryCookie()
   {
     return _request.getVaryCookie();
   }
-  
+
   public void setVaryCookie(String cookie)
   {
     _request.setVaryCookie(cookie);
   }
-  
+
   public boolean getHasCookie()
   {
     return _request.getHasCookie();
@@ -885,12 +890,12 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.getMemorySession();
   }
-  
+
   public Cookie getCookie(String name)
   {
     return _request.getCookie(name);
   }
-  
+
   public void setHasCookie()
   {
     _request.setHasCookie();
@@ -901,11 +906,58 @@ public class HttpServletRequestImpl implements CauchoRequest
     return _request.isComet();
   }
 
+  /**
+   * @since Servlet 3.0
+   */
+  public boolean authenticate(HttpServletResponse response)
+    throws IOException, ServletException
+  {
+    return _request.authenticate(response);
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public Part getPart(String name)
+    throws IOException, ServletException
+  {
+    return _request.getPart(name);
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public Iterable<Part> getParts()
+    throws IOException, ServletException
+  {
+    return _request.getParts();
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public void login(String username, String password)
+    throws ServletException
+  {
+    _request.login(username, password);
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public void logout()
+    throws ServletException
+  {
+    _request.logout();
+  }
+
   public ConnectionCometController toComet()
   {
-    if (_comet == null)
+    if (_comet == null) {
       _comet = _request.getConnection().toComet(true, this, _response);
-    
+      _comet.setAsyncListenerNode(_asyncListenerNode);
+    }
+
     return _comet;
   }
 
@@ -918,12 +970,12 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isDuplex();
   }
-  
+
   public void killKeepalive()
   {
     _request.killKeepalive();
   }
-  
+
   public boolean allowKeepalive()
   {
     return _request.allowKeepalive();
@@ -943,7 +995,7 @@ public class HttpServletRequestImpl implements CauchoRequest
   {
     return _request.isLoginRequested();
   }
-  
+
   public boolean login(boolean isFail)
   {
     return _request.login(isFail);
@@ -989,7 +1041,12 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public void addAsyncListener(AsyncListener listener)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    if (_comet == null) {
+      _asyncListenerNode
+        = new AsyncListenerNode(listener, this, _response, _asyncListenerNode);
+    }
+    else
+      _comet.addAsyncListener(listener, this, _response);
   }
 
   /**
@@ -998,10 +1055,16 @@ public class HttpServletRequestImpl implements CauchoRequest
    * @since Servlet 3.0
    */
   public void addAsyncListener(AsyncListener listener,
-			       ServletRequest request,
-			       ServletResponse response)
+                               ServletRequest request,
+                               ServletResponse response)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    if (_comet == null) {
+      _asyncListenerNode
+        = new AsyncListenerNode(listener, request, response,
+                                _asyncListenerNode);
+    }
+    else
+      _comet.addAsyncListener(listener, request, response);
   }
 
   /**
@@ -1011,7 +1074,10 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public AsyncContext getAsyncContext()
   {
-    return (AsyncContext) _comet;
+    if (_comet != null)
+      return (AsyncContext) _comet;
+    else
+      throw new IllegalStateException(L.l("getAsyncContext() must be called after asyncStarted() has started a new AsyncContext."));
   }
 
   /**
@@ -1041,7 +1107,12 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public void setAsyncTimeout(long timeout)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    _asyncTimeout = timeout;
+  }
+
+  public long getAsyncTimeout()
+  {
+    return _asyncTimeout;
   }
 
   /**
@@ -1051,8 +1122,12 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public AsyncContext startAsync()
   {
-    if (_comet == null)
+    if (_comet == null) {
       _comet = _request.getConnection().toComet(true, this, _response);
+      if (_asyncTimeout > 0)
+        _comet.setMaxIdleTime(_asyncTimeout);
+      _comet.setAsyncListenerNode(_asyncListenerNode);
+    }
 
     _comet.suspend();
 
@@ -1065,14 +1140,21 @@ public class HttpServletRequestImpl implements CauchoRequest
    * @since Servlet 3.0
    */
   public AsyncContext startAsync(ServletRequest request,
-				 ServletResponse response)
+                                 ServletResponse response)
   {
-    if (_comet == null)
+    if (_comet == null) {
       _comet = _request.getConnection().toComet(false, request, response);
+      _comet.setAsyncListenerNode(_asyncListenerNode);
+    }
 
     _comet.suspend();
-    
+
     return (AsyncContext) _comet;
+  }
+
+  public DispatcherType getDispatcherType()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   @Override

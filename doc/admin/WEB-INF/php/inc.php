@@ -197,6 +197,19 @@ function format_count($count)
     return sprintf("%.1fG", $count / (1000.0 * 1000.0 * 1000.0));
 }
 
+function indent($string, $count = 2)
+{
+  $lines = explode("\n", $string);
+  $output = "";
+  $indent = str_repeat(" ", $count);
+
+  foreach ($lines as $line) {
+    $output .= $indent . $line . "\n";
+  }
+
+  return $output;
+}
+
 function uri($path)
 {
   global $home_uri;
@@ -335,10 +348,14 @@ function display_jmx($mbean_server, $group_mbeans)
       $s = "show('h$start_id');hide('s$start_id');";
       $h = "hide('h$start_id');show('s$start_id');";
 
+/*
       for ($i = 0; $i < count($attr_names); $i++) {
         $s .= "show('jmx" . ($i + $start_id) . "');";
         $h .= "hide('jmx" . ($i + $start_id) . "');";
       }
+*/
+        $s .= "show('jmx" . ($start_id) . "');";
+        $h .= "hide('jmx" . ($start_id) . "');";
       
       echo "<tr><td class='item' colspan='2'>";
       echo "<a id='s$start_id' href=\"javascript:$s\">[show]</a>\n";
@@ -346,12 +363,15 @@ function display_jmx($mbean_server, $group_mbeans)
       echo jmx_short_name($mbean->mbean_name, $group_array);
       echo "</td></tr>\n";
 
+      echo "<tr><td>";
+      echo "<table id='jmx${start_id}' class='data' style='display:none'>\n";
       $row = 0;
 
       foreach ($attr_names as $attr_name) {
         $id = "jmx" . $data_id++;
       
-        echo "<tr id='$id' style='display:none'>";
+//        echo "<tr id='$id' style='display:none'>";
+        echo "<tr>";
 	echo "<td>" . $attr_name . "</td>";
 
 	$v = $mbean->$attr_name;
@@ -362,8 +382,9 @@ function display_jmx($mbean_server, $group_mbeans)
 	
         echo "</td>\n";
 
-        echo "</tr>";
+        echo "</tr>\n";
       }
+      echo "</table>";
     }
   }
   
@@ -509,7 +530,25 @@ function display_header($script, $title, $server, $allow_remote = false)
 
   <script language='javascript' type='text/javascript'>
     function hide(id) { document.getElementById(id).style.display = 'none'; }
-    function show(id) { document.getElementById(id).style.display = ''; }
+    function show(id) { document.getElementById(id).style.display = 'block'; }
+    function showInline(id) { document.getElementById(id).style.display = 'inline'; }
+    function setValue(id, v) { document.getElementById(id).value = v; }
+    function selectChoice(root, name)
+    {
+      var textInput = document.getElementById(root + "_" + name + "_text");
+      var choice = document.getElementById(root + "_" + name + "_choice");
+      var infoId = root + "_" + name + "_" + textInput.value + "_info";
+      infoId = infoId.replace(/\./g, "_");
+
+      if (textInput.value != "")
+        hide(infoId);
+
+      textInput.value = choice.options[choice.selectedIndex].value;
+
+      infoId = root + "_" + name + "_" + textInput.value + "_info";
+      infoId = infoId.replace(/\./g, "_");
+      show(infoId);
+    }
   </script>
 </head>
 
@@ -672,11 +711,14 @@ function display_left_navigation($current_server)
     sort($client_names);
 
     foreach ($client_names as $client) {
-      $client_server = $mbean_server->lookup("resin:type=ServerConnector,name=$client");
-
       $name = $client;
       if ($name == "")
         $name = "default";
+
+      if (! $client)
+        $client = '""';
+        
+      $client_server = $mbean_server->lookup("resin:type=ClusterServer,name=$client");
 
       if ($client == $current_server->Id) {
         echo "<div class='nav-this'>$name</div>\n";
@@ -685,7 +727,7 @@ function display_left_navigation($current_server)
         echo "<div class='nav-dead'>$name</div>\n";
       }
       else {
-        echo "<div class='nav-server'><a href='?q=$g_page&server-id=$client'>";
+        echo "<div class='nav-server'><a href='?q=$g_page&server-id=$name'>";
         echo "$name</a></div>\n";
       }
     }
@@ -707,7 +749,7 @@ function info($name,$wiki="")
     $wiki = $name;
 
   echo $name;
-  echo "<sup><small><a href='http://wiki.caucho.com/Admin:$wiki' class='info'>?</a></small></sup>";
+  echo "<sup><small><a href='http://wiki.caucho.com/Admin: $wiki' class='info'>?</a></small></sup>";
 }
 
 function sort_host($a, $b)

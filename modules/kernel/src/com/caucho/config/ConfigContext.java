@@ -27,7 +27,7 @@
 
 package com.caucho.config;
 
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.Destructor;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.NodeBuilderChildProgram;
@@ -50,13 +50,17 @@ import org.w3c.dom.*;
 import javax.el.*;
 import java.io.Closeable;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.context.CreationalContext;
-import javax.context.ApplicationScoped;
-import javax.context.Dependent;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.Dependent;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.context.spi.Contextual;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 /**
  * The ConfigContext contains the state of the current configuration.
@@ -78,6 +82,10 @@ public class ConfigContext implements CreationalContext {
 
   private ConfigContext _parent;
   private DependentScope _dependentScope;
+
+  private ScopeContext _scope;
+  private Contextual<?> _bean;
+  private InjectionPoint _ij;
   
   private ArrayList<Dependency> _dependList;
   private Document _dependDocument;
@@ -95,13 +103,13 @@ public class ConfigContext implements CreationalContext {
     _parent = parent;
   }
 
-  public ConfigContext(ComponentImpl component,
+  public ConfigContext(AbstractBean bean,
 		       Object value,
 		       ScopeContext scope)
   {
     this();
 
-    _dependentScope = new DependentScope(component, value, scope);
+    _dependentScope = new DependentScope(bean, value, scope);
   }
 
   public ConfigContext(ScopeContext scope)
@@ -149,6 +157,22 @@ public class ConfigContext implements CreationalContext {
     _currentBuilder.set(builder);
   }
 
+  public InjectionPoint getInjectionPoint()
+  {
+    return _ij;
+  }
+
+  public void setInjectionPoint(InjectionPoint ij)
+  {
+    _ij = ij;
+  }
+
+  public void setScope(ScopeContext scope, Contextual<?> bean)
+  {
+    _scope = scope;
+    _bean = bean;
+  }
+
   /**
    * Returns the file var
    */
@@ -163,7 +187,7 @@ public class ConfigContext implements CreationalContext {
    * @param aThis
    * @param value
    */
-  public void addDestructor(ComponentImpl comp, Object value)
+  public void addDestructor(AbstractBean comp, Object value)
   {
     if (_dependentScope != null)
       _dependentScope.addDestructor(comp, value);
@@ -177,7 +201,7 @@ public class ConfigContext implements CreationalContext {
 
   public boolean canInject(ScopeContext scope)
   {
-    return _dependentScope == null || _dependentScope.canInject(scope);
+    return _dependentScope != null && _dependentScope.canInject(scope);
   }
 
   public boolean canInject(Class scopeType)
@@ -198,8 +222,8 @@ public class ConfigContext implements CreationalContext {
    */
   public Object get(Bean comp)
   {
-    if (_dependentScope != null && comp instanceof ComponentImpl) {
-      Object value = _dependentScope.get((ComponentImpl) comp);
+    if (_dependentScope != null && comp instanceof AbstractBean) {
+      Object value = _dependentScope.get((AbstractBean) comp);
 
       return value;
     }
@@ -218,12 +242,15 @@ public class ConfigContext implements CreationalContext {
    * @param aThis
    * @param obj
    */
-  public void put(ComponentImpl comp, Object obj)
+  public void put(AbstractBean comp, Object obj)
   {
     if (_dependentScope == null)
       _dependentScope = new DependentScope();
 
     _dependentScope.put(comp, obj);
+
+    if (_scope != null)
+      _scope.put(comp, obj);
   }
 
   public Object findByName(String name)
@@ -242,10 +269,10 @@ public class ConfigContext implements CreationalContext {
       return null;
   }
   
-  public void remove(ComponentImpl comp)
+  public void remove(Bean comp)
   {
     if (_dependentScope != null)
-      _dependentScope.remove(comp);
+      _dependentScope.remove((AbstractBean) comp);
   }
 
   /**
@@ -522,6 +549,10 @@ public class ConfigContext implements CreationalContext {
 		    childNode);
       }
 
+      // ioc/23m2
+      if ("new".equals(localName))
+	return null;
+
       throw error(L.l("'{0}' is an unknown property of '{1}'.",
 		      qName.getName(), type.getTypeName()),
 		  childNode);
@@ -545,7 +576,7 @@ public class ConfigContext implements CreationalContext {
       ConfigType childType = attrStrategy.getConfigType();
 	  
       Object value = childType.valueOf(evalObject(text));
-	  
+      
       attrStrategy.setValue(bean, qName, value);
     }
     else
@@ -557,6 +588,10 @@ public class ConfigContext implements CreationalContext {
 				      QName qName,
 				      Attribute attrStrategy)
   {
+    // ioc/2013
+    if (! attrStrategy.isSetter())
+      return false;
+    
     String text = getTextValue(childNode);
 
     if (text == null)
@@ -570,7 +605,7 @@ public class ConfigContext implements CreationalContext {
 	text = text.trim();
 	  
       Object elValue = eval(attrStrategy.getConfigType(), text);
-
+      
       // ioc/2410
       if (elValue != NULL)
 	attrStrategy.setValue(bean, qName, elValue);
@@ -613,7 +648,15 @@ public class ConfigContext implements CreationalContext {
 
     // server/0219
     // Object childBean = attrStrategy.create(parent, qName, type);
-    Object childBean = type.create(parent, qName);
+
+    Element childNew = getChildNewElement(childNode);
+
+    Object childBean;
+
+    if (childNew != null)
+      childBean = createNew(type, parent, childNew);
+    else
+      childBean = type.create(parent, qName);
 
     if (childBean == null)
       return false;
@@ -627,6 +670,67 @@ public class ConfigContext implements CreationalContext {
     attrStrategy.setValue(parent, qName, childBean);
 
     return true;
+  }
+
+  private Object configureObjectBean(ConfigType type, Element node)
+  {
+    String text = getTextValue(node);
+
+    Object value = null;
+
+    if (text != null) {
+      boolean isTrim = isTrim(node);
+	  
+      if (isEL()
+	  && (text.indexOf("#{") >= 0 || text.indexOf("${") >= 0)) {
+	if (isTrim)
+	  text = text.trim();
+	  
+	return eval(type, text);
+      }
+      else
+	return type.valueOf(text);
+    }
+    else if ((value = configureInlineObject(type, node)) != null)
+      return value;
+    else {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  private Object configureInlineObject(ConfigType type, Element node)
+  {
+    QName qName = ((QNode) node).getQName();
+    
+    type = TypeFactory.getFactory().getEnvironmentType(qName);
+
+    if (type == null) {
+      // server/6500
+      return null;
+    }
+
+    // server/0219
+    // Object childBean = attrStrategy.create(parent, qName, type);
+
+    Element childNew = getChildNewElement(node);
+
+    Object childBean;
+
+    if (childNew != null)
+      childBean = createNew(type, null, childNew);
+    else
+      childBean = type.create(null, qName);
+
+    if (childBean == null)
+      return null;
+
+    // server/1af3
+    ConfigType childType = TypeFactory.getType(childBean);
+
+    childBean = configureChildBean(childBean, childType,
+				   node, null);
+
+    return childBean;
   }
   
   private void configureBeanProperties(Node childNode,
@@ -711,6 +815,77 @@ public class ConfigContext implements CreationalContext {
     return child;
   }
 
+  private Object createNew(ConfigType type,
+				Object parent,
+				Element newNode)
+  {
+    String text = getTextValue(newNode);
+    
+    if (text != null) {
+      text = text.trim();
+      
+      return type.valueOf(create(newNode, StringType.TYPE));
+    }
+
+    int count = countNewChildren(newNode);
+
+    Constructor ctor = type.getConstructor(count);
+
+    Class []paramTypes = ctor.getParameterTypes();
+
+    Object []args = new Object[paramTypes.length];
+    int i = 0;
+    for (Node child = newNode.getFirstChild();
+	 child != null;
+	 child = child.getNextSibling()) {
+      if (! (child instanceof Element))
+	continue;
+
+      ConfigType childType = TypeFactory.getType(paramTypes[i]);
+
+      args[i++] = create(child, childType);
+    }
+
+    try {
+      return ctor.newInstance(args);
+    } catch (InvocationTargetException e) {
+      throw ConfigException.create(ctor.getName(), e.getCause());
+    } catch (Exception e) {
+      throw ConfigException.create(ctor.getName(), e);
+    }
+  }
+
+  private int countNewChildren(Element newNode)
+  {
+    int count = 0;
+    
+    for (Node child = newNode.getFirstChild();
+	 child != null;
+	 child = child.getNextSibling()) {
+      if (child instanceof Element)
+	count++;
+    }
+
+    return count;
+  }
+
+  private Element getChildNewElement(Node node)
+  {
+    if (! (node instanceof Element))
+      return null;
+    
+    Element elt = (Element) node;
+
+    for (Node child = elt.getFirstChild();
+	 child != null;
+	 child = child.getNextSibling()) {
+      if ("new".equals(child.getLocalName()))
+	return (Element) child;
+    }
+
+    return null;
+  }
+
   private boolean isEmptyText(Node node)
   {
     if (! (node instanceof CharacterData))
@@ -781,7 +956,7 @@ public class ConfigContext implements CreationalContext {
   }
 
   //
-  // XXX: required by args ...
+  // Used for args
   //
   public Object create(Node childNode, ConfigType type)
     throws ConfigException
@@ -790,7 +965,7 @@ public class ConfigContext implements CreationalContext {
       Object childBean;
       String text;
 
-      if ((text = getTextValue(childNode)) != null) {
+      if ((text = getArgTextValue(childNode)) != null) {
 	boolean isTrim = isTrim(childNode);
 
 	if (isEL() && type.isEL()
@@ -1059,7 +1234,6 @@ public class ConfigContext implements CreationalContext {
       return cData.getData();
     }
       
-
     if (! (node instanceof Element))
       return null;
 
@@ -1092,6 +1266,17 @@ public class ConfigContext implements CreationalContext {
     }
 
     return "";
+  }
+
+  /**
+   * Returns the text value of the node.
+   */
+  String getArgTextValue(Node node)
+  {
+    if (node instanceof Element && ! node.getLocalName().equals("value"))
+      return null;
+
+    return getTextValue(node);
   }
 
   private Object eval(ConfigType type, String data)
@@ -1451,6 +1636,13 @@ public class ConfigContext implements CreationalContext {
   */
 
   public void push(Object obj)
+  {
+    if (_scope != null) {
+      _scope.put(_bean, obj);
+    }
+  }
+
+  public void release()
   {
   }
 }

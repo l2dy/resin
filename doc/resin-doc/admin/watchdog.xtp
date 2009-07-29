@@ -65,6 +65,19 @@ will run with their respective user ids.</p>
 main class, <code>ResinBoot</code>.  The major operations are: start, stop, restart, shutdown
 and status.</p>
 
+<s2 title="console">
+
+<p>The "console" command starts a new Resin instance in a console window for
+development.  The standard output of the Resin instance will appear in the
+console window.</p>
+
+<example title="Example: watchdog console">
+resin-4.0.x> java -jar lib/resin.jar -conf conf/test.conf -server a console
+...
+</example>
+
+</s2>
+
 <s2 title="start">
 
 <p>The "start" command starts a new Resin instance with the given server id.
@@ -141,7 +154,7 @@ port 6600 for commands.</p>
     &lt;http port="80"/>
   &lt;/server>
 
-  &lt;resin:import path="${resin.home}/conf/app-default.xml"/>
+  &lt;resin:import path="${__DIR__}/app-default.xml"/>
 
   &lt;host id="">
     &lt;web-app id="" path="/var/www/htdocs"/>

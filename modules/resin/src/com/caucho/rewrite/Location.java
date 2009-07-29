@@ -38,6 +38,7 @@ import com.caucho.util.L10N;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -59,7 +60,60 @@ import java.util.regex.Pattern;
  * </pre>
  */
 @Configurable
-public class Location extends AbstractRewriteFilter
+public class Location extends AbstractDispatchRule
 {
+  private ArrayList<DispatchRule> _ruleList
+    = new ArrayList<DispatchRule>();
+
+  private DispatchRule []_rules = new DispatchRule[0];
+
+  /**
+   * Adds a child dispatch rule
+   */
+  public void add(DispatchRule rule)
+  {
+    _ruleList.add(rule);
+    _rules = new DispatchRule[_ruleList.size()];
+    _ruleList.toArray(_rules);
+  }
+
+  @Override
+  public FilterChain map(String uri,
+			 String queryString,
+			 FilterChain next,
+			 FilterChain tail)
+    throws ServletException
+  {
+    return super.map(uri, queryString, next, next);
+  }
+
+  @Override
+  protected FilterChain createDispatch(String uri,
+				       String queryString,
+				       String target,
+				       FilterChain next)
+  {
+    return mapChain(0, uri, queryString, next);
+  }
+
+  private FilterChain mapChain(int index,
+			       String uri, String queryString,
+			       FilterChain chain)
+  {
+    try {
+      if (_rules.length <= index)
+	return chain;
+
+      DispatchRule rule = _rules[index];
+    
+      uri = rule.rewriteUri(uri, queryString);
+
+      FilterChain next = mapChain(index + 1, uri, queryString, chain);
+
+      return rule.map(uri, queryString, next, chain);
+    } catch (ServletException e) {
+      throw ConfigException.create(e);
+    }
+  }
 }
 

@@ -36,6 +36,6 @@ package javax.servlet;
  */
 public enum SessionTrackingMode {
   COOKIE,
-  SSL,
-  URL
-}
+  URL,
+  SSL
+  }

@@ -75,23 +75,26 @@ public class HessianProxy implements InvocationHandler, Serializable {
 
   private Class _type;
   private URL _url;
-  
-  /**
-   * Package protected constructor for factory
-   */
-  HessianProxy(HessianProxyFactory factory, URL url)
-  {
-    _factory = factory;
-    _url = url;
-  }
 
   /**
    * Protected constructor for subclassing
    */
   protected HessianProxy(URL url, HessianProxyFactory factory)
   {
+    this(url, factory, null);
+  }
+
+  /**
+   * Protected constructor for subclassing
+   */
+  protected HessianProxy(URL url, HessianProxyFactory factory, Class type)
+  {
     _factory = factory;
     _url = url;
+    _type = type;
+
+    if (type == null)
+      Thread.dumpStack();
   }
 
   /**
@@ -235,12 +238,17 @@ public class HessianProxy implements InvocationHandler, Serializable {
 
 	in = _factory.getHessian2Input(is);
 
-	return in.readReply(method.getReturnType());
+	Object value = in.readReply(method.getReturnType());
+
+	return value;
       }
       else if (code == 'r') {
+	int major = is.read();
+	int minor = is.read();
+	
 	in = _factory.getHessianInput(is);
 
-	in.startReply();
+	in.startReplyBody();
 
 	Object value = in.readObject(method.getReturnType());
 
@@ -344,12 +352,10 @@ public class HessianProxy implements InvocationHandler, Serializable {
     }
   }
 
-  /*
   public Object writeReplace()
   {
-    return new HessianRemote(_type, _url);
+    return new HessianRemote(_type.getName(), _url.toString());
   }
-  */
 
   /**
    * Method that allows subclasses to add request headers such as cookies.

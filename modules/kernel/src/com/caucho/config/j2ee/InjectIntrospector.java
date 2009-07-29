@@ -29,9 +29,9 @@
 
 package com.caucho.config.j2ee;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.SingletonGenerator;
+import com.caucho.config.program.BeanValueGenerator;
 import com.caucho.config.program.ComponentValueGenerator;
 import com.caucho.config.program.FieldGeneratorProgram;
 import com.caucho.config.program.MethodGeneratorProgram;
@@ -43,18 +43,20 @@ import com.caucho.util.L10N;
 
 
 import javax.annotation.*;
+import javax.decorator.Decorates;
 import javax.ejb.EJB;
 import javax.ejb.EJBs;
 import javax.naming.*;
-import javax.inject.BindingType;
-import javax.inject.Produces;
-import javax.inject.Disposes;
-import javax.inject.Initializer;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.BindingType;
+import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.Disposes;
+import javax.enterprise.inject.Initializer;
+import javax.enterprise.inject.spi.AnnotatedField;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.Bean;
 import javax.interceptor.*;
 import javax.persistence.*;
-import javax.event.Observes;
-import javax.inject.Disposes;
+import javax.enterprise.event.Observes;
 //import javax.xml.ws.WebServiceRef;
 
 import java.beans.Introspector;
@@ -110,8 +112,8 @@ public class InjectIntrospector {
       if (annList == null)
 	annList = method.getAnnotations();
       
-      if (! isAnnotationPresent(annList, PostConstruct.class)
-	  && ! isAnnotationPresent(annList, Initializer.class)) {
+      if (! isAnnotationPresent(annList, PostConstruct.class)) {
+	// && ! isAnnotationPresent(annList, Initializer.class)) {
 	continue;
       }
 
@@ -248,6 +250,7 @@ public class InjectIntrospector {
     configureClassResources(injectList, type);
 
     for (Field field : type.getDeclaredFields()) {
+      /*
       if (hasBindingAnnotation(field)) {
         InjectManager webBeans = InjectManager.create();
 
@@ -257,43 +260,22 @@ public class InjectIntrospector {
 
         continue;
       }
+      */
       
       introspect(injectList, field);
     }
 
+    /*
     for (Method method : type.getDeclaredMethods()) {
       String fieldName = method.getName();
       Class []param = method.getParameterTypes();
 
-      /*
-      if (hasBindingAnnotation(method)) {
-        WebBeansContainer webBeans = WebBeansContainer.create();
-
-        webBeans.createProgram(injectList, method);
-
-        continue;
-      }
-      */
-
       if (param.length != 1)
         continue;
 
-      /*
-      if (fieldName.startsWith("set") && fieldName.length() > 3) {
-        fieldName = fieldName.substring(3);
-
-        char ch = fieldName.charAt(0);
-
-        if (Character.isUpperCase(ch)
-	    && (fieldName.length() == 1
-		|| Character.isLowerCase(fieldName.charAt(1)))) {
-          fieldName = Character.toLowerCase(ch) + fieldName.substring(1);
-        }
-      }
-      */
-
       introspect(injectList, method);
     }
+    */
   }
 
   public static void
@@ -397,6 +379,20 @@ public class InjectIntrospector {
 				   "", pContext);
   }
 
+  public static void introspect(ArrayList<ConfigProgram> injectList,
+				AnnotatedField field)
+    throws ConfigException
+  {
+    introspect(injectList, field.getJavaMember());
+  }
+
+  public static void introspect(ArrayList<ConfigProgram> injectList,
+				AnnotatedMethod method)
+    throws ConfigException
+  {
+    introspect(injectList, method.getJavaMember());
+  }
+
   private static void introspect(ArrayList<ConfigProgram> injectList,
 				 Field field)
     throws ConfigException
@@ -437,6 +433,8 @@ public class InjectIntrospector {
       gen = generateWebService(location, field.getType(), jndiName, webService);
     }
     */
+    else if (field.isAnnotationPresent(Decorates.class)) {
+    }
     else if (hasBindingAnnotation(field))
       introspectWebBean(injectList, field);
 
@@ -556,7 +554,9 @@ public class InjectIntrospector {
 
     bindJndi(location, jndiName, bean);
 
-    return new ComponentValueGenerator(location, (ComponentImpl) bean);
+    // return new ComponentValueGenerator(location, (AbstractBean) bean);
+
+    return new BeanValueGenerator(location, bean);
   }
 
   private static ValueGenerator
@@ -659,7 +659,7 @@ public class InjectIntrospector {
     InjectManager webBeans = InjectManager.create();
 
     boolean isOptional = false;
-    webBeans.createProgram(injectList, field, isOptional);
+    // webBeans.createProgram(injectList, field, isOptional);
   }
 
   private static void introspectWebBean(ArrayList<ConfigProgram> injectList,
@@ -668,7 +668,7 @@ public class InjectIntrospector {
   {
     InjectManager webBeans = InjectManager.create();
 
-    webBeans.createProgram(injectList, method);
+    // webBeans.createProgram(injectList, method);
   }
 
   /**

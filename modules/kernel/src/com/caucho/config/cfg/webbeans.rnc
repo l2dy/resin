@@ -15,6 +15,8 @@ w_bean-Custom = element * - w:* {
    & (attribute name { string }
       | element Named { attribute value { string }? | string }?)
   
+   & w_new?
+  
    & element ApplicationScoped { empty }?
    & element ConversationScoped { empty }?
    & element RequestScoped { empty }?
@@ -56,6 +58,13 @@ w_deploy = element Deploy {
   w_bean-Field-Custom*
   & w_standard?
   & w_production?
+  & w_class*
+  & w_stereotype*
+}
+
+w_enable = element enable {
+  w_class*
+  & w_stereotype*
 }
 
 w_component-type =
@@ -78,6 +87,10 @@ w_init = element init {
   w_Any
 }
 
+w_new =
+  attribute new { string }
+  | element new { w_Any }
+
 w_interceptors = element Interceptors {
   w_bean-Field-Custom*
 }
@@ -89,6 +102,10 @@ w_producer = element producer {
 w_production = element Production {
   empty
 }  
+
+w_stereotype = element stereotype {
+  string
+}
 
 w_type = element type {
   string
@@ -110,6 +127,8 @@ w_Beans = element Beans {
   & w_decorators?
   
   & w_deploy?
+  
+  & w_enable?
   
   & w_interceptors?
 }

@@ -37,7 +37,12 @@ import java.net.*;
 import java.util.logging.*;
 
 /**
- * Thread responsible for watching a backend server.
+ * Thread responsible for the Resin restart capability, managing and
+ * restarting the WatchdogProcess.
+ *
+ * Each WatchdogProcess corresponds to a single Resin instantiation.  When
+ * Resin exits, the WatchdogProcess completes, and WatchdogTask will
+ * create a new one.
  */
 class WatchdogTask implements Runnable
 {
@@ -54,8 +59,14 @@ class WatchdogTask implements Runnable
   WatchdogTask(Watchdog watchdog)
   {
     _watchdog = watchdog;
+
+    if (watchdog == null)
+      throw new NullPointerException();
   }
 
+  /**
+   * True if the Resin server is currently active.
+   */
   boolean isActive()
   {
     return _lifecycle.isActive();
@@ -69,6 +80,10 @@ class WatchdogTask implements Runnable
     return _lifecycle.getStateName();
   }
 
+  /**
+   * Returns the pid of the current Resin process, when the pid is
+   * available through JNI.
+   */
   int getPid()
   {
     WatchdogProcess process = _process;
@@ -78,30 +93,45 @@ class WatchdogTask implements Runnable
       return 0;
   }
 
+  /**
+   * Starts management of the watchdog process
+   */
   public void start()
   {
     if (! _lifecycle.toActive())
       return;
 
-    Thread thread = new Thread(this, "watchdog-" + _watchdog.getId());
-    thread.setDaemon(false);
-
-    thread.start();
+    ThreadPool.getCurrent().schedule(this);
   }
 
+  /**
+   * Stops the watchdog process.  Once stopped, the WatchdogProcess will
+   * not be reused.
+   */
   public void stop()
   {
     if (! _lifecycle.toDestroy())
       return;
 
     WatchdogProcess process = _process;
-    if (process != null)
+    _process = null;
+    
+    if (process != null) {
       process.stop();
+
+      process.waitForExit();
+    }
   }
 
+  /**
+   * Main thread watching over the health of the Resin instances.
+   */
   public void run()
   {
     try {
+      Thread thread = Thread.currentThread();
+      thread.setName("watchdog-" + _watchdog.getId());
+      
       int i = 0;
       long retry = Long.MAX_VALUE;
     
@@ -109,8 +139,11 @@ class WatchdogTask implements Runnable
 	String id = String.valueOf(i);
 
 	_watchdog.notifyTaskStarted();
+
+	log.info(_watchdog + " starting");
 	
 	_process = new WatchdogProcess(id, _watchdog);
+	
 	try {
 	  _process.run();
 	} catch (Exception e) {
@@ -120,9 +153,13 @@ class WatchdogTask implements Runnable
 	  _process = null;
 
 	  if (process != null)
-	    process.destroy();
+	    process.kill();
 	}
       }
+	
+      log.info(_watchdog + " stopped");
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
     } finally {
       _lifecycle.toDestroy();
 
@@ -135,11 +172,13 @@ class WatchdogTask implements Runnable
    */
   void kill()
   {
+    _lifecycle.toDestroy();
+    
     WatchdogProcess process = _process;
     _process = null;
     
     if (process != null)
-      process.destroy();
+      process.kill();
   }
 
   @Override

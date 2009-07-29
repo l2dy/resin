@@ -34,8 +34,8 @@ import com.caucho.config.gen.ApiClass;
 import com.caucho.config.gen.ApiMethod;
 import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.gen.BusinessMethodGenerator;
-import com.caucho.config.gen.TransactionChain;
 import com.caucho.config.gen.View;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.ConfigException;
@@ -56,9 +56,6 @@ import com.caucho.vfs.Path;
 import com.caucho.vfs.PersistentDependency;
 import com.caucho.vfs.Vfs;
 
-import javax.annotation.PostConstruct;
-import javax.ejb.*;
-import javax.interceptor.*;
 import java.lang.annotation.Annotation;
 import java.lang.ref.SoftReference;
 import java.util.ArrayList;
@@ -67,6 +64,12 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.lang.reflect.*;
+
+import javax.annotation.PostConstruct;
+import javax.ejb.*;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionTarget;
+import javax.interceptor.*;
 
 /**
  * Configuration for an ejb bean.
@@ -89,6 +92,8 @@ public class EjbBean extends DescriptionGroupConfig
 
   private String _ejbName;
 
+  private AnnotatedType _annotatedType;
+
   // The published name as used by IIOP, Hessian, and
   // jndi-remote-prefix/jndi-local-prefix
   private String _mappedName;
@@ -102,6 +107,8 @@ public class EjbBean extends DescriptionGroupConfig
   // these classes are loaded with the parent (configuration) loader, not
   // the server loader
   private ApiClass _ejbClass;
+
+  private InjectionTarget _injectionTarget;
 
   protected ApiClass _remoteHome;
   
@@ -159,7 +166,24 @@ public class EjbBean extends DescriptionGroupConfig
     _ejbModuleName = ejbModuleName;
 
     _loader = ejbConfig.getEjbContainer().getClassLoader();
- }
+  }
+
+  /**
+   * Creates a new entity bean configuration.
+   */
+  public EjbBean(EjbConfig ejbConfig,
+		 AnnotatedType annType,
+		 String ejbModuleName)
+  {
+    _ejbConfig = ejbConfig;
+
+    _annotatedType = annType;
+    _ejbModuleName = ejbModuleName;
+
+    setEJBClass(annType.getJavaClass());
+
+    _loader = ejbConfig.getEjbContainer().getClassLoader();
+  }
 
   public EjbConfig getConfig()
   {
@@ -187,6 +211,16 @@ public class EjbBean extends DescriptionGroupConfig
 
     // ejb/0fbb
     _aroundInvokeMethodName = aroundInvoke.getMethodName();
+  }
+
+  public void setInjectionTarget(InjectionTarget injectTarget)
+  {
+    _injectionTarget = injectTarget;
+  }
+
+  public InjectionTarget getInjectionTarget()
+  {
+    return _injectionTarget;
   }
 
   /**
@@ -417,7 +451,7 @@ public class EjbBean extends DescriptionGroupConfig
   public void setEJBClass(Class ejbClass)
     throws ConfigException
   {
-    setEJBClassWrapper(new ApiClass(ejbClass));
+    setEJBClassWrapper(new ApiClass(ejbClass, _annotatedType));
   }
 
   /**
@@ -461,8 +495,16 @@ public class EjbBean extends DescriptionGroupConfig
 
     ApiMethod method = ejbClass.getMethod("finalize", new Class[0]);
 
-    if (method != null && ! method.getDeclaringClass().equals(Object.class))
-      throw error(L.l("'{0}' may not implement finalize().  Bean implementations may not implement finalize().", ejbClass.getName()));
+    if (method != null
+	&& ! method.getMethod().getDeclaringClass().equals(Object.class)) {
+      throw error(L.l("'{0}' may not implement finalize().  Bean implementations may not implement finalize().", method.getMethod().getDeclaringClass().getName()));
+    }
+
+    if (_annotatedType == null) {
+      InjectManager manager = InjectManager.create();
+
+      _annotatedType = manager.createAnnotatedType(_ejbClass.getJavaClass());
+    }
   }
 
   /**
@@ -488,6 +530,11 @@ public class EjbBean extends DescriptionGroupConfig
   public ApiClass getEJBClassWrapper()
   {
     return _ejbClass;
+  }
+
+  public AnnotatedType getAnnotatedType()
+  {
+    return _annotatedType;
   }
 
   /**
@@ -710,10 +757,12 @@ public class EjbBean extends DescriptionGroupConfig
     if (! local.isInterface())
       throw error(L.l("'{0}' must be an interface. <local> interfaces must be interfaces.", local.getName()));
 
+    /*
     if (EJBLocalObject.class.isAssignableFrom(local.getJavaClass())) {
     }
     else if (! isAllowPOJO())
       throw new ConfigException(L.l("'{0}' must extend EJBLocalObject.  <local> interfaces must extend javax.ejb.EJBLocalObject.", local.getName()));
+    */
 
     if (! _localList.contains(local)) {
       _localList.add(local);
@@ -981,9 +1030,22 @@ public class EjbBean extends DescriptionGroupConfig
       if (getEJBClassWrapper() == null)
 	throw error(L.l("ejb-class is not defined for '{0}'",
 			getEJBName()));
-      
-      _bean = createBeanGenerator();
 
+      for (EjbMethodPattern methodPattern : _methodList) {
+	for (ApiClass localList : _localList) {
+	  for (ApiMethod apiMethod : localList.getMethods()) {
+	    methodPattern.configure(apiMethod);
+	  }
+	}
+	
+	for (ApiClass remoteList : _remoteList) {
+	  for (ApiMethod apiMethod : remoteList.getMethods()) {
+	    methodPattern.configure(apiMethod);
+	  }
+	}
+      }
+
+      /*
       if (getLocalHome() != null)
 	_bean.setLocalHome(getLocalHome());
 
@@ -997,12 +1059,17 @@ public class EjbBean extends DescriptionGroupConfig
       for (ApiClass remoteApi : _remoteList) {
 	_bean.addRemote(remoteApi);
       }
+      */
 
       // XXX: add local api
 
       introspect();
 
       initIntrospect();
+      
+      _bean = createBeanGenerator();
+
+      _bean.introspect();
 
       _bean.createViews();
 
@@ -1017,31 +1084,39 @@ public class EjbBean extends DescriptionGroupConfig
 	  throw error(L.l("'{0}' is an unknown around-invoke method",
 			  _aroundInvokeMethodName));
 	
-	_bean.setAroundInvokeMethod(method.getMethod());
+	// XXX: _bean.setAroundInvokeMethod(method.getMethod());
       }
 
+      /* XXX:
       if (interceptor != null) {
 	for (Class cl : interceptor.getInterceptors()) {
 	  _bean.addInterceptor(cl);
 	}
       }
+      */
 
+      /*
       if (_interceptors != null) {
         for (Interceptor i : _interceptors) {
           _bean.addInterceptor(i.getInterceptorJClass().getJavaClass());
         }
       }
+      */
 
       for (View view : _bean.getViews()) {
+	  /*
 	for (BusinessMethodGenerator bizMethod : view.getMethods()) {
 	  if (! isContainerTransaction())
 	    bizMethod.getXa().setContainerManaged(false);
 	}
+	  */
       }
 
+      /*
       for (EjbMethodPattern method : _methodList) {
 	method.configure(_bean);
       }
+      */
 
       for (RemoveMethod method : _removeMethods) {
 	method.configure(_bean);
@@ -1057,7 +1132,7 @@ public class EjbBean extends DescriptionGroupConfig
 
   protected void introspect()
   {
-    _bean.introspect();
+    // _bean.introspect();
   }
   
   /**
@@ -1157,71 +1232,6 @@ public class EjbBean extends DescriptionGroupConfig
   }
 
   /**
-   * Creates the views.
-   */
-  protected void createViews21()
-    throws ConfigException
-  {
-    /*
-    if (_remoteHome != null) {
-      _remoteHomeView = createHomeView(_remoteHome, "RemoteHome");
-      _remoteHomeView.introspect();
-    }
-    
-    if (_remote != null) {
-      ArrayList<ApiClass> list = new ArrayList<ApiClass>();
-      list.add(_remote);
-
-      _remoteView = createRemoteObjectView(list, "Remote", "21");
-      _remoteView.introspect();
-    }
-
-    if (_remote21 != null) {
-      ArrayList<ApiClass> list = new ArrayList<ApiClass>();
-      list.add(_remote21);
-
-      _remoteView21 = createRemoteObjectView(list, "Remote", "21");
-      _remoteView21.introspect();
-    }
-
-    else if (_remoteList.size() > 0) {
-      ArrayList<ApiClass> list = new ArrayList<ApiClass>();
-      list.addAll(_remoteList);
-      list.remove(_remote21);
-
-      if (list.size() > 0) {
-        _remoteView = createRemoteObjectView(list, "Remote", "");
-        _remoteView.introspect();
-      }
-    }
-
-    if (_localHome != null) {
-      _localHomeView = createHomeView(_localHome, "LocalHome");
-      _localHomeView.introspect();
-    }
-
-    if (_local21 != null) {
-      ArrayList<ApiClass> list = new ArrayList<ApiClass>();
-      list.add(_local21);
-
-      _localView21 = createObjectView(list, "Local", "21");
-      _localView21.introspect();
-    }
-
-    if (_localList.size() > 0) {
-      ArrayList<ApiClass> list = new ArrayList<ApiClass>();
-      list.addAll(_localList);
-      list.remove(_local21);
-
-      if (list.size() > 0) {
-        _localView = createObjectView(list, "Local", "");
-        _localView.introspect();
-      }
-    }
-    */
-  }
-
-  /**
    * Generates the class.
    */
   public void generate(JavaClassGenerator javaGen, boolean isAutoCompile)
@@ -1275,9 +1285,11 @@ public class EjbBean extends DescriptionGroupConfig
       Class []param = method.getParameterTypes();
       Class retType = method.getReturnType();
 
-      if (method.getDeclaringClass().isAssignableFrom(EJBObject.class))
+      Method javaMethod = method.getJavaMember();
+
+      if (javaMethod.getDeclaringClass().isAssignableFrom(EJBObject.class))
         continue;
-      if (method.getDeclaringClass().isAssignableFrom(EJBLocalObject.class))
+      if (javaMethod.getDeclaringClass().isAssignableFrom(EJBLocalObject.class))
         continue;
 
       if (EJBObject.class.isAssignableFrom(objectClass.getJavaClass()))
@@ -1309,7 +1321,7 @@ public class EjbBean extends DescriptionGroupConfig
                         method.getDeclaringClass().getName(),
                         getFullMethodName(method),
                         implMethod.getReturnType().getName(),
-                        getShortClassName(implMethod.getDeclaringClass()),
+                        implMethod.getDeclaringClass().getSimpleName(),
                         getFullMethodName(implMethod)));
       }
 
@@ -1340,7 +1352,7 @@ public class EjbBean extends DescriptionGroupConfig
       throw error(L.l("{0}: '{1}' expected to match {2}.{3}",
                       beanClass.getName(),
                       getFullMethodName(methodName, param),
-                      getShortClassName(sourceMethod.getDeclaringClass()),
+                      sourceMethod.getDeclaringClass().getSimpleName(),
                       getFullMethodName(sourceMethod)));
     }
     else if (method == null) {
@@ -1491,7 +1503,7 @@ public class EjbBean extends DescriptionGroupConfig
                       getFullMethodName(methodName, param)));
     }
 
-    Class declaringClass = method.getDeclaringClass();
+    ApiClass declaringClass = method.getDeclaringClass();
 
     if (method.isAbstract()) {
       if (method.getDeclaringClass().getName().equals("javax.ejb.EntityBean"))
@@ -1593,14 +1605,17 @@ public class EjbBean extends DescriptionGroupConfig
   }
 
   public CallChain getTransactionChain(CallChain next,
-                                          ApiMethod apiMethod,
-                                          ApiMethod implMethod,
-                                          String prefix)
+				       ApiMethod apiMethod,
+				       ApiMethod implMethod,
+				       String prefix)
   {
+    /*
     return TransactionChain.create(next,
 				   getTransactionAttribute(implMethod, prefix),
                                    apiMethod, implMethod, isEJB3(),
                                    _ejbConfig.getApplicationExceptions());
+    */
+    return null;
   }
 
   public CallChain getSecurityChain(CallChain next,
@@ -1704,8 +1719,7 @@ public class EjbBean extends DescriptionGroupConfig
     if (! isContainerTransaction())
       return null;
 
-    TransactionAttributeType transaction
-      = TransactionAttributeType.REQUIRED;
+    TransactionAttributeType transaction = null;
 
     EjbMethodPattern ejbMethod = getMethodPattern(null, null);
 
@@ -1984,7 +1998,7 @@ public class EjbBean extends DescriptionGroupConfig
                       caller.getDeclaringClass().getName()) +
                   L.l(" {0} must throw all {1}.{2} exceptions.",
                       caller.getName(),
-                      getShortClassName(callee.getDeclaringClass()),
+                      callee.getDeclaringClass().getSimpleName(),
                       callee.getName()));
     }
   }

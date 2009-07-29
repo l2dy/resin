@@ -6,7 +6,7 @@ import java.io.Serializable;
 /**
  * Basic implementation of an entry in the Queue.
  */
-public abstract class QueueEntry
+public abstract class QueueEntry implements Serializable
 {  
   private final int _priority;
 
@@ -44,6 +44,16 @@ public abstract class QueueEntry
     return _msgId;
   }
   
+  public long getLeaseExpires()
+  {
+    return _leaseExpire;
+  }
+  
+  public long getExpiresTime()
+  {
+    return _expiresTime;
+  }
+  
   /**
    * Returns true if we can get a lease to this entry
    */
@@ -56,6 +66,12 @@ public abstract class QueueEntry
   {
     return _readSequence != 0;
   }
+  
+  public boolean isExpired()
+  {
+    return _expiresTime > Alarm.getCurrentTime();
+  }
+  
   
   public long getReadSequence()
   {

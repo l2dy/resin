@@ -1,7 +1,7 @@
 <document>
   <header>
     <product>resin</product>
-    <version>Resin 3.1</version>
+    <version>Resin 4.0</version>
     <title>Command-Line Configuration</title>
     <description>
       <p>While most configuration options have been made available in
@@ -52,7 +52,7 @@
     </s1>
     
     <s1 title="Startup Options">
-      <p>As of Resin 3.1, startup options should be declared in the
+      <p>As of Resin 4.0, startup options should be declared in the
         configuration file. However, some startup options are available
         via the command line.</p>
       <s2 name="command-line" title="Command-line arguments">
@@ -77,6 +77,11 @@
         <td>-verbose</td>
         <td>Show the Java environment before starting Resin.</td>
         <td>off</td>
+      </tr>
+      <tr>
+        <td>console</td>
+        <td>Starts Resin in console mode for development and debugging</td>
+        <td>n/a</td>
       </tr>
       <tr>
         <td>start</td>
@@ -143,9 +148,9 @@
     </s1>
       <s1 title="JDK arguments">
 
-      <p>Resin 3.1 has moved all JDK arguments into the resin.xml
+      <p>Resin 4.0 has moved all JDK arguments into the resin.xml
       file, in the &lt;<a href="../reference/server-tags.xtp#jvm-arg">jvm-arg</a>&gt;
-      tag. Because the Resin 3.1 watchdog starts each Resin server instance,
+      tag. Because the Resin 4.0 watchdog starts each Resin server instance,
       it can pass the arguments defined in the configuration file to the JVM.
       By moving the Java arguments to the configuration file, server configuration
       is easier and more maintainable.</p>
@@ -160,6 +165,7 @@
             &lt;jvm-arg>-Xss1m&lt;/jvm-arg>
             &lt;jvm-arg>-verbosegc&lt;/jvm-arg>
             &lt;jvm-arg>-Dfoo=bar&lt;/jvm-arg>
+            &lt;jvm-arg>-Dcaucho.smallmem&lt;/jvm-arg>
             &lt;jvm-arg>-agentlib:resin&lt;/jvm-arg>
             &lt;jvm-arg>-Xdebug&lt;/jvm-arg>
             

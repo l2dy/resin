@@ -311,6 +311,19 @@ public class Hessian2Input
     readMethod();
   }
 
+  public Object []readArguments()
+    throws IOException
+  {
+    int len = readInt();
+
+    Object []args = new Object[len];
+
+    for (int i = 0; i < len; i++)
+      args[i] = readObject();
+
+    return args;
+  }
+
   /**
    * Completes reading the call
    *
@@ -1649,7 +1662,7 @@ public class Hessian2Input
 	String type = readType();
       
 	Deserializer reader;
-	reader = findSerializerFactory().getListDeserializer(null, cl);
+	reader = findSerializerFactory().getListDeserializer(type, cl);
 
 	Object v = reader.readLengthList(this, length);
 

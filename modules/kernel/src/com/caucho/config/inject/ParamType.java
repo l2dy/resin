@@ -47,20 +47,109 @@ import javax.annotation.*;
 /**
  * param type matching
  */
-public class ParamType extends BaseType
+public class ParamType extends BaseType implements ParameterizedType
 {
   private Class _type;
   private BaseType []_param;
+  private Type []_actualArguments;
+  private HashMap _paramMap;
 
-  public ParamType(Class type, BaseType []param)
+  public ParamType(Class type,
+		   BaseType []param,
+		   HashMap paramMap)
   {
     _type = type;
     _param = param;
+    _paramMap = paramMap;
+
+    _actualArguments = new Type[param.length];
+    for (int i = 0; i < param.length; i++) {
+      _actualArguments[i] = param[i].toType();
+    }
   }
   
   public Class getRawClass()
   {
     return _type;
+  }
+
+  @Override
+  public Type toType()
+  {
+    return this;
+  }
+
+  public Type []getActualTypeArguments()
+  {
+    return _actualArguments;
+  }
+
+  public Type getOwnerType()
+  {
+    return null;
+  }
+  
+  public BaseType []getParameters()
+  {
+    return _param;
+  }
+
+  @Override
+  public HashMap getParamMap()
+  {
+    return _paramMap;
+  }
+
+  public Type getRawType()
+  {
+    return _type;
+  }
+
+  @Override
+  public boolean isAssignableFrom(BaseType type)
+  {
+    // ioc/0062
+    if (! getRawClass().isAssignableFrom(type.getRawClass()))
+      return false;
+
+    BaseType []paramA = getParameters();
+    BaseType []paramB = type.getParameters();
+
+    if (paramA.length != paramB.length)
+      return false;
+
+    for (int i = 0; i < paramA.length; i++) {
+      if (! paramA[i].isParamAssignableFrom(paramB[i])) {
+	return false;
+      }
+    }
+
+    return true;
+  }
+
+  @Override
+  public BaseType findClass(InjectManager manager, Class cl)
+  {
+    if (_type.equals(cl))
+      return this;
+
+    for (Type type : _type.getGenericInterfaces()) {
+      BaseType ifaceType = manager.createBaseType(type, _paramMap);
+
+      BaseType baseType = ifaceType.findClass(manager, cl);
+
+      if (baseType != null)
+	return baseType;
+    }
+
+    Class superclass = _type.getSuperclass();
+
+    if (superclass == null)
+      return null;
+
+    BaseType superType = manager.createBaseType(superclass, _paramMap);
+
+    return superType.findClass(manager, cl);
   }
   
   public boolean isMatch(Type type)
@@ -75,7 +164,7 @@ public class ParamType extends BaseType
       return false;
 
     Type []args = pType.getActualTypeArguments();
-    
+
     if (_param.length != args.length)
       return false;
 
@@ -113,6 +202,25 @@ public class ParamType extends BaseType
     }
 
     return true;
+  }
+
+  @Override
+  public String getSimpleName()
+  {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(getRawClass().getSimpleName());
+    sb.append("<");
+
+    for (int i = 0; i < _param.length; i++) {
+      if (i != 0)
+	sb.append(",");
+      
+      sb.append(_param[i].getSimpleName());
+    }
+    sb.append(">");
+
+    return sb.toString();
   }
 
   public String toString()

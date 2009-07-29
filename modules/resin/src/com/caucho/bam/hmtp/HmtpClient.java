@@ -45,11 +45,12 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.logging.*;
 import java.security.PublicKey;
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * HMTP client protocol
  */
-public class HmtpClient extends SimpleActorClient {
+public class HmtpClient extends SimpleActorClient implements LinkClient {
   private static final Logger log
     = Logger.getLogger(HmtpClient.class.getName());
 
@@ -194,6 +195,19 @@ public class HmtpClient extends SimpleActorClient {
       _os.flush();
 
       String status = readLine(_is);
+      int statusCode = 0;
+
+      if (status != null) {
+	String []statusLine = status.split("[\\s]+");
+
+	if (statusLine.length > 2) {
+	  try {
+	    statusCode = Integer.parseInt(statusLine[1]);
+	  } catch (Exception e) {
+	    log.finer(String.valueOf(e));
+	  }
+	}
+      }
 
       String header;
 	
@@ -226,15 +240,27 @@ public class HmtpClient extends SimpleActorClient {
 	
 	if (log.isLoggable(Level.FINE))
 	  log.fine(this + " " + status + "\n" + text);
-      
-	throw new RemoteConnectionFailedException("Failed to upgrade to HMTP\n" + status + "\n\n" + text);
+
+	switch (statusCode) {
+	case 0:
+	  throw new RemoteConnectionFailedException("Failed to connect to HMTP\n" + status + "\n\n" + text);
+	  
+	case HttpServletResponse.SC_SERVICE_UNAVAILABLE:
+	  throw new RemoteConnectionFailedException("Failed to connect to HMTP because server is busy or unavailable.\n" + status + "\n\n" + text);
+	  
+	case HttpServletResponse.SC_NOT_FOUND:
+	  throw new RemoteConnectionFailedException("Failed to connect to HMTP because the HMTP service has not been enabled.\n" + status + "\n\n" + text);
+	  
+	default:
+	  throw new RemoteConnectionFailedException("Failed to upgrade to HMTP\n" + status + "\n\n" + text);
+	}
       }
     } catch (ActorException e) {
       _connException = e;
 
       throw _connException;
     } catch (IOException e) {
-      _connException = new ActorException(e);
+      _connException = new RemoteConnectionFailedException("Failed to connect to server at " + _host + ":" + _port + "\n  " + e, e);
 
       throw _connException;
     }
@@ -307,6 +333,11 @@ public class HmtpClient extends SimpleActorClient {
       return jid;
   }
 
+  public ActorStream getLinkStream()
+  {
+    return getBrokerStream();
+  }
+  
   /**
    * Returns the current stream to the broker, throwing an exception if
    * it's unavailable
@@ -352,7 +383,7 @@ public class HmtpClient extends SimpleActorClient {
   /**
    * Spawns the thread to handle the inbound packets
    */
-  protected void executeThread (Runnable r)
+  protected void executeThread(Runnable r)
   {
     Thread thread = new Thread(r);
     thread.setName("hmtp-reader-" + _host + "-" + _port);

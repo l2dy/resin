@@ -30,7 +30,6 @@
 package com.caucho.config.inject;
 
 import com.caucho.config.*;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.j2ee.*;
 import com.caucho.config.types.*;
 import com.caucho.util.*;
@@ -43,15 +42,15 @@ import java.util.ArrayList;
 import java.util.Set;
 
 import javax.annotation.*;
-import javax.context.CreationalContext;
-import javax.inject.manager.Bean;
-import javax.inject.manager.InjectionPoint;
-import javax.inject.manager.Manager;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.BeanManager;
 
 /**
  * Configuration for a @Produces method
  */
-public class ProducesInjectionPointBean extends Bean {
+public class ProducesInjectionPointBean<X> implements Bean<X> {
   private static final L10N L = new L10N(ProducesInjectionPointBean.class);
 
   private final ProducesBean _producesBean;
@@ -60,8 +59,6 @@ public class ProducesInjectionPointBean extends Bean {
   ProducesInjectionPointBean(ProducesBean producesBean,
 			     InjectionPoint ij)
   {
-    super(producesBean.getManager());
-
     _producesBean = producesBean;
     _ij = ij;
   }
@@ -79,13 +76,18 @@ public class ProducesInjectionPointBean extends Bean {
   }
 
   /**
-   * Returns the bean's deployment type
+   * Returns the bean's stereotype annotations.
    */
-  public Class<? extends Annotation> getDeploymentType()
+  public Set<Annotation> getStereotypes()
   {
-    return _producesBean.getDeploymentType();
+    return _producesBean.getStereotypes();
   }
 
+  public Class getBeanClass()
+  {
+    return _producesBean.getBeanClass();
+  }
+  
   /**
    * Returns the set of injection points, for validation.
    */
@@ -114,9 +116,9 @@ public class ProducesInjectionPointBean extends Bean {
   /**
    * Returns true if the bean is serializable
    */
-  public boolean isSerializable()
+  public boolean isPassivationCapable()
   {
-    return _producesBean.isSerializable();
+    return _producesBean.isPassivationCapable();
   }
 
   /**
@@ -130,18 +132,61 @@ public class ProducesInjectionPointBean extends Bean {
   /**
    * Returns the types that the bean exports for bindings.
    */
-  public Set<Class<?>> getTypes()
+  public Set<Type> getTypes()
   {
     return _producesBean.getTypes();
   }
   
   public Object create(CreationalContext creationalContext)
   {
-    return _producesBean.createNew(creationalContext, _ij);
+    Object instance = _producesBean.produce(creationalContext);
+    //_producesBean.inject(instance);
+
+    return instance;
+  }
+  
+  /**
+   * Instantiate the bean.
+   */
+  public X produce(CreationalContext cxt)
+  {
+    return (X) _producesBean.produce(cxt);
+  }
+  
+  /**
+   * Inject the bean.
+   */
+  public void inject(X instance, CreationalContext cxt)
+  {
+  }
+  
+  /**
+   * Call post-construct
+   */
+  public void postConstruct(X instance)
+  {
+  }
+  
+  /**
+   * Call pre-destroy
+   */
+  public void preDestroy(X instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call destroy
+   */
+  public void destroy(X instance, CreationalContext<X> env)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
+  /*
   public void destroy(Object instance)
   {
     _producesBean.destroy(instance);
   }
+  */
 }

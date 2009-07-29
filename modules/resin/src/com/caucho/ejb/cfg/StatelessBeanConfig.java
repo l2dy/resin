@@ -29,16 +29,18 @@
 
 package com.caucho.ejb.cfg;
 
+import java.lang.annotation.Annotation;
 import java.util.*;
 import java.util.logging.*;
 
 import javax.annotation.*;
-import javax.inject.manager.Bean;
+import javax.ejb.Stateless;
+import javax.enterprise.inject.AnnotationLiteral;
+import javax.enterprise.inject.spi.Bean;
 import javax.jms.*;
 
 import com.caucho.config.*;
 import com.caucho.config.cfg.AbstractBeanConfig;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.CauchoBean;
 import com.caucho.config.types.*;
 import com.caucho.ejb.manager.*;
@@ -54,71 +56,25 @@ public class StatelessBeanConfig extends AbstractBeanConfig
   private static final Logger log
     = Logger.getLogger(StatelessBeanConfig.class.getName());
 
-  private CauchoBean _bean;
-  private EjbStatelessBean _ejbBean;
-
   public StatelessBeanConfig()
   {
   }
 
-  public StatelessBeanConfig(CauchoBean beanConfig)
-  {
-    _bean = beanConfig;
-    
-    ComponentImpl comp = (ComponentImpl) beanConfig;
-
-    setClass((Class) comp.getTargetType());
-
-    // XXX:
-    //if (beanConfig.getComponentType() != null)
-    //  setComponentType(beanConfig.getComponentType());
-    
-    if (beanConfig.getName() != null)
-      setName(beanConfig.getName());
-    
-    // XXX:
-    // setScope(beanConfig.getScope());
-
-    if (comp.getInit() != null)
-      setInit(comp.getInit());
-  }
-
-  @PostConstruct
-  public void init()
+  protected void initImpl()
   {
     if (getInstanceClass() == null)
       throw new ConfigException(L.l("ejb-stateless-bean requires a 'class' attribute"));
     
-    EjbContainer ejbContainer = EjbContainer.create();
-    EjbConfigManager configManager = ejbContainer.getConfigManager();
+    final String name = getName();
 
-    EjbStatelessBean bean = new EjbStatelessBean(configManager, "config");
-    bean.setEJBClass(getInstanceClass());
+    Annotation ann = new Stateless() {
+	public Class annotationType() { return Stateless.class; }
+	public String name() { return name; }
+	public String mappedName() { return name; }
+	public String description() { return ""; }
+    };
 
-    String name = getName();
-    
-    if (name == null)
-      name = getJndiName();
-
-    if (name == null)
-      name = getInstanceClass().getSimpleName();
-
-    bean.setEJBName(name);
-
-    if (getInit() != null)
-      bean.setInit(getInit());
-
-    _ejbBean = bean;
-
-    configManager.setBeanConfig(name, bean);
-
-    // XXX: timing?
-    // configManager.start();
-  }
-
-  public Bean getInjectBean()
-  {
-    return _bean;
+    add(ann);
   }
 }
 

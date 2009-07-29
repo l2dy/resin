@@ -37,7 +37,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.spi.Bean;
 
 /**
  * Administration for an injection Bean queue
@@ -129,19 +129,6 @@ public class InjectBeanAdmin extends AbstractManagedObject
     nameList.toArray(names);
 
     return names;
-  }
-
-  /**
-   * Returns the @DeploymentType attribute
-   */
-  public String getDeploymentType()
-  {
-    Class annType = _bean.getDeploymentType();
-
-    if (annType != null)
-      return annType.getName();
-    else
-      return null;
   }
 
   /**

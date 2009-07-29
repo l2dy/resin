@@ -19,7 +19,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
@@ -32,8 +33,9 @@ import static java.lang.annotation.ElementType.*;
 import static java.lang.annotation.RetentionPolicy.*;
 import java.lang.annotation.*;
 
-import javax.annotation.Stereotype;
-import javax.context.ApplicationScoped;
+import javax.ejb.Startup;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.inject.stereotype.Stereotype;
 
 /**
  * @Service is a startup @Stereotype for an @ApplicationScoped bean
@@ -41,7 +43,7 @@ import javax.context.ApplicationScoped;
  */
 
 @Stereotype
-@ServiceStartup  
+@Startup  
 @ApplicationScoped
 @Documented  
 @Retention(RUNTIME)

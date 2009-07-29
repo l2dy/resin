@@ -29,35 +29,42 @@
 
 package com.caucho.ejb.session;
 
-import com.caucho.config.*;
-import com.caucho.config.inject.ComponentImpl;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.SingletonBean;
-import com.caucho.ejb.AbstractContext;
-import com.caucho.ejb.AbstractServer;
-import com.caucho.ejb.cfg.*;
-import com.caucho.ejb.manager.EjbContainer;
-
-import javax.ejb.*;
-import javax.annotation.Named;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.logging.Logger;
 
+import javax.ejb.EJBHome;
+import javax.ejb.EJBLocalHome;
+import javax.ejb.SessionContext;
+import javax.enterprise.inject.Named;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
+
+import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.ManagedBeanImpl;
+import com.caucho.ejb.AbstractContext;
+import com.caucho.ejb.AbstractServer;
+import com.caucho.ejb.manager.EjbContainer;
+
 /**
  * Server container for a session bean.
  */
-abstract public class SessionServer extends AbstractServer
-{
-  private final static Logger log
-    = Logger.getLogger(SessionServer.class.getName());
+abstract public class SessionServer extends AbstractServer {
+  private final static Logger log = Logger.getLogger(SessionServer.class
+      .getName());
 
-  private HashMap<Class,ComponentImpl> _componentMap
-    = new HashMap<Class,ComponentImpl>();
+  @SuppressWarnings("unchecked")
+  private HashMap<Class, InjectionTarget> _componentMap = new HashMap<Class, InjectionTarget>();
 
-  public SessionServer(EjbContainer manager)
+  @SuppressWarnings("unchecked")
+  private Bean _bean;
+
+  @SuppressWarnings("unchecked")
+  public SessionServer(EjbContainer manager, AnnotatedType annotatedType)
   {
-    super(manager);
+    super(manager, annotatedType);
   }
 
   @Override
@@ -66,12 +73,19 @@ abstract public class SessionServer extends AbstractServer
     return "session:";
   }
 
+  @SuppressWarnings("unchecked")
+  @Override
+  public Bean getDeployBean()
+  {
+    return _bean;
+  }
+
   /**
    * Initialize the server
    */
+  @SuppressWarnings("unchecked")
   @Override
-  public void init()
-    throws Exception
+  public void init() throws Exception
   {
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -80,20 +94,19 @@ abstract public class SessionServer extends AbstractServer
       thread.setContextClassLoader(_loader);
 
       super.init();
-      
-      SingletonBean comp
-	= new SessionSingletonBean(getSessionContext(), getEjbClass());
 
-      _component = comp;
+      InjectManager beanManager = InjectManager.create();
 
-      InjectManager inject = InjectManager.create();
+      BeanFactory factory = beanManager.createBeanFactory(SessionContext.class);
 
-      inject.addBean(comp);
+      _component = factory.singleton(getSessionContext());
+
+      beanManager.addBean(_component);
 
       if (_localHomeClass != null)
-	_localHome = (EJBLocalHome) getLocalObject(_localHomeClass);
+        _localHome = (EJBLocalHome) getLocalObject(_localHomeClass);
       if (_remoteHomeClass != null)
-	_remoteHome = (EJBHome) getRemoteObject(_remoteHomeClass);
+        _remoteHome = (EJBHome) getRemoteObject(_remoteHomeClass);
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -103,6 +116,7 @@ abstract public class SessionServer extends AbstractServer
     log.fine(this + " initialized");
   }
 
+  @SuppressWarnings("unchecked")
   private void registerWebBeans()
   {
     Class beanClass = getBeanSkelClass();
@@ -110,62 +124,65 @@ abstract public class SessionServer extends AbstractServer
     ArrayList<Class> remoteApiList = getRemoteApiList();
 
     if (beanClass != null && (localApiList != null || remoteApiList != null)) {
-      InjectManager webBeans = InjectManager.create();
+      InjectManager beanManager = InjectManager.create();
 
       String beanName = getEJBName();
       Named named = (Named) beanClass.getAnnotation(Named.class);
 
       if (named != null)
-	beanName = named.value();
+        beanName = named.value();
+
+      ManagedBeanImpl mBean = beanManager.createManagedBean(getAnnotatedType());
+
+      Class baseApi = beanClass;
 
       if (localApiList != null) {
-	for (Class api : localApiList) {
-	  ComponentImpl comp = createSessionComponent(api, getEjbClass());
-
-	  comp.setTargetType(api);
-
-	  comp.setName(beanName);
-
-	  comp.init();
-
-	  webBeans.addComponentByName(beanName, comp);
-	  webBeans.addComponentByType(api, comp);
-	  
-	  _componentMap.put(api, comp);
-	}
+        for (Class api : localApiList) {
+          baseApi = api;
+        }
       }
-      
+
       if (remoteApiList != null) {
-	for (Class api : remoteApiList) {
-	  ComponentImpl comp = createSessionComponent(api, getEjbClass());
-
-	  comp.setTargetType(api);
-
-	  comp.setName(beanName);
-
-	  comp.init();
-	  webBeans.addComponentByName(beanName, comp);
-	  webBeans.addComponentByType(api, comp);
-
-	  _componentMap.put(api, comp);
-	}
+        for (Class api : remoteApiList) {
+          baseApi = api;
+        }
       }
+
+      _bean = createBean(mBean, baseApi);
+
+      beanManager.addBean(_bean);
+
+      /*
+       * if (remoteApiList != null) { for (Class api : remoteApiList) {
+       * factory.type(api); } }
+       */
+
+      // XXX: component
+      // beanManager.addBean(factory.bean());
     }
+  }
+
+  @SuppressWarnings("unchecked")
+  protected Bean createBean(ManagedBeanImpl mBean, Class api)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   protected void bindInjection()
   {
     super.bindInjection();
 
-    for (ComponentImpl comp : _componentMap.values()) {
-      comp.bind();
-    }
+    /*
+     * for (ComponentImpl comp : _componentMap.values()) { comp.bind(); }
+     */
   }
-  
-  abstract protected ComponentImpl
-    createSessionComponent(Class api, Class beanClass);
 
-  protected ComponentImpl getComponent(Class api)
+  @SuppressWarnings("unchecked")
+  abstract protected InjectionTarget createSessionComponent(Class api,
+      Class beanClass);
+
+  @SuppressWarnings("unchecked")
+  protected InjectionTarget getComponent(Class api)
   {
     return _componentMap.get(api);
   }
@@ -173,6 +190,7 @@ abstract public class SessionServer extends AbstractServer
   /**
    * Returns the object key from a handle.
    */
+  @SuppressWarnings("unchecked")
   @Override
   public Class getPrimaryKeyClass()
   {

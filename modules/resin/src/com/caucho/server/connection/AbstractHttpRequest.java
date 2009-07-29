@@ -34,40 +34,33 @@ import com.caucho.i18n.CharacterEncoding;
 import com.caucho.security.AbstractLogin;
 import com.caucho.security.Login;
 import com.caucho.security.RoleMapManager;
-import com.caucho.security.SecurityContext;
 import com.caucho.security.SecurityContextProvider;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.port.TcpConnection;
-import com.caucho.server.security.AbstractAuthenticator;
 import com.caucho.server.session.SessionImpl;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.server.webapp.ErrorPageManager;
 import com.caucho.util.*;
-import com.caucho.vfs.BufferedReaderAdapter;
-import com.caucho.vfs.Encoding;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.*;
 
 import javax.servlet.*;
+import javax.servlet.annotation.MultipartConfig;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
+import javax.servlet.http.Part;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.io.InputStream;
 import java.net.InetAddress;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -101,6 +94,8 @@ public abstract class AbstractHttpRequest
   public static final String JSP_EXCEPTION = "javax.servlet.jsp.jspException";
   
   public static final String SHUTDOWN = "com.caucho.shutdown";
+
+  public static final String MULTIPARTCONFIG = "com.caucho.multipart-config";
   
   private static final String CHAR_ENCODING = "resin.form.character.encoding";
   private static final String FORM_LOCALE = "resin.form.local";
@@ -129,7 +124,12 @@ public abstract class AbstractHttpRequest
   protected final Connection _conn;
   protected final TcpConnection _tcpConn;
 
-  protected AbstractHttpResponse _response;
+  protected final AbstractHttpResponse _response;
+
+  // Connection stream
+  protected final ReadStream _rawRead;
+  // Stream for reading post contents
+  protected final ReadStream _readStream;
 
   protected Invocation _invocation;
 
@@ -159,11 +159,6 @@ public abstract class AbstractHttpRequest
   private boolean _sessionIsLoaded;
   private SessionImpl _session;
 
-  // Connection stream
-  protected final ReadStream _rawRead;
-  // Stream for reading post contents
-  protected final ReadStream _readStream;
-
   // True if the post stream has been initialized
   protected boolean _hasReadStream;
 
@@ -185,6 +180,7 @@ public abstract class AbstractHttpRequest
   private final HashMapImpl<String,String[]> _form
     = new HashMapImpl<String,String[]>();
   private HashMapImpl<String,String[]> _filledForm;
+  private List<Part> _parts;
   
   private final HashMapImpl<String,Object> _attributes
     = new HashMapImpl<String,Object>();
@@ -215,6 +211,7 @@ public abstract class AbstractHttpRequest
     _server = server;
 
     _conn = conn;
+    
     if (conn != null)
       _rawRead = conn.getReadStream();
     else
@@ -229,7 +226,11 @@ public abstract class AbstractHttpRequest
     _readStream.setReuseBuffer(true);
 
     _bufferedReader = new BufferedReaderAdapter(_readStream);
+
+    _response = createResponse();
   }
+
+  abstract protected AbstractHttpResponse createResponse();
 
   /**
    * Initialization.
@@ -264,7 +265,7 @@ public abstract class AbstractHttpRequest
   /**
    * Prepare the Request object for a new request.
    *
-   * @param s the raw connection stream
+   * @param httpBuffer the raw connection stream
    */
   protected void startRequest(HttpBufferStore httpBuffer)
     throws IOException
@@ -1166,7 +1167,7 @@ public abstract class AbstractHttpRequest
    * Parses a single cookie
    *
    * @param cookies the array of cookies read
-   * @param rawCook the input for the cookie
+   * @param rawCookie the input for the cookie
    */
   private void fillCookie(ArrayList cookies, CharSegment rawCookie)
   {
@@ -1379,8 +1380,6 @@ public abstract class AbstractHttpRequest
 
   /**
    * Returns the current session.
-   *
-   * @param create true if a new session should be created
    *
    * @return the current session
    */
@@ -1750,8 +1749,6 @@ public abstract class AbstractHttpRequest
 	  log.finer("authentication failed, no login module found for "
 		    + app);
 
-	Thread.dumpStack();
-      
 	_response.sendError(HttpServletResponse.SC_FORBIDDEN);
 	
 	return false;
@@ -1880,7 +1877,7 @@ public abstract class AbstractHttpRequest
 
     if (user == null) {
       if (log.isLoggable(Level.FINE))
-        log.fine("no user for isUserInRole");
+        log.fine(this + " no user for isUserInRole");
     
       return false;
     }
@@ -1900,15 +1897,17 @@ public abstract class AbstractHttpRequest
     
     Login login = app == null ? null : app.getLogin();
 
-    boolean inRole = login.isUserInRole(user, role);
-      
+    boolean inRole = login != null && login.isUserInRole(user, role);
+
     if (log.isLoggable(Level.FINE)) {
-      if (user == null)
-        log.fine("no user for isUserInRole");
+      if (login == null)
+        log.fine(this + " no Login for isUserInRole");
+      else if (user == null)
+        log.fine(this + " no user for isUserInRole");
       else if (inRole)
-        log.fine(user + " is in role: " + role);
+        log.fine(this + " " + user + " is in role: " + role);
       else
-        log.fine("failed " + user + " in role: " + role);
+        log.fine(this + " failed " + user + " in role: " + role);
     }
 
     return inRole;
@@ -2169,6 +2168,24 @@ public abstract class AbstractHttpRequest
           return _form;
         }
 
+        MultipartConfig multipartConfig
+          = (MultipartConfig) getAttribute(MULTIPARTCONFIG);
+
+        long fileUploadMax = -1;
+
+        if (multipartConfig != null) {
+          formUploadMax = multipartConfig.maxRequestSize();
+          fileUploadMax = multipartConfig.maxFileSize();
+        }
+
+        if (multipartConfig != null &&
+            formUploadMax > 0 &&
+            formUploadMax < getLongContentLength())
+          throw new IllegalStateException(L.l(
+            "multipart form data request's Content-Length '{0}' is greater then configured in @MultipartConfig.maxRequestSize value: '{1}'",
+            getLongContentLength(),
+            formUploadMax));
+
         i += "boundary=".length();
         char ch = contentType.charAt(i);
         CharBuffer boundary = new CharBuffer();
@@ -2189,12 +2206,16 @@ public abstract class AbstractHttpRequest
           }
         }
 
+        _parts = new ArrayList<Part>();
+        
         try {
           MultipartForm.parsePostData(_form,
+                                      _parts,
                                       getStream(false), boundary.toString(),
                                       this,
                                       javaEncoding,
-                                      formUploadMax);
+                                      formUploadMax,
+                                      fileUploadMax);
         } catch (IOException e) {
           log.log(Level.FINE, e.toString(), e);
           setAttribute("caucho.multipart.form.error", e.getMessage());
@@ -2802,6 +2823,11 @@ public abstract class AbstractHttpRequest
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  public long getAsyncTimeout()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   /**
    * Starts an async mode
    *
@@ -2821,6 +2847,106 @@ public abstract class AbstractHttpRequest
 				 ServletResponse response)
   {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public DispatcherType getDispatcherType()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public boolean authenticate(HttpServletResponse response)
+    throws IOException, ServletException
+  {
+    Login login = getLogin();
+
+    if (login == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    Principal principal = login.login(this, response, true);
+
+    if (principal != null)
+      return true;
+
+    return false;
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public void login(String username, String password)
+    throws ServletException
+  {
+    Login login = getLogin();
+
+    if (login == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    if (! login.isPasswordBased())
+      throw new ServletException(L.l("Authentication mechanism '{0}' does not support password authentication", login));
+
+    removeAttribute(Login.LOGIN_USER);
+    removeAttribute(Login.LOGIN_PASSWORD);
+    
+    Principal principal = login.getUserPrincipal(this);
+
+    if (principal != null)
+      throw new ServletException(L.l("UserPrincipal object has already been established"));
+
+    setAttribute(Login.LOGIN_USER, username);
+    setAttribute(Login.LOGIN_PASSWORD, password);
+
+    try {
+      login.login(this, getResponse(), true);
+    }
+    finally {
+      removeAttribute(Login.LOGIN_USER);
+      removeAttribute(Login.LOGIN_PASSWORD);
+    }
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public Part getPart(String name)
+    throws IOException, ServletException
+  {
+    if (! getContentType().startsWith("multipart/form-data"))
+      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
+    
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+
+    for (Part part : _parts) {
+      if (name.equals(part.getName()))
+        return part;
+    }
+
+    return null;
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public Iterable<Part> getParts()
+    throws IOException, ServletException
+  {
+    if (! getContentType().startsWith("multipart/form-data"))
+      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
+
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+    
+    return _parts;
+  }
+
+  public Part createPart(String name, Map<String, List<String>> headers) {
+    return new PartImpl(name, headers);
   }
 
   /**
@@ -2846,7 +2972,6 @@ public abstract class AbstractHttpRequest
   /**
    * Prepare the Request object for a new request.
    *
-   * @param s the raw connection stream
    */
   protected void startInvocation()
     throws IOException
@@ -2948,6 +3073,184 @@ public abstract class AbstractHttpRequest
   protected String dbgId()
   {
     return "Tcp[" + _conn.getId() + "] ";
+  }
+
+  private class PartImpl implements Part {
+    private String _name;
+    private Map<String, List<String>> _headers;
+    private Object _value;
+    private Path _newPath;
+
+    private PartImpl(String name, Map<String, List<String>> headers)
+    {
+      _name = name;
+      _headers = headers;
+    }
+
+    public void delete()
+      throws IOException
+    {
+      if (_newPath != null)
+        _newPath.remove();
+      
+      Object value = getValue();
+
+      if (! (value instanceof FilePath))
+        throw new IOException(L.l("Part.delete() is not applicable to part '{0}':'{1}'", _name, value));
+
+      ((FilePath)value).remove();
+    }
+
+    public String getContentType()
+    {
+      String[] value = _filledForm.get(_name + ".content-type");
+
+      if (value != null && value.length > 0)
+        return value[0];
+
+      return null;
+    }
+
+    public String getHeader(String name)
+    {
+      List<String> values = _headers.get(name);
+
+      if (values != null && values.size() > 0)
+        return values.get(0);
+
+      return null;
+    }
+
+    public Iterable<String> getHeaderNames()
+    {
+      return _headers.keySet();
+    }
+
+    public Iterable<String> getHeaders(String name)
+    {
+      return _headers.get(name);
+    }
+
+    public InputStream getInputStream()
+      throws IOException
+    {
+      Object value = getValue();
+
+      if (value instanceof FilePath)
+        return ((FilePath)value).openRead();
+
+      throw new IOException(L.l("Part.getInputStream() is not applicable to part '{0}':'{1}'", _name, value));
+    }
+
+    public String getName()
+    {
+      return _name;
+    }
+
+    public long getSize()
+    {
+      Object value = getValue();
+
+      if (value instanceof FilePath) {
+        return ((Path) value).getLength();
+      }
+      else if (value instanceof String) {
+        return -1;
+      }
+      else if (value == null) {
+        return -1;
+      }
+      else {
+        log.finest(L.l("Part.getSize() is not applicable to part'{0}':'{1}'",
+                       _name, value));
+
+        return -1;
+      }
+    }
+
+    public void write(String fileName)
+      throws IOException
+    {
+
+      if (_newPath != null)
+        throw new IOException(L.l(
+          "Contents of part '{0}' has already been written to '{1}'",
+          _name,
+          _newPath));
+
+      Path path;
+
+      Object value = getValue();
+
+      if (!(value instanceof FilePath))
+        throw new IOException(L.l(
+          "Part.write() is not applicable to part '{0}':'{1}'",
+          _name,
+          value));
+      else
+        path = (Path) value;
+
+      MultipartConfig mc = (MultipartConfig) getAttribute(MULTIPARTCONFIG);
+      String location = mc.location().replace('\\', '/');
+      fileName = fileName.replace('\\', '/');
+
+      String file;
+
+      if (location.charAt(location.length() -1) != '/' && fileName.charAt(fileName.length() -1) != '/')
+        file = location + '/' + fileName;
+      else
+        file = location + fileName;
+
+      _newPath = Vfs.lookup(file);
+
+      if (_newPath.exists())
+        throw new IOException(L.l("File '{0}' already exists.", _newPath));
+
+      Path parent = _newPath.getParent();
+
+      if (! parent.exists())
+        if (! parent.mkdirs())
+          throw new IOException(L.l("Unable to create path '{0}'. Check permissions.", parent));
+
+      if (! path.renameTo(_newPath)) {
+        WriteStream out = null;
+
+        try {
+          out = _newPath.openWrite();
+
+          path.writeToStream(out);
+
+          out.flush();
+
+          out.close();
+        } catch (IOException e) {
+          log.log(Level.SEVERE, L.l("Cannot write contents of '{0}' to '{1}'", path, _newPath), e);
+
+          throw e;
+        } finally {
+          if (out != null)
+            out.close();
+        }
+      }
+    }
+
+    private Object getValue() {
+      if (_value != null)
+        return _value;
+      
+      String []values = _filledForm.get(_name + ".file");
+
+      if (values != null && values.length > 0) {
+        _value = Vfs.lookup(values[0]);
+      } else {
+        values = _filledForm.get(_name);
+
+        if (values != null && values.length > 0)
+          _value = values[0];
+      }
+
+      return _value;
+    }
   }
 
   static {

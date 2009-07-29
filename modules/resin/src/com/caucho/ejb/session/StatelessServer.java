@@ -29,15 +29,20 @@
 
 package com.caucho.ejb.session;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.j2ee.*;
 import com.caucho.config.program.*;
+import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.ejb.AbstractContext;
 import com.caucho.ejb.EJBExceptionWrapper;
+import com.caucho.ejb.inject.StatelessBeanImpl;
 import com.caucho.ejb.manager.EjbContainer;
 import com.caucho.ejb.protocol.*;
+import com.caucho.util.L10N;
 
 import javax.ejb.*;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.logging.Level;
@@ -47,6 +52,8 @@ import java.util.logging.Logger;
  * Server home container for a stateless session bean
  */
 public class StatelessServer extends SessionServer {
+  private static final L10N L = new L10N(StatelessServer.class);
+  
   protected static Logger log
     = Logger.getLogger(StatelessServer.class.getName());
 
@@ -60,9 +67,10 @@ public class StatelessServer extends SessionServer {
    * @param allowJVMCall allows fast calls to the same JVM (with serialization)
    * @param config the session configuration from the ejb.xml
    */
-  public StatelessServer(EjbContainer ejbContainer)
+  public StatelessServer(EjbContainer ejbContainer,
+			 AnnotatedType annotatedType)
   {
-    super(ejbContainer);
+    super(ejbContainer, annotatedType);
   }
 
   @Override
@@ -91,8 +99,22 @@ public class StatelessServer extends SessionServer {
   {
     return getStatelessContext().getProvider(api);
   }
+
+  protected Bean createBean(ManagedBeanImpl mBean, Class api)
+  {
+    StatelessProvider provider = getStatelessContext().getProvider(api);
+
+    if (provider == null)
+      throw new NullPointerException(L.l("'{0}' is an unknown api for {1}",
+					 api, getStatelessContext()));
+    
+    StatelessBeanImpl statelessBean
+      = new StatelessBeanImpl(this, mBean, provider);
+
+    return statelessBean;
+  }
   
-  protected ComponentImpl createSessionComponent(Class api, Class beanClass)
+  protected InjectionTarget createSessionComponent(Class api, Class beanClass)
   {
     StatelessProvider provider = getStatelessContext().getProvider(api);
 
@@ -230,6 +252,7 @@ public class StatelessServer extends SessionServer {
    */
   Object getObjectHandle(StatelessObject obj, Class api)
   {
+    /* XXX:
     ComponentImpl comp = getComponent(api);
 
     // XXX: remote handle differently
@@ -237,6 +260,9 @@ public class StatelessServer extends SessionServer {
       return comp.getHandle();
     else
       return new ObjectSkeletonWrapper(obj.getHandle());
+    */
+    
+    return new ObjectSkeletonWrapper(obj.getHandle());
   }
 
   /**

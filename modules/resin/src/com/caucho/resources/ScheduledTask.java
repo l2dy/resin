@@ -26,32 +26,40 @@
  *
  * @author Scott Ferguson
  */
-
 package com.caucho.resources;
 
-import com.caucho.config.ConfigException;
-import com.caucho.config.Service;
-import com.caucho.config.Unbound;
-import com.caucho.config.Configurable;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.cfg.BeanConfig;
-import com.caucho.config.types.*;
-import com.caucho.loader.*;
-import com.caucho.util.*;
-import com.caucho.server.connection.*;
-import com.caucho.server.util.ScheduledThreadPool;
-import com.caucho.server.webapp.*;
+import java.util.Date;
+import java.util.TimerTask;
+import java.util.concurrent.Executor;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
-import javax.context.Dependent;
-import javax.inject.AnnotationLiteral;
-import javax.el.*;
+import javax.el.ELContext;
+import javax.el.MethodExpression;
+import javax.enterprise.inject.Current;
+import javax.enterprise.inject.Instance;
 import javax.resource.spi.work.Work;
-import javax.servlet.*;
-import javax.inject.Current;
-import java.util.*;
-import java.util.concurrent.Executor;
-import java.util.logging.*;
+import javax.servlet.RequestDispatcher;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
+import com.caucho.config.Service;
+import com.caucho.config.Unbound;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.types.CronType;
+import com.caucho.config.types.Period;
+import com.caucho.config.types.Trigger;
+import com.caucho.loader.Environment;
+import com.caucho.loader.EnvironmentClassLoader;
+import com.caucho.loader.EnvironmentListener;
+import com.caucho.server.connection.StubServletRequest;
+import com.caucho.server.connection.StubServletResponse;
+import com.caucho.server.util.ScheduledThreadPool;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.util.Alarm;
+import com.caucho.util.AlarmListener;
+import com.caucho.util.L10N;
 
 /**
  * The cron resources starts application Work tasks at cron-specified
@@ -80,6 +88,9 @@ public class ScheduledTask
   private MethodExpression _method;
   
   private String _url;
+
+  @SuppressWarnings("unused")
+  private @Current Instance<WebApp> _webAppInstance;
   private WebApp _webApp;
   
   private Alarm _alarm;
@@ -147,12 +158,12 @@ public class ScheduledTask
     
     _url = url;
 
-    _webApp
-      = InjectManager.create().getInstanceByType(WebApp.class);
+    _webApp = WebApp.getCurrent();
 
-    if (_webApp == null)
+    /*
       throw new ConfigException(L.l("relative url '{0}' requires web-app context",
 				    url));
+    */
   }
 
   /**

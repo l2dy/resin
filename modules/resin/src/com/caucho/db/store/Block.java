@@ -59,6 +59,7 @@ abstract public class Block implements SyncCacheListener {
 
   private final Object _writeLock = new Object();
   private final AtomicBoolean _isWriting = new AtomicBoolean();
+  private final AtomicInteger _writeCount = new AtomicInteger();
   private volatile boolean _isWriteRequired;
 
   private boolean _isFlushDirtyOnCommit;
@@ -153,6 +154,9 @@ abstract public class Block implements SyncCacheListener {
   public void read()
     throws IOException
   {
+    if (_isValid)
+      return;
+    
     synchronized (this) {
       if (! _isValid) {
 	if (log.isLoggable(Level.FINEST))
@@ -188,6 +192,18 @@ abstract public class Block implements SyncCacheListener {
   public void write()
     throws IOException
   {
+    if (_writeCount.getAndIncrement() < 2) {
+      try {
+        writeImpl();
+      } finally {
+        _writeCount.getAndDecrement();
+      }
+    }
+  }
+
+  private void writeImpl()
+    throws IOException
+  {
     synchronized (_writeLock) {
       int dirtyMin = 0;
       int dirtyMax = 0;
@@ -215,9 +231,7 @@ abstract public class Block implements SyncCacheListener {
 	if (log.isLoggable(Level.FINEST))
 	  log.finest("write db-block " + this + " [" + dirtyMin + ", " + dirtyMax + "]");
 
-	//System.out.println(this + " WRITE_BEGIN");
 	writeImpl(dirtyMin, dirtyMax - dirtyMin);
-	//System.out.println(this + " WRITE_END");
       } finally {
 	free();
       }
@@ -282,6 +296,12 @@ abstract public class Block implements SyncCacheListener {
   public boolean isDirty()
   {
     return _dirtyMin < _dirtyMax;
+  }
+
+  public void deallocate()
+    throws IOException
+  {
+    getStore().freeBlock(getBlockId());
   }
 
   /**

@@ -208,7 +208,7 @@ public class UnicodeModule extends AbstractQuercusModule {
   public static Value iconv_substr(Env env,
                        StringValue str,
                        int offset,
-                       @Optional("7fffffff") int length,
+                       @Optional("0x7fffffff") int length,
                        @Optional("") String charset)
   {
     if (charset.length() == 0)
@@ -332,7 +332,7 @@ public class UnicodeModule extends AbstractQuercusModule {
       Encoder encoder;
       
       if (isEndUtf8)
-        encoder = new Utf8Encoder(outCharset);
+        encoder = new Utf8Encoder();
       else
         encoder = Encoder.create(outCharset);
       

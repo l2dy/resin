@@ -30,6 +30,7 @@
 package com.caucho.config.gen;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.SerializeHandle;
 import com.caucho.java.JavaWriter;
 import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.util.L10N;
@@ -37,11 +38,11 @@ import java.io.*;
 import java.lang.reflect.*;
 import java.lang.annotation.*;
 import java.util.*;
-import javax.annotation.NonBinding;
-import javax.annotation.Stereotype;
 import javax.decorator.Decorator;
-import javax.inject.BindingType;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.NonBinding;
+import javax.enterprise.inject.BindingType;
+import javax.enterprise.inject.stereotype.Stereotype;
+import javax.enterprise.inject.spi.Bean;
 import javax.interceptor.Interceptor;
 import javax.interceptor.InterceptorBindingType;
 
@@ -63,19 +64,26 @@ public class PojoBean extends BeanGenerator {
   private boolean _hasReadResolve;
   private boolean _isReadResolveEnhanced;
   private boolean _isSingleton;
+  private boolean _isSerializeHandle;
   
-  public PojoBean(Class beanClass)
+  public PojoBean(ApiClass beanClass)
   {
-    super(beanClass.getName() + "$ResinWebBean", new ApiClass(beanClass));
+    super(beanClass.getName() + "$ResinWebBean", beanClass);
 
     setSuperClassName(beanClass.getName());
-    addInterfaceName("java.io.Serializable");
+
+    if (beanClass.isAnnotationPresent(SerializeHandle.class)) {
+      _isSerializeHandle = true;
+      
+      addInterfaceName("java.io.Serializable");
+      addInterfaceName("com.caucho.config.inject.HandleAware");
+    }
     
     addImport("javax.transaction.*");
+
+    _view = new PojoView(this, getBeanClass());
     
-    _view = new PojoView(this, getEjbClass());
-    
-    _beanClass = new ApiClass(beanClass);
+    _beanClass = beanClass;
   }
 
   public void setSingleton(boolean isSingleton)
@@ -83,12 +91,13 @@ public class PojoBean extends BeanGenerator {
     _isSingleton = isSingleton;
   }
 
+  @Override
   public void introspect()
   {
     super.introspect();
     
-    introspectClass(_beanClass.getJavaClass());
-    
+    introspectClass(_beanClass);
+
     for (ApiMethod method : _beanClass.getMethods()) {
       if (Object.class.equals(method.getDeclaringClass()))
 	continue;
@@ -100,29 +109,27 @@ public class PojoBean extends BeanGenerator {
 
       int index = _businessMethods.size();
       BusinessMethodGenerator bizMethod
-	= new BusinessMethodGenerator(_view, method, method.getMethod(), index);
+	= new BusinessMethodGenerator(_view, method, method, index);
 
       // ioc/0i10
       if (_businessMethods.contains(bizMethod))
 	continue;
 
-      bizMethod.introspect(method.getMethod(), method.getMethod());
+      bizMethod.introspect(method, method);
 
       if (! bizMethod.isEnhanced())
 	continue;
       
       if (! method.isPublic() && ! method.isProtected())
-	throw new ConfigException(L.l("{0}: Resin-IoC/WebBeans annotations are not allowed on private methods.", bizMethod));
+	throw new ConfigException(L.l("{0}: Java Injection annotations are not allowed on private methods.", bizMethod));
       if (method.isStatic())
-	throw new ConfigException(L.l("{0}: Resin-Ioc/WebBeans annotations are not allowed on static methods.", bizMethod));
+	throw new ConfigException(L.l("{0}: Java Injection annotations are not allowed on static methods.", bizMethod));
       if (method.isFinal())
-	throw new ConfigException(L.l("{0}: Resin-Ioc/WebBeans annotations are not allowed on final methods.", bizMethod));
+	throw new ConfigException(L.l("{0}: Java Injection annotations are not allowed on final methods.", bizMethod));
 
-      if (bizMethod.isEnhanced()) {
-	_isEnhanced = true;
+      _isEnhanced = true;
 
-	_businessMethods.add(bizMethod);
-      }
+      _businessMethods.add(bizMethod);
     }
     
     if (Serializable.class.isAssignableFrom(_beanClass.getJavaClass())
@@ -136,17 +143,17 @@ public class PojoBean extends BeanGenerator {
       _isEnhanced = true;
   }
 
-  protected void introspectClass(Class cl)
+  protected void introspectClass(ApiClass cl)
   {
-    if (isAnnotationPresent(Interceptor.class)
-	|| isAnnotationPresent(Decorator.class)) {
+    if (cl.isAnnotationPresent(Interceptor.class)
+	|| cl.isAnnotationPresent(Decorator.class)) {
       return;
     }
     
     ArrayList<Annotation> interceptorBindingList
       = new ArrayList<Annotation>();
 
-    Annotation []xmlInterceptorBindings = getInterceptorBindings();
+    Set<Annotation> xmlInterceptorBindings = getInterceptorBindings();
 
     if (xmlInterceptorBindings != null) {
       for (Annotation ann : xmlInterceptorBindings) {
@@ -173,9 +180,11 @@ public class PojoBean extends BeanGenerator {
       }
     }
 
+    /*
     if (interceptorBindingList.size() > 0) {
       _view.setInterceptorBindings(interceptorBindingList);
     }
+    */
   }
 
   private boolean hasTransientInject(Class cl)
@@ -279,10 +288,31 @@ public class PojoBean extends BeanGenerator {
       out.println("  = new com.caucho.ejb3.xa.XAManager();");
     }
 
+    if (_isSerializeHandle) {
+      generateSerializeHandle(out);
+    }
+
     /*
     if (_isReadResolveEnhanced)
       generateReadResolve(out);
     */
+  }
+
+  protected void generateSerializeHandle(JavaWriter out)
+    throws IOException
+  {
+    out.println();
+    out.println("private transient Object _serializationHandle;");
+    out.println();
+    out.println("public void setSerializationHandle(Object handle)");
+    out.println("{");
+    out.println("  _serializationHandle = handle;");
+    out.println("}");
+    out.println();
+    out.println("private Object writeReplace()");
+    out.println("{");
+    out.println("  return _serializationHandle;");
+    out.println("}");
   }
 
   protected void generateReadResolve(JavaWriter out)

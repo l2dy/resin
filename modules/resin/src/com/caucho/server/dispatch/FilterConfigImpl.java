@@ -31,25 +31,30 @@ package com.caucho.server.dispatch;
 
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
+import com.caucho.config.annotation.DisableConfig;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.InitParam;
 import com.caucho.server.util.CauchoSystem;
+import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterConfig;
 import javax.servlet.ServletContext;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Map;
+import javax.servlet.FilterRegistration;
+import javax.servlet.DispatcherType;
+import java.util.*;
 
 /**
  * Configuration for a filter.
  */
-public class FilterConfigImpl implements FilterConfig {
+public class FilterConfigImpl
+  implements FilterConfig, FilterRegistration.Dynamic
+{
   private static final L10N L = new L10N(FilterConfigImpl.class);
-  
+  private static final Iterable<String> EMPTY
+    = new ArrayList<String>(0);
+
   private String _filterName;
   private String _filterClassName;
   private Class _filterClass;
@@ -58,8 +63,11 @@ public class FilterConfigImpl implements FilterConfig {
 
   private ContainerProgram _init;
 
+  private WebApp _webApp;
   private ServletContext _servletContext;
-  
+  private FilterManager _filterManager;
+  private Filter _filter;
+
   /**
    * Creates a new filter configuration object.
    */
@@ -100,6 +108,14 @@ public class FilterConfigImpl implements FilterConfig {
     Config.validate(_filterClass, Filter.class);
   }
 
+  @DisableConfig
+  public void setFilterClass(Class filterClass)
+  {
+    _filterClass = filterClass;
+
+    Config.validate(_filterClass, Filter.class);
+  }
+
   /**
    * Gets the filter name.
    */
@@ -114,6 +130,16 @@ public class FilterConfigImpl implements FilterConfig {
   public String getFilterClassName()
   {
     return _filterClassName;
+  }
+
+  public Filter getFilter()
+  {
+    return _filter;
+  }
+
+  public void setFilter(Filter filter)
+  {
+    _filter = filter;
   }
 
   /**
@@ -156,6 +182,11 @@ public class FilterConfigImpl implements FilterConfig {
     return Collections.enumeration(_initParams.keySet());
   }
 
+  public void setWebApp(WebApp webApp)
+  {
+    _webApp = webApp;
+  }
+
   /**
    * Returns the servlet context.
    */
@@ -170,6 +201,16 @@ public class FilterConfigImpl implements FilterConfig {
   public void setServletContext(ServletContext app)
   {
     _servletContext = app;
+  }
+
+  public FilterManager getFilterManager()
+  {
+    return _filterManager;
+  }
+
+  public void setFilterManager(FilterManager filterManager)
+  {
+    _filterManager = filterManager;
   }
 
   /**
@@ -202,6 +243,145 @@ public class FilterConfigImpl implements FilterConfig {
   public String getDisplayName()
   {
     return _displayName;
+  }
+
+  public void addMappingForServletNames(EnumSet<DispatcherType> dispatcherTypes,
+                                        boolean isMatchAfter,
+                                        String... servletNames)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    try {
+      FilterMapping mapping = new FilterMapping();
+      mapping.setServletContext(_webApp);
+
+      mapping.setFilterName(_filterName);
+
+      if (dispatcherTypes != null) {
+        for (DispatcherType dispatcherType : dispatcherTypes) {
+          mapping.addDispatcher(dispatcherType);
+        }
+      }
+
+      for (String servletName : servletNames)
+          mapping.addServletName(servletName);
+
+      _webApp.addFilterMapping(mapping);
+    }
+    catch (Exception e) {
+      //XXX: needs better exception handling
+      throw new RuntimeException(e.getMessage(), e);
+    }
+  }
+
+  public Iterable<String> getServletNameMappings()
+  {
+    Set<String> names = _filterManager.getServletNameMappings(_filterName);
+
+    if (names == null)
+      return EMPTY;
+
+    return Collections.unmodifiableSet(names);
+  }
+
+  public void addMappingForUrlPatterns(EnumSet<DispatcherType> dispatcherTypes,
+                                       boolean isMatchAfter,
+                                       String... urlPatterns)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    try {
+      FilterMapping mapping = new FilterMapping();
+      mapping.setServletContext(_webApp);
+
+      mapping.setFilterName(_filterName);
+
+      if (dispatcherTypes != null) {
+        for (DispatcherType dispatcherType : dispatcherTypes) {
+          mapping.addDispatcher(dispatcherType);
+        }
+      }
+
+      FilterMapping.URLPattern urlPattern = mapping.createUrlPattern();
+
+      for (String pattern : urlPatterns) {
+        urlPattern.addText(pattern);
+      }
+
+
+      urlPattern.init();
+
+      _webApp.addFilterMapping(mapping);
+    }
+    catch (Exception e) {
+      //XXX: needs better exception handling
+      throw new RuntimeException(e.getMessage(), e);
+    }
+  }
+
+  public Iterable<String> getUrlPatternMappings()
+  {
+    Set<String> patterns = _filterManager.getUrlPatternMappings(_filterName);
+
+    if (patterns == null)
+      return EMPTY;
+
+    return Collections.unmodifiableSet(patterns);
+  }
+
+  public String getName()
+  {
+    return _filterName;
+  }
+
+  public String getClassName()
+  {
+    return _filterClassName;
+  }
+
+  public boolean setInitParameter(String name, String value)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    if (_initParams.containsKey(name))
+      return false;
+
+    _initParams.put(name, value);
+    
+    return true;
+  }
+
+  public Set<String> setInitParameters(Map<String, String> initParameters)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+    
+    Set<String> conflicts = new HashSet<String>();
+
+    for (Map.Entry<String, String> parameter : initParameters.entrySet()) {
+      if (_initParams.containsKey(parameter.getKey()))
+        conflicts.add(parameter.getKey());
+      else
+        _initParams.put(parameter.getKey(), parameter.getValue());
+    }
+
+    return conflicts;
+  }
+
+  public Map<String, String> getInitParameters()
+  {
+    return _initParams;
+  }
+
+  public void setAsyncSupported(boolean isAsyncSupported)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    if (true) throw new UnsupportedOperationException("unimplemented");
   }
 
   /**

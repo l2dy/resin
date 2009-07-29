@@ -30,31 +30,33 @@
 package com.caucho.config.inject;
 
 import com.caucho.config.*;
-import com.caucho.config.inject.SimpleBean;
+import com.caucho.config.inject.AbstractBean;
 import com.caucho.util.*;
 
 import java.lang.reflect.*;
 import java.lang.annotation.*;
 import java.util.*;
 
-import javax.context.CreationalContext;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.decorator.Decorates;
-import javax.inject.AnnotationLiteral;
-import javax.inject.BindingType;
-import javax.inject.Current;
-import javax.inject.manager.Decorator;
-import javax.inject.manager.InjectionPoint;
+import javax.enterprise.inject.AnnotationLiteral;
+import javax.enterprise.inject.BindingType;
+import javax.enterprise.inject.Current;
+import javax.enterprise.inject.spi.Decorator;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 /**
  * DecoratorBean represents a Java decorator
  */
-public class DecoratorBean extends Decorator
+public class DecoratorBean<T> implements Decorator<T>
 {
   private static final L10N L = new L10N(DecoratorBean.class);
+
+  private InjectManager _beanManager;
   
   private Class _type;
 
-  private SimpleBean _bean;
+  private AbstractBean _bean;
 
   private Field _delegateField;
 
@@ -64,14 +66,14 @@ public class DecoratorBean extends Decorator
   private HashSet<Annotation> _bindings
     = new HashSet<Annotation>();
   
-  public DecoratorBean(InjectManager webBeans,
-		       Class type)
+  public DecoratorBean(InjectManager beanManager,
+		       Class<T> type)
   {
-    super(webBeans);
+    _beanManager = beanManager;
 
     _type = type;
 
-    _bean = new SimpleBean(_type);
+    _bean = beanManager.createManagedBean(type);
 
     init();
   }
@@ -92,9 +94,9 @@ public class DecoratorBean extends Decorator
   /**
    * Returns the bean's deployment type
    */
-  public Class<? extends Annotation> getDeploymentType()
+  public Set<Annotation> getStereotypes()
   {
-    return _bean.getDeploymentType();
+    return _bean.getStereotypes();
   }
 
   /**
@@ -117,7 +119,7 @@ public class DecoratorBean extends Decorator
   /**
    * Returns true if the bean is serializable
    */
-  public boolean isSerializable()
+  public boolean isPassivationCapable()
   {
     return false;
   }
@@ -133,18 +135,26 @@ public class DecoratorBean extends Decorator
   /**
    * Returns the types that the bean implements
    */
-  public Set<Class<?>> getTypes()
+  public Set<Type> getTypes()
   {
     return _bean.getTypes();
+  }
+
+  /**
+   * Returns the types for the decorated
+   */
+  public Set<Type> getDecoratedTypes()
+  {
+    throw new UnsupportedOperationException();
   }
 
   //
   // lifecycle
   //
   
-  public Object create(CreationalContext creationalContext)
+  public T create(CreationalContext<T> creationalContext)
   {
-    return _bean.create(creationalContext);
+    return (T) _bean.create(creationalContext);
   }
 
   /*
@@ -162,20 +172,29 @@ public class DecoratorBean extends Decorator
     return _bean.getInjectionPoints();
   }
 
+  public Class getBeanClass()
+  {
+    return _bean.getBeanClass();
+  }
+  
   /**
    * Create a new instance of the bean.
    */
+  /*
   public Object create()
   {
     return _bean.create();
   }
+  */
 
   /**
    * Destroys a bean instance
    */
+  /*
   public void destroy(Object instance)
   {
   }
+  */
 
   //
   // decorator
@@ -195,7 +214,7 @@ public class DecoratorBean extends Decorator
   /**
    * Returns the bindings for the delegated object
    */
-  public Set<Annotation> getDelegateBindingTypes()
+  public Set<Annotation> getDelegateBindings()
   {
     return _bindings;
   }
@@ -231,7 +250,7 @@ public class DecoratorBean extends Decorator
 
   public void init()
   {
-    _bean.init();
+    // _bean.init();
     
     introspect();
 
@@ -300,6 +319,46 @@ public class DecoratorBean extends Decorator
 
     if (_bindings.size() == 0)
       _bindings.add(new AnnotationLiteral<Current>() {});
+  }
+  
+  /**
+   * Instantiate the bean.
+   */
+  public T instantiate()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Inject the bean.
+   */
+  public void inject(T instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call post-construct
+   */
+  public void postConstruct(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call pre-destroy
+   */
+  public void preDestroy(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call destroy
+   */
+  public void destroy(T instance, CreationalContext<T> env)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   private void addType(Class type)

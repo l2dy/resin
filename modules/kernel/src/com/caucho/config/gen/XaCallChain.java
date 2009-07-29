@@ -26,124 +26,121 @@
  *
  * @author Scott Ferguson
  */
-
 package com.caucho.config.gen;
+
+import java.io.IOException;
+import java.util.HashMap;
+
+import javax.ejb.ApplicationException;
+import javax.ejb.SessionSynchronization;
+import javax.ejb.TransactionAttribute;
+import javax.ejb.TransactionAttributeType;
+import javax.ejb.TransactionManagement;
+import javax.ejb.TransactionManagementType;
 
 import com.caucho.java.JavaWriter;
 import com.caucho.util.L10N;
 
-import java.io.*;
-import java.lang.reflect.*;
-import java.util.*;
-import javax.ejb.*;
-
 /**
- * Represents the xa interception
+ * Represents the XA interception
  */
-public class XaCallChain extends AbstractCallChain
-{
+public class XaCallChain extends AbstractCallChain {
+  @SuppressWarnings("unused")
   private static final L10N L = new L10N(XaCallChain.class);
 
   private BusinessMethodGenerator _bizMethod;
   private EjbCallChain _next;
 
-  private boolean _isContainerManaged = true;
   private TransactionAttributeType _xa;
-  private boolean _isSynchronization;
+  private boolean _isContainerManaged = true;
+  private boolean _isSessionSynchronization;
 
   public XaCallChain(BusinessMethodGenerator bizMethod, EjbCallChain next)
   {
     super(next);
-    
+
     _bizMethod = bizMethod;
     _next = next;
+
+    _isContainerManaged = bizMethod.isXaContainerManaged();
   }
 
   protected BusinessMethodGenerator getBusinessMethod()
   {
     return _bizMethod;
   }
-  
+
   /**
    * Returns true if the business method has any active XA annotation.
    */
   public boolean isEnhanced()
   {
-    return (_isContainerManaged
-	    && _xa != null
-	    && ! _xa.equals(TransactionAttributeType.SUPPORTS));
-  }
-
-  public boolean isContainerManaged()
-  {
-    return _isContainerManaged;
-  }
-
-  public void setContainerManaged(boolean isContainerManaged)
-  {
-    _isContainerManaged = isContainerManaged;
+    return (_isContainerManaged && _xa != null && !_xa
+        .equals(TransactionAttributeType.SUPPORTS));
   }
 
   /**
-   * Sets the transaction type
+   * Returns the transaction type
    */
-  public void setTransactionType(TransactionAttributeType xa)
-  {
-    _xa = xa;
-  }
-
-  protected TransactionAttributeType getTransactionType()
+  public TransactionAttributeType getTransactionType()
   {
     return _xa;
-  }
-
-  public void setSynchronization(boolean isSynchronization)
-  {
-    _isSynchronization = isSynchronization;
   }
 
   /**
    * Introspects the method for the default values
    */
-  public void introspect(Method apiMethod, Method implMethod)
+  @SuppressWarnings("unchecked")
+  public void introspect(ApiMethod apiMethod, ApiMethod implMethod)
   {
-    if (! _isContainerManaged)
-      return;
-    
-    Class apiClass = apiMethod.getDeclaringClass();
-    Class implClass = null;
+    ApiClass apiClass = apiMethod.getDeclaringClass();
+    ApiClass beanClass = _bizMethod.getBeanClass();
 
-    if (implMethod != null)
-      implClass = implMethod.getDeclaringClass();
-    
+    TransactionManagement xaManagement = beanClass
+        .getAnnotation(TransactionManagement.class);
+
+    if (xaManagement == null)
+      xaManagement = apiClass.getAnnotation(TransactionManagement.class);
+
+    if (xaManagement != null
+        && xaManagement.value() != TransactionManagementType.CONTAINER) {
+      _isContainerManaged = false;
+      return;
+    }
+
+    Class javaClass = beanClass.getJavaClass();
+
+    if (javaClass != null
+        && SessionSynchronization.class.isAssignableFrom(javaClass)) {
+      _isSessionSynchronization = true;
+    }
+
     TransactionAttribute xaAttr;
-    
+
     xaAttr = apiMethod.getAnnotation(TransactionAttribute.class);
 
     if (xaAttr == null) {
-      xaAttr = (TransactionAttribute)
-	apiClass.getAnnotation(TransactionAttribute.class);
+      xaAttr = apiClass.getAnnotation(TransactionAttribute.class);
     }
 
     if (xaAttr == null && implMethod != null) {
       xaAttr = implMethod.getAnnotation(TransactionAttribute.class);
     }
 
-    if (xaAttr == null && implClass != null) {
-      xaAttr = (TransactionAttribute)
-	implClass.getAnnotation(TransactionAttribute.class);
+    if (xaAttr == null && beanClass != null) {
+      xaAttr = beanClass.getAnnotation(TransactionAttribute.class);
     }
 
     if (xaAttr != null)
-      setTransactionType(xaAttr.value());
+      _xa = xaAttr.value();
   }
 
   /**
    * Generates the static class prologue
    */
+  @SuppressWarnings("unchecked")
   @Override
-  public void generatePrologue(JavaWriter out, HashMap map)
-    throws IOException
+  public void generatePrologue(JavaWriter out, HashMap map) throws IOException
   {
     if (_isContainerManaged && map.get("caucho.ejb.xa") == null) {
       map.put("caucho.ejb.xa", "done");
@@ -152,137 +149,132 @@ public class XaCallChain extends AbstractCallChain
       out.println("private static final com.caucho.ejb3.xa.XAManager _xa");
       out.println("  = new com.caucho.ejb3.xa.XAManager();");
     }
-    
+
     _next.generatePrologue(out, map);
   }
 
   /**
    * Generates the method interceptor code
    */
-  public void generateCall(JavaWriter out)
-    throws IOException
+  @SuppressWarnings("unchecked")
+  public void generateCall(JavaWriter out) throws IOException
   {
     boolean isPushDepth = false;
-    
+
     if (_isContainerManaged && _xa != null) {
       switch (_xa) {
-      case MANDATORY:
-	{
-	  out.println("_xa.beginMandatory();");
-	}
-	break;
-	
-      case NEVER:
-	{
-	  out.println("_xa.beginNever();");
-	}
-	break;
-	
-      case NOT_SUPPORTED:
-	{
-	  out.println("Transaction xa = _xa.beginNotSupported();");
-	  out.println();
-	  out.println("try {");
-	  out.pushDepth();
-	  isPushDepth = true;
-	}
-	break;
-	
-      case REQUIRED:
-	{
-	  out.println("Transaction xa = _xa.beginRequired();");
-	  out.println();
-	  out.println("try {");
-	  out.pushDepth();
-	  isPushDepth = true;
-	}
-	break;
-	
-      case REQUIRES_NEW:
-	{
-	  out.println("Transaction xa = _xa.beginRequiresNew();");
-	  out.println();
-	  out.println("try {");
-	  out.pushDepth();
-	  isPushDepth = true;
-	}
-	break;
+      case MANDATORY: {
+        out.println("_xa.beginMandatory();");
+      }
+        break;
+
+      case NEVER: {
+        out.println("_xa.beginNever();");
+      }
+        break;
+
+      case NOT_SUPPORTED: {
+        out.println("Transaction xa = _xa.beginNotSupported();");
+        out.println();
+        out.println("try {");
+        out.pushDepth();
+        isPushDepth = true;
+      }
+        break;
+
+      case REQUIRED: {
+        out.println("Transaction xa = _xa.beginRequired();");
+        out.println();
+        out.println("try {");
+        out.pushDepth();
+        isPushDepth = true;
+      }
+        break;
+
+      case REQUIRES_NEW: {
+        out.println("Transaction xa = _xa.beginRequiresNew();");
+        out.println();
+        out.println("try {");
+        out.pushDepth();
+        isPushDepth = true;
+      }
+        break;
       }
     }
 
-    if (_isSynchronization) {
-      out.println("_xa.registerSynchronization(_bean);");
+    if (_isContainerManaged && _isSessionSynchronization) {
+      out.print("_xa.registerSynchronization(");
+      _bizMethod.generateThis(out);
+      out.println(");");
     }
 
     generateNext(out);
 
     if (_isContainerManaged && _xa != null) {
       if (isPushDepth)
-	out.popDepth();
-      
+        out.popDepth();
+
       for (Class exn : _bizMethod.getApiMethod().getExceptionTypes()) {
-	ApplicationException appExn
-	  = (ApplicationException) exn.getAnnotation(ApplicationException.class);
+        ApplicationException appExn = (ApplicationException) exn
+            .getAnnotation(ApplicationException.class);
 
-	if (appExn == null)
-	  continue;
-	
-	if (! RuntimeException.class.isAssignableFrom(exn)
-	    && appExn.rollback()) {
-	  out.println("} catch (" + exn.getName() + " e) {");
-	  out.println("  _xa.markRollback(e);");
-	  out.println("  throw e;");
-	}
-	else if (RuntimeException.class.isAssignableFrom(exn)
-		 && ! appExn.rollback()) {
-	  out.println("} catch (" + exn.getName() + " e) {");
-	  out.println("  throw e;");
-	}
+        if (appExn == null)
+          continue;
+
+        if (!RuntimeException.class.isAssignableFrom(exn) && appExn.rollback()) {
+          out.println("} catch (" + exn.getName() + " e) {");
+          out.println("  _xa.markRollback(e);");
+          out.println("  throw e;");
+        } else if (RuntimeException.class.isAssignableFrom(exn)
+            && !appExn.rollback()) {
+          out.println("} catch (" + exn.getName() + " e) {");
+          out.println("  throw e;");
+        }
       }
 
       switch (_xa) {
       case REQUIRED:
-      case REQUIRES_NEW:
-	{
-	  out.println("} catch (RuntimeException e) {");
-	  out.println("  _xa.markRollback(e);");
-	  out.println("  throw e;");
-	}
+      case REQUIRES_NEW: {
+        out.println("} catch (RuntimeException e) {");
+        out.println("  _xa.markRollback(e);");
+        out.println("  throw e;");
+      }
       }
 
       switch (_xa) {
-      case NOT_SUPPORTED:
-	{
-	  out.println("} finally {");
-	  out.println("  if (xa != null)");
-	  out.println("    _xa.resume(xa);");
-	  out.println("}");
-	}
-	break;
-      
-      case REQUIRED:
-	{
-	  out.println("} finally {");
-	  out.println("  if (xa == null)");
-	  out.println("    _xa.commit();");
-	  out.println("}");
-	}
-	break;
-      
-      case REQUIRES_NEW:
-	{
-	  out.println("} finally {");
-	  out.println("  _xa.endRequiresNew(xa);");
-	  out.println("}");
-	}
-	break;
+      case NOT_SUPPORTED: {
+        out.println("} finally {");
+        out.println("  if (xa != null)");
+        out.println("    _xa.resume(xa);");
+        out.println("}");
+      }
+        break;
+
+      case REQUIRED: {
+        out.println("} finally {");
+        out.println("  if (xa == null)");
+        out.println("    _xa.commit();");
+        out.println("}");
+      }
+        break;
+
+      case REQUIRES_NEW: {
+        out.println("} finally {");
+        out.println("  _xa.endRequiresNew(xa);");
+        out.println("}");
+      }
+        break;
       }
     }
   }
 
-  protected void generateNext(JavaWriter out)
-    throws IOException
+  protected void generateNext(JavaWriter out) throws IOException
   {
     _next.generateCall(out);
+  }
+
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _bizMethod + "]";
   }
 }

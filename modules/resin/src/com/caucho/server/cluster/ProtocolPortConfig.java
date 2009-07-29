@@ -31,6 +31,8 @@ package com.caucho.server.cluster;
 
 import java.util.logging.*;
 import javax.annotation.*;
+import javax.enterprise.context.spi.*;
+import javax.enterprise.inject.spi.*;
 
 import com.caucho.config.*;
 import com.caucho.config.program.*;
@@ -98,13 +100,20 @@ public class ProtocolPortConfig extends Port
     if (_protocolClass != null) {
       InjectManager webBeans = InjectManager.create();
 
+      /*
       Protocol protocol
 	= (Protocol) webBeans.createTransientObjectNoInit(_protocolClass);
+      */
+      InjectionTarget target = webBeans.createManagedBean(_protocolClass);
+      CreationalContext env = webBeans.createCreationalContext();
+      
+      Protocol protocol = (Protocol) target.produce(env);
+      target.inject(protocol, env);
       
       if (_init != null)
 	_init.configure(protocol);
 
-      Config.init(protocol);
+      target.postConstruct(protocol);
 
       setProtocol(protocol);
     }

@@ -30,59 +30,61 @@
 package com.caucho.config.event;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 
-import javax.event.Event;
-import javax.event.Observer;
-import javax.inject.manager.Manager;
+import javax.enterprise.event.Event;
+import javax.enterprise.event.Observer;
+import javax.enterprise.inject.spi.BeanManager;
+import javax.enterprise.inject.TypeLiteral;
 
-public class EventImpl implements Event<Object>
+public class EventImpl<T> implements Event<T>
 {
-  private final Manager _manager;
-  private final Class _eventType;
+  private final BeanManager _manager;
+  private final Type _type;
   private final Annotation []_bindings;
 
-  public EventImpl(Manager manager,
-		   Class eventType,
+  public EventImpl(BeanManager manager,
+		   Type type,
 		   Annotation []bindings)
   {
     _manager = manager;
-    _eventType = eventType;
+    _type = type;
     _bindings = bindings;
   }
   
-  public void fire(Object event, Annotation... bindings)
+  public void fire(T event)
   {
-    if (_bindings.length == 0)
-      _manager.fireEvent(event, bindings);
-    else if (bindings == null || bindings.length == 0)
-      _manager.fireEvent(event, _bindings);
-    else {
-      Annotation []fullBindings
-	= new Annotation[_bindings.length + bindings.length];
-
-      System.arraycopy(_bindings, 0, fullBindings, 0, _bindings.length);
-      System.arraycopy(bindings, 0, fullBindings, _bindings.length,
-		       bindings.length);
-
-      _manager.fireEvent(event, fullBindings);
-    }
+    _manager.fireEvent(event, _bindings);
   }
 
-  public void observe(Observer observer, Annotation... bindings)
+  public void addObserver(Observer<T> observer)
   {
-    if (_bindings.length == 0)
-      _manager.addObserver(observer, _eventType, bindings);
-    else if (bindings == null || bindings.length == 0)
-      _manager.addObserver(observer, _eventType, _bindings);
-    else {
-      Annotation []fullBindings
-	= new Annotation[_bindings.length + bindings.length];
+    _manager.addObserver(observer, _bindings);
+  }
 
-      System.arraycopy(_bindings, 0, fullBindings, 0, _bindings.length);
-      System.arraycopy(bindings, 0, fullBindings, _bindings.length,
-		       bindings.length);
+  public void removeObserver(Observer<T> observer)
+  {
+    _manager.removeObserver(observer);
+  }
 
-      _manager.addObserver(observer, _eventType, fullBindings);
-    }
+  public Event<T> select(Annotation... bindings)
+  {
+    if (bindings == null)
+      return this;
+
+    // ioc/0b54 - union would cause problems with @Current
+    return new EventImpl(_manager, _type, bindings);
+  }
+  
+  public <U extends T> Event<U> select(Class<U> subtype,
+				       Annotation... bindings)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public <U extends T> Event<U> select(TypeLiteral<U> subtype,
+				       Annotation... bindings)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 }

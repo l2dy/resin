@@ -30,33 +30,46 @@
 package com.caucho.config.inject;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.Set;
 
-import javax.context.Contextual;
-import javax.context.CreationalContext;
+import javax.enterprise.context.spi.Contextual;
+import javax.enterprise.context.spi.CreationalContext;
 
-import javax.inject.manager.Bean;
-import javax.inject.manager.InjectionPoint;
-import javax.inject.manager.Manager;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.BeanManager;
 
 /**
  * Configuration for the xml web bean component.
  */
-public class InjectionPointBean<T> extends Bean<T>
+public class InjectionPointBean<T> implements Bean<T>
 {
-  public InjectionPointBean(Manager manager)
+  public InjectionPointBean(BeanManager manager)
   {
-    super(manager);
   }
 
   //
   // metadata for the bean
   //
+  
+  public Class<T> getBeanClass()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
 
   /**
    * Returns the bean's binding annotations.
    */
   public Set<Annotation> getBindings()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
+   * Returns the bean's stereotype annotations.
+   */
+  public Set<Annotation> getStereotypes()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
@@ -97,7 +110,7 @@ public class InjectionPointBean<T> extends Bean<T>
   /**
    * Returns true if the bean is serializable
    */
-  public boolean isSerializable()
+  public boolean isPassivationCapable()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
@@ -113,7 +126,7 @@ public class InjectionPointBean<T> extends Bean<T>
   /**
    * Returns the types that the bean exports for bindings.
    */
-  public Set<Class<?>> getTypes()
+  public Set<Type> getTypes()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
@@ -122,8 +135,39 @@ public class InjectionPointBean<T> extends Bean<T>
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
+  /**
+   * Instantiate the bean.
+   */
+  public T instantiate()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Inject the bean.
+   */
+  public void inject(T instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call post-construct
+   */
+  public void postConstruct(T instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call pre-destroy
+   */
+  public void preDestroy(T instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
 
-  public void destroy(T instance)
+  public void destroy(T instance, CreationalContext<T> env)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }

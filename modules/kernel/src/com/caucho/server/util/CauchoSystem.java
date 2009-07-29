@@ -35,6 +35,7 @@ import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CpuUsage;
 import com.caucho.util.Crc64;
+import com.caucho.util.ThreadDump;
 import com.caucho.vfs.CaseInsensitive;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -43,6 +44,7 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -87,6 +89,7 @@ public class CauchoSystem {
   private static String _user;
   private static String _group;
   private static String _classPath;
+  private static ArrayList<String> _classPathList;
 
   static CpuUsage _cpuUsage;
   
@@ -503,6 +506,30 @@ public class CauchoSystem {
     return _classPath;
   }
 
+  /**
+   * Returns the system classpath, including the bootpath
+   */
+  public static ArrayList<String> getClassPathList()
+  {
+    if (_classPathList != null)
+      return _classPathList;
+
+    ArrayList<String> list = new ArrayList<String>();
+
+    String classPath = getClassPath();
+    String []classPathArray
+      = classPath.split("[" + getPathSeparatorChar() + "]");
+
+    for (int i = 0; i < classPathArray.length; i++) {
+      if (! list.contains(classPathArray[i]))
+	list.add(classPathArray[i]);
+    }
+
+    _classPathList = list;
+
+    return _classPathList;
+  }
+
   public static double getLoadAvg()
   {
     if (_jniCauchoSystem == null)
@@ -530,7 +557,7 @@ public class CauchoSystem {
   {
     try {
       System.err.println(cl + " Resin restarting due to OutOfMemoryError " + e);
-      Thread.dumpStack();
+      ThreadDump.dumpThreads();
     } finally {
       Runtime.getRuntime().halt(EXIT_OOM);
     }

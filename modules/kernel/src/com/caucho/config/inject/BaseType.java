@@ -43,20 +43,44 @@ import java.lang.annotation.*;
 import java.util.*;
 
 import javax.annotation.*;
-import javax.inject.manager.Bean;
-import javax.inject.manager.Manager;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeanManager;
 
 /**
  * type matching the web bean
  */
 abstract public class BaseType
 {
+  private static final BaseType []NULL_PARAM = new BaseType[0];
+  
   public static BaseType create(Type type, HashMap paramMap)
   {
-    if (type instanceof Class)
-      return new ClassType((Class) type);
+    if (type instanceof Class) {
+      TypeVariable []typeParam = ((Class) type).getTypeParameters();
+      
+      if (typeParam == null || typeParam.length == 0)
+	return new ClassType((Class) type);
+
+      BaseType []args = new BaseType[typeParam.length];
+
+      HashMap newParamMap = new HashMap();
+
+      for (int i = 0; i < args.length; i++) {
+	args[i] = ClassType.OBJECT_TYPE;
+	
+	if (args[i] == null) {
+	  throw new NullPointerException("unsupported BaseType: " + type);
+	}
+	
+	newParamMap.put(typeParam[i].getName(), args[i]);
+      }
+
+      return new ParamType((Class) type, args, newParamMap);
+    }
     else if (type instanceof ParameterizedType) {
       ParameterizedType pType = (ParameterizedType) type;
+
+      Class rawType = (Class) pType.getRawType();
 
       Type []typeArgs = pType.getActualTypeArguments();
       
@@ -65,11 +89,20 @@ abstract public class BaseType
       for (int i = 0; i < args.length; i++) {
 	args[i] = create(typeArgs[i], paramMap);
 	
-	if (args[i] == null)
-	  return null;
+	if (args[i] == null) {
+	  throw new NullPointerException("unsupported BaseType: " + type);
+	}
+      }
+      
+      HashMap newParamMap = new HashMap();
+      
+      TypeVariable []typeVars = rawType.getTypeParameters();
+
+      for (int i = 0; i < typeVars.length; i++) {
+	newParamMap.put(typeVars[i].getName(), args[i]);
       }
 
-      return new ParamType((Class) pType.getRawType(), args);
+      return new ParamType((Class) pType.getRawType(), args, newParamMap);
     }
     else if (type instanceof GenericArrayType) {
       GenericArrayType aType = (GenericArrayType) type;
@@ -79,14 +112,134 @@ abstract public class BaseType
       
       return new ArrayType(baseType, rawType);
     }
-    else {
-      return null;
+    else if (type instanceof TypeVariable) {
+      TypeVariable aType = (TypeVariable) type;
+
+      BaseType actualType = null;
+
+      if (paramMap != null)
+	actualType = (BaseType) paramMap.get(aType.getName());
+
+      if (actualType != null)
+	return actualType;
+
+      BaseType []baseBounds;
+
+      if (aType.getBounds() != null) {
+	Type []bounds = aType.getBounds();
+	
+	baseBounds = new BaseType[bounds.length];
+
+	for (int i = 0; i < bounds.length; i++)
+	  baseBounds[i] = create(bounds[i], paramMap);
+      }
+      else
+	baseBounds = new BaseType[0];
+      
+      return new VarType(aType.getName(), baseBounds);
     }
+    else if (type instanceof WildcardType) {
+      WildcardType aType = (WildcardType) type;
+
+      BaseType []lowerBounds = toBaseType(aType.getLowerBounds(), paramMap);
+      BaseType []upperBounds = toBaseType(aType.getUpperBounds(), paramMap);
+      
+      return new WildcardTypeImpl(lowerBounds, upperBounds);
+    }
+    
+    else {
+      throw new NullPointerException("unsupported BaseType: " + type + " " + type.getClass());
+    }
+  }
+
+  /**
+   * Create a class-based type, where any parameters are filled with the
+   * variables, not Object.
+   */
+  public static BaseType createClass(Class type)
+  {
+    TypeVariable []typeParam = ((Class) type).getTypeParameters();
+      
+    if (typeParam == null || typeParam.length == 0)
+      return new ClassType((Class) type);
+
+    BaseType []args = new BaseType[typeParam.length];
+
+    HashMap newParamMap = new HashMap();
+
+    for (int i = 0; i < args.length; i++) {
+      args[i] = create(typeParam[i], newParamMap);
+	
+      if (args[i] == null) {
+	throw new NullPointerException("unsupported BaseType: " + type);
+      }
+	
+      newParamMap.put(typeParam[i].getName(), args[i]);
+    }
+
+    return new ParamType((Class) type, args, newParamMap);
+  }
+
+  private static BaseType []toBaseType(Type []types, HashMap paramMap)
+  {
+    if (types == null)
+      return NULL_PARAM;
+    
+    BaseType []baseTypes = new BaseType[types.length];
+
+    for (int i = 0; i < types.length; i++) {
+      baseTypes[i] = create(types[i], paramMap);
+    }
+
+    return baseTypes;
   }
   
   abstract public Class getRawClass();
 
+  public HashMap getParamMap()
+  {
+    return null;
+  }
+
+  public BaseType []getParameters()
+  {
+    return NULL_PARAM;
+  }
+
+  public boolean isWildcard()
+  {
+    return false;
+  }
+
   abstract public boolean isMatch(Type type);
+
+  public boolean isAssignableFrom(BaseType type)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
+   * Assignable as a parameter.
+   */
+  public boolean isParamAssignableFrom(BaseType type)
+  {
+    return isAssignableFrom(type);
+  }
+
+  public Type toType()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public BaseType findClass(InjectManager manager, Class cl)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public String getSimpleName()
+  {
+    return getRawClass().getSimpleName();
+  }
   
   public String toString()
   {

@@ -123,7 +123,10 @@ namespace Caucho
     }
     
     public void FindApacheInProgramFiles(ArrayList homes) {
-      String[] groupDirs = Directory.GetDirectories("\\Program Files", "Apache*");
+      String programFiles 
+        = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+      
+      String[] groupDirs = Directory.GetDirectories(programFiles, "Apache*");
       
       foreach (String groupDir in groupDirs) {
         String[] testDirs = Directory.GetDirectories(groupDir, "*");
@@ -202,8 +205,9 @@ namespace Caucho
       
       process.BeginErrorReadLine();
       process.BeginOutputReadLine();
-      while(! process.HasExited) {
-        process.WaitForExit(100);
+      while(! (process.HasExited)) {
+        //Vista needs more time
+        process.WaitForExit(3000);
       }
       process.CancelErrorRead();
       process.CancelOutputRead();
@@ -546,19 +550,26 @@ namespace Caucho
     private String FindIIS() {
       String result = null;
       
-      DirectoryEntry entry = new DirectoryEntry("IIS://localhost/W3SVC/1/ROOT/scripts");
-      
-      if (entry.Properties != null) {
-        Object val = entry.Properties["Path"];
-        if (val != null && (val is PropertyValueCollection)) {
-          PropertyValueCollection collection = (PropertyValueCollection) val;
-          IEnumerator enumerator = collection.GetEnumerator();
-          
-          if (enumerator.MoveNext())
-            result = (String) enumerator.Current;
+      DirectoryEntry entry = null;
+      try {
+        entry = new DirectoryEntry("IIS://localhost/W3SVC/1/ROOT/scripts");
+        
+        if (entry.Properties != null) {
+          Object val = entry.Properties["Path"];
+          if (val != null && (val is PropertyValueCollection)) {
+            PropertyValueCollection collection = (PropertyValueCollection) val;
+            IEnumerator enumerator = collection.GetEnumerator();
+            
+            if (enumerator.MoveNext())
+              result = (String) enumerator.Current;
+          }
         }
+      } catch (Exception e) {
+        Console.Out.WriteLine(e.ToString());
+      } finally {
+        if (entry != null)
+          entry.Close();
       }
-      entry.Close();
       
       return result;
     }

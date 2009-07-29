@@ -32,15 +32,15 @@ package com.caucho.config.event;
 import java.util.*;
 import java.lang.annotation.*;
 import java.lang.reflect.*;
-import javax.context.Context;
-import javax.event.Observer;
-import javax.event.Observes;
-import javax.event.IfExists;
-import javax.inject.manager.Bean;
+import javax.enterprise.event.Observer;
+import javax.enterprise.event.Observes;
+import javax.enterprise.event.IfExists;
+import javax.enterprise.context.spi.Context;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
 
 import com.caucho.config.*;
 import com.caucho.config.inject.AbstractBean;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.util.*;
 import com.caucho.config.cfg.*;
@@ -123,7 +123,7 @@ public class ObserverImpl implements Observer {
       Type []param = _method.getGenericParameterTypes();
       Annotation [][]annList = _method.getParameterAnnotations();
 
-      _args = new ComponentImpl[param.length];
+      _args = new Bean[param.length];
 
       String loc = LineConfigException.loc(_method);
       
@@ -131,7 +131,7 @@ public class ObserverImpl implements Observer {
 	if (hasObserves(annList[i]))
 	  continue;
 
-	Set beans = _webBeans.resolveByType(param[i], annList[i]);
+	Set beans = _webBeans.getBeans(param[i], annList[i]);
 	
 	if (beans == null || beans.size() == 0) {
 	  throw new ConfigException(loc
@@ -139,12 +139,12 @@ public class ObserverImpl implements Observer {
 					  getSimpleName(param[i])));
 	}
 	
-	ComponentImpl comp = null;
+	Bean comp = null;
 
 	// XXX: error checking
 	Iterator iter = beans.iterator();
 	if (iter.hasNext()) {
-	  comp = (ComponentImpl) iter.next();
+	  comp = (Bean) iter.next();
 	}
 
 	_args[i] = comp;
@@ -162,7 +162,7 @@ public class ObserverImpl implements Observer {
     return false;
   }
 
-  public void notify(Object event)
+  public boolean notify(Object event)
   {
     Object obj = null;
 
@@ -172,8 +172,14 @@ public class ObserverImpl implements Observer {
       if (context != null && context.isActive())
 	obj = context.get(_bean);
     }
-    else
-      obj = _webBeans.getInstance(_bean);
+    else {
+      // XXX: perf
+      CreationalContext env = _webBeans.createCreationalContext();
+      
+      obj = _webBeans.getReference(_bean, _bean.getBeanClass(), env); 
+    }
+
+    System.out.println("OBJ: " + obj);
 
     try {
       if (obj != null) {
@@ -182,8 +188,11 @@ public class ObserverImpl implements Observer {
 	for (int i = 0; i < _args.length; i++) {
 	  Bean bean = _args[i];
 	  
-	  if (bean != null)
-	    args[i] = _webBeans.getInstance(bean);
+	  if (bean != null) {
+	    CreationalContext env = _webBeans.createCreationalContext();
+	    
+	    args[i] = _webBeans.getReference(bean, bean.getBeanClass(), env);
+	  }
 	  else
 	    args[i] = event;
 	}
@@ -197,6 +206,8 @@ public class ObserverImpl implements Observer {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+
+    return false;
   }
 
   public boolean equals(Object obj)

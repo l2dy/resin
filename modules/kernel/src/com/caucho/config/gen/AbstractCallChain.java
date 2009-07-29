@@ -26,13 +26,12 @@
  *
  * @author Scott Ferguson
  */
-
 package com.caucho.config.gen;
 
+import java.io.IOException;
+import java.util.HashMap;
+
 import com.caucho.java.JavaWriter;
-import java.io.*;
-import java.lang.reflect.*;
-import java.util.*;
 
 /**
  * Represents a filter for invoking a method
@@ -44,27 +43,30 @@ abstract public class AbstractCallChain implements EjbCallChain {
   {
     if (next == null)
       throw new NullPointerException();
-    
+
     _next = next;
   }
-  
+
   /**
    * Returns true if this filter will generate code.
    */
+  @Override
   abstract public boolean isEnhanced();
 
   /**
    * Introspects the method for the default values
    */
-  public void introspect(Method apiMethod, Method implMethod)
+  @Override
+  public void introspect(ApiMethod apiMethod, ApiMethod implMethod)
   {
   }
 
   /**
    * Generates the static class prologue
    */
-  public void generatePrologue(JavaWriter out, HashMap map)
-    throws IOException
+  @SuppressWarnings("unchecked")
+  @Override
+  public void generatePrologue(JavaWriter out, HashMap map) throws IOException
   {
     _next.generatePrologue(out, map);
   }
@@ -72,8 +74,10 @@ abstract public class AbstractCallChain implements EjbCallChain {
   /**
    * Generates initialization in the constructor
    */
+  @SuppressWarnings("unchecked")
+  @Override
   public void generateConstructor(JavaWriter out, HashMap map)
-    throws IOException
+      throws IOException
   {
     _next.generateConstructor(out, map);
   }
@@ -81,8 +85,8 @@ abstract public class AbstractCallChain implements EjbCallChain {
   /**
    * Generates the method interception code
    */
-  public void generateCall(JavaWriter out)
-    throws IOException
+  @Override
+  public void generateCall(JavaWriter out) throws IOException
   {
     _next.generateCall(out);
   }

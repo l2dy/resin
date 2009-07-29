@@ -199,20 +199,35 @@ public class RewriteDispatch
     */
 
     if (_matchRule != null) {
+      // uri = _matchRule.rewriteUri(uri, queryString);
+      
       chain = _matchRule.map(uri, queryString, chain);
     }
+
+    chain = mapChain(0, uri, queryString, chain);
 
     for (int i = _filterList.size() - 1; i >= 0; i--) {
       chain = _filterList.get(i).map(uri, queryString, chain);
     }
 
-    FilterChain next = chain;
-    
-    for (int i = _ruleList.size() - 1; i >= 0; i--) {
-      next = _ruleList.get(i).map(uri, queryString, next, chain);
-    }
+    return chain;
+  }
 
-    return next;
+  private FilterChain mapChain(int index,
+			       String uri, String queryString,
+			       FilterChain chain)
+    throws ServletException
+  {
+    if (_ruleList.size() <= index)
+      return chain;
+
+    DispatchRule rule = _ruleList.get(index);
+    
+    uri = rule.rewriteUri(uri, queryString);
+
+    FilterChain next = mapChain(index + 1, uri, queryString, chain);
+
+    return rule.map(uri, queryString, next, chain);
   }
 
   public void clearCache()

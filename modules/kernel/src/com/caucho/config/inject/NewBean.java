@@ -46,13 +46,15 @@ import java.util.*;
 import java.util.logging.*;
 
 import javax.annotation.*;
-import javax.context.CreationalContext;
-import javax.context.Dependent;
+import javax.enterprise.context.Dependent;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.interceptor.InterceptorBindingType;
-import javax.inject.Produces;
-import javax.inject.manager.Bean;
-import javax.inject.manager.InjectionPoint;
-import javax.inject.Initializer;
+import javax.enterprise.inject.Initializer;
+import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * NewBean represents the SimpleBean created through the @New interface.
@@ -62,16 +64,20 @@ import javax.inject.Initializer;
  * <li>interceptor bindings are defined by annotations
  *
  */
-public class NewBean extends SimpleBean
+public class NewBean extends InjectionTargetImpl
 {
-  NewBean(InjectManager inject, Class type)
+  private AnnotatedType _beanType;
+  
+  NewBean(InjectManager inject, AnnotatedType beanType)
   {
-    super(inject, type);
+    super(inject, beanType);
 
-    addBinding(NewLiteral.NEW);
-    setScopeType(Dependent.class);
+    _beanType = beanType;
 
-    init();
+    //addBinding(NewLiteral.NEW);
+    //setScopeType(Dependent.class);
+
+    //init();
   }
 
   /**
@@ -99,28 +105,34 @@ public class NewBean extends SimpleBean
   /**
    * @New disables produces introspection.
    */
+  /*
   @Override
-  protected void introspectProduces(Method []methods)
+  protected void introspectProduces(Set<AnnotatedMethod> methods)
   {
   }
+  */
 
   /**
    * @New disables observer introspection.
    */
+  /*
   @Override
-  protected void introspectObservers(Method []methods)
+  protected void introspectObservers(Set<AnnotatedMethod> methods)
   {
   }
+  */
 
   /**
    * Creates a new instance of the component.
    */
-    public Object create(CreationalContext env,
-			 InjectionPoint ij)
+  @Override
+  public Object create(CreationalContext env)
   {
-    Object value = createNew(env, ij);
-
-    init(value, env);
+    InjectionTarget target = this;
+    
+    Object value = target.produce(env);
+    target.inject(value, env);
+    target.postConstruct(value);
     
     return value;
   }

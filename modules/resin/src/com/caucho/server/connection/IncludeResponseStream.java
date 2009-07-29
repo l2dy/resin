@@ -160,8 +160,9 @@ public class IncludeResponseStream extends ToByteResponseStream {
 
       _writer.write(buffer, 0, charLength);
     
-      if (_cacheWriter != null)
+      if (_cacheWriter != null) {
 	_cacheWriter.write(buffer, 0, charLength);
+      }
     }
     else
       super.flushCharBuffer();
@@ -217,8 +218,18 @@ public class IncludeResponseStream extends ToByteResponseStream {
     if (false && _isCauchoResponseStream) // jsp/15dv
       super.write(buf, offset, length);
     else {
+      // server/2h0m
+      
       if (_os == null)
 	_os = _next.getOutputStream();
+
+      if (_cacheStream != null)
+	_cacheStream.write(buf, offset, length);
+
+      if (_cacheWriter != null) {
+	// server/2h0m
+	_response.killCache();
+      }
 
       _os.write(buf, offset, length);
     }
@@ -245,8 +256,9 @@ public class IncludeResponseStream extends ToByteResponseStream {
       if (length == 0)
 	return;
     
-      if (_cacheStream != null)
+      if (_cacheStream != null) {
 	_cacheStream.write(buf, offset, length);
+      }
 
       if (_os == null)
 	_os = _next.getOutputStream();
@@ -337,5 +349,10 @@ public class IncludeResponseStream extends ToByteResponseStream {
 
     _cacheStream = null;
     _cacheWriter = null;
+  }
+
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _next + "]";
   }
 }

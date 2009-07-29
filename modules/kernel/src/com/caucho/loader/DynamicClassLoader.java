@@ -925,25 +925,25 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public final String getClassPath()
   {
-    StringBuilder head = new StringBuilder();
+    ArrayList<String> list = new ArrayList<String>();
 
-    buildClassPath(head);
+    buildClassPath(list);
 
-    return head.toString();
+    return toClassPath(list);
   }
 
   /**
    * Fill data for the class path.  fillClassPath() will add all 
    * .jar and .zip files in the directory list.
    */
-  protected final void buildClassPath(StringBuilder head)
+  protected final void buildClassPath(ArrayList<String> cp)
   {
     ClassLoader parent = getParent();
 
     if (parent instanceof DynamicClassLoader)
-      ((DynamicClassLoader) parent).buildClassPath(head);
+      ((DynamicClassLoader) parent).buildClassPath(cp);
     else {
-      head.append(CauchoSystem.getClassPath());
+      cp.addAll(CauchoSystem.getClassPathList());
 
       for (; parent != null; parent = parent.getParent()) {
 	// XXX: should be reverse order
@@ -951,32 +951,30 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 	  URLClassLoader urlLoader = (URLClassLoader) parent;
 
 	  for (URL url : urlLoader.getURLs()) {
-	    if (head.length() > 0)
-	      head.append(CauchoSystem.getPathSeparatorChar());
-
 	    String urlString = url.toString();
 	    if (urlString.startsWith("file:"))
 	      urlString = urlString.substring("file:".length());
-	    
-	    head.append(urlString);
+
+	    if (! cp.contains(urlString))
+	      cp.add(urlString);
 	  }
 	}
       }
     }
 
-    buildImportClassPath(head);
+    buildImportClassPath(cp);
 
     ArrayList<Loader> loaders = getLoaders();
     if (loaders != null) {
       for (int i = 0; i < loaders.size(); i++) {
 	Loader loader = loaders.get(i);
 
-	loader.buildClassPath(head);
+	loader.buildClassPath(cp);
       }
     }
   }
 
-  protected void buildImportClassPath(StringBuilder sb)
+  protected void buildImportClassPath(ArrayList<String> sb)
   {
   }
 
@@ -986,16 +984,16 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public final String getLocalClassPath()
   {
-    StringBuilder head = new StringBuilder();
+    ArrayList<String> cp = new ArrayList<String>();
 
     ArrayList<Loader> loaders = getLoaders();
     for (int i = 0; i < loaders.size(); i++) {
       Loader loader = loaders.get(i);
 
-      buildClassPath(head);
+      buildClassPath(cp);
     }
 
-    return head.toString();
+    return toClassPath(cp);
   }
 
   /**
@@ -1004,31 +1002,31 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public final String getSourcePath()
   {
-    StringBuilder head = new StringBuilder();
+    ArrayList<String> cp = new ArrayList<String>();
 
-    buildSourcePath(head);
+    buildSourcePath(cp);
 
-    return head.toString();
+    return toClassPath(cp);
   }
 
   /**
    * Fill data for the class path.  fillSourcePath() will add all 
    * .jar and .zip files in the directory list.
    */
-  protected final void buildSourcePath(StringBuilder head)
+  protected final void buildSourcePath(ArrayList<String> cp)
   {
     ClassLoader parent = getParent();
 
     if (parent instanceof DynamicClassLoader)
-      ((DynamicClassLoader) parent).buildSourcePath(head);
+      ((DynamicClassLoader) parent).buildSourcePath(cp);
     else
-      head.append(CauchoSystem.getClassPath());
+      cp.addAll(CauchoSystem.getClassPathList());
 
     ArrayList<Loader> loaders = getLoaders();
     for (int i = 0; i < loaders.size(); i++) {
       Loader loader = loaders.get(i);
 
-      loader.buildSourcePath(head);
+      loader.buildSourcePath(cp);
     }
   }
 
@@ -1087,6 +1085,19 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 	}
       }
     }
+  }
+
+  protected static String toClassPath(ArrayList<String> list)
+  {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < list.size(); i++) {
+      if (i != 0)
+	sb.append(CauchoSystem.getPathSeparatorChar());
+
+      sb.append(list.get(i));
+    }
+
+    return sb.toString();
   }
 
   /**
@@ -1305,7 +1316,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   {
     // XXX: removed sync block, since handled below
 
-    Class cl = loadClassImpl(name, resolve);
+    Class cl = null;
+
+    cl = loadClassImpl(name, resolve);
 
     if (cl != null)
       return cl;
@@ -1504,7 +1517,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     }
 
     try {
-      return loadClass(entry);
+      return loadClassEntry(entry);
     } catch (RuntimeException e) {
       throw e;
     } catch (ClassNotFoundException e) {
@@ -1541,14 +1554,19 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    * Loads the class from the loader.  The loadClass must be in the
    * top classLoader because the defineClass must be owned by the top.
    */
-  protected Class loadClass(ClassEntry entry)
-      throws IOException, ClassNotFoundException
+  protected Class loadClassEntry(ClassEntry entry)
+    throws IOException, ClassNotFoundException
   {
+    Class cl = null;
+
+    byte []bBuf;
+    int bLen;
+    
     synchronized (entry) {
-      Class cl = entry.getEntryClass();
+      cl = entry.getEntryClass();
 
       if (cl != null)
-        return cl;
+	return cl;
 
       entry.preLoad();
 
@@ -1588,8 +1606,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
       entry.load(buffer);
 
-      byte []bBuf = buffer.getBuffer();
-      int bLen = buffer.length();
+      bBuf = buffer.getBuffer();
+      bLen = buffer.length();
 
       if (_classFileTransformerList != null) {
 	Class redefineClass = null;
@@ -1635,34 +1653,37 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 	  }
 	}
       }
+    }
 
-      try {
-        cl = defineClass(entry.getName(),
-			 bBuf, 0, bLen,
-			 entry.getCodeSource());
-      } catch (RuntimeException e) {
-        log().log(Level.FINE, entry.getName() + " [" + e.toString() + "]", e);
-
-	throw e;
-      } catch (Exception e) {
-        log().log(Level.FINE, entry.getName() + " [" + e.toString() + "]", e);
-
-        ClassNotFoundException exn;
-        exn = new ClassNotFoundException(entry.getName() + " [" + e + "]", e);
-        //exn.initCause(e);
-
-        throw exn;
-      }
+    try {
+      // #3423 - defineClass must be outside ClassEntry synchronized
+      // block because it can force recursive definitions,
+      // possibly causing deadlocks
+      cl = defineClass(entry.getName(),
+		       bBuf, 0, bLen,
+		       entry.getCodeSource());
 
       entry.setEntryClass(cl);
+    } catch (RuntimeException e) {
+      log().log(Level.FINE, entry.getName() + " [" + e.toString() + "]", e);
 
-      if (entry.postLoad()) {
-        _dependencies.add(AlwaysModified.create());
-        _dependencies.setModified(true);
-      }
+      throw e;
+    } catch (Exception e) {
+      log().log(Level.FINE, entry.getName() + " [" + e.toString() + "]", e);
 
-      return cl;
+      ClassNotFoundException exn;
+      exn = new ClassNotFoundException(entry.getName() + " [" + e + "]", e);
+      //exn.initCause(e);
+
+      throw exn;
     }
+
+    if (entry.postLoad()) {
+      _dependencies.add(AlwaysModified.create());
+      _dependencies.setModified(true);
+    }
+
+    return cl;
   }
 
   /**

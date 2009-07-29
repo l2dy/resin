@@ -30,7 +30,6 @@
 package com.caucho.server.webbeans;
 
 import com.caucho.util.*;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.scope.ApplicationScope;
 import com.caucho.config.scope.ScopeContext;
 import com.caucho.server.dispatch.ServletInvocation;
@@ -38,15 +37,16 @@ import com.caucho.server.dispatch.ServletInvocation;
 import java.lang.annotation.Annotation;
 import java.util.*;
 
-import javax.context.*;
 import javax.faces.*;
 import javax.faces.context.*;
 import javax.faces.component.*;
 import javax.servlet.*;
 import javax.servlet.http.*;
-import javax.context.ConversationScoped;
-import javax.context.Conversation;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.ConversationScoped;
+import javax.enterprise.context.spi.Conversation;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.context.spi.Contextual;
+import javax.enterprise.inject.spi.Bean;
 
 /**
  * The conversation scope value
@@ -55,6 +55,8 @@ public class ConversationScope extends ScopeContext
   implements Conversation, java.io.Serializable
 {
   private static final L10N L = new L10N(ConversationScope.class);
+  
+  private ScopeIdMap _idMap = new ScopeIdMap();
 
   public ConversationScope()
   {
@@ -109,8 +111,12 @@ public class ConversationScope extends ScopeContext
 	scope._conversationMap.put(id, map);
     }
 
+    Bean comp = (Bean) bean;
+
+    String scopeId = _idMap.getId(comp);
+
     if (map != null)
-      return (T) map.get(((ComponentImpl) bean).getScopeId());
+      return (T) map.get(scopeId);
     else
       return null;
   }
@@ -125,6 +131,10 @@ public class ConversationScope extends ScopeContext
 
     if (instance != null || cxt == null)
       return instance;
+
+    Bean comp = (Bean) bean;
+
+    String scopeId = _idMap.getId(comp);
 
     FacesContext facesContext = FacesContext.getCurrentInstance();
 
@@ -160,7 +170,7 @@ public class ConversationScope extends ScopeContext
     if (map != null) {
       instance = bean.create(cxt);
 
-      map.put(((ComponentImpl) bean).getScopeId(), instance);
+      map.put(scopeId, instance);
     }
 
     return instance;
@@ -182,6 +192,14 @@ public class ConversationScope extends ScopeContext
   // Conversation API
   //
 
+  /**
+   * Begins an extended conversation
+   */
+  public void begin(String name)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
   /**
    * Begins an extended conversation
    */
@@ -234,6 +252,26 @@ public class ConversationScope extends ScopeContext
       return;
 
     scope._extendedConversation = null;
+  }
+
+  public boolean isLongRunning()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public String getId()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public long getTimeout()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public void setTimeout(long timeout)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   static class Scope implements java.io.Serializable {

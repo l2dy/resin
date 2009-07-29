@@ -31,6 +31,7 @@ package com.caucho.server.security;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.program.ContainerProgram;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.security.Authenticator;
 import com.caucho.security.AbstractLogin;
 import com.caucho.security.BasicLogin;
@@ -39,6 +40,7 @@ import com.caucho.security.Login;
 import com.caucho.util.L10N;
 
 import javax.servlet.ServletException;
+import javax.enterprise.inject.spi.InjectionTarget;
 import java.util.logging.Logger;
 
 /**
@@ -47,7 +49,7 @@ import java.util.logging.Logger;
 public class LoginConfig {
   private static final Logger log
     = Logger.getLogger(LoginConfig.class.getName());
-  static final L10N L = new L10N(LoginConfig.class);
+  private static final L10N L = new L10N(LoginConfig.class);
 
   private String _authMethod = "basic";
   private String _realmName;
@@ -184,6 +186,10 @@ public class LoginConfig {
 
       if (_authenticator != null)
 	login.setAuthenticator(_authenticator);
+
+      InjectManager manager = InjectManager.create();
+      InjectionTarget inject = manager.createInjectionTarget(login.getClass());
+      inject.inject(login, manager.createCreationalContext());
     
       login.init();
 

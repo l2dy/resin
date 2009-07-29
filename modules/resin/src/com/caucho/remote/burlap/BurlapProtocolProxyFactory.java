@@ -33,6 +33,8 @@ import com.caucho.burlap.client.*;
 import com.caucho.remote.*;
 import com.caucho.remote.client.*;
 
+import java.lang.annotation.Annotation;
+
 /**
  * Burlap factory for creating remote-client proxies
  */
@@ -49,6 +51,14 @@ public class BurlapProtocolProxyFactory
   public void setURL(String url)
   {
     _url = url;
+  }
+
+  @Override
+  public void setProxyType(Annotation ann)
+  {
+    BurlapClient client = (BurlapClient) ann;
+
+    setURL(client.url());
   }
   
   /**

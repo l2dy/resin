@@ -30,6 +30,9 @@
 package com.caucho.quercus;
 
 import com.caucho.config.ConfigException;
+import com.caucho.java.JavaCompiler;
+import com.caucho.java.WorkDir;
+import com.caucho.loader.SimpleLoader;
 import com.caucho.quercus.annotation.ClassImplementation;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.expr.ExprFactory;
@@ -262,17 +265,26 @@ public class Quercus
 
   public String getVersion()
   {
-    return "Open Source 4.0.0";
+    return "Open Source 4.0.1";
   }
 
   public String getVersionDate()
   {
-    return "20090301T2777";
+    return "20090801";
   }
 
   public boolean isProfile()
   {
     return false;
+  }
+  
+  public int getProfileIndex(String name)
+  {
+    return -1;
+  }
+  
+  public void setProfileProbability(double probability)
+  {
   }
 
   protected PageManager createPageManager()
@@ -295,12 +307,10 @@ public class Quercus
 
   public ModuleContext getLocalContext(ClassLoader loader)
   {
-    if (_moduleContext == null) {
-      synchronized (this) {
-	if (_moduleContext == null) {
-	  _moduleContext = createModuleContext(null, loader);
-	  _moduleContext.init();
-	}
+    synchronized (this) {
+      if (_moduleContext == null) {
+	_moduleContext = createModuleContext(null, loader);
+	_moduleContext.init();
       }
     }
 
@@ -334,7 +344,7 @@ public class Quercus
     return _pageManager.isCompile();
   }
   
-  /*
+  /**
    * Returns true if this is the Professional version.
    */
   public boolean isPro()
@@ -342,7 +352,7 @@ public class Quercus
     return false;
   }
   
-  /*
+  /**
    * Returns true if Quercus is running under Resin.
    */
   public boolean isResin()
@@ -905,16 +915,42 @@ public class Quercus
   {
     return _serverEnvMap;
   }
+  
+  /**
+   * Returns the compile classloader
+   */
+  public ClassLoader getCompileClassLoader()
+  {
+    return null;
+  }
 
+  /**
+   * Sets the compile classloader
+   */
+  public void setCompileClassLoader(ClassLoader loader)
+  {
+  }
+  
   /**
    * Returns the relative path.
    */
-  /*
-  public String getClassName(Path path)
+  public final String getClassName(Path path)
   {
-    return _pageManager.getClassName(path);
+    if (path == null)
+      return "tmp.eval";
+    
+    String pathName = path.getFullPath();
+    String pwdName = getPwd().getFullPath();
+
+    String relPath;
+
+    if (pathName.startsWith(pwdName))
+      relPath = pathName.substring(pwdName.length());
+    else
+      relPath = pathName;
+
+    return "_quercus." + JavaCompiler.mangleName(relPath);
   }
-  */
 
   /**
    * Returns an include path.

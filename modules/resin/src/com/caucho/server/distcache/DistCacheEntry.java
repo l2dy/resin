@@ -56,15 +56,15 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   private Object _key;
 
   private final AtomicBoolean _isReadUpdate = new AtomicBoolean();
-  
+
   private final AtomicReference<MnodeValue> _mnodeValue
     = new AtomicReference<MnodeValue>();
 
   private int _hits;
 
   public DistCacheEntry(Object key,
-		    HashKey keyHash,
-		    ClusterPod.Owner owner)
+                        HashKey keyHash,
+                        ClusterPod.Owner owner)
   {
     _key = key;
     _keyHash = keyHash;
@@ -72,9 +72,9 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   }
 
   public DistCacheEntry(Object key,
-		    HashKey keyHash,
-		    ClusterPod.Owner owner,
-		    CacheConfig config)
+                        HashKey keyHash,
+                        ClusterPod.Owner owner,
+                        CacheConfig config)
   {
     _key = key;
     _keyHash = keyHash;
@@ -88,6 +88,14 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   public final Object getKey()
   {
     return _key;
+  }
+
+  /**
+   * Returns the keyHash
+   */
+  public final HashKey getKeyHash()
+  {
+    return _keyHash;
   }
 
   /**
@@ -107,11 +115,16 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   }
 
   /**
-   * Returns the keyHash
+   * Returns the cacheHash
    */
-  public final HashKey getKeyHash()
+  public final HashKey getCacheHash()
   {
-    return _keyHash;
+    MnodeValue value = getMnodeValue();
+
+    if (value != null)
+      return value.getCacheHashKey();
+    else
+      return null;
   }
 
   /**
@@ -141,11 +154,14 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   /**
    * Returns the object, checking the backing store if necessary.
    */
-  public Object get(CacheConfig config)
+  abstract public Object get(CacheConfig config);
+
+  /**
+   * Returns the object, updating the backing store if necessary.
+   */
+  public Object getLazy(CacheConfig config)
   {
-    CacheLoader cacheLoader = config.getCacheLoader();
-    
-    return (cacheLoader == null) ? null : cacheLoader.load(getKey());
+    return get(config);
   }
 
   /**
@@ -172,8 +188,8 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
    * Sets the value by an input stream
    */
   abstract public ExtCacheEntry put(InputStream is,
-				    CacheConfig config,          
-				    long idleTimeout)
+                                    CacheConfig config,
+                                    long idleTimeout)
     throws IOException;
 
   /**
@@ -204,7 +220,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
    * Sets the current value.
    */
   public final boolean compareAndSet(MnodeValue oldMnodeValue,
-				     MnodeValue mnodeValue)
+                                     MnodeValue mnodeValue)
   {
     return _mnodeValue.compareAndSet(oldMnodeValue, mnodeValue);
   }
@@ -236,7 +252,10 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
 
   public void clearLease()
   {
-    getMnodeValue().clearLease();
+    MnodeValue mnodeValue = getMnodeValue();
+
+    if (mnodeValue != null)
+      mnodeValue.clearLease();
   }
 
   public long getCost()
@@ -244,7 +263,6 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
     return 0;
   }
 
-  //TODO(fred): implement as time of first put for key.
   public long getCreationTime()
   {
     return getMnodeValue().getCreationTime();
@@ -289,9 +307,9 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   public String toString()
   {
     return (getClass().getSimpleName()
-	    + "[key=" + _key
-	    + ",keyHash=" + Hex.toHex(_keyHash.getHash(), 0, 4)
-	    + ",owner=" + _owner
-	    + "]");
+            + "[key=" + _key
+            + ",keyHash=" + Hex.toHex(_keyHash.getHash(), 0, 4)
+            + ",owner=" + _owner
+            + "]");
   }
 }

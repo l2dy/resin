@@ -30,24 +30,29 @@
 package com.caucho.ejb.cfg;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Names;
 import com.caucho.config.gen.ApiClass;
 import com.caucho.config.gen.ApiMethod;
 import com.caucho.config.gen.BeanGenerator;
-import com.caucho.config.gen.MessageGenerator;
+import com.caucho.config.gen.XaAnnotation;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.JndiBuilder;
+import com.caucho.ejb.gen.MessageGenerator;
 import com.caucho.ejb.AbstractServer;
 import com.caucho.ejb.manager.EjbContainer;
 import com.caucho.ejb.message.*;
 import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.jca.*;
+import com.caucho.jms.JmsMessageListener;
 import com.caucho.jca.cfg.*;
 import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.ActivationConfigProperty;
 import javax.ejb.MessageDriven;
+import javax.ejb.TransactionAttribute;
+import javax.ejb.TransactionAttributeType;
 import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
 import javax.interceptor.AroundInvoke;
@@ -57,11 +62,13 @@ import javax.jms.MessageListener;
 import javax.jms.Session;
 import javax.resource.spi.*;
 import javax.naming.NamingException;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
 import java.lang.reflect.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Configuration for an ejb entity bean.
@@ -91,6 +98,27 @@ public class EjbMessageBean extends EjbBean {
   public EjbMessageBean(EjbConfig config, String ejbModuleName)
   {
     super(config, ejbModuleName);
+  }
+  
+  /**
+   * Creates a new session bean configuration.
+   */
+  public EjbMessageBean(EjbConfig ejbConfig,
+			AnnotatedType annType,
+			MessageDriven messageDriven)
+  {
+    super(ejbConfig, annType, messageDriven.name());
+  }
+
+  
+  /**
+   * Creates a new session bean configuration.
+   */
+  public EjbMessageBean(EjbConfig ejbConfig,
+			AnnotatedType annType,
+			String ejbName)
+  {
+    super(ejbConfig, annType, ejbName);
   }
 
   /**
@@ -331,18 +359,25 @@ public class EjbMessageBean extends EjbBean {
 
         Destination dest = null;
 
-        List<Bean> beans = webBeans.getBeansOfType(Destination.class);
-        
-        for (Bean bean : beans) {
-          if (destinationName.equals(bean.getName()))
-            dest = (Destination) bean.create(null);
-        }
+        Set<Bean<?>> beans = webBeans.getBeans(Destination.class,
+					       Names.create(destinationName));
+
+	if (beans.size() > 0) {
+	  Bean bean = webBeans.getHighestPrecedenceBean(beans);
+
+	  dest = (Destination) webBeans.getReference(bean, Destination.class,
+						     webBeans.createCreationalContext());
+	}
 
 	setDestination(dest);
       }
     }
     else if ("messageSelector".equals(name)) {
       _messageSelector = (String) value;
+    }
+    else if ("message-consumer-max".equals(name)
+	     || "consumer-max".equals(name)) {
+      setMessageConsumerMax(Integer.parseInt(String.valueOf(value)));
     }
     else
       log.log(Level.FINE, L.l("activation-config-property '{0}' is unknown, ignored",
@@ -413,12 +448,10 @@ public class EjbMessageBean extends EjbBean {
 
   protected void introspect()
   {
-    _messageBean.setApi(new ApiClass(_messagingType));
-    
     super.introspect();
 
     MessageDriven messageDriven
-      = (MessageDriven) getEJBClass().getAnnotation(MessageDriven.class);
+      = getEJBClassWrapper().getAnnotation(MessageDriven.class);
 
     if (messageDriven != null) {
       ActivationConfigProperty []activationConfig
@@ -436,17 +469,15 @@ public class EjbMessageBean extends EjbBean {
       if (type != null && ! Object.class.equals(type))
 	_messagingType = type;
     }
-  }
-  
-  /**
-   * Creates the bean generator for the session bean.
-   */
-  @Override
-  protected BeanGenerator createBeanGenerator()
-  {
-    _messageBean = new MessageGenerator(getEJBName(), getEJBClassWrapper());
-    
-    return _messageBean;
+
+    JmsMessageListener listener
+      = getEJBClassWrapper().getAnnotation(JmsMessageListener.class);
+
+    if (listener != null) {
+      addActivationConfigProperty("destination", listener.destination());
+      addActivationConfigProperty("consumer-max",
+				  String.valueOf(listener.consumerMax()));
+    }
   }
 
   /**
@@ -468,6 +499,10 @@ public class EjbMessageBean extends EjbBean {
       return;
 
     // XXX: annotations in super classes?
+
+    if (! type.isAnnotationPresent(TransactionAttribute.class)) {
+      type.addAnnotation(XaAnnotation.create(TransactionAttributeType.REQUIRED));
+    }
 
     javax.ejb.MessageDriven messageDriven
       = type.getAnnotation(javax.ejb.MessageDriven.class);
@@ -498,6 +533,19 @@ public class EjbMessageBean extends EjbBean {
 
       configureMethods(type);
     }
+  }
+  
+  /**
+   * Creates the bean generator for the session bean.
+   */
+  @Override
+  protected BeanGenerator createBeanGenerator()
+  {
+    _messageBean = new MessageGenerator(getEJBName(), getEJBClassWrapper());
+    
+    _messageBean.setApi(new ApiClass(_messagingType));
+    
+    return _messageBean;
   }
 
   private void configureMethods(ApiClass type)
@@ -545,7 +593,7 @@ public class EjbMessageBean extends EjbBean {
     if (factory == null) {
       InjectManager webBeans = InjectManager.create();
 
-      factory = webBeans.getObject(ConnectionFactory.class);
+      factory = webBeans.getReference(ConnectionFactory.class);
     }
       
     if (_destination != null)
@@ -611,7 +659,7 @@ public class EjbMessageBean extends EjbBean {
       InjectManager webBeans = InjectManager.create();
 
       ResourceAdapter ra
-	= (ResourceAdapter) webBeans.getInstanceByType(raClass);
+	= (ResourceAdapter) webBeans.getReference(raClass);
 
       if (ra == null) {
 	throw error(L.l("resource-adapter '{0}' must be configured in a <connector> tag.",
@@ -640,7 +688,7 @@ public class EjbMessageBean extends EjbBean {
 	throw new ConfigException(L.l("ResourceAdapter is required for ActivationSpecServer"));
 
     
-      server = new MessageServer(ejbManager);
+      server = new MessageServer(ejbManager, getAnnotatedType());
 
       server.setConfigLocation(getFilename(), getLine());
 

@@ -45,36 +45,67 @@ import java.io.IOException;
 public class SetRequestSecureFilterChain extends AbstractFilterChain
 {
   private final FilterChain _next;
+  private Boolean _isSecure;
 
-  public SetRequestSecureFilterChain(FilterChain next)
+  public SetRequestSecureFilterChain(FilterChain next,
+				     Boolean isSecure)
   {
     _next = next;
+    _isSecure = isSecure;
   }
 
   @Override
   public void doFilter(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
+    doFilter(request, response, _next, _isSecure);
+  }
+
+  public static void doFilter(ServletRequest request,
+			      ServletResponse response,
+			      FilterChain next,
+			      boolean isSecure)
+    throws ServletException, IOException
+  {
     HttpServletRequest req = (HttpServletRequest) request;
+    HttpServletResponse res = (HttpServletResponse) response;
 
-    req = new SecureServletRequestWrapper(req);
+    req = new SecureServletRequestWrapper(req, isSecure);
 
-    _next.doFilter(req, response);
+    if (res instanceof CauchoResponse) {
+      // server/125i - XXX: needs refactor
+      CauchoResponse cRes = (CauchoResponse) res;
+      CauchoRequest oldReq = cRes.getAbstractHttpResponse().getRequest();
+      
+      cRes.getAbstractHttpResponse().setRequest((CauchoRequest) req);
+      try {
+	next.doFilter(req, res);
+      } finally {
+	cRes.getAbstractHttpResponse().setRequest(oldReq);
+      }
+    }
+    else
+      next.doFilter(req, res);
   }
 
   public static class SecureServletRequestWrapper extends RequestAdapter
   {
-    public SecureServletRequestWrapper(HttpServletRequest request)
+    private Boolean _isSecure;
+    
+    public SecureServletRequestWrapper(HttpServletRequest request,
+				       Boolean isSecure)
     {
       setRequest(request);
 
       if (request instanceof CauchoRequest)
 	setWebApp(((CauchoRequest) request).getWebApp());
+
+      _isSecure = isSecure;
     }
 
     public boolean isSecure()
     {
-      return true;
+      return _isSecure;
     }
 
     /**

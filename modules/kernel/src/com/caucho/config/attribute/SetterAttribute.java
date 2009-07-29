@@ -37,7 +37,7 @@ import com.caucho.util.L10N;
 import com.caucho.xml.QName;
 
 public class SetterAttribute extends Attribute {
-  private final L10N L = new L10N(SetterAttribute.class);
+  private static final L10N L = new L10N(SetterAttribute.class);
   
   private final Method _setter;
   private final Class _type;
@@ -133,13 +133,13 @@ public class SetterAttribute extends Attribute {
     throws ConfigException
   {
     try {
-      if (configType != null
-	  && _type.isAssignableFrom(configType.getType())) {
+      if (configType != null && _type.isAssignableFrom(configType.getType())) {
 	// ioc/2172
 	return configType.create(parent, name);
       }
-      else
+      else {
 	return getConfigType().create(parent, name);
+      }
     } catch (Exception e) {
       throw ConfigException.create(_setter, e);
     }

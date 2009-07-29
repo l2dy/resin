@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.servlet;
 
+import com.caucho.java.WorkDir;
 import com.caucho.quercus.Quercus;
 import com.caucho.quercus.QuercusDieException;
 import com.caucho.quercus.QuercusErrorException;
@@ -87,7 +88,15 @@ public class QuercusServletImpl extends HttpServlet
 
     checkServletAPIVersion();
     
-    getQuercus().setPwd(new FilePath(_servletContext.getRealPath("/")));
+    Path pwd = new FilePath(_servletContext.getRealPath("/"));
+    
+    getQuercus().setPwd(pwd);
+
+    // need to set these for non-Resin containers
+    if (! getQuercus().isResin()) {
+      Vfs.setPwd(pwd);
+      WorkDir.setLocalWorkDir(pwd.lookup("WEB-INF/work"));
+    }
 
     getQuercus().init();
   }
@@ -194,8 +203,8 @@ public class QuercusServletImpl extends HttpServlet
       catch (QuercusLineRuntimeException e) {
         log.log(Level.FINE, e.toString(), e);
 
-	ws.println(e.getMessage());
-	//  return;
+        ws.println(e.getMessage());
+        //  return;
       }
       catch (QuercusValueException e) {
         log.log(Level.FINE, e.toString(), e);

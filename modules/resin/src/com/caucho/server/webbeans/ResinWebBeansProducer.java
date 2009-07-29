@@ -31,6 +31,7 @@ package com.caucho.server.webbeans;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.CauchoDeployment;
+import com.caucho.config.ContextDependent;
 import com.caucho.config.annotation.ServiceBinding;
 import com.caucho.config.annotation.OsgiServiceBinding;
 import com.caucho.config.inject.BeanStartupEvent;
@@ -51,14 +52,14 @@ import java.util.Set;
 import java.util.concurrent.*;
 import java.util.logging.*;
 import javax.ejb.*;
-import javax.context.ApplicationScoped;
-import javax.context.Conversation;
-import javax.event.Observes;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.spi.Conversation;
+import javax.enterprise.event.Observes;
 import javax.management.*;
 import javax.transaction.*;
-import javax.inject.*;
-import javax.inject.manager.Bean;
-import javax.inject.manager.Manager;
+import javax.enterprise.inject.*;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeanManager;
 
 //import org.osgi.framework.BundleContext;
 
@@ -81,18 +82,18 @@ public class ResinWebBeansProducer
   /**
    * Returns the web beans container.
    */
+  /*
   @Produces
-  @Standard
-  public Manager getManager()
+  public BeanManager getManager()
   {
     return InjectManager.create();
   }
+  */
   
   /**
    * Returns the web beans conversation controller
    */
   @Produces
-  @Standard
   public Conversation getConversation()
   {
     return InjectManager.create().createConversation();
@@ -133,6 +134,7 @@ public class ResinWebBeansProducer
    */
   @Produces
   @CauchoDeployment
+  @ContextDependent
   public ScheduledExecutorService getScheduledExecutorService()
   {
     return ScheduledThreadPool.getLocal();
@@ -143,65 +145,9 @@ public class ResinWebBeansProducer
    */
   @Produces
   @CauchoDeployment
+  @ContextDependent
   public TimerService getTimerService()
   {
     return EjbTimerService.getCurrent();
   }
-
-  //
-  // event listeners
-  //
-
-  /**
-   * Starts a bean based on a ServiceStartup event
-   */
-  public void serviceStartup(@Observes @ServiceBinding BeanStartupEvent beanEvent)
-  {
-    Bean bean = beanEvent.getBean();
-    
-    if (log.isLoggable(Level.FINER))
-      log.fine(bean + " starting at initialization");
-    
-    InjectManager webBeans = InjectManager.create();
-
-    webBeans.getInstance(bean);
-  }
-
-  /**
-   * Registers a bean with OSGi based on a ServiceStartup event
-   */
-  /*
-  public void osgiServiceStartup(@Observes @OsgiServiceBinding
-				 BeanStartupEvent beanEvent)
-  {
-    Bean bean = beanEvent.getBean();
-    
-    if (log.isLoggable(Level.FINER))
-      log.fine(bean + " starting at initialization");
-    
-    InjectManager webBeans = InjectManager.create();
-    BundleContext bundle = webBeans.getInstanceByType(BundleContext.class);
-
-    if (bundle == null)
-      throw new ConfigException(L.l("The current environment does not have a BundleContext"));
-
-    Object service = webBeans.getInstance(bean);
-
-    Set<Class> typeSet = bean.getTypes();
-      
-    String types[] = new String[typeSet.size()];
-    int i = 0;
-    for (Class type : typeSet) {
-      types[i++] = type.getName();
-    }
-    Dictionary properties = new Hashtable();
-
-    String name = bean.getName();
-
-    if (name != null)
-      properties.put("javax.webbeans.Named", name);
-
-    bundle.registerService(types, service, properties);
-  }
-  */
 }

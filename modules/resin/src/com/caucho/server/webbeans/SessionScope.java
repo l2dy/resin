@@ -29,22 +29,25 @@
 
 package com.caucho.server.webbeans;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.scope.ApplicationScope;
 import com.caucho.config.scope.DestructionListener;
 import com.caucho.config.scope.ScopeContext;
+import com.caucho.config.scope.ContextContainer;
 import com.caucho.server.dispatch.ServletInvocation;
 
 import java.lang.annotation.Annotation;
 import javax.servlet.*;
 import javax.servlet.http.*;
-import javax.context.*;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.*;
+import javax.enterprise.context.spi.*;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * The session scope value
  */
 public class SessionScope extends ScopeContext {
+  private ScopeIdMap _idMap = new ScopeIdMap();
   
   /**
    * Returns true if the scope is currently active.
@@ -78,13 +81,22 @@ public class SessionScope extends ScopeContext {
       return null;
 
     HttpSession session = ((HttpServletRequest) request).getSession();
-    ComponentImpl comp = (ComponentImpl) bean;
 
-    Object result = session.getAttribute(comp.getScopeId());
+    if (session == null)
+      return null;
 
-    return (T) result;
+    ContextContainer context
+      = (ContextContainer) session.getAttribute("webbeans.resin");
+
+    if (context != null) {
+      String id = ((PassivationCapable) bean).getId();
+      
+      return (T) context.get(id);
+    }
+
+    return null;
   }
-  
+
   public <T> T get(Contextual<T> bean,
 		   CreationalContext<T> creationalContext)
   {
@@ -94,16 +106,27 @@ public class SessionScope extends ScopeContext {
       return null;
 
     HttpSession session = ((HttpServletRequest) request).getSession();
-    ComponentImpl comp = (ComponentImpl) bean;
 
-    Object result = session.getAttribute(comp.getScopeId());
+    Bean comp = (Bean) bean;
+
+    String id = ((PassivationCapable) bean).getId();
+
+    ContextContainer context
+      = (ContextContainer) session.getAttribute("webbeans.resin");
+
+    if (context == null) {
+      context = new SessionContextContainer();
+      session.setAttribute("webbeans.resin", context);
+    }
+    
+    Object result = context.get(id);
 
     if (result != null || creationalContext == null)
       return (T) result;
-
+    
     result = comp.create(creationalContext);
 
-    session.setAttribute(comp.getScopeId(), result);
+    context.put(id, result);
     
     return (T) result;
   }
@@ -124,7 +147,7 @@ public class SessionScope extends ScopeContext {
 	    || scope instanceof SessionScope);
   }
 
-  public void addDestructor(ComponentImpl comp, Object value)
+  public void addDestructor(Bean comp, Object value)
   {
     ServletRequest request = ServletInvocation.getContextRequest();
 
@@ -137,8 +160,9 @@ public class SessionScope extends ScopeContext {
 	listener = new DestructionListener();
 	session.setAttribute("caucho.destroy", listener);
       }
-      
-      listener.addValue(comp, value);
+
+      // XXX:
+      //listener.addValue(comp, value);
     }
   }
 }

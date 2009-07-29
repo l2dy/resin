@@ -33,6 +33,8 @@ import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 
 import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -44,21 +46,16 @@ public final class Lock {
   private final static Logger log
     = Logger.getLogger(Lock.class.getName());
 
+  private static final long WRITE_LOCK = 1L << 32;
+  private static final long READ_LOCK = 1L;
+
   private final String _id;
 
-  // count of threads trying to upgrade from a read lock
-  private int _tryUpgradeCount;
-  // count of threads trying to get a write lock
-  private int _tryWriteCount;
+  private final AtomicLong _lockCount = new AtomicLong();
+
+  private final Object _lock = new Object();
   
-  // count of threads with a read currently running
-  private int _tryReadCount;
-  // count of threads with a read currently running
-  private int _readCount;
-  // true if a thread has a write lock
-  private boolean _isWrite;
-  
-  private Thread _owner;
+  private int _activeLockCount;
   
   public Lock(String id)
   {
@@ -78,78 +75,44 @@ public final class Lock {
    *
    * @param timeout how long to wait for a timeout
    */
-  void lockRead(Transaction xa, long timeout)
+  public void lockRead(long timeout)
     throws LockTimeoutException
   {
     if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " lockRead (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
+      log.finest(this + " lockRead 0x" + Long.toHexString(_lockCount.get()));
     }
 
-    long start = Alarm.getCurrentTime();
-    long expire = start + timeout;
-
-    synchronized (this) {
-      long now;
-
-      while (true) {
-	if (! _isWrite && _tryWriteCount == 0) {
-	  _readCount++;
-	  return;
-	}
-
-	long delta = expire - Alarm.getCurrentTime();
-
-	if (delta < 0)
-	  break;
-
-	try {
-	  wait(delta);
-	} catch (InterruptedException e) {
-	  throw new LockTimeoutException(e);
-	}
-
-	if (Alarm.isTest()) {
-	  expire = 0;
-	}
-      }
-
-      if (! Alarm.isTest()) {
-	printOwnerStack();
-	Thread.dumpStack();
-      }
-
-      throw new LockTimeoutException(L.l("{0} lockRead timed out ({1}ms) read-count:{2} try-writers:{3} is-write:{4}",
-					 this,
-					 Alarm.getCurrentTime() - start,
-					 _readCount,
-					 _tryWriteCount,
-					 _isWrite));
+    long lock = 0;
+    
+    // add to the read lock
+    for (lock = _lockCount.get();
+         ! _lockCount.compareAndSet(lock, lock + READ_LOCK);
+         lock = _lockCount.get()) {
     }
+    
+    if (lock < WRITE_LOCK) {
+      return; // read-only automatically locks
+    }
+
+    lock(timeout, READ_LOCK, 0);
   }
 
   /**
    * Clears a read lock.
    */
-  void unlockRead()
+  public void unlockRead()
     throws SQLException
   {
-    synchronized (this) {
-      _readCount--;
+    long lock = 0;
     
-      if (_readCount < 0)
-	Thread.dumpStack();
-
-      if (log.isLoggable(Level.FINEST)) {
-	log.finest(this + " unlockRead (read:" + _readCount
-		   + " write:" + _isWrite
-		   + " try-write:" + _tryWriteCount + ")");
-      }
-
-
-      notifyAll();
+    // release the read lock
+    for (lock = _lockCount.get();
+         ! _lockCount.compareAndSet(lock, lock - READ_LOCK);
+         lock = _lockCount.get()) {
     }
+
+    if (WRITE_LOCK <= lock)
+      unlock();
   }
 
   /**
@@ -157,65 +120,23 @@ public final class Lock {
    *
    * @param timeout how long to wait for a timeout
    */
-  void lockReadAndWrite(Transaction xa, long timeout)
+  public void lockReadAndWrite(long timeout)
     throws SQLException
   {
     if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " lockReadAndWrite (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
+      log.finest(this + " lockReadAndWrite "
+                 + "0x" + Long.toHexString(_lockCount.get()));
     }
 
-    long start = Alarm.getCurrentTime();
-    long expire = start + timeout;
-    boolean isOkay = false;
-
-    synchronized (this) {
-      _tryWriteCount++;
-
-      // XXX: temp debug only
-      if (_owner == null)
-	_owner = Thread.currentThread();
-
-      try {
-	while (true) {
-	  if (! _isWrite && _readCount == _tryUpgradeCount) {
-	    _readCount++;
-	    _isWrite = true;
-	    _owner = Thread.currentThread();
-	    return;
-	  }
-
-	  long delta = expire - Alarm.getCurrentTime();
-
-	  if (delta < 0 || Alarm.isTest())
-	    break;
-
-	  try {
-	    wait(delta);
-	  } catch (InterruptedException e) {
-	    throw new LockTimeoutException(e);
-	  }
-	}
-
-	if (! Alarm.isTest()) {
-	  printOwnerStack();
-	  Thread.dumpStack();
-	}
-	
-	throw new LockTimeoutException(L.l("{0} lockReadAndWrite timed out ({1}ms) readers:{2} is-write:{3} try-writers:{4} try-upgrade:{5}",
-					   this,
-					   (Alarm.getCurrentTime() - start),
-					   _readCount,
-					   _isWrite,
-					   _tryWriteCount,
-					   _tryUpgradeCount));
-      } finally {
-	_tryWriteCount--;
-
-	notifyAll();
-      }
+    long lock = 0;
+    
+    // add to the read lock
+    for (lock = _lockCount.get();
+         ! _lockCount.compareAndSet(lock, lock + (READ_LOCK|WRITE_LOCK));
+         lock = _lockCount.get()) {
     }
+    
+    lock(timeout, READ_LOCK|WRITE_LOCK, lock);
   }
 
   /**
@@ -229,21 +150,24 @@ public final class Lock {
     throws SQLException
   {
     if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " lockReadAndWriteNoWait (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
+      log.finest(this + " lockReadAndWriteNoWait "
+                 + "0x" + Long.toHexString(_lockCount.get()));
     }
 
-    synchronized (this) {
-      // XXX: temp debug only
-      if (_owner == null)
-	_owner = Thread.currentThread();
+    long value = READ_LOCK|WRITE_LOCK;
 
-      if (_readCount == 0 && ! _isWrite) {
-	_owner = Thread.currentThread();
-	_readCount++;
-	_isWrite = true;
-	return true;
+    if (_lockCount.compareAndSet(0, value)) {
+      synchronized (_lock) {
+        if (_activeLockCount == 0) {
+          _activeLockCount = 1;
+          return true;
+        }
+      }
+
+      long lock;
+      for (lock = _lockCount.get();
+           ! _lockCount.compareAndSet(lock, lock - value);
+           lock = _lockCount.get()) {
       }
     }
 
@@ -253,107 +177,23 @@ public final class Lock {
   /**
    * Clears a write lock.
    */
-  void unlockReadAndWrite()
+  public void unlockReadAndWrite()
     throws SQLException
   {
-    synchronized (this) {
-      _readCount--;
-      _isWrite = false;
-      _owner = null;
-
-      notifyAll();
+    if (log.isLoggable(Level.FINEST)) {
+      log.finest(this + " unlockReadAndWrite "
+                 + "0x" + Long.toHexString(_lockCount.get()));
     }
+
+    long lock = 0;
     
-    if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " unlockReadAndWrite (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
-    }
-  }
-
-  /**
-   * Tries to get a write lock when already have a read lock.
-   *
-   * @param timeout how long to wait for a timeout
-   */
-  void lockWrite(Transaction xa, long timeout)
-    throws SQLException
-  {
-    if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " lockWrite (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
+    // release the read lock
+    for (lock = _lockCount.get();
+         ! _lockCount.compareAndSet(lock, lock - (READ_LOCK|WRITE_LOCK));
+         lock = _lockCount.get()) {
     }
 
-    long start = Alarm.getCurrentTime();
-    long expire = start + timeout;
-
-    synchronized (this) {
-      _tryWriteCount++;
-      _tryUpgradeCount++;
-
-      // XXX: temp debug only
-      if (_owner == null)
-	_owner = Thread.currentThread();
-
-      try {
-	while (true) {
-	  if (! _isWrite && _readCount == _tryUpgradeCount) {
-	    _isWrite = true;
-	    _owner = Thread.currentThread();
-	    return;
-	  }
-
-	  long delta = expire - Alarm.getCurrentTime();
-
-	  if (delta < 0 || Alarm.isTest())
-	    break;
-
-	  try {
-	    wait(delta);
-	  } catch (InterruptedException e) {
-	    throw new LockTimeoutException(e);
-	  }
-	}
-
-	if (! Alarm.isTest()) {
-	  printOwnerStack();
-	  Thread.dumpStack();
-	}
-	
-	throw new LockTimeoutException(L.l("{0} lockWrite timed out ({1}ms) readers:{2} try-writers:{3} upgrade:{4}",
-					   this,
-					   Alarm.getCurrentTime() - start,
-					   _readCount,
-					   _tryWriteCount,
-					   _tryUpgradeCount));
-      } finally {
-	_tryWriteCount--;
-	_tryUpgradeCount--;
-
-	notifyAll();
-      }
-    }
-  }
-
-  /**
-   * Clears a write lock.
-   */
-  void unlockWrite()
-    throws SQLException
-  {
-    synchronized (this) {
-      _isWrite = false;
-      _owner = null;
-
-      notifyAll();
-    }
-    
-    if (log.isLoggable(Level.FINEST)) {
-      log.finest(this + " unlockWrite (read:" + _readCount
-		 + " write:" + _isWrite
-		 + " try-write:" + _tryWriteCount + ")");
-    }
+    unlock();
   }
 
   /**
@@ -361,26 +201,9 @@ public final class Lock {
    */
   void waitForCommit()
   {
-    // Thread.yield();
-    
-    synchronized (this) {
-      while (true) {
-	if (! _isWrite && _tryWriteCount == 0) {
-	  return;
-	}
-
-	if (Alarm.isTest())
-	  return;
-
-	try {
-	  wait(1000L);
-	} catch (InterruptedException e) {
-	  log.log(Level.FINER, e.toString(), e);
-	}
-      }
-    }
   }
 
+  /*
   private void printOwnerStack()
   {
     Thread thread = _owner;
@@ -393,9 +216,118 @@ public final class Lock {
     for (int i = 0; i < stack.length; i++)
       System.out.println(stack[i]);
   }
-  
+  */
+
+  private void lock(long timeout, long value, long initialValue)
+    throws LockTimeoutException
+  {
+    long expires = Alarm.getCurrentTime() + timeout;
+
+    boolean isWrite = (value == (READ_LOCK|WRITE_LOCK));
+
+    synchronized (_lock) {
+      if (isWrite && initialValue < WRITE_LOCK)
+        _activeLockCount += (int) initialValue;
+
+      while (_activeLockCount > 0) {
+        long delta = expires - Alarm.getCurrentTime();
+
+        if (delta < 0) {
+          long lock;
+          for (lock = _lockCount.get();
+               ! _lockCount.compareAndSet(lock, lock - value);
+               lock = _lockCount.get()) {
+          }
+          
+          throw new LockTimeoutException(L.l("{0} lock timed out ({1}ms) 0x{2}",
+                                             this, timeout, Long.toHexString(_lockCount.get())));
+        }
+
+        try {
+          Thread.interrupted();
+          _lock.wait(delta);
+        } catch (Exception e) {
+        }
+      }
+    }
+  }
+
+  private void unlock()
+  {
+    synchronized (_lock) {
+      _activeLockCount--;
+
+      if (_activeLockCount == 0) {
+        if (_lockCount.get() < WRITE_LOCK)
+          _lock.notifyAll();
+        else
+          _lock.notify();
+      }
+    }
+  }
+
+  @Override
   public String toString()
   {
-    return "Lock[" + _id + "]";
+    return getClass().getSimpleName() + "[" + _id + "]";
+  }
+
+  static final class LockNode {
+    private LockNode _next;
+    private final Thread _thread;
+    private boolean _isValid = true;
+    private boolean _isAcquire;
+    private final boolean _isWrite;
+
+    LockNode(boolean isWrite)
+    {
+      _thread = Thread.currentThread();
+      _isWrite = isWrite;
+    }
+
+    public final Thread getThread()
+    {
+      return _thread;
+    }
+
+    public LockNode getNext()
+    {
+      return _next;
+    }
+
+    public void setNext(LockNode next)
+    {
+      _next = next;
+    }
+
+    public boolean isValid()
+    {
+      return _isValid;
+    }
+
+    public void setValid(boolean isValid)
+    {
+      _isValid = isValid;
+    }
+
+    public boolean isAcquire()
+    {
+      return _isAcquire;
+    }
+
+    public void setAcquire(boolean isAcquire)
+    {
+      _isAcquire = isAcquire;
+    }
+
+    public boolean isRead()
+    {
+      return ! _isWrite;
+    }
+
+    public boolean isWrite()
+    {
+      return _isWrite;
+    }
   }
 }

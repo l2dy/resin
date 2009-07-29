@@ -44,10 +44,16 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
+
+import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Servlet to call PHP through javax.script.
@@ -62,41 +68,94 @@ public class QuercusServlet
   private Quercus _quercus;
   private QuercusServletImpl _impl;
 
-  private boolean _isCompileSet;
+  private boolean _isCompile;
+  private boolean _isLazyCompile = true;
+  private boolean _isCompileFailover = true;
+  private double _profileProbability;
+  private boolean _isRequireSource = true;
+  private DataSource _database;
+  private boolean _isStrict;
+  private int _pageCacheSize = -1;
+  private int _regexpCacheSize = -1;
+  private boolean _isConnectionPool = true;
+  private String _iniPath;
+  private String _scriptEncoding;
+  private String _mysqlVersion;
+  private String _phpVersion;
+  
+  protected File _licenseDirectory;
+  
+  private ArrayList<QuercusModule> _moduleList
+    = new ArrayList<QuercusModule>();
+  
+  private ArrayList<PhpClassConfig> _classList
+    = new ArrayList<PhpClassConfig>();
+  
+  private ArrayList<PhpClassConfig> _classImplList
+    = new ArrayList<PhpClassConfig>();
+  
+  private ArrayList<PhpIni> _phpIniList
+    = new ArrayList<PhpIni>();
+  
+  private ArrayList<ServerEnv> _serverEnvList
+    = new ArrayList<ServerEnv>();
 
   public QuercusServlet()
   {
     checkJavaVersion();
-
-    if (_impl == null)
-      _impl = getQuercusServlet();
   }
 
-  protected QuercusServletImpl getQuercusServlet()
+  protected QuercusServletImpl getQuercusServlet(boolean isResin)
   {
     QuercusServletImpl impl = null;
     
-    try {
-      Class cl = Class.forName("com.caucho.quercus.servlet.ProQuercusServlet");
-      
-      impl = (QuercusServletImpl) cl.newInstance();
-    } catch (ConfigException e) {
-      log.log(Level.FINEST, e.toString(), e);
-      log.info("Quercus compiled mode requires Resin personal or professional licenses");
-      log.info(e.getMessage());
-    } catch (Exception e) {
-      log.log(Level.FINEST, e.toString(), e);
+    if (isResin) {
+      try {
+        Class cl = Class.forName("com.caucho.quercus.servlet.ProResinQuercusServlet");
+
+        Constructor cons = cl.getConstructor(File.class);
+        
+        impl = (QuercusServletImpl) cons.newInstance(_licenseDirectory);
+        
+        //impl = (QuercusServletImpl) cl.newInstance();
+      } catch (ConfigException e) {
+        log.log(Level.FINEST, e.toString(), e);
+        log.info("Quercus compiled mode requires Resin personal or professional licenses");
+        log.info(e.getMessage());
+
+      } catch (Exception e) {
+        log.log(Level.FINEST, e.toString(), e);
+      }
+
+      if (impl == null) {
+        try {
+          Class cl = Class.forName("com.caucho.quercus.servlet.ResinQuercusServlet");
+          impl = (QuercusServletImpl) cl.newInstance();
+        } catch (Exception e) {
+          log.log(Level.FINEST, e.toString(), e);
+        }
+      }
     }
     
     if (impl == null) {
       try {
-	Class cl = Class.forName("com.caucho.quercus.servlet.ResinQuercusServlet");
-	impl = (QuercusServletImpl) cl.newInstance();
+        Class cl = Class.forName("com.caucho.quercus.servlet.ProQuercusServlet");
+        
+        Constructor cons = cl.getConstructor(java.io.File.class);
+        
+        impl = (QuercusServletImpl) cons.newInstance(_licenseDirectory);
+        
+        //impl = (QuercusServletImpl) cl.newInstance();
+      } catch (ConfigException e) {
+        log.log(Level.FINEST, e.toString(), e);
+        log.info("Quercus compiled mode requires valid Quercus professional licenses");
+        log.info(e.getMessage());
+        
       } catch (Exception e) {
-	log.log(Level.FINEST, e.toString(), e);
+        log.log(Level.FINEST, e.toString(), e);
       }
     }
-    
+
     if (impl == null)
       impl = new QuercusServletImpl();
 
@@ -111,9 +170,9 @@ public class QuercusServlet
     String version = System.getProperty("java.version");
 
     if (version.startsWith("1.3.") || version.startsWith("1.4."))
-      throw new QuercusRuntimeException(L.l("Quercus requires JDK 1.5 or newer."));
+      throw new QuercusRuntimeException(L.l("Quercus requires JDK 1.5 or higher."));
 
-/*
+    /*
     int major = 0;
     int minor = 0;
 
@@ -138,8 +197,8 @@ public class QuercusServlet
     }
 
     if (major == 1 && minor < 5)
-      throw new QuercusRuntimeException(L.l("Quercus requires JDK 1.5 or newer."));
-*/
+      throw new QuercusRuntimeException(L.l("Quercus requires JDK 1.5 or higher."));
+    */
   }
 
   /**
@@ -148,18 +207,14 @@ public class QuercusServlet
   public void setCompile(String isCompile)
     throws ConfigException
   {
-    _isCompileSet = true;
-
-    Quercus quercus = getQuercus();
-
     if ("true".equals(isCompile) || "".equals(isCompile)) {
-      quercus.setCompile(true);
-      quercus.setLazyCompile(false);
+      _isCompile = true;
+      _isLazyCompile = false;
     } else if ("false".equals(isCompile)) {
-      quercus.setCompile(false);
-      quercus.setLazyCompile(false);
+      _isCompile = false;
+      _isLazyCompile = false;
     } else if ("lazy".equals(isCompile)) {
-      quercus.setLazyCompile(true);
+      _isLazyCompile = true;
     } else
       throw new ConfigException(L.l(
         "'{0}' is an unknown compile value.  Values are 'true', 'false', or 'lazy'.",
@@ -172,15 +227,13 @@ public class QuercusServlet
   public void setCompileFailover(String isCompileFailover)
     throws ConfigException
   {
-    Quercus quercus = getQuercus();
-
     if ("true".equals(isCompileFailover) || "".equals(isCompileFailover)) {
-      quercus.setCompileFailover(true);
+      _isCompileFailover = true;
     } else if ("false".equals(isCompileFailover)) {
-      quercus.setCompileFailover(false);
+      _isCompileFailover = false;
     } else
       throw new ConfigException(L.l(
-        "'{0}' is an unknown compile-failover value.  Values are 'true', 'false', or 'lazy'.",
+        "'{0}' is an unknown compile-failover value.  Values are 'true' or 'false'.",
         isCompileFailover));
   }
 
@@ -190,7 +243,7 @@ public class QuercusServlet
   public void setProfileProbability(double probability)
     throws ConfigException
   {
-    _impl.setProfileProbability(probability);
+    _profileProbability = probability;
   }
 
   /**
@@ -198,7 +251,7 @@ public class QuercusServlet
    */
   public void setRequireSource(boolean isRequireSource)
   {
-    getQuercus().setRequireSource(isRequireSource);
+    _isRequireSource = isRequireSource;
   }
 
   /**
@@ -209,8 +262,8 @@ public class QuercusServlet
   {
     if (database == null)
       throw new ConfigException(L.l("invalid database"));
-
-    getQuercus().setDatabase(database);
+    
+    _database = database;
   }
 
   /**
@@ -218,7 +271,7 @@ public class QuercusServlet
    */
   public void setStrict(boolean isStrict)
   {
-    getQuercus().setStrict(isStrict);
+    _isStrict = isStrict;
   }
   
   /*
@@ -226,7 +279,7 @@ public class QuercusServlet
    */
   public void setPageCacheEntries(int entries)
   {
-    getQuercus().setPageCacheSize(entries);
+    _pageCacheSize = entries;
   }
   
   /*
@@ -234,7 +287,7 @@ public class QuercusServlet
    */
   public void setPageCacheSize(int size)
   {
-    getQuercus().setPageCacheSize(size);
+    _pageCacheSize = size;
   }
   
   /*
@@ -242,7 +295,7 @@ public class QuercusServlet
    */
   public void setRegexpCacheSize(int size)
   {
-    getQuercus().setRegexpCacheSize(size);
+    _regexpCacheSize = size;
   }
   
   /*
@@ -250,7 +303,7 @@ public class QuercusServlet
    */
   public void setConnectionPool(boolean isEnable)
   {
-    getQuercus().setConnectionPool(isEnable);
+    _isConnectionPool = isEnable;
   }
 
   /**
@@ -259,7 +312,9 @@ public class QuercusServlet
   public void addModule(QuercusModule module)
     throws ConfigException
   {
-    getQuercus().addModule(module);
+    //getQuercus().addModule(module);
+    
+    _moduleList.add(module);
   }
 
   /**
@@ -268,7 +323,9 @@ public class QuercusServlet
   public void addClass(PhpClassConfig classConfig)
     throws ConfigException
   {
-    getQuercus().addJavaClass(classConfig.getName(), classConfig.getType());
+    //getQuercus().addJavaClass(classConfig.getName(), classConfig.getType());
+    
+    _classList.add(classConfig);
   }
 
   /**
@@ -277,7 +334,9 @@ public class QuercusServlet
   public void addImplClass(PhpClassConfig classConfig)
     throws ConfigException
   {
-    getQuercus().addImplClass(classConfig.getName(), classConfig.getType());
+    //getQuercus().addImplClass(classConfig.getName(), classConfig.getType());
+    
+    _classImplList.add(classConfig);
   }
 
   /**
@@ -286,7 +345,11 @@ public class QuercusServlet
   public PhpIni createPhpIni()
     throws ConfigException
   {
-    return new PhpIni(getQuercus());
+    PhpIni ini = new PhpIni();
+    
+    _phpIniList.add(ini);
+    
+    return ini;
   }
 
   /**
@@ -295,15 +358,27 @@ public class QuercusServlet
   public ServerEnv createServerEnv()
     throws ConfigException
   {
-    return new ServerEnv(getQuercus());
+    ServerEnv ini = new ServerEnv();
+    
+    _serverEnvList.add(ini);
+    
+    return ini;
   }
 
   /**
-   * Adds a quercus.ini configuration
+   * Sets a php.ini file.
    */
-  public void setIniFile(Path path)
+  public void setIniFile(String relPath)
   {
-    getQuercus().setIniFile(path);
+    /*
+    Quercus quercus = getQuercus();
+
+    String realPath = getServletContext().getRealPath(relPath);
+
+    Path path = quercus.getPwd().lookup(realPath);
+    */
+    
+    _iniPath = relPath;
   }
 
   /**
@@ -312,23 +387,31 @@ public class QuercusServlet
   public void setScriptEncoding(String encoding)
     throws ConfigException
   {
-    getQuercus().setScriptEncoding(encoding);
+    _scriptEncoding = encoding;
   }
 
   /**
-   * Sets the version of the client php library.
+   * Sets the version of the client mysql library to report as.
    */
   public void setMysqlVersion(String version)
   {
-    getQuercus().setMysqlVersion(version);
+    _mysqlVersion = version;
   }
   
   /**
-   * Sets the php version that Quercus is implementing.
+   * Sets the php version that Quercus should report itself as.
    */
   public void setPhpVersion(String version)
   {
-    getQuercus().setPhpVersion(version);
+    _phpVersion = version;
+  }
+  
+  /**
+   * Sets the directory for Resin/Quercus licenses.
+   */
+  public void setLicenseDirectory(String relPath)
+  {
+    _licenseDirectory = new File(getServletContext().getRealPath(relPath));
   }
 
   /**
@@ -383,19 +466,13 @@ public class QuercusServlet
         if (ds == null)
           throw new ServletException(L.l("database '{0}' is not valid", paramValue));
 
-        getQuercus().setDatabase(ds);
+        setDatabase(ds);
       } catch (Exception e) {
         throw new ServletException(e);
       }
     }
     else if ("ini-file".equals(paramName)) {
-      Quercus quercus = getQuercus();
-
-      String realPath = getServletContext().getRealPath(paramValue);
-
-      Path path = quercus.getPwd().lookup(realPath);
-
-      setIniFile(path);
+      setIniFile(paramValue);
     }
     else if ("mysql-version".equals(paramName)) {
       setMysqlVersion(paramValue);
@@ -419,6 +496,12 @@ public class QuercusServlet
     else if ("connection-pool".equals(paramName)) {
       setConnectionPool("true".equals(paramValue));
     }
+    else if ("require-source".equals(paramName)) {
+      setRequireSource("true".equals(paramValue));
+    }
+    else if ("license-directory".equals(paramName)) {
+      setLicenseDirectory(paramValue);
+    }
     else
       throw new ServletException(L.l("'{0}' is not a recognized init-param", paramName));
   }
@@ -426,13 +509,63 @@ public class QuercusServlet
   private void initImpl(ServletConfig config)
     throws ServletException
   {
-    getQuercus();
-
-    if (! _isCompileSet) {
-      getQuercus().setLazyCompile(true);
-    }
-
+    Class configClass = config.getClass();
+    
+    _impl = getQuercusServlet(configClass.getName().startsWith("com.caucho"));
+    
     _impl.init(config);
+    
+    Quercus quercus = getQuercus();
+    
+    quercus.setCompile(_isCompile);
+    quercus.setLazyCompile(_isLazyCompile);
+    quercus.setCompileFailover(_isCompileFailover);
+    quercus.setProfileProbability(_profileProbability);
+    quercus.setRequireSource(_isRequireSource);
+    quercus.setDatabase(_database);
+    quercus.setStrict(_isStrict);
+    quercus.setPageCacheSize(_pageCacheSize);
+    quercus.setRegexpCacheSize(_regexpCacheSize);
+    quercus.setConnectionPool(_isConnectionPool);
+    
+    if (_iniPath != null) {
+      String realPath = getServletContext().getRealPath(_iniPath);
+      quercus.setIniFile(getQuercus().getPwd().lookup(realPath));
+    }
+    
+    if (_scriptEncoding != null)
+      quercus.setScriptEncoding(_scriptEncoding);
+    
+    if (_mysqlVersion != null)
+      quercus.setMysqlVersion(_mysqlVersion);
+    
+    if (_phpVersion != null)
+      quercus.setPhpVersion(_phpVersion);
+    
+    for (QuercusModule module : _moduleList) {
+      quercus.addModule(module);
+    }
+    
+    for (PhpClassConfig cls : _classList) {
+      quercus.addJavaClass(cls.getName(), cls.getType());
+    }
+    
+    for (PhpClassConfig cls : _classImplList) {
+      quercus.addImplClass(cls.getName(), cls.getType());
+    }
+    
+    for (PhpIni ini : _phpIniList) {
+      for (Map.Entry<String,String> entry : ini._propertyMap.entrySet()) {
+        quercus.setIni(entry.getKey(), entry.getValue());
+      }
+    }
+    
+    for (ServerEnv serverEnv : _serverEnvList) {
+      for (Map.Entry<String,String> entry
+           : serverEnv._propertyMap.entrySet()) {
+        quercus.setIni(entry.getKey(), entry.getValue());
+      }
+    }
   }
 
   /**
@@ -457,7 +590,7 @@ public class QuercusServlet
   }
 
   /**
-   * Gets the script manager.
+   * Closes the servlet instance.
    */
   public void destroy()
   {
@@ -466,11 +599,11 @@ public class QuercusServlet
   }
 
   public static class PhpIni {
-    private Quercus _quercus;
-
-    PhpIni(Quercus quercus)
+    HashMap<String,String> _propertyMap
+      = new HashMap<String,String>();
+    
+    PhpIni()
     {
-      _quercus = quercus;
     }
 
     /**
@@ -478,16 +611,18 @@ public class QuercusServlet
      */
     public void setProperty(String key, String value)
     {
-      _quercus.setIni(key, value);
+      //_quercus.setIni(key, value);
+      
+      _propertyMap.put(key, value);
     }
   }
 
   public static class ServerEnv {
-    private Quercus _quercus;
-
-    ServerEnv(Quercus quercus)
+    HashMap<String,String> _propertyMap
+      = new HashMap<String,String>();
+    
+    ServerEnv()
     {
-      _quercus = quercus;
     }
 
     /**
@@ -495,7 +630,9 @@ public class QuercusServlet
      */
     public void setProperty(String key, String value)
     {
-      _quercus.setServerEnv(key, value);
+      //_quercus.setServerEnv(key, value);
+      
+      _propertyMap.put(key, value);
     }
   }
 }

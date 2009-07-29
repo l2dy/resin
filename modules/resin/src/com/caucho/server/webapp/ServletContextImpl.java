@@ -126,7 +126,24 @@ public class ServletContextImpl extends ServletContextCompat
   /**
    * Sets an init param
    */
-  protected void setInitParameter(String name, String value)
+  public boolean setInitParameter(String name, String value)
+  {
+    if (isActive())
+      throw new IllegalStateException(L.l("setInitParameter must be called before the web-app has been initialized, because it's required by the servlet spec."));
+
+    // server/1h12
+    if (_initParams.containsKey(name))
+      return false;
+
+    _initParams.put(name, value);
+
+    return true;
+  }
+
+  /**
+   * Sets an init param
+   */
+  protected void setInitParam(String name, String value)
   {
     _initParams.put(name, value);
   }
@@ -136,7 +153,7 @@ public class ServletContextImpl extends ServletContextCompat
    */
   public String getInitParameter(String name)
   {
-    return (String) _initParams.get(name);
+    return _initParams.get(name);
   }
 
   /**
@@ -410,5 +427,82 @@ public class ServletContextImpl extends ServletContextCompat
   public Enumeration getServlets()
   {
     throw new UnsupportedOperationException("getServlets is deprecated");
+  }
+
+  public void setSessionTrackingModes(Set<SessionTrackingMode> modes)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public ServletRegistration.Dynamic addServlet(String servletName,
+                                                String className)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public ServletRegistration.Dynamic addServlet(String servletName,
+                                                Servlet servlet)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public ServletRegistration.Dynamic addServlet(String servletName,
+                                                Class<? extends Servlet> servletClass)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public <T extends Servlet> T createServlet(Class<T> c)
+    throws ServletException
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public ServletRegistration getServletRegistration(String servletName)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public Map<String, ServletRegistration> getServletRegistrations()
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public FilterRegistration.Dynamic addFilter(String filterName,
+                                              String className)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public FilterRegistration.Dynamic addFilter(String filterName, Filter filter)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public FilterRegistration.Dynamic addFilter(String filterName,
+                                              Class<? extends Filter> filterClass)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public <T extends Filter> T createFilter(Class<T> c)
+    throws ServletException
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public FilterRegistration getFilterRegistration(String filterName)
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public Map<String, FilterRegistration> getFilterRegistrations()
+  {
+    throw new UnsupportedOperationException("unimplemented");
+  }
+  
+  protected boolean isActive()
+  {
+    throw new UnsupportedOperationException("unimplemented");
   }
 }

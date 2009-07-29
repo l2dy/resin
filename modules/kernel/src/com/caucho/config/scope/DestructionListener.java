@@ -32,10 +32,10 @@ package com.caucho.config.scope;
 import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.util.*;
-import javax.context.Contextual;
+import javax.enterprise.context.spi.Contextual;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.servlet.http.*;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.loader.*;
 
 /**
@@ -96,12 +96,13 @@ public class DestructionListener
       Contextual bean = beanList.get(i);
       WeakReference<Object> ref = valueList.get(i);
       Object value = null;
+      CreationalContext<?> env = null;
 
       if (ref != null) {
 	value = ref.get();
 
 	if (value != null)
-	  bean.destroy(value);
+	  bean.destroy(value, null);
       }
     }
   }

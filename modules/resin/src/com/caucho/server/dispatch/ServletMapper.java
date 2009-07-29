@@ -42,6 +42,9 @@ import javax.servlet.ServletException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.Map;
+import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -56,7 +59,8 @@ public class ServletMapper {
   
   private ServletManager _servletManager;
   
-  private UrlMap<String> _servletMap = new UrlMap<String>();
+  private UrlMap<ServletMapping> _servletMap
+    = new UrlMap<ServletMapping>();
   
   private ArrayList<String> _welcomeFileList = new ArrayList<String>();
   
@@ -66,6 +70,10 @@ public class ServletMapper {
   private ArrayList<String> _ignorePatterns = new ArrayList<String>();
   
   private String _defaultServlet;
+
+  //Servlet 3.0 maps serletName to urlPattern
+  private Map<String, Set<String>> _urlPatterns
+    = new HashMap<String, Set<String>>();
 
   /**
    * Sets the servlet context.
@@ -102,11 +110,13 @@ public class ServletMapper {
   /**
    * Adds a servlet mapping
    */
-  public void addUrlRegexp(String regexp, ServletMapping mapping)
+  public void addUrlRegexp(String regexp,
+			   String servletName,
+			   ServletMapping mapping)
     throws ServletException
   {
-    _servletMap.addRegexp(regexp, regexp);
-    _regexpMap.put(regexp, mapping);
+    _servletMap.addRegexp(regexp, mapping);
+    _regexpMap.put(servletName, mapping);
   }
 
   /**
@@ -118,6 +128,8 @@ public class ServletMapper {
     throws ServletException
   {
     try {
+      boolean isIgnore = false;
+      
       if (servletName == null) {
 	throw new ConfigException(L.l("servlets need a servlet-name."));
       }
@@ -127,6 +139,7 @@ public class ServletMapper {
       else if (servletName.equals("plugin_match")
 	       || servletName.equals("plugin-match")) {
         // special case
+	isIgnore = true;
       }
       else if (servletName.equals("plugin_ignore")
 	       || servletName.equals("plugin-ignore")) {
@@ -135,6 +148,8 @@ public class ServletMapper {
 	
 	return;
       }
+      else if (mapping.getBean() != null) {
+      }
       else if (_servletManager.getServlet(servletName) == null)
         throw new ConfigException(L.l("'{0}' is an unknown servlet-name.  servlet-mapping requires that the named servlet be defined in a <servlet> configuration before the <servlet-mapping>.", servletName));
 
@@ -142,10 +157,20 @@ public class ServletMapper {
         _defaultServlet = servletName;
       }
       else if (mapping.isStrictMapping()) {
-        _servletMap.addStrictMap(urlPattern, null, servletName);
+        _servletMap.addStrictMap(urlPattern, null, mapping);
       }
       else
-        _servletMap.addMap(urlPattern, servletName);
+        _servletMap.addMap(urlPattern, mapping, isIgnore);
+
+      Set<String> patterns = _urlPatterns.get(servletName);
+
+      if (patterns == null) {
+        patterns = new HashSet<String>();
+
+        _urlPatterns.put(servletName, patterns);
+      }
+
+      patterns.add(urlPattern);
 
       log.config("servlet-mapping " + urlPattern + " -> " + servletName);
     } catch (ServletException e) {
@@ -155,6 +180,11 @@ public class ServletMapper {
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
+  }
+
+  public Set<String> getUrlPatterns(String servletName)
+  {
+    return _urlPatterns.get(servletName);
   }
   
   /**
@@ -197,8 +227,13 @@ public class ServletMapper {
 
     invocation.setClassLoader(Thread.currentThread().getContextClassLoader());
 
+    ServletConfigImpl config = null;
+
     if (_servletMap != null) {
-      servletName = _servletMap.map(contextURI, vars);
+      ServletMapping servletMap = _servletMap.map(contextURI, vars);
+
+      if (servletMap != null && servletMap.isServletConfig())
+	config = servletMap;
 
       ServletMapping servletRegexp = _regexpMap.get(servletName);
 
@@ -206,6 +241,9 @@ public class ServletMapper {
 	servletName = servletRegexp.initRegexp(_servletContext,
 					       _servletManager,
 					       vars);
+      }
+      else if (servletMap != null) {
+	servletName = servletMap.getServletName();
       }
     }
 
@@ -253,7 +291,10 @@ public class ServletMapper {
 	    return new RedirectFilterChain(contextPath + contextURI + "/");
           }
           else {
-            servletName = _servletMap.map(welcomeURI, vars);
+	    ServletMapping servletMap = _servletMap.map(welcomeURI, vars);
+
+	    if (servletMap != null)
+	      servletName = servletMap.getServletName();
 
             if (servletName != null || _defaultServlet != null) {
               contextURI = welcomeURI;
@@ -302,9 +343,18 @@ public class ServletMapper {
       invocation.setPathInfo(null);
 
     ServletMapping regexp = _regexpMap.get(servletName);
-
-    if (regexp != null)
+    if (regexp != null) {
       servletName = regexp.initRegexp(_servletContext, _servletManager, vars);
+
+      if (servletName == null) {
+	log.fine(L.l("'{0}' has no matching servlet", contextURI));
+      
+	return new ErrorFilterChain(404);
+      }
+
+      if (regexp.isServletConfig())
+	config = regexp;
+    }
 
     if (servletName.equals("invoker"))
       servletName = handleInvoker(invocation);
@@ -316,13 +366,15 @@ public class ServletMapper {
 	       + contextURI + " -> " + servletName + ")");
     }
 
-    ServletConfigImpl config = _servletManager.getServlet(servletName);
+    if (config == null)
+      config = _servletManager.getServlet(servletName);
 
     if (config != null) {
       invocation.setSecurityRoleMap(config.getRoleMap());
     }
 
-    FilterChain chain = _servletManager.createServletChain(servletName);
+    FilterChain chain
+      = _servletManager.createServletChain(servletName, config);
 
     if (chain instanceof PageFilterChain) {
       PageFilterChain pageChain = (PageFilterChain) chain;

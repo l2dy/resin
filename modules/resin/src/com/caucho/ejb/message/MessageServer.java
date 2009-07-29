@@ -30,6 +30,7 @@
 package com.caucho.ejb.message;
 
 import com.caucho.config.*;
+import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.AbstractContext;
 import com.caucho.ejb.AbstractServer;
@@ -38,6 +39,7 @@ import com.caucho.jca.*;
 import com.caucho.util.L10N;
 
 import javax.ejb.MessageDrivenContext;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.jms.*;
 import javax.naming.*;
 import javax.resource.spi.*;
@@ -65,12 +67,13 @@ public class MessageServer extends AbstractServer
 
   private Method _ejbCreate;
 
-  public MessageServer(EjbContainer ejbContainer)
+  public MessageServer(EjbContainer ejbContainer, AnnotatedType annotatedType)
   {
-    super(ejbContainer);
+    super(ejbContainer, annotatedType);
 
     InjectManager webBeans = InjectManager.create();
-    UserTransaction ut = webBeans.getObject(UserTransaction.class);
+    
+    UserTransaction ut = webBeans.getReference(UserTransaction.class);
     
     // ejb/0fbl
     _context = new MessageDrivenContextImpl(this, ut);
@@ -136,9 +139,10 @@ public class MessageServer extends AbstractServer
   @Override
   protected void bindContext()
   {
-    InjectManager webBeans = InjectManager.create();
+    InjectManager manager = InjectManager.create();
+    BeanFactory factory = manager.createBeanFactory(_context.getClass());
 
-    webBeans.addSingleton(_context);
+    manager.addBean(factory.singleton(_context));
   }
 
   /**

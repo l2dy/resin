@@ -30,8 +30,13 @@
 package com.caucho.server.security;
 
 import com.caucho.config.cfg.BeanConfig;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.config.*;
 import com.caucho.util.L10N;
+
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
+import java.util.Set;
 
 /**
  * The login configures a basic: or form:.
@@ -74,12 +79,12 @@ public class LoginResinConfig extends BeanConfig {
 
   public AbstractLogin getLoginObject()
   {
-    return (AbstractLogin) getComponentFactory().get();
-  }
+    InjectManager manager = InjectManager.create();
 
-  public String toString()
-  {
-    return "Login[]";
+    Bean bean = getComponentFactory();
+    CreationalContext env = manager.createCreationalContext();
+    
+    return (AbstractLogin) manager.getReference(bean, AbstractLogin.class, env);
   }
 }
 

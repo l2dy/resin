@@ -29,8 +29,8 @@
 
 package com.caucho.config.inject;
 
-import javax.context.CreationalContext;
-import javax.inject.manager.*;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.*;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -63,6 +63,11 @@ public class AbstractInjectionPoint implements InjectionPoint
     _type = type;
     _bindings = bindings;
     _annotations = annotations;
+  }
+
+  public Annotated getAnnotated()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
   
   public Set<Annotation> getBindings()
@@ -115,7 +120,18 @@ public class AbstractInjectionPoint implements InjectionPoint
     if (_injectionBean == null)
       _injectionBean = _inject.resolveByInjectionPoint(this);
 
-    return _inject.getInstance(_injectionBean); // XXX: cxt
+    return _inject.getReference(_injectionBean,
+				_injectionBean.getBeanClass(), cxt);
+  }
+
+  public boolean isDelegate()
+  {
+    return false;
+  }
+
+  public boolean isTransient()
+  {
+    return false;
   }
 
   @Override

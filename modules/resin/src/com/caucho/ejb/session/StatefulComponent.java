@@ -30,64 +30,70 @@
 package com.caucho.ejb.session;
 
 import com.caucho.config.ConfigContext;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
 
 import java.lang.annotation.*;
-import javax.context.CreationalContext;
-import javax.inject.manager.InjectionPoint;
+import java.util.Set;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * Component for session beans
  */
-public class StatefulComponent extends ComponentImpl {
+public class StatefulComponent<X> implements InjectionTarget<X> {
   private final StatefulProvider _provider;
   private final Class _beanClass;
 
   public StatefulComponent(StatefulProvider provider,
 			   Class beanClass)
   {
-    super(InjectManager.create());
-    
     _provider = provider;
     _beanClass = beanClass;
-  }
-
-  @Override
-  protected Class getIntrospectionClass()
-  {
-    return _beanClass;
-  }
-
-  /**
-   * Called for implicit introspection.
-   */
-  @Override
-  public void introspect()
-  {
-    Class cl = getIntrospectionClass();
-
-    introspectTypes(cl);
-
-    introspectClass(cl);
-
-    if (getBindings().size() == 0)
-      introspectBindings(cl.getAnnotations());
-
-    /*
-    introspectObservers(cl);
-    
-    introspectMBean();
-    */
   }
 
   /**
    * Creates a new instance of the component
    */
-  @Override
-  public Object createNew(CreationalContext env,
-			  InjectionPoint ij)
+  public X produce(CreationalContext<X> env)
   {
-    return _provider.__caucho_createNew(this, env);
+    return (X) _provider.__caucho_createNew(this, env);
+  }
+  
+  /**
+   * Inject the bean.
+   */
+  public void inject(X instance, CreationalContext<X> ctx)
+  {
+  }
+  
+  /**
+   * PostConstruct initialization
+   */
+  public void postConstruct(X instance)
+  {
+  }
+  
+  /**
+   * Call pre-destroy
+   */
+  public void dispose(X instance)
+  {
+  }
+  
+  /**
+   * Call destroy
+   */
+  public void preDestroy(X instance)
+  {
+  }
+
+  /**
+   * Returns the injection points.
+   */
+  public Set<InjectionPoint> getInjectionPoints()
+  {
+    return null;
   }
 }

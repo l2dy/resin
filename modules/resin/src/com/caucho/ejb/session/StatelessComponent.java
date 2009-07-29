@@ -30,49 +30,29 @@
 package com.caucho.ejb.session;
 
 import com.caucho.config.ConfigContext;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.AbstractInjectionTarget;
 import com.caucho.config.scope.ScopeContext;
 
 import java.lang.annotation.*;
-import javax.context.CreationalContext;
-import javax.inject.manager.InjectionPoint;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * Component for session beans
  */
-public class StatelessComponent extends ComponentImpl
-{
+public class StatelessComponent<X> extends AbstractInjectionTarget<X> {
   private final StatelessProvider _provider;
 
   public StatelessComponent(StatelessProvider provider, Class api)
   {
-    super(InjectManager.create());
-
     _provider = provider;
   }
 
   @Override
-  public void setScope(ScopeContext scope)
+  public X produce(CreationalContext<X> env)
   {
-  }
-
-  @Override
-  public Object get()
-  {
-    return _provider.__caucho_get();
-  }
-
-  @Override
-  public Object create(CreationalContext env,
-		       InjectionPoint ij)
-  {
-    return _provider.__caucho_get();
-  }
-
-  @Override
-  public Object create()
-  {
-    return _provider.__caucho_get();
+    return (X) _provider.__caucho_get();
   }
 }

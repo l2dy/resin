@@ -29,7 +29,7 @@
 
 package com.caucho.config.types;
 
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.cfg.BeanConfig;
 import com.caucho.config.*;
@@ -38,6 +38,8 @@ import com.caucho.config.cfg.*;
 import com.caucho.util.L10N;
 
 import java.util.logging.*;
+import java.util.Set;
+import javax.enterprise.inject.spi.Bean;
 
 /**
  * Configures an interface type.  Allows class and uri syntax
@@ -174,14 +176,18 @@ public class InterfaceConfig extends BeanConfig {
   {
     if (_valueName != null) {
       InjectManager webBeans = InjectManager.create();
-      
-      _comp = (ComponentImpl) webBeans.findByName(_valueName);
 
-      if (_comp == null) {
+      Set<Bean<?>> beans = webBeans.getBeans(_valueName);
+
+      if (beans.size() > 0) {
+	_bean = (AbstractBean) beans.iterator().next();
+      }
+
+      if (_bean == null) {
 	_value = Jndi.lookup(_valueName);
       }
 
-      if (_comp == null && _value == null)
+      if (_bean == null && _value == null)
 	throw new ConfigException(L.l("'{0}' is an unknown bean",
 				      _valueName));
     }

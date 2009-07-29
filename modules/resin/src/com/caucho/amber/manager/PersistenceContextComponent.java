@@ -29,38 +29,43 @@
 
 package com.caucho.amber.manager;
 
+import java.lang.reflect.Type;
+import java.util.HashSet;
+import java.util.Set;
+
 import javax.persistence.*;
-import javax.context.CreationalContext;
-import javax.context.ApplicationScoped;
-import javax.inject.manager.InjectionPoint;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 import com.caucho.config.inject.*;
 
 /**
  * The @PersistenceContext webbeans component
  */
-public class PersistenceContextComponent extends FactoryComponent {
+public class PersistenceContextComponent extends AbstractBean {
   private final EntityManagerTransactionProxy _proxy;
 
+  private HashSet<Type> _types = new HashSet<Type>();
+  
   public PersistenceContextComponent(String name,
 				     EntityManagerTransactionProxy proxy)
   {
-    super(EntityManager.class, name);
-    setScopeType(ApplicationScoped.class);
-    addBinding(CurrentLiteral.CURRENT);
+    super(InjectManager.create());
+    
+    _types.add(EntityManager.class);
     
     _proxy = proxy;
   }
 
   @Override
-  public Object create()
+  public Set<Type> getTypes()
   {
-    return _proxy;
+    return _types;
   }
 
   @Override
-  protected Object createNew(CreationalContext context,
-			     InjectionPoint ij)
+  public Object create(CreationalContext context)
   {
     return _proxy;
   }

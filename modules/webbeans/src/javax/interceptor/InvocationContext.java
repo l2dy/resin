@@ -35,6 +35,8 @@ import java.util.Map;
 public interface InvocationContext {
   public Object getTarget();
 
+  public Object getTimer();
+
   public Method getMethod();
 
   public Object[] getParameters()

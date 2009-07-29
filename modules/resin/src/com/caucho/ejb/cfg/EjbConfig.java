@@ -35,6 +35,7 @@ import com.caucho.config.types.FileSetType;
 import com.caucho.ejb.AbstractServer;
 import com.caucho.ejb.manager.EjbContainer;
 import com.caucho.java.gen.JavaClassGenerator;
+import com.caucho.jms.JmsMessageListener;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -42,6 +43,12 @@ import com.caucho.vfs.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.logging.Logger;
+
+import javax.ejb.Stateful;
+import javax.ejb.Stateless;
+import javax.ejb.MessageDriven;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * Manages the EJB configuration files.
@@ -313,8 +320,10 @@ public class EjbConfig {
   public void addIntrospectableClass(String className)
   {
     try {
-      ClassLoader loader = _ejbContainer.getIntrospectionClassLoader();
+      ClassLoader tempLoader = _ejbContainer.getIntrospectionClassLoader();
+      ClassLoader loader = _ejbContainer.getClassLoader();
 
+      // ejb/0f20
       Class type = Class.forName(className, false, loader);
 
       if (findBeanByType(type) != null)
@@ -339,6 +348,57 @@ public class EjbConfig {
 	bean.setAllowPOJO(true);
 	bean.setEJBClass(type);
 	
+	setBeanConfig(bean.getEJBName(), bean);
+      }
+    } catch (ConfigException e) {
+      throw e;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  public void addAnnotatedType(AnnotatedType annType,
+			       InjectionTarget injectTarget)
+  {
+    try {
+      ClassLoader loader = _ejbContainer.getIntrospectionClassLoader();
+
+      Class type = annType.getJavaClass();
+
+      if (findBeanByType(type) != null)
+	return;
+
+      if (annType.isAnnotationPresent(Stateless.class)) {
+	Stateless stateless = annType.getAnnotation(Stateless.class);
+	
+	EjbStatelessBean bean = new EjbStatelessBean(this, annType, stateless);
+	bean.setInjectionTarget(injectTarget);
+
+	setBeanConfig(bean.getEJBName(), bean);
+      }
+      else if (annType.isAnnotationPresent(Stateful.class)) {
+	Stateful stateful = annType.getAnnotation(Stateful.class);
+	
+	EjbStatefulBean bean = new EjbStatefulBean(this, annType, stateful);
+	bean.setInjectionTarget(injectTarget);
+
+	setBeanConfig(bean.getEJBName(), bean);
+      }
+      else if (annType.isAnnotationPresent(MessageDriven.class)) {
+	MessageDriven message = annType.getAnnotation(MessageDriven.class);
+	EjbMessageBean bean = new EjbMessageBean(this, annType, message);
+	bean.setInjectionTarget(injectTarget);
+
+	setBeanConfig(bean.getEJBName(), bean);
+      }
+      else if (annType.isAnnotationPresent(JmsMessageListener.class)) {
+	JmsMessageListener listener
+	  = annType.getAnnotation(JmsMessageListener.class);
+	
+	EjbMessageBean bean = new EjbMessageBean(this, annType,
+						 listener.destination());
+	bean.setInjectionTarget(injectTarget);
+
 	setBeanConfig(bean.getEJBName(), bean);
       }
     } catch (ConfigException e) {

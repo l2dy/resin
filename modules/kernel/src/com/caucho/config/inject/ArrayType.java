@@ -47,7 +47,7 @@ import javax.annotation.*;
 /**
  * class type matching
  */
-public class ArrayType extends BaseType
+public class ArrayType extends BaseType implements GenericArrayType
 {
   private BaseType _componentType;
   private Class _rawType;
@@ -62,6 +62,16 @@ public class ArrayType extends BaseType
   {
     return _rawType;
   }
+
+  public Type getGenericComponentType()
+  {
+    return _componentType.toType();
+  }
+
+  public Type toType()
+  {
+    return this;
+  }
   
   public boolean isMatch(Type type)
   {
@@ -74,6 +84,12 @@ public class ArrayType extends BaseType
       return false;
   }
 
+  @Override
+  public boolean isAssignableFrom(BaseType type)
+  {
+    return equals(type);
+  }
+
   public int hashCode()
   {
     return 17 + 37 * _componentType.hashCode();
@@ -83,12 +99,19 @@ public class ArrayType extends BaseType
   {
     if (o == this)
       return true;
-    else if (! (o instanceof ArrayType))
+    else if (o instanceof GenericArrayType) {
+      GenericArrayType type = (GenericArrayType) o;
+
+      return _componentType.equals(type.getGenericComponentType());
+    }
+    else
       return false;
+  }
 
-    ArrayType type = (ArrayType) o;
-
-    return _componentType.equals(type._componentType);
+  @Override
+  public String getSimpleName()
+  {
+    return _componentType.getSimpleName() + "[]";
   }
 
   public String toString()

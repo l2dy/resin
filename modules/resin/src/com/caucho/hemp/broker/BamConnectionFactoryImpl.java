@@ -37,6 +37,7 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 import java.util.logging.*;
+import javax.enterprise.inject.Current;
 
 /**
  * BamConnectionFactory
@@ -44,54 +45,48 @@ import java.util.logging.*;
 public class BamConnectionFactoryImpl implements ClientActorFactory
 {
   private static final L10N L = new L10N(BamConnectionFactoryImpl.class);
-  
-  private Broker _broker;
-  
+
+  private Broker _broker = HempBroker.getCurrent();
+
   public BamConnectionFactoryImpl()
   {
-    InjectManager manager = InjectManager.getCurrent();
-
-    _broker = manager.getInstanceByType(Broker.class);
-
-    if (_broker == null)
-      throw new IllegalStateException(L.l("No Broker defined in current context"));
   }
-  
+
   /**
    * Creates a session
    */
   public ActorClient getConnection(String uid,
-				     String password)
+                                     String password)
   {
     if (uid == null)
       uid = createUid();
-    
+
     return _broker.getConnection(uid, password);
   }
-  
+
   /**
    * Creates a session
    */
   public ActorClient getConnection(String uid,
-				     String password,
-				     String resource)
+                                     String password,
+                                     String resource)
   {
     if (uid == null)
       uid = createUid();
-    
+
     return _broker.getConnection(uid, resource);
   }
-  
+
   /**
    * Creates a session
    */
   public ActorClient getConnection(ActorStream stream,
-				   String uid,
-				   String resource)
+                                   String uid,
+                                   String resource)
   {
     if (uid == null)
       uid = createUid();
-    
+
     return _broker.getConnection(stream, uid, resource);
   }
 

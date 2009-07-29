@@ -30,11 +30,11 @@
 package com.caucho.server.dispatch;
 
 import com.caucho.config.*;
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.annotation.DisableConfig;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
-import com.caucho.config.program.NodeBuilderProgram;
 import com.caucho.config.types.InitParam;
 import com.caucho.config.types.CronType;
 import com.caucho.jmx.Jmx;
@@ -50,23 +50,25 @@ import com.caucho.servlet.comet.CometServlet;
 import com.caucho.util.*;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionTarget;
+import javax.faces.*;
+import javax.faces.application.*;
 import javax.naming.NamingException;
 import javax.servlet.*;
+import javax.servlet.annotation.MultipartConfig;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
 import java.security.Principal;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Hashtable;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Configuration for a servlet.
  */
-public class ServletConfigImpl implements ServletConfig, AlarmListener
+public class ServletConfigImpl
+  implements ServletConfig, ServletRegistration.Dynamic, AlarmListener
 {
   static L10N L = new L10N(ServletConfigImpl.class);
   protected static final Logger log
@@ -82,6 +84,7 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   
   private String _servletClassName;
   private Class _servletClass;
+  private Bean _bean;
   private String _jspFile;
   private String _displayName;
   private int _loadOnStartup = Integer.MIN_VALUE;
@@ -102,10 +105,12 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   private ProtocolServletFactory _protocolFactory;
   
   private Alarm _alarm;
-  private ComponentImpl _comp;
+  private InjectionTarget _comp;
 
+  private WebApp _webApp;
   private ServletContext _servletContext;
   private ServletManager _servletManager;
+  private ServletMapper _servletMapper;
 
   private ServletException _initException;
   private long _nextInitTime;
@@ -153,6 +158,104 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
     return _servletName;
   }
 
+  public String getName()
+  {
+    return _servletName;
+  }
+
+  public ServletConfigImpl createRegexpConfig(String servletName)
+    throws ServletException
+  {
+    ServletConfigImpl config = new ServletConfigImpl();
+    config.setServletName(servletName);
+    config.setServletClass(servletName);
+
+    config.init();
+
+    return config;
+  }
+
+  public String getClassName()
+  {
+    return _servletClassName;
+  }
+
+  public boolean setInitParameter(String name, String value)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    if (_initParams.containsKey(name))
+      return false;
+
+    _initParams.put(name, value);
+
+    return true;
+  }
+
+  public Set<String> addMapping(String... urlPatterns)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+    
+    try {
+
+      ServletMapping mapping = _webApp.createServletMapping();
+
+      mapping.setServletName(getServletName());
+
+      for (String urlPattern : urlPatterns) {
+        mapping.addURLPattern(urlPattern);
+      }
+
+      _webApp.addServletMapping(mapping);
+
+      Set<String> patterns = _servletMapper.getUrlPatterns(_servletName);
+
+      return Collections.unmodifiableSet(new HashSet<String>(patterns));
+    }
+    catch (ServletException e) {
+      throw new RuntimeException(e.getMessage(), e);
+    }
+  }
+
+  public Iterable<String> getMappings()
+  {
+    Set<String> patterns = _servletMapper.getUrlPatterns(_servletName);
+
+    return Collections.unmodifiableSet(new HashSet<String>(patterns));
+  }
+
+  public Set<String> setInitParameters(Map<String, String> initParameters)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+    
+    Set<String> conflicting = new HashSet<String>();
+
+    for (Map.Entry<String, String> param : initParameters.entrySet()) {
+      if (_initParams.containsKey(param.getKey()))
+        conflicting.add(param.getKey());
+      else
+        _initParams.put(param.getKey(), param.getValue());
+    }
+
+    return Collections.unmodifiableSet(conflicting);
+  }
+
+  public Map<String, String> getInitParameters()
+  {
+    return _initParams;
+  }
+
+  public void setAsyncSupported(boolean isAsyncSupported)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    throw new UnsupportedOperationException(ServletConfigImpl.class.getName());
+  }
+
   /**
    * Sets the servlet name default when not specified
    */
@@ -178,27 +281,64 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   }
 
   /**
+   * Set the bean
+   */
+  @Configurable
+  public void setBean(Bean bean)
+  {
+    _bean = bean;
+  }
+
+  public Bean getBean()
+  {
+    return _bean;
+  }
+
+  public boolean isServletConfig()
+  {
+    return _bean != null || _servletClassName != null;
+  }
+  
+  /**
    * Sets the servlet class.
    */
+  @Configurable
   public void setServletClass(String servletClassName)
   {
     _servletClassName = servletClassName;
 
     // JSF is special
     if ("javax.faces.webapp.FacesServlet".equals(_servletClassName)) {
+      // ioc/0566
+      
       if (_loadOnStartup < 0)
 	_loadOnStartup = 1;
 
       if (_servletContext instanceof WebApp)
 	((WebApp) _servletContext).createJsp().setLoadTldOnInit(true);
     }
+
+    InjectManager beanManager = InjectManager.create();
+    beanManager.addConfiguredBean(servletClassName);
+  }
+
+  @DisableConfig
+  public void setServletClass(Class<? extends Servlet> servletClass)
+  {
+    if (_servletClass != null)
+      throw new IllegalStateException();
+
+    _servletClass = servletClass;
   }
 
   /**
-   * Gets the servlet name.
+   * Gets the servlet class.
    */
   public Class getServletClass()
   {
+    if (_bean != null)
+      return _bean.getBeanClass();
+    
     if (_servletClassName == null)
       return null;
     
@@ -326,6 +466,11 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
     _servletContext = app;
   }
 
+  public void setWebApp(WebApp webApp)
+  {
+    _webApp = webApp;
+  }
+
   /**
    * Returns the servlet manager.
    */
@@ -340,6 +485,11 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   public void setServletManager(ServletManager manager)
   {
     _servletManager = manager;
+  }
+
+  public void setServletMapper(ServletMapper servletMapper)
+  {
+    _servletMapper = servletMapper;
   }
 
   /**
@@ -481,6 +631,14 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   }
 
   /**
+   * Sets the web service protocol.
+   */
+  public void setProtocolFactory(ProtocolServletFactory factory)
+  {
+    _protocolFactory = factory;
+  }
+
+  /**
    * Sets the init exception
    */
   public void setInitException(ServletException exn)
@@ -504,6 +662,16 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   public Object getServlet()
   {
     return _servlet;
+  }
+
+  public MultipartConfig getMultipartConfig()
+  {
+    Class servletClass = getServletClass();
+
+    if (servletClass != null)
+      return (MultipartConfig) servletClass.getAnnotation(MultipartConfig.class);
+    else
+      return null;
   }
 
   /**
@@ -544,13 +712,17 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
       }
     }
 
+    InjectManager webBeans = InjectManager.create();
+    
     if (_var != null) {
       validateClass(true);
       
       Object servlet = createServlet(false);
 
-      InjectManager webBeans = InjectManager.create();
-      webBeans.addSingleton(servlet, _var);
+      BeanFactory factory = webBeans.createBeanFactory(servlet.getClass());
+      factory.name(_var);
+      
+      webBeans.addBean(factory.singleton(servlet));
     }
   }
 
@@ -593,7 +765,7 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
 
       if (Servlet.class.isAssignableFrom(_servletClass)) {
       }
-      else if (_protocolConfig != null) {
+      else if (_protocolConfig != null || _protocolFactory != null) {
       }
       /*
       else if (_servletClass.isAnnotationPresent(WebService.class)) {
@@ -724,7 +896,7 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
     else if (SingleThreadModel.class.isAssignableFrom(servletClass)) {
       servletChain = new SingleThreadServletFilterChain(this);
     }
-    else if (_protocolConfig != null) {
+    else if (_protocolConfig != null || _protocolFactory != null) {
       servletChain = new WebServiceFilterChain(this);
     }
     else if (CometServlet.class.isAssignableFrom(servletClass))
@@ -783,7 +955,7 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   /**
    * Instantiates a servlet given its configuration.
    *
-   * @param servletName the servlet
+   * @param isNew
    *
    * @return the initialized servlet.
    */
@@ -800,6 +972,10 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
 
     if (Alarm.getCurrentTime() < _nextInitTime)
       throw _initException;
+    
+    if ("javax.faces.webapp.FacesServlet".equals(_servletClassName)) {
+      addFacesResolvers();
+    }
 
     try {
       synchronized (this) {
@@ -849,6 +1025,22 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
     }
   }
 
+  private void addFacesResolvers()
+  {
+    ApplicationFactory appFactory = (ApplicationFactory)
+      FactoryFinder.getFactory(FactoryFinder.APPLICATION_FACTORY);
+
+    if (appFactory != null) {
+      Application app = appFactory.getApplication();
+
+      if (app != null) {
+	InjectManager beanManager = InjectManager.create();
+
+	app.addELResolver(beanManager.getELResolver());
+      }
+    }
+  }
+
   Servlet createProtocolServlet()
     throws ServletException
   {
@@ -858,7 +1050,12 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
       if (_protocolFactory == null)
 	_protocolFactory = _protocolConfig.createFactory();
 
-      Servlet servlet = _protocolFactory.createServlet(_servletClass, service);
+      if (_protocolFactory == null)
+	throw new IllegalStateException(L.l("unknown protocol factory for '{0}'",
+					    this));
+
+      Servlet servlet
+	= _protocolFactory.createServlet(getServletClass(), service);
 
       servlet.init(this);
 
@@ -875,6 +1072,11 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
   private Object createServletImpl()
     throws Exception
   {
+    if (_bean != null) {
+      ConfigContext env = ConfigContext.create();
+      return _bean.create(env);
+    }
+      
     Class servletClass = getServletClass();
 
     Object servlet;
@@ -889,10 +1091,12 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
     else if (servletClass != null) {
       InjectManager inject = InjectManager.create();
       
-      _comp = (ComponentImpl) inject.createTransient(servletClass);
+      _comp = inject.createInjectionTarget(servletClass);
 
+      ConfigContext env = ConfigContext.create();
       // server/1b40
-      servlet = _comp.createNoInit();
+      servlet = _comp.produce(env);
+      _comp.inject(servlet, env);
     }
     else
       throw new ServletException(L.l("Null servlet class for '{0}'.",
@@ -973,7 +1177,7 @@ public class ServletConfigImpl implements ServletConfig, AlarmListener
       alarm.dequeue();
     
     if (_comp != null)
-      _comp.destroy(servlet);
+      _comp.preDestroy(servlet);
 
     if (servlet instanceof Servlet) {
       ((Servlet) servlet).destroy();

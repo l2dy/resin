@@ -29,7 +29,6 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.inject.SimpleBean;
 import com.caucho.util.*;
 
 import java.lang.reflect.*;
@@ -37,24 +36,27 @@ import java.lang.annotation.*;
 import java.util.*;
 
 import javax.annotation.*;
-import javax.context.CreationalContext;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.ejb.*;
 import javax.interceptor.AroundInvoke;
 import javax.interceptor.InterceptorBindingType;
-import javax.inject.manager.Interceptor;
-import javax.inject.manager.InterceptionType;
-import javax.inject.manager.InjectionPoint;
+import javax.interceptor.InvocationContext;
+import javax.enterprise.inject.spi.Interceptor;
+import javax.enterprise.inject.spi.InterceptionType;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 /**
  * InterceptorBean represents a Java interceptor
  */
-public class InterceptorBean extends Interceptor
+public class InterceptorBean<X> implements Interceptor<X>
 {
   private static final L10N L = new L10N(InterceptorBean.class);
+
+  private final InjectManager _beanManager;
   
   private Class _type;
 
-  private SimpleBean _bean;
+  private ManagedBeanImpl _bean;
 
   private Method _aroundInvoke;
   private Method _postConstruct;
@@ -65,14 +67,14 @@ public class InterceptorBean extends Interceptor
   private HashSet<Annotation> _bindings
     = new HashSet<Annotation>();
   
-  public InterceptorBean(InjectManager webBeans,
+  public InterceptorBean(InjectManager beanManager,
 			 Class type)
   {
-    super(webBeans);
+    _beanManager = beanManager;
 
     _type = type;
 
-    _bean = new SimpleBean(_type);
+    _bean = beanManager.createManagedBean(_type);
 
     init();
   }
@@ -87,20 +89,21 @@ public class InterceptorBean extends Interceptor
   //
 
   /**
-   * Returns the bean's deployment type
-   */
-  public Class getDeploymentType()
-  {
-    return _bean.getDeploymentType();
-  }
-
-  /**
    * Returns the bean's bindings
    */
   @Override
   public Set<Annotation> getBindings()
   {
     return _bean.getBindings();
+  }
+
+  /**
+   * Returns the bean's stereotypes
+   */
+  @Override
+  public Set<Annotation> getStereotypes()
+  {
+    return _bean.getStereotypes();
   }
 
   /**
@@ -123,7 +126,7 @@ public class InterceptorBean extends Interceptor
   /**
    * Returns true if the bean is serializable
    */
-  public boolean isSerializable()
+  public boolean isPassivationCapable()
   {
     return false;
   }
@@ -139,9 +142,14 @@ public class InterceptorBean extends Interceptor
   /**
    * Returns the types that the bean implements
    */
-  public Set<Class<?>> getTypes()
+  public Set<Type> getTypes()
   {
     return _bean.getTypes();
+  }
+
+  public Class getBeanClass()
+  {
+    return _bean.getBeanClass();
   }
 
   //
@@ -151,17 +159,19 @@ public class InterceptorBean extends Interceptor
   /**
    * Create a new instance of the bean.
    */
+  /*
   public Object create()
   {
     return _bean.create();
   }
-
+  */
+  
   /**
    * Destroys a bean instance
    */
-  public void destroy(Object instance)
+  public void destroy(X instance, CreationalContext<X> env)
   {
-    _bean.destroy(instance);
+    _bean.destroy(instance, env);
   }
 
   //
@@ -171,7 +181,7 @@ public class InterceptorBean extends Interceptor
   /**
    * Returns the bean's binding types
    */
-  public Set<Annotation> getInterceptorBindingTypes()
+  public Set<Annotation> getInterceptorBindings()
   {
     return _bindings;
   }
@@ -202,6 +212,14 @@ public class InterceptorBean extends Interceptor
     }
   }
 
+  /**
+   * Returns the bean's deployment type
+   */
+  public boolean intercepts(InterceptionType type)
+  {
+    return getMethod(type) != null;
+  }
+
   public Object create(CreationalContext creationalContext)
   {
     return _bean.create(creationalContext);
@@ -221,7 +239,7 @@ public class InterceptorBean extends Interceptor
 
   public void init()
   {
-    _bean.init();
+    // _bean.init();
     
     introspect();
   }
@@ -264,6 +282,58 @@ public class InterceptorBean extends Interceptor
       }
     }
   }
+
+  /**
+   * Invokes the callback
+   */
+  public Object intercept(InterceptionType type,
+			  X instance,
+			  InvocationContext ctx)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Instantiate the bean.
+   */
+  public Object instantiate()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Inject the bean.
+   */
+  public void inject(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call post-construct
+   */
+  public void postConstruct(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call pre-destroy
+   */
+  public void preDestroy(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  /**
+   * Call destroy
+   */
+  /*
+  public void destroy(Object instance)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  */
 
   @Override
   public boolean equals(Object o)

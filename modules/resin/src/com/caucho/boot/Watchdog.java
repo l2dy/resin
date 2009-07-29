@@ -39,6 +39,7 @@ import java.lang.reflect.*;
 import java.net.*;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -53,16 +54,18 @@ class Watchdog
   
   private final String _id;
 
-  private WatchdogConfig _config;
+  private final WatchdogConfig _config;
+  private final WatchdogAdmin _admin;
   
-  private boolean _isSingle;
-  private WatchdogTask _task;
+  private AtomicReference<WatchdogTask> _taskRef
+    = new AtomicReference<WatchdogTask>();
+  
+  private boolean _isConsole;
 
   // statistics
   private Date _initialStartTime;
   private Date _lastStartTime;
   private int _startCount;
-  private WatchdogAdmin _admin;
 
   Watchdog(String id, WatchdogArgs args, Path rootDirectory)
   {
@@ -115,11 +118,13 @@ class Watchdog
   /**
    * Sets the config state of the watchdog
    */
+  /*
   public void setConfig(WatchdogConfig config)
   {
     _config = config;
   }
-
+  */
+  
   /**
    * Returns the JAVA_HOME for the Resin instance
    */
@@ -179,9 +184,9 @@ class Watchdog
   /**
    * Returns true for a standalone start.
    */
-  public boolean isSingle()
+  public boolean isConsole()
   {
-    return _isSingle;
+    return _isConsole;
   }
 
   /**
@@ -263,7 +268,7 @@ class Watchdog
 
   public String getState()
   {
-    WatchdogTask task = _task;
+    WatchdogTask task = _taskRef.get();
     
     if (task == null)
       return "inactive";
@@ -273,7 +278,7 @@ class Watchdog
 
   int getPid()
   {
-    WatchdogTask task = _task;
+    WatchdogTask task = _taskRef.get();
     
     if (task != null)
       return task.getPid();
@@ -286,15 +291,16 @@ class Watchdog
     return _config.isVerbose();
   }
 
-  public int startSingle()
+  public int startConsole()
   {
-    if (_task != null)
+    _isConsole = true;
+    
+    WatchdogTask task = new WatchdogTask(this);
+
+    if (! _taskRef.compareAndSet(null, task))
       return -1;
     
-    _isSingle = true;
-    _task = new WatchdogTask(this);
-    
-    _task.start();
+    task.start();
 
     return 1;
   }
@@ -304,14 +310,19 @@ class Watchdog
    */
   public void start()
   {
-    WatchdogTask task = null;
-    
-    synchronized (this) {
-      if (_task != null)
-	throw new IllegalStateException(L.l("Can't start new task because of old task '{0}'", _task));
+    WatchdogTask task = new WatchdogTask(this);
 
-      task = new WatchdogTask(this);
-      _task = task;
+    if (! _taskRef.compareAndSet(null, task)) {
+      WatchdogTask oldTask = _taskRef.get();
+      
+      if (oldTask != null && ! oldTask.isActive()) {
+	_taskRef.set(task);
+      }
+      else if (_taskRef.compareAndSet(null, task)) {
+      }
+      else {
+	throw new IllegalStateException(L.l("Can't start new Resin server '{0}' because one is already running '{1}'", _id, task));
+      }
     }
 
     task.start();
@@ -319,7 +330,7 @@ class Watchdog
 
   public boolean isActive()
   {
-    return _task != null;
+    return _taskRef.get() != null;
   }
 
   /**
@@ -327,7 +338,7 @@ class Watchdog
    */
   public void stop()
   {
-    WatchdogTask task = _task;
+    WatchdogTask task = _taskRef.getAndSet(null);
     
     if (task != null)
       task.stop();
@@ -338,8 +349,7 @@ class Watchdog
    */
   public void kill()
   {
-    WatchdogTask task = _task;
-    _task = null;
+    WatchdogTask task = _taskRef.getAndSet(null);
     
     if (task != null)
       task.kill();
@@ -349,11 +359,7 @@ class Watchdog
   {
     kill();
 
-    WatchdogAdmin admin = _admin;
-    _admin = null;
-
-    if (admin != null)
-      admin.unregister();
+    _admin.unregister();
   }
 
   void notifyTaskStarted()
@@ -367,10 +373,7 @@ class Watchdog
 
   void completeTask(WatchdogTask task)
   {
-    synchronized (this) {
-      if (_task == task)
-	_task = null;
-    }
+    _taskRef.compareAndSet(task, null);
   }
   
   @Override
@@ -434,7 +437,7 @@ class Watchdog
 
     public String getState()
     {
-      WatchdogTask task = _task;
+      WatchdogTask task = _taskRef.get();
     
       if (task == null)
 	return "inactive";

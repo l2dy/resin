@@ -32,7 +32,13 @@ package com.caucho.config.gen;
 import java.util.*;
 import java.lang.reflect.*;
 import java.lang.annotation.*;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedType;
 
+import com.caucho.config.inject.AnnotatedMethodImpl;
+import com.caucho.config.inject.AnnotatedTypeImpl;
+import com.caucho.config.inject.AnnotatedElementImpl;
+import com.caucho.config.inject.ReflectionAnnotatedFactory;
 import com.caucho.util.*;
 
 /**
@@ -44,6 +50,10 @@ public class ApiClass {
     = new ApiClass(javax.ejb.EntityBean.class);
 
   private Class _apiClass;
+  private AnnotatedType<?> _annotatedType;
+
+  private boolean _isReadOnly;
+  
   private HashMap<String,Type> _typeMap;
   private ArrayList<Type> _typeParam;
     
@@ -58,7 +68,7 @@ public class ApiClass {
    */
   public ApiClass(Class apiClass)
   {
-    this(apiClass, null);
+    this(apiClass, null, null, false);
   }
   
   /**
@@ -66,12 +76,58 @@ public class ApiClass {
    *
    * @param topClass the api class
    */
-  public ApiClass(Class apiClass, HashMap<String,Type> parentTypeMap)
+  public ApiClass(Class apiClass, boolean isReadOnly)
+  {
+    this(apiClass, null, null, isReadOnly);
+  }
+  
+  /**
+   * Creates a new api class
+   *
+   * @param topClass the api class
+   */
+  public ApiClass(Class apiClass, AnnotatedType annotatedType)
+  {
+    this(apiClass, annotatedType, null, false);
+  }
+  
+  /**
+   * Creates a new api class
+   *
+   * @param topClass the api class
+   */
+  public ApiClass(AnnotatedType annotatedType, boolean isReadOnly)
+  {
+    this(annotatedType.getJavaClass(), annotatedType, null, isReadOnly);
+  }
+  
+  /**
+   * Creates a new api class
+   *
+   * @param topClass the api class
+   */
+  public ApiClass(Class apiClass,
+		  AnnotatedType annotatedType,
+		  HashMap<String,Type> parentTypeMap,
+		  boolean isReadOnly)
   {
     if (apiClass == null)
       throw new NullPointerException();
     
+    if (annotatedType == null) {
+      if (isReadOnly)
+	annotatedType = ReflectionAnnotatedFactory.introspectSimpleType(apiClass);
+      else
+	annotatedType = new AnnotatedTypeImpl(apiClass, apiClass);
+    }
+    else if (! isReadOnly && ! (annotatedType instanceof AnnotatedTypeImpl)) {
+      // XXX:
+      annotatedType = new AnnotatedTypeImpl(apiClass, apiClass);
+    }
+
     _apiClass = apiClass;
+    _annotatedType = annotatedType;
+    _isReadOnly = isReadOnly;
 
     _typeMap = new HashMap<String,Type>();
 
@@ -88,10 +144,12 @@ public class ApiClass {
    * @param topClass the api class
    */
   public ApiClass(Class apiClass,
+		  AnnotatedType annotatedType,
 		  HashMap<String,Type> parentTypeMap,
-		  ArrayList<Type> param)
+		  ArrayList<Type> param,
+		  boolean isReadOnly)
   {
-    this(apiClass, parentTypeMap);
+    this(apiClass, annotatedType, parentTypeMap, isReadOnly);
 
     _typeParam = param;
   }
@@ -201,6 +259,11 @@ public class ApiClass {
     return _apiClass.isPrimitive();
   }
 
+  public boolean isAssignableFrom(Class cl)
+  {
+    return _apiClass.isAssignableFrom(cl);
+  }
+
   /**
    * Returns the fields.
    */
@@ -276,7 +339,10 @@ public class ApiClass {
    */
   public boolean isAnnotationPresent(Class annType)
   {
-    return _apiClass.isAnnotationPresent(annType);
+    if (_annotatedType != null)
+      return _annotatedType.isAnnotationPresent(annType);
+    else
+      return _apiClass.isAnnotationPresent(annType);
   }
 
   /**
@@ -284,18 +350,43 @@ public class ApiClass {
    */
   public <A extends Annotation> A getAnnotation(Class<A> annType)
   {
-    return (A) _apiClass.getAnnotation(annType);
+    if (_annotatedType != null)
+      return _annotatedType.getAnnotation(annType);
+    else
+      return (A) _apiClass.getAnnotation(annType);
   }
+
+  public Set<Annotation> getAnnotations()
+  {
+    if (_annotatedType != null)
+      return _annotatedType.getAnnotations();
+    else {
+      LinkedHashSet<Annotation> set = new LinkedHashSet<Annotation>();
+
+      for (Annotation ann : _apiClass.getAnnotations())
+	set.add(ann);
+
+      return set;
+    }
+  }
+  
+  public void addAnnotation(Annotation ann)
+  {
+    ((AnnotatedElementImpl) _annotatedType).addAnnotation(ann);
+  }
+  
 
   private void introspectClass(Class cl, HashMap<String,Type> typeMap)
   {
-    if (cl == null)
+    if (cl == null || Object.class.equals(cl))
       return;
 
     HashSet<ApiMethod> methodSet = new HashSet<ApiMethod>();
-    
+
     for (Method method : cl.getDeclaredMethods()) {
-      ApiMethod apiMethod = new ApiMethod(this, method, typeMap);
+      AnnotatedMethod annMethod = findAnnotatedMethod(method);
+      
+      ApiMethod apiMethod = new ApiMethod(this, method, annMethod, typeMap);
 
       methodSet.add(apiMethod);
     }
@@ -312,6 +403,18 @@ public class ApiClass {
     }
   }
 
+  private AnnotatedMethod findAnnotatedMethod(Method method)
+  {
+    if (_annotatedType != null) {
+      for (AnnotatedMethod annMethod : _annotatedType.getMethods()) {
+	if (AnnotatedMethodImpl.isMatch(annMethod.getJavaMember(), method))
+	  return annMethod;
+      }
+    }
+
+    return null;
+  }
+
   private ApiClass introspectGenericClass(Type type,
 					  HashMap<String,Type> typeMap)
   {
@@ -321,7 +424,10 @@ public class ApiClass {
     if (type instanceof Class) {
       introspectClass((Class) type, typeMap);
 
-      return new ApiClass((Class) type);
+      if (_isReadOnly)
+	return ApiClassFactory.introspect((Class) type);
+      else
+	return new ApiClass((Class) type);
     }
     else if (type instanceof ParameterizedType) {
       ParameterizedType pType = (ParameterizedType) type;
@@ -351,7 +457,7 @@ public class ApiClass {
 
       introspectClass(rawType, subMap);
 
-      return new ApiClass(rawType, subMap, paramList);
+      return new ApiClass(rawType, null, subMap, paramList, _isReadOnly);
     }
     else
       return null;
@@ -359,6 +465,6 @@ public class ApiClass {
 
   public String toString()
   {
-    return "ApiClass[" + _apiClass.getName() + "]";
+    return getClass().getSimpleName() + "[" + _apiClass.getName() + "]";
   }
 }

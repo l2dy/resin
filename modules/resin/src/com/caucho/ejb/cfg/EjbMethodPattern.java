@@ -29,6 +29,7 @@
 package com.caucho.ejb.cfg;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.gen.ApiMethod;
 import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.gen.BusinessMethodGenerator;
 import com.caucho.config.gen.SecurityCallChain;
@@ -37,6 +38,7 @@ import com.caucho.config.gen.XaCallChain;
 import com.caucho.util.L10N;
 
 import java.util.ArrayList;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
 import javax.ejb.*;
@@ -324,30 +326,32 @@ public class EjbMethodPattern {
   /**
    * Configures the bean with the override values
    */
-  public void configure(BeanGenerator bean)
+  public void configure(ApiMethod apiMethod)
   {
-    for (View view : bean.getViews()) {
-      // XXX: check for type
-      
-      for (BusinessMethodGenerator bizMethod : view.getMethods()) {
-	Method apiMethod = bizMethod.getApiMethod();
-	if (_signature.isMatch(apiMethod.getName(),
-			       apiMethod.getParameterTypes())) {
-	  configureSecurity(bizMethod);
-	  configureXA(bizMethod);
-	}
-      }
+    if (_signature.isMatch(apiMethod.getName(),
+			   apiMethod.getParameterTypes())) {
+      // configureSecurity(apiMethod);
+      configureXA(apiMethod);
     }
   }
 
-  private void configureXA(BusinessMethodGenerator bizMethod)
+  private void configureXA(ApiMethod apiMethod)
   {
     if (_transactionType == null)
       return;
 
-    XaCallChain xa = bizMethod.getXa();
+    Annotation ann = new TransactionAttribute() {
+	public Class annotationType() { return TransactionAttribute.class; }
+	public TransactionAttributeType value() { return _transactionType; }
+      };
 
-    xa.setTransactionType(_transactionType);
+    apiMethod.addAnnotation(ann);
+
+    // XXX: need to modify ...
+    
+    // XaCallChain xa = bizMethod.getXa();
+
+    // xa.setTransactionType(_transactionType);
   }
 
   private void configureSecurity(BusinessMethodGenerator bizMethod)
@@ -357,7 +361,7 @@ public class EjbMethodPattern {
 
     SecurityCallChain security = bizMethod.getSecurity();
 
-    security.setRoles(_roles);
+    // security.setRoles(_roles);
   }
 
   /**

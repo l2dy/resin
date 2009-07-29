@@ -30,15 +30,17 @@
 package com.caucho.config.inject;
 
 import com.caucho.config.ConfigContext;
-import com.caucho.config.inject.HandleAware;
 import com.caucho.config.scope.ScopeContext;
 import com.caucho.config.scope.ApplicationScope;
 
 import java.io.Closeable;
 import java.lang.annotation.*;
 import java.lang.reflect.Type;
-import javax.context.CreationalContext;
-import javax.inject.manager.InjectionPoint;
+import java.util.Set;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Annotated;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 /**
  * SingletonBean represents a singleton instance exported as a web beans.
@@ -49,172 +51,38 @@ import javax.inject.manager.InjectionPoint;
  * manager.addBean(new SingletonBean(myValue));
  * </pre></code>
  */
-public class SingletonBean extends SimpleBean
+public class SingletonBean extends AbstractSingletonBean
   implements Closeable
 {
-  private static final Object []NULL_ARGS = new Object[0];
-
   private Object _value;
 
-  protected SingletonBean(InjectManager manager)
+  SingletonBean(ManagedBeanImpl managedBean,
+		Set<Type> types,
+		Annotated annotated,
+		Set<Annotation> bindings,
+		Set<Annotation> stereotypes,
+		Class<? extends Annotation> scopeType,
+		String name,
+		Object value)
   {
-    super(manager);
-  }
-
-  /**
-   * Creates a WebBeans Bean for the value by introspecting the
-   * value's annotations and methods.
-   *
-   * @param value the singleton value
-   */
-  public SingletonBean(Object value)
-  {
-    this(value, null, null, null);
-  }
-
-
-  /**
-   * Creates a WebBeans Bean for the value by introspecting the
-   * value's annotations and methods.
-   *
-   * @param value the singleton value
-   * @param name the webbean name
-   */
-  public SingletonBean(Object value, String name)
-  {
-    this(value, name, null, null, null);
-  }
-  
-  public SingletonBean(Object value,
-		       String name,
-		       Type ...api)
-  {
-    this(value, null, name, null, api);
-  }
-  
-  public SingletonBean(Object value,
-		       String name,
-		       Annotation []binding)
-  {
-    this(value, null, name, binding);
-  }
-  
-  public SingletonBean(Object value,
-		       Class<? extends Annotation> deploymentType,
-		       String name,
-		       Type ...api)
-  {
-    this(value, deploymentType, name, null, api);
-  }
-  
-  public SingletonBean(Object value,
-		       Class<? extends Annotation> deploymentType,
-		       String name,
-		       Annotation []binding,
-		       Type ...api)
-  {
-    super(InjectManager.create());
-    
-    _value = value;
-    setTargetType(value.getClass());
-
-    super.setScope(InjectManager.create().getApplicationScope());
-    
-    setName(name);
-
-    // for null API, use void.class
-    if (api != null && api.length > 0) {
-      for (Type type : api) {
-	addType(type);
-      }
-    }
-
-    if (deploymentType != null)
-      setDeploymentType(deploymentType);
-
-    if (binding != null) {
-      for (Annotation ann : binding)
-	addBinding(ann);
-    }
-
-    init();
-  }
-
-  /**
-   * Special constructor for internal use
-   */
-  public SingletonBean(InjectManager webBeans, Object value)
-  {
-    super(webBeans);
+    super(managedBean, types, annotated, bindings,
+	  stereotypes, scopeType, name);
 
     _value = value;
 
-    setTargetType(value.getClass());
-    
-    super.setScope(webBeans.getApplicationScope());
-  }
+    if (value instanceof HandleAware) {
+      HandleAware handleAware = (HandleAware) value;
+      String id = getId();
 
-  protected void setValue(Object value)
-  {
-  }
-
-  @Override
-  public void bind()
-  {
-  }
-  
-  @Override
-  public void introspectConstructor()
-  {
-  }
-
-  /**
-   * Complete initialization
-   */
-  @Override
-  public void init()
-  {
-    super.init();
-
-    if (_value instanceof HandleAware)
-      ((HandleAware) _value).setSerializationHandle(getHandle());
+      if (id != null)
+	handleAware.setSerializationHandle(new SingletonHandle(id));
+    }
   }
 
   @Override
-  public void setScope(ScopeContext scope)
-  {
-  }
-
-  @Override
-  public Object get()
+  public Object create(CreationalContext env)
   {
     return _value;
-  }
-
-  @Override
-  public Object get(ConfigContext env)
-  {
-    return _value;
-  }
-
-  @Override
-  public Object create()
-  {
-    return _value;
-  }
-
-  @Override
-  public Object create(CreationalContext env,
-		       InjectionPoint ij)
-  {
-    return _value;
-  }
-
-  @Override
-    protected Object createNew(CreationalContext env,
-			       InjectionPoint ij)
-  {
-    throw new IllegalStateException();
   }
 
   /**
@@ -222,7 +90,10 @@ public class SingletonBean extends SimpleBean
    */
   public void close()
   {
-    if (_value != null)
-      destroy(_value);
+    if (_value != null) {
+      CreationalContext env = null;
+      
+      destroy(_value, env);
+    }
   }
 }

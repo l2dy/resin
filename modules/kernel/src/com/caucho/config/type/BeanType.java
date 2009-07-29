@@ -35,15 +35,16 @@ import java.lang.reflect.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.*;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.PropertyStringProgram;
 import com.caucho.config.*;
+import com.caucho.config.annotation.DisableConfig;
 import com.caucho.config.attribute.*;
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.j2ee.*;
-import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.types.*;
 import com.caucho.util.*;
 import com.caucho.xml.*;
@@ -71,8 +72,8 @@ public class BeanType extends ConfigType
 
   private final Class _beanClass;
   
-  private ConcurrentHashMap<QName,Attribute> _nsAttributeMap
-    = new ConcurrentHashMap<QName,Attribute>();
+  private HashMap<QName,Attribute> _nsAttributeMap
+    = new HashMap<QName,Attribute>();
   
   private HashMap<String,Attribute> _attributeMap
     = new HashMap<String,Attribute>();
@@ -102,7 +103,7 @@ public class BeanType extends ConfigType
   private Attribute _addCustomBean;
   private Attribute _addAnnotation;
   
-  private ComponentImpl _component;
+  private ManagedBeanImpl _component;
 
   private ArrayList<ConfigProgram> _injectList;
   private ArrayList<ConfigProgram> _initList;
@@ -150,10 +151,14 @@ public class BeanType extends ConfigType
 	InjectManager webBeans
 	  = InjectManager.create(_beanClass.getClassLoader());
 
-	_component = (ComponentImpl) webBeans.createTransient(_beanClass);
+	_component = webBeans.createManagedBean(_beanClass);
       }
 
-      Object bean = _component.createNoInit();
+      InjectionTarget injection = _component.getInjectionTarget();
+      ConfigContext env = ConfigContext.create();
+
+      Object bean = injection.produce(env);
+      injection.inject(bean, env);
 
       if (_setParent != null
 	  && parent != null
@@ -174,6 +179,21 @@ public class BeanType extends ConfigType
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
+  }
+
+  /**
+   * Returns a constructor with a given number of arguments
+   */
+  @Override
+  public Constructor getConstructor(int count)
+  {
+    for (Constructor ctor : _beanClass.getConstructors()) {
+      if (ctor.getParameterTypes().length == count)
+	return ctor;
+    }
+    
+    throw new ConfigException(L.l("{0} does not have any constructor with {1} arguments",
+				  this, count));
   }
 
   /**
@@ -221,16 +241,18 @@ public class BeanType extends ConfigType
   @Override
   public Attribute getAttribute(QName name)
   {
-    Attribute attr = _nsAttributeMap.get(name);
+    synchronized (_nsAttributeMap) {
+      Attribute attr = _nsAttributeMap.get(name);
 
-    if (attr == null) {
-      attr = getAttributeImpl(name);
+      if (attr == null) {
+	attr = getAttributeImpl(name);
 
-      if (attr != null)
-	_nsAttributeMap.put(name, attr);
+	if (attr != null)
+	  _nsAttributeMap.put(name, attr);
+      }
+
+      return attr;
     }
-
-    return attr;
   }
 
   protected Attribute getAttributeImpl(QName name)
@@ -635,12 +657,16 @@ public class BeanType extends ConfigType
     fillSetterMap(setterMap, methods);
 
     for (Method method : methods) {
+      if (method.getAnnotation(DisableConfig.class) != null)
+        continue;
+      
       Class []paramTypes = method.getParameterTypes();
 
       String name = method.getName();
 
       if ("replaceObject".equals(name) && paramTypes.length == 0) {
 	_replaceObject = method;
+	_replaceObject.setAccessible(true);
 	continue;
       }
 
@@ -649,6 +675,7 @@ public class BeanType extends ConfigType
 	  && String.class.equals(paramTypes[0])
 	  && Modifier.isStatic(method.getModifiers())) {
 	_valueOf = method;
+	_valueOf.setAccessible(true);
 	continue;
       }
       

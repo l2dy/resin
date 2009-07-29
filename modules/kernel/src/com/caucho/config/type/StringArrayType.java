@@ -73,10 +73,7 @@ public final class StringArrayType extends ConfigType
       return value;
     else if (value == null)
       return null;
-    else if (value instanceof String)
-      return valueOf((String) value);
     else
-      throw new ConfigException(L.l("'{0}' is not a valid String[] value",
-				    value));
+      return valueOf(String.valueOf(value));
   }
 }

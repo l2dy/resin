@@ -29,7 +29,6 @@
 
 package com.caucho.config.j2ee;
 
-import com.caucho.config.inject.ComponentImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ValueGenerator;
 import com.caucho.config.program.ConfigProgram;
@@ -43,7 +42,8 @@ import javax.persistence.*;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import javax.inject.manager.Bean;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
 import javax.rmi.*;
 import java.util.*;
 import java.util.logging.Level;
@@ -145,8 +145,11 @@ public class ResourceGenerator extends ValueGenerator {
       }
     }
 
-    if (_bean != null)
-      return _webBeans.getInstance(_bean);
+    if (_bean != null) {
+      CreationalContext<?> env = _webBeans.createCreationalContext();
+      
+      return _webBeans.getReference(_bean, _bean.getBeanClass(), env);
+    }
     else
       return getJndiValue(_type);
   }

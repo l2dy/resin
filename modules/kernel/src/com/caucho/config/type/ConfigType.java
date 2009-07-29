@@ -36,6 +36,7 @@ import com.caucho.el.*;
 import com.caucho.util.*;
 import com.caucho.xml.QName;
 
+import java.lang.reflect.Constructor;
 import javax.el.*;
 
 import org.w3c.dom.Node;
@@ -104,6 +105,15 @@ abstract public class ConfigType
   {
     return bean;
   }
+
+  /**
+   * Returns the constructor with the given number of arguments
+   */
+  public Constructor getConstructor(int count)
+  {
+    throw new ConfigException(L.l("'{0}' does not support <new> constructors",
+				  this));
+  }
   
   /**
    * Converts the string to a value of the type.
@@ -162,6 +172,14 @@ abstract public class ConfigType
   }
 
   /**
+   * Returns true for an array type
+   */
+  public boolean isArray()
+  {
+    return false;
+  }
+
+  /**
    * Return true if the object is replaced
    */
   public boolean isReplace()
@@ -175,6 +193,11 @@ abstract public class ConfigType
   public boolean isProgram()
   {
     return ConfigProgram.class.equals(getType());
+  }
+
+  public ConfigType getComponentType()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   public Attribute getDefaultAttribute(QName qName)

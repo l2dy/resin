@@ -29,7 +29,8 @@
 
 package com.caucho.jca.cfg;
 
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.Config;
@@ -51,7 +52,15 @@ import com.caucho.naming.Jndi;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.L10N;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
+import javax.enterprise.inject.Current;
+import javax.enterprise.inject.Instance;
+import javax.enterprise.inject.spi.Bean;
 import javax.management.Attribute;
 import javax.management.MBeanAttributeInfo;
 import javax.management.MBeanInfo;
@@ -61,11 +70,6 @@ import javax.management.ObjectName;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.resource.spi.*;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Configuration for the connection-factory pattern.
@@ -79,7 +83,9 @@ public class ConnectionFactoryConfig extends BeanConfig {
   private ResourceAdapter _ra;
 
   private int _maxConnections = 1024;
-  private long _maxActiveTime = Integer.MAX_VALUE;
+  private long _maxActiveTime = Long.MAX_VALUE / 2;
+
+  private @Current Instance<ResourceAdapterController> _raControllerInstance;
 
   public ConnectionFactoryConfig()
   {
@@ -111,10 +117,12 @@ public class ConnectionFactoryConfig extends BeanConfig {
   {
     super.init();
 
-    ComponentImpl comp = getComponent();
-    
+    Bean comp = getComponent();
+
+    InjectManager manager = InjectManager.create();
+
     ManagedConnectionFactory managedFactory
-      = (ManagedConnectionFactory) comp.get();
+      = (ManagedConnectionFactory) manager.getReference(comp, ManagedConnectionFactory.class, manager.createCreationalContext());
     
     if (managedFactory instanceof ResourceAdapterAssociation) {
       Class cl = managedFactory.getClass();
@@ -174,15 +182,21 @@ public class ConnectionFactoryConfig extends BeanConfig {
       connectionFactory = cm.init(managedFactory);
       cm.start();
 
-      InjectManager webBeans = InjectManager.create();
+      BeanFactory factory
+	= manager.createBeanFactory(connectionFactory.getClass());
       
       if (getName() != null) {
 	Jndi.bindDeepShort(getName(), connectionFactory);
 
-	webBeans.addSingleton(connectionFactory, getName());
+	factory.name(getName());
+	factory.binding(Names.create(getName()));
+	// server/30i0
+	factory.binding(CurrentLiteral.CURRENT);
       }
-      else
-	webBeans.addSingleton(connectionFactory);
+
+      Bean bean = factory.singleton(connectionFactory);
+
+      manager.addBean(bean);
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
@@ -202,14 +216,16 @@ public class ConnectionFactoryConfig extends BeanConfig {
     }
       
     InjectManager webBeans = InjectManager.create();
+    String raName = ra.getResourceAdapterClass().getName();
 
-    ResourceAdapterController raController
-      = webBeans.getInstanceByType(ResourceAdapterController.class,
-				   Names.create(ra.getResourceAdapterClass().getName()));
+    Instance<ResourceAdapterController> instance
+      = _raControllerInstance.select(Names.create(raName));
     
+    ResourceAdapterController raController = instance.get();
+
     if (raController == null) {
       throw new ConfigException(L.l("'{0}' does not have a configured resource-adapter for '{1}'.",
-				    ra.getResourceAdapterClass().getName(),
+				    raName,
 				    cl.getName()));
     }
 

@@ -116,6 +116,11 @@ public final class ThreadPool {
     init();
   }
 
+  public static ThreadPool getCurrent()
+  {
+    return getThreadPool();
+  }
+  
   public static ThreadPool getThreadPool()
   {
     synchronized (ThreadPool.class) {
@@ -480,6 +485,8 @@ public final class ThreadPool {
 		  + " idle=" + (_idleCount + _startCount)
 		  + " max=" + _threadMax);
 
+      ThreadDump.dumpThreads();
+      
       OverflowThread item = new OverflowThread(task);
       item.start();
     }
@@ -607,8 +614,9 @@ public final class ThreadPool {
 
 		if (! Alarm.isTest()) {
 		  long delta = expireTime - Alarm.getCurrentTime();
-		
-		  _idleLock.wait(delta);
+
+		  if (delta > 0)
+		    _idleLock.wait(delta);
 		}
 		else
 		  _idleLock.wait(1000);

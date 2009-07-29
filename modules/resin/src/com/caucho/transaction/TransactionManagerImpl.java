@@ -28,11 +28,12 @@
 
 package com.caucho.transaction;
 
-import com.caucho.config.inject.SingletonHandle;
+import com.caucho.config.inject.SingletonBindingHandle;
 import com.caucho.config.types.Period;
 import com.caucho.loader.ClassLoaderListener;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
+import com.caucho.server.cluster.Server;
 import com.caucho.transaction.xalog.AbstractXALogManager;
 import com.caucho.transaction.xalog.AbstractXALogStream;
 import com.caucho.util.Crc64;
@@ -432,11 +433,11 @@ public class TransactionManagerImpl
    */
   private Object writeReplace()
   {
-    return new SingletonHandle(TransactionManager.class);
+    return new SingletonBindingHandle(TransactionManager.class);
   }
 
   public String toString()
   {
-    return "TransactionManagerImpl[]";
+    return getClass().getSimpleName() + "[]";
   }
 }

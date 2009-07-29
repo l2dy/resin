@@ -42,27 +42,42 @@ namespace Caucho
 {
   public class Resin: ServiceBase
   {
-    public static String HKEY_JRE = "Software\\JavaSoft\\Java Runtime Environment";
-    public static String HKEY_JDK = "Software\\JavaSoft\\Java Development Kit";
-    public static String CAUCHO_APP_DATA = "Caucho Technology\\Resin";
+    private static String HKEY_JRE = "Software\\JavaSoft\\Java Runtime Environment";
+    private static String HKEY_JDK = "Software\\JavaSoft\\Java Development Kit";
+    private static String CAUCHO_APP_DATA = "Caucho Technology\\Resin";
     
-    public static String USAGE = @"usage: {0} [flags]
-  -h                 : this help
-  -verbose           : information on launching java
-  -java_home <dir>   : sets the JAVA_HOME
-  -java_exe <path>   : path to java executable
-  -resin_home <dir>  : home of Resin
-  -classpath <dir>   : java classpath
-  -Jxxx              : JVM arg xxx
-  -J-Dfoo=bar        : Set JVM variable
-  -Xxxx              : JVM -X parameter
-  -install           : install as NT service
-  -install-as <name> : install as a named NT service
-  -remove            : remove as NT service
-  -remove-as <name>  : remove as a named NT service
-  -user <name>       : specify username for NT service
-  -password <pwd>    : specify password for NT
-  -conf <resin.conf> : alternate configuration file";
+    private static String USAGE = @"usage: {0} [flags] gui |console | status | start | stop | restart | kill | shutdown
+  -h                                     : this help
+  -verbose                               : information on launching java
+  -java_home <dir>                       : sets the JAVA_HOME
+  -java_exe <path>                       : path to java executable
+  -classpath <dir>                       : java classpath
+  -Jxxx                                  : JVM arg xxx
+  -J-Dfoo=bar                            : Set JVM variable
+  -Xxxx                                  : JVM -X parameter
+  -install                               : install as NT service
+  -install-as <name>                     : install as a named NT service
+  -remove                                : remove as NT service
+  -remove-as <name>                      : remove as a named NT service
+  -user <name>                           : specify username for NT service
+  -password <pwd>                        : specify password for NT
+  -resin_home <dir>                      : home of Resin
+  -root-directory <dir>                  : select a root directory
+  -log-directory  <dir>                  : select a logging directory
+  -dynamic-server <cluster:address:port> : initialize a dynamic server
+  -watchdog-port  <port>                 : override the watchdog-port
+  -server <id>                           : select a <server> to run
+  -conf <resin.conf>                     : alternate configuration file";
+    
+    private static String REQUIRE_COMMAND_MSG = @"Resin requires a command:
+  gui - start Resin with a Graphic UI
+  console - start Resin in console mode
+  status - watchdog status
+  start - start a Resin server
+  stop - stop a Resin server
+  restart - restart a Resin server
+  kill - force a kill of a Resin server
+  shutdown - shutdown the watchdog";
 
     private bool _verbose;
     private bool _nojit;
@@ -88,7 +103,7 @@ namespace Caucho
     
     private Process _process;
     
-    public Resin(String[] args)
+    private Resin(String[] args)
     {
       _displayName = "Resin Web Server";
       StringBuilder jvmArgs = new StringBuilder();
@@ -128,7 +143,7 @@ namespace Caucho
           _user = args[argsIdx + 1];
           
           if (! _user.StartsWith(".\\") && _user.IndexOf('\\') < 0)
-             _user = ".\\" + _user;
+            _user = ".\\" + _user;
           
           argsIdx += 2;
         } else if ("-password".Equals(args[argsIdx])) {
@@ -239,7 +254,8 @@ namespace Caucho
           
           argsIdx++;
         } else if ("-console".Equals(args[argsIdx])) {
-          //console = true; XXX not supported - already console application
+          //make -console be a command
+          _command = "console";
           
           argsIdx++;
         } else if("-nojit".Equals(args[argsIdx])) {
@@ -253,14 +269,18 @@ namespace Caucho
         } else if("-e".Equals(args[argsIdx]) ||
                   "-compile".Equals(args[argsIdx])) {
           argsIdx++;
-        } else if ("start".Equals(args[argsIdx])   ||
+        } else if ("gui".Equals(args[argsIdx])) {
+          _command = args[argsIdx];
+          
+          argsIdx++;
+        } else if ("console".Equals(args[argsIdx]) ||
+                   "status".Equals(args[argsIdx])  ||
+                   "start".Equals(args[argsIdx])   ||
                    "stop".Equals(args[argsIdx])    ||
                    "restart".Equals(args[argsIdx]) ||
                    "kill".Equals(args[argsIdx]) ||
                    "shutdown".Equals(args[argsIdx])) {
           _command = args[argsIdx];
-
-          //main = "com.caucho.boot.ResinBoot"; XXX not supported - was used with jview
 
           _standalone = true;
           
@@ -268,6 +288,15 @@ namespace Caucho
         } else {
           resinArgs.Append(' ').Append(args[argsIdx++]);
         }
+      }
+
+      if (_command == null &&
+          (! _install) &&
+          (! _uninstall)&&
+          (! _service)) {
+        Info(REQUIRE_COMMAND_MSG);
+        
+        Environment.Exit(-1);
       }
       
       if (ServiceName == null || "".Equals(ServiceName))
@@ -278,7 +307,7 @@ namespace Caucho
       _passToServiceArgs = passToServiceArgs.ToString();
     }
     
-    public int Execute() {
+    private int Execute() {
       if (_help) {
         Usage(ServiceName);
         
@@ -305,7 +334,6 @@ namespace Caucho
       
       if (_javaExe == null)
         _javaExe = "java.exe";
-
 
       try {
         Directory.SetCurrentDirectory(_rootDirectory);
@@ -340,15 +368,22 @@ namespace Caucho
       } else if (_service) {
         ServiceBase.Run(new ServiceBase[]{this});
       } else if (_standalone) {
-        StartResin();
-        Join();
-        return _process.ExitCode;
-
+        if (StartResin()) {
+          Join();
+          
+          if (_process != null)
+            return _process.ExitCode;
+        }
+        
+        return 1;
       } else {
-        ResinWindow window = new ResinWindow(this, _displayName);
-        window.Show();
-        StartResin();
-        Application.Run();
+        if (StartResin()) {
+          ResinWindow window = new ResinWindow(this, _displayName);
+          window.Show();
+          Application.Run();
+        }
+        
+        return 1;
       }
       
       return 0;
@@ -378,13 +413,13 @@ namespace Caucho
       
       serviceKey.SetValue("ImagePath", builder.ToString());
 
-      storeState(installState, ServiceName);
+      StoreState(installState, ServiceName);
       
       Info(String.Format("\nInstalled {0} as Windows Service", ServiceName));
     }
     
-    public void UninstallService() {
-      Hashtable state = loadState(ServiceName);
+    private void UninstallService() {
+      Hashtable state = LoadState(ServiceName);
       
       Installer installer = InitInstaller();
       
@@ -421,7 +456,7 @@ namespace Caucho
     private static String GetResinAppDataDir() {
       return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + '\\' + CAUCHO_APP_DATA;
     }
-    public static void storeState(Hashtable state, String serviceName) {
+    private static void StoreState(Hashtable state, String serviceName) {
       String dir = GetResinAppDataDir();
       if (! Directory.Exists(dir))
         Directory.CreateDirectory(dir);
@@ -433,7 +468,7 @@ namespace Caucho
       fs.Close();
     }
     
-    public static Hashtable loadState(String serviceName) {
+    private static Hashtable LoadState(String serviceName) {
       String dir = GetResinAppDataDir();
       FileStream fs = new FileStream(dir + '\\' + serviceName + ".srv", FileMode.Open, FileAccess.Read);
       BinaryFormatter serializer = new BinaryFormatter();
@@ -443,29 +478,54 @@ namespace Caucho
       return state;
     }
     
-    protected override void OnStart(string[] args)
-    {
-      StartResin();
-      base.OnStart(args);
+    public bool StartResin() {
+      if (!_service && _process != null)
+        return false;
+      
+      try {
+        if (_service)
+          ExecuteJava("start");
+        else if ("gui".Equals(_command))
+          ExecuteJava("console");
+        else
+          ExecuteJava(_command);
+        
+        return true;
+      } catch (Exception e) {
+        StringBuilder message = new StringBuilder("Unable to start application. Make sure java is in your path. Use option -verbose for more detail.\n");
+        message.Append(e.ToString());
+        
+        Info(message.ToString());
+        
+        return false;
+      }
+    }
+    
+    public void StopResin() {
+      if (_service) {
+        Info("Stopping Resin");
+        
+        ExecuteJava("stop");
+      } else {
+        if (_process != null && ! _process.HasExited) {
+          Info("Stopping Resin ", false);
+          
+          _process.Kill();
+          
+          //give server time to close
+          for (int i = 0; i < 14; i++) {
+            Info(".", false);
+            Thread.CurrentThread.Join(1000);
+          }
+          
+          Info(". done.");
+        }
+        
+        _process = null;
+      }
     }
 
-    protected override void OnStop()
-    {
-      StopResin();
-      base.OnStop();
-    }
-    
-    public void StartResin() {
-      if (!_service && _process != null)
-        return;
-      
-      if (_service)
-        ExecuteJava("start");
-      else
-        ExecuteJava(_command);
-    }
-    
-    public void ExecuteJava(String command) {
+    private void ExecuteJava(String command) {
       if (_verbose) {
         StringBuilder info = new StringBuilder();
         
@@ -498,21 +558,30 @@ namespace Caucho
       startInfo.Arguments = arguments.ToString();
       
       if (_verbose)
-        Info("Using Command Line :" + _javaExe + ' ' + startInfo.Arguments);
+        Info("Using Command Line: " + _javaExe + ' ' + startInfo.Arguments);
       
       startInfo.UseShellExecute = false;
+      startInfo.WorkingDirectory = _rootDirectory;
       
       if (_service) {
         startInfo.RedirectStandardError = true;
         startInfo.RedirectStandardOutput = true;
-        Process process = Process.Start(startInfo);
+        
+        Process process = null;
+        try {
+          process = Process.Start(startInfo);
+        } catch (Exception e) {
+          EventLog.WriteEntry(ServiceName, e.ToString(), EventLogEntryType.Error);
+          
+          return;
+        }
         
         StringBuilder error = new StringBuilder();
         StringBuilder output = new StringBuilder();
         process.ErrorDataReceived += delegate(Object sendingProcess, DataReceivedEventArgs err) {
           error.Append(err.Data).Append('\n');
         };
-        process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs err) { 
+        process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs err) {
           output.Append(err.Data).Append('\n');
         };
         process.BeginErrorReadLine();
@@ -544,26 +613,19 @@ namespace Caucho
       }
     }
     
-    public void StopResin() {
-      if (_service) {
-        Info("Stopping Resin");
-        
-        ExecuteJava("stop");
-      } else {
-        if (_process != null && ! _process.HasExited) {
-          Info("Stopping Resin");
-          
-          _process.Kill();
-          
-          while(!_process.HasExited)
-            Thread.Sleep(500);
-        }
-        
-        _process = null;
-      }
+    protected override void OnStart(string[] args)
+    {
+      StartResin();
+      base.OnStart(args);
     }
-    
-    public void Join() {
+
+    protected override void OnStop()
+    {
+      StopResin();
+      base.OnStop();
+    }
+
+    private void Join() {
       if (_process != null && ! _process.HasExited)
         _process.WaitForExit();
     }
@@ -575,11 +637,17 @@ namespace Caucho
         Console.WriteLine(message);
     }
     
-    public void Info(String message) {
+    private void Info(String message) {
+      Info(message, true);
+    }
+    
+    private void Info(String message, bool newLine) {
       if (_service && EventLog != null)
         EventLog.WriteEntry(this.ServiceName, message, EventLogEntryType.Information);
-      else
+      else if (newLine)
         Console.WriteLine(message);
+      else 
+        Console.Write(message);
     }
     
     public static int Main(String []args) {
@@ -587,7 +655,7 @@ namespace Caucho
       return resin.Execute();
     }
 
-    public static String GetJavaExe(String javaHome) {
+    private static String GetJavaExe(String javaHome) {
       if (File.Exists(javaHome + "\\bin\\java.exe"))
         return javaHome + "\\bin\\java.exe";
       else if (File.Exists(javaHome + "\\jrockit.exe"))
@@ -596,14 +664,14 @@ namespace Caucho
         return null;
     }
     
-    public static String GetClasspath(String cp, String resinHome, String javaHome, String envCp) {
+    private static String GetClasspath(String cp, String resinHome, String javaHome, String envCp) {
       StringBuilder buffer = new StringBuilder();
 
       if(cp != null && ! "".Equals(cp))
         buffer.Append(cp).Append(';');
 
-      buffer.Append(resinHome + "\\classes;");
-      buffer.Append(resinHome + "\\lib\\resin.jar;");
+//      buffer.Append(resinHome + "\\classes;");
+//      buffer.Append(resinHome + "\\lib\\resin.jar;");
       
       if (javaHome != null) {
         
@@ -623,7 +691,7 @@ namespace Caucho
       return buffer.ToString();
     }
     
-    public static String FindJdkInRegistry(String key) {
+    private static String FindJdkInRegistry(String key) {
       RegistryKey regKey
         = Registry.LocalMachine.OpenSubKey(key);
       
@@ -649,7 +717,7 @@ namespace Caucho
       return result;
     }
     
-    public static String FindPath(String exe) {
+    private static String FindPath(String exe) {
       String[] paths = Environment.GetEnvironmentVariable("PATH").Split(';');
       
       foreach (String path in paths) {
@@ -662,7 +730,7 @@ namespace Caucho
       return null;
     }
     
-    public static String GetJavaHome(String resinHome, String javaHome) {
+    private static String GetJavaHome(String resinHome, String javaHome) {
       String path = null;
       
       if (javaHome != null) {
@@ -691,10 +759,16 @@ namespace Caucho
             javaHome = Directory.GetCurrentDirectory().Substring(0, 2) + dir;
         }
         
-        dirs = Directory.GetDirectories("\\Program Files\\java", "jdk*");
-        foreach (String dir in dirs) {
-          if (File.Exists(dir + "\\bin\\java.exe"))
-            javaHome = Directory.GetCurrentDirectory().Substring(0, 2) + dir;
+        String programFilesJava
+          = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles)
+          + "\\java";
+        
+        if (Directory.Exists(programFilesJava)) {
+          dirs = Directory.GetDirectories(programFilesJava, "jdk*");
+          foreach (String dir in dirs) {
+            if (File.Exists(dir + "\\bin\\java.exe"))
+              javaHome = dir;
+          }
         }
       }
       

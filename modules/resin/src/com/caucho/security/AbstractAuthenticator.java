@@ -228,7 +228,6 @@ public class AbstractAuthenticator
   /**
    * Returns true if the user plays the named role.
    *
-   * @param request the servlet request
    * @param user the user to test
    * @param role the role to test
    */
@@ -245,8 +244,6 @@ public class AbstractAuthenticator
   /**
    * Logs the user out from the session.
    *
-   * @param application the application
-   * @param timeoutSession the session timing out, null if not a timeout logout
    * @param user the logged in user
    */
   public void logout(Principal user)
@@ -273,6 +270,9 @@ public class AbstractAuthenticator
     
     char []password = cred.getPassword();
     char []digest = getPasswordDigest(principal.getName(), password);
+    
+    if (digest == null)
+      return null;
 
     if (! isMatch(digest, user.getPassword()) && ! user.isAnonymous()) {
       user = null;
@@ -293,14 +293,17 @@ public class AbstractAuthenticator
    */
   protected char []getPasswordDigest(String user, char []password)
   {
-    if (_passwordDigest != null)
-      return _passwordDigest.getPasswordDigest(user, password);
-    else {
-      char []digest = new char[password.length];
-      System.arraycopy(password, 0, digest, 0, password.length);
-      
-      return digest;
+    if (_passwordDigest != null) {
+      char []digest = _passwordDigest.getPasswordDigest(user, password);
+
+      if (digest != null)
+	return digest;
     }
+
+    char []digest = new char[password.length];
+    System.arraycopy(password, 0, digest, 0, password.length);
+      
+    return digest;
   }
 
   //

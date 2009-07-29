@@ -31,13 +31,10 @@ package com.caucho.security;
 
 import com.caucho.config.inject.InjectManager;
 import com.caucho.server.session.SessionImpl;
-import com.caucho.server.security.*;
-import com.caucho.util.LruCache;
 
 import javax.annotation.PostConstruct;
-import javax.inject.UnsatisfiedDependencyException;
-import javax.naming.Context;
-import javax.naming.InitialContext;
+import javax.enterprise.inject.Current;
+import javax.enterprise.inject.Instance;
 import javax.servlet.*;
 import javax.servlet.http.*;
 import java.io.IOException;
@@ -94,14 +91,14 @@ public abstract class AbstractLogin implements Login {
   protected Authenticator _auth;
   protected SingleSignon _singleSignon;
 
-  private InjectManager _webBeans;
+  private @Current Instance<Authenticator> _authInstance;
+  private @Current Instance<SingleSignon> _signonInstance;
 
   private boolean _isSessionSaveLogin = true;
   private boolean _isLogoutOnTimeout = true;
   
   protected AbstractLogin()
   {
-    _webBeans = InjectManager.create();
   }
 
   /**
@@ -118,11 +115,8 @@ public abstract class AbstractLogin implements Login {
   public Authenticator getAuthenticator()
   {
     if (_auth == null) {
-      try {
-	_auth = _webBeans.getInstanceByType(Authenticator.class);
-      } catch (UnsatisfiedDependencyException e) {
-        log.finer(e.toString());
-	log.log(Level.FINEST, e.toString(), e);
+      if (! _authInstance.isUnsatisfied()) {
+	_auth = _authInstance.get();
       }
 
       if (_auth == null) {
@@ -211,11 +205,8 @@ public abstract class AbstractLogin implements Login {
     */
 
     // XXX: order
-    try {
-      if (_singleSignon == null)
-	_singleSignon = _webBeans.getInstanceByType(SingleSignon.class);
-    } catch (Exception e) {
-      log.log(Level.FINEST, e.toString(), e);
+    if (_singleSignon == null && ! _signonInstance.isUnsatisfied()) {
+      _singleSignon = _signonInstance.get();
     }
   }
 
@@ -237,7 +228,6 @@ public abstract class AbstractLogin implements Login {
    * <p/>authenticate is used for the security checks.
    *
    * @param request servlet request
-   * @param application servlet application
    *
    * @return the logged in principal on success, null on failure.
    */
@@ -274,7 +264,7 @@ public abstract class AbstractLogin implements Login {
    *
    * @param request servlet request
    * @param response servlet response for a failed authentication.
-   * @param application servlet application
+   * @param isFail if true send a challenge (Form|HTTP Basic,etc.)
    *
    * @return the logged in principal on success, null on failure.
    */
@@ -367,7 +357,12 @@ public abstract class AbstractLogin implements Login {
     if (sessionId != null && singleSignon != null)
       singleSignon.put(sessionId, user);
   }
-  
+
+  public boolean isPasswordBased()
+  {
+    return false;
+  }
+
   /**
    * Gets the user from a persistent cookie, using authenticateCookie
    * to actually look the cookie up.
@@ -419,8 +414,8 @@ public abstract class AbstractLogin implements Login {
    * <code>isUserInRole</code> is called in response to the
    * <code>HttpServletRequest.isUserInRole</code> call.
    *
-   * @param request servlet request
-   * @param application servlet application
+   * @param user UserPrincipal object associated with request
+   * @param role to be tested
    *
    * @return the logged in principal on success, null on failure.
    */
@@ -485,8 +480,6 @@ public abstract class AbstractLogin implements Login {
   /**
    * Logs the user out from the session.
    *
-   * @param application the application
-   * @param timeoutSession the session timing out, null if not a timeout logout
    * @param user the logged in user
    */
   /*

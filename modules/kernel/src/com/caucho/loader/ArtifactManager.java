@@ -144,12 +144,21 @@ public class ArtifactManager
     return null;
   }
 
-  public void buildImportClassPath(StringBuilder sb)
+  public void buildImportClassPath(ArrayList<String> cp)
   {
     resolve();
 
     for (Entry entry : _entryList) {
-      entry.getLoader().buildClassPathImpl(sb);
+      entry.getLoader().buildClassPathImpl(cp);
+    }
+  }
+
+  void applyVisibleModules(EnvironmentApply apply)
+  {
+    resolve();
+    
+    for (Entry entry : _entryList) {
+      apply.apply(entry.getLoader());
     }
   }
 

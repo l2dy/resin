@@ -31,17 +31,19 @@ package com.caucho.config.inject;
 import java.lang.ref.*;
 
 import com.caucho.config.*;
-import com.caucho.config.inject.ComponentImpl;
+import com.caucho.config.inject.AbstractBean;
 import com.caucho.loader.*;
+
+import javax.enterprise.context.spi.CreationalContext;
 
 /**
  * Waits for the close event and calls a destroy() method.
  */
 public class ComponentClose implements ClassLoaderListener {
   private final WeakReference<Object> _ref;
-  private final ComponentImpl _comp;
+  private final AbstractBean _comp;
 
-  public ComponentClose(Object value, ComponentImpl comp)
+  public ComponentClose(Object value, AbstractBean comp)
   {
     _comp = comp;
     _ref = new WeakReference<Object>(value);
@@ -61,8 +63,11 @@ public class ComponentClose implements ClassLoaderListener {
   {
     Object obj = _ref.get();
 
-    if (obj != null)
-      _comp.destroy(obj, new ConfigContext());
+    if (obj != null) {
+      CreationalContext env = null;
+      
+      _comp.destroy(obj, env);
+    }
   }
 
   public String toString()

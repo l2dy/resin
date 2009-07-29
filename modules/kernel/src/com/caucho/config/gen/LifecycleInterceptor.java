@@ -39,7 +39,7 @@ import java.util.*;
 import javax.annotation.security.*;
 import javax.ejb.*;
 import javax.interceptor.*;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.spi.Bean;
 
 /**
  * Represents the interception
@@ -88,11 +88,11 @@ public class LifecycleInterceptor {
    * Introspects the @Interceptors annotation on the method
    * and the class.
    */
-  public void introspect(Class implClass)
+  public void introspect(ApiClass implClass)
   {
     Interceptors iAnn;
     
-    iAnn = (Interceptors) implClass.getAnnotation(Interceptors.class);
+    iAnn = implClass.getAnnotation(Interceptors.class);
 
     if (iAnn != null) {
       for (Class iClass : iAnn.value()) {
@@ -112,7 +112,7 @@ public class LifecycleInterceptor {
 
   private Method findInterceptorMethod(Class cl)
   {
-    for (Method method : cl.getDeclaredMethods()) {
+    for (Method method : cl.getMethods()) {
       if (method.isAnnotationPresent(_annType)
 	  && method.getParameterTypes().length == 1
 	  && method.getParameterTypes()[0].equals(InvocationContext.class)) {

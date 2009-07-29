@@ -33,7 +33,7 @@ import com.caucho.config.inject.BeanConfigFactory;
 import com.caucho.config.inject.CauchoBean;
 import javax.ejb.Stateless;
 import javax.ejb.Stateful;
-import javax.inject.manager.Bean;
+import javax.enterprise.inject.spi.Bean;
 
 /**
  * Custom bean creation
@@ -44,14 +44,14 @@ public class StatelessBeanConfigFactory implements BeanConfigFactory
   public boolean createBean(CauchoBean cauchoBean)
   {
     if (cauchoBean.isAnnotationPresent(Stateless.class)) {
-      StatelessBeanConfig cfg = new StatelessBeanConfig(cauchoBean);
-      cfg.init();
+      //StatelessBeanConfig cfg = new StatelessBeanConfig(cauchoBean);
+      //cfg.init();
       
       return true;
     }
     else if (cauchoBean.isAnnotationPresent(Stateful.class)) {
-      StatefulBeanConfig cfg = new StatefulBeanConfig(cauchoBean);
-      cfg.init();
+      //StatefulBeanConfig cfg = new StatefulBeanConfig(cauchoBean);
+      //cfg.init();
 
       return true;
     }
