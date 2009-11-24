@@ -38,6 +38,8 @@ import com.caucho.util.RandomUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLDecoder;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -103,6 +105,16 @@ public abstract class Path {
   }
 
   /**
+   * Creates a new Path object.
+   *
+   * @param root the new Path root.
+   */
+  protected Path(SchemeMap map)
+  {
+    _schemeMap = map;
+  }
+
+  /**
    * Looks up a new path based on the old path.
    *
    * @param name relative url to the new path
@@ -110,6 +122,16 @@ public abstract class Path {
    */
   public final Path lookup(String name)
   {
+    return lookup(name, null);
+  }
+
+  /**
+   * Looks up a path by a URL.
+   */
+  public final Path lookup(URL url)
+  {
+    String name = URLDecoder.decode(url.toString());
+  
     return lookup(name, null);
   }
 
@@ -135,7 +157,7 @@ public abstract class Path {
       PathKey key = _key.getAndSet(null);
 
       if (key == null)
-	key = new PathKey();
+        key = new PathKey();
 
       key.init(this, userPath);
 
@@ -144,7 +166,7 @@ public abstract class Path {
       _key.set(key);
 
       if (path != null) {
-	return path.cacheCopy();
+        return path.cacheCopy();
       }
     }
 
@@ -156,19 +178,19 @@ public abstract class Path {
     /*
     if (System.currentTimeMillis() > 15000) {
       if (path.getPath().endsWith("UIRepeat.class")) {
-	Thread.dumpStack();
-	System.out.println("PATH: " + path);
+        Thread.dumpStack();
+        System.out.println("PATH: " + path);
       }
     }
     */
 
     if (isPathCacheable()) {
       synchronized (_key) {
-	Path copy = path.cacheCopy();
+        Path copy = path.cacheCopy();
 
-	if (copy != null) {
-	  _pathLookupCache.putIfNew(new PathKey(this, userPath), copy);
-	}
+        if (copy != null) {
+          _pathLookupCache.putIfNew(new PathKey(this, userPath), copy);
+        }
       }
     }
 
@@ -382,7 +404,15 @@ public abstract class Path {
    * Returns the url scheme
    */
   public abstract String getScheme();
-  
+
+  /**
+   * Returns the schemeMap
+   */
+  protected SchemeMap getSchemeMap()
+  {
+    return _schemeMap;
+  }
+
   /**
    * Returns the hostname
    */
@@ -489,20 +519,20 @@ public abstract class Path {
     int lastCh;
 
     if ((lastCh = lower.charAt(lower.length() - 1)) == '.'
-	|| lastCh == ' ' || lastCh == '*' || lastCh == '?'
-	|| ((lastCh == '/' || lastCh == '\\') && ! isDirectory())
-	|| lower.endsWith("::$data")
-	|| isWindowsSpecial(lower, "/con")
-	|| isWindowsSpecial(lower, "/aux")
-	|| isWindowsSpecial(lower, "/prn")
-	|| isWindowsSpecial(lower, "/nul")
-	|| isWindowsSpecial(lower, "/com1")
-	|| isWindowsSpecial(lower, "/com2")
-	|| isWindowsSpecial(lower, "/com3")
-	|| isWindowsSpecial(lower, "/com4")
-	|| isWindowsSpecial(lower, "/lpt1")
-	|| isWindowsSpecial(lower, "/lpt2")
-	|| isWindowsSpecial(lower, "/lpt3")) {
+        || lastCh == ' ' || lastCh == '*' || lastCh == '?'
+        || ((lastCh == '/' || lastCh == '\\') && ! isDirectory())
+        || lower.endsWith("::$data")
+        || isWindowsSpecial(lower, "/con")
+        || isWindowsSpecial(lower, "/aux")
+        || isWindowsSpecial(lower, "/prn")
+        || isWindowsSpecial(lower, "/nul")
+        || isWindowsSpecial(lower, "/com1")
+        || isWindowsSpecial(lower, "/com2")
+        || isWindowsSpecial(lower, "/com3")
+        || isWindowsSpecial(lower, "/com4")
+        || isWindowsSpecial(lower, "/lpt1")
+        || isWindowsSpecial(lower, "/lpt2")
+        || isWindowsSpecial(lower, "/lpt3")) {
       return true;
     }
 
@@ -656,7 +686,7 @@ public abstract class Path {
   public void clearStatusCache()
   {
   }
-  
+
   /**
    * Returns the length of the file in bytes.
    * @return 0 for non-files
@@ -967,8 +997,8 @@ public abstract class Path {
       if (exists()) {
         StreamImpl stream = openWriteImpl();
         stream.close();
-	
-	clearStatusCache();
+
+        clearStatusCache();
 
         return true;
       }
@@ -1080,7 +1110,7 @@ public abstract class Path {
   public final ReadStream openRead() throws IOException
   {
     clearStatusCache();
-    
+
     StreamImpl impl = openReadImpl();
     impl.setPath(this);
 
@@ -1093,7 +1123,7 @@ public abstract class Path {
   public final WriteStream openWrite() throws IOException
   {
     clearStatusCache();
-    
+
     StreamImpl impl = openWriteImpl();
     impl.setPath(this);
     return new WriteStream(impl);
@@ -1108,7 +1138,7 @@ public abstract class Path {
   public ReadWritePair openReadWrite() throws IOException
   {
     clearStatusCache();
-    
+
     StreamImpl impl = openReadWriteImpl();
     impl.setPath(this);
     WriteStream writeStream = new WriteStream(impl);
@@ -1128,7 +1158,7 @@ public abstract class Path {
   public void openReadWrite(ReadStream is, WriteStream os) throws IOException
   {
     clearStatusCache();
-    
+
     StreamImpl impl = openReadWriteImpl();
     impl.setPath(this);
 
@@ -1142,7 +1172,7 @@ public abstract class Path {
   public WriteStream openAppend() throws IOException
   {
     clearStatusCache();
-    
+
     StreamImpl impl = openAppendImpl();
     return new WriteStream(impl);
   }
@@ -1153,7 +1183,7 @@ public abstract class Path {
   public RandomAccessStream openRandomAccess() throws IOException
   {
     clearStatusCache();
-    
+
     throw new UnsupportedOperationException(getClass().getName());
   }
 
@@ -1165,7 +1195,7 @@ public abstract class Path {
   {
     synchronized (LOCK) {
       if (! exists()) {
-	clearStatusCache();
+        clearStatusCache();
         WriteStream s = openWrite();
         s.close();
         return true;
@@ -1326,9 +1356,9 @@ public abstract class Path {
         try {
           long digest = 0;
 
-	  byte []buffer = is.getBuffer();
-	  while (is.fillBuffer() > 0) {
-	    int length = is.getLength();
+          byte []buffer = is.getBuffer();
+          while (is.fillBuffer() > 0) {
+            int length = is.getLength();
 
             digest = Crc64.generate(digest, buffer, 0, length);
           }
@@ -1553,9 +1583,9 @@ public abstract class Path {
     public int hashCode()
     {
       if (_parent != null)
-	return _parent.hashCode() * 65521 + _lookup.hashCode();
+        return _parent.hashCode() * 65521 + _lookup.hashCode();
       else
-	return _lookup.hashCode();
+        return _lookup.hashCode();
     }
 
     public boolean equals(Object test)
@@ -1566,9 +1596,9 @@ public abstract class Path {
       PathKey key = (PathKey) test;
 
       if (_parent != null)
-	return (_parent.equals(key._parent) && _lookup.equals(key._lookup));
+        return (_parent.equals(key._parent) && _lookup.equals(key._lookup));
       else
-	return (key._parent == null && _lookup.equals(key._lookup));
+        return (key._parent == null && _lookup.equals(key._lookup));
     }
   }
 

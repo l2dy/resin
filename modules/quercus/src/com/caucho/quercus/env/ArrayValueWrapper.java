@@ -178,6 +178,15 @@ public class ArrayValueWrapper extends ArrayValue {
   {
     return _array.remove(key);
   }
+  
+  /**
+   * Returns true if the index isset().
+   */
+  @Override
+  public boolean isset(Value key)
+  {
+    return _array.isset(key);
+  }
 
   /**
    * Returns the array ref.
@@ -210,7 +219,7 @@ public class ArrayValueWrapper extends ArrayValue {
    * Returns the head.
    */
   @Override
-  protected Entry getHead()
+  public Entry getHead()
   {
     return _array.getHead();
   }

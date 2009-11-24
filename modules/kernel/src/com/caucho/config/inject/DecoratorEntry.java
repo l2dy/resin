@@ -55,24 +55,24 @@ public class DecoratorEntry<X> {
   private static final Class []NULL_ARG = new Class[0];
 
   private Decorator<X> _decorator;
-  
+
   private ArrayList<Binding> _bindings
     = new ArrayList<Binding>();
 
   private BaseType _delegateType;
 
   public DecoratorEntry(Decorator<X> decorator,
-			BaseType delegateType)
+                        BaseType delegateType)
   {
     _decorator = decorator;
     _delegateType = delegateType;
 
-    for (Annotation ann : decorator.getDelegateBindings()) {
+    for (Annotation ann : decorator.getDelegateQualifiers()) {
       _bindings.add(new Binding(ann));
     }
 
     if (_bindings.size() == 0)
-      _bindings.add(new Binding(new CurrentLiteral()));
+      _bindings.add(new Binding(CurrentLiteral.CURRENT));
   }
 
   public Decorator<X> getDecorator()
@@ -89,7 +89,7 @@ public class DecoratorEntry<X> {
   {
     for (Binding binding : _bindings) {
       if (! isMatch(binding, bindingAnn)) {
-	return false;
+        return false;
       }
     }
 
@@ -100,7 +100,7 @@ public class DecoratorEntry<X> {
   {
     for (Annotation ann : bindingAnn) {
       if (binding.isMatch(ann))
-	return true;
+        return true;
     }
 
     return false;

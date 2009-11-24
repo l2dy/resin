@@ -39,13 +39,14 @@ import com.caucho.security.Authenticator;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.server.connection.*;
 import com.caucho.server.cluster.Server;
+import com.caucho.servlet.DuplexContext;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
 
 import java.io.*;
 import java.util.logging.*;
 
-import javax.enterprise.inject.Current;
+import javax.inject.Inject;
 import javax.enterprise.inject.Instance;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.*;
@@ -61,8 +62,8 @@ public class HmtpServlet extends GenericServlet {
   private boolean _isAdmin;
   private boolean _isAuthenticationRequired = true;
 
-  private @Current Instance<Authenticator> _authInstance;
-  private @Current Instance<AdminAuthenticator> _adminInstance;
+  private @Inject Instance<Authenticator> _authInstance;
+  private @Inject Instance<AdminAuthenticator> _adminInstance;
 
   private Authenticator _auth;
   private ServerLinkManager _linkManager;
@@ -146,8 +147,8 @@ public class HmtpServlet extends GenericServlet {
       = new ServerFromLinkStream(broker, _linkManager, is, os, address,
                                  _auth, _isAuthenticationRequired);
 
-    TcpDuplexController controller = res.upgradeProtocol(fromLinkStream);
+    DuplexContext duplex = req.startDuplex(fromLinkStream);
 
-    controller.setIdleTimeMax(30 * 60 * 1000L);
+    duplex.setTimeout(30 * 60 * 1000L);
   }
 }

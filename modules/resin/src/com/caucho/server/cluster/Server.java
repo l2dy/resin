@@ -67,6 +67,10 @@ import com.caucho.server.dispatch.InvocationMatcher;
 import com.caucho.server.distcache.DistributedCacheManager;
 import com.caucho.server.distcache.FileCacheManager;
 import com.caucho.server.distcache.PersistentStoreConfig;
+import com.caucho.server.distlock.AbstractLockManager;
+import com.caucho.server.distlock.SingleLockManager;
+import com.caucho.server.distlock.AbstractVoteManager;
+import com.caucho.server.distlock.SingleVoteManager;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.host.Host;
 import com.caucho.server.host.HostConfig;
@@ -129,10 +133,6 @@ public class Server extends ProtocolDispatchServer
 
   private Throwable _configException;
 
-  private HostContainer _hostContainer;
-
-  private String _serverHeader;
-
   private AdminAuthenticator _adminAuth;
 
   private InjectManager _webBeans;
@@ -149,6 +149,15 @@ public class Server extends ProtocolDispatchServer
   private PersistentStoreConfig _persistentStoreConfig;
 
   private DistributedCacheManager _distributedCacheManager;
+  private AbstractLockManager _distributedLockManager;
+  private AbstractVoteManager _distributedVoteManager;
+
+  private HostContainer _hostContainer;
+
+  private String _stage = "default";
+  private boolean _isPreview;
+
+  private String _serverHeader;
 
   private int _urlLengthMax = 8192;
 
@@ -207,6 +216,13 @@ public class Server extends ProtocolDispatchServer
   private ClusterCache _systemStore;
   private GlobalCache _globalStore;
 
+  //
+  // listeners
+  //
+
+  private ArrayList<ServerListener> _serverListeners
+    = new ArrayList<ServerListener>();
+
   // stats
 
   private long _startTime;
@@ -224,6 +240,7 @@ public class Server extends ProtocolDispatchServer
     _selfServer = clusterServer;
     Cluster cluster = clusterServer.getCluster();
     _resin = cluster.getResin();
+    _resin.setServer(this);
 
     _id = cluster.getId() + ":" + clusterServer.getId();
 
@@ -261,8 +278,6 @@ public class Server extends ProtocolDispatchServer
         _hostContainer = new HostContainer();
         _hostContainer.setClassLoader(_classLoader);
         _hostContainer.setDispatchServer(this);
-
-        _admin = new ServerAdmin(this);
 
         _alarm = new Alarm(this);
 
@@ -515,6 +530,44 @@ public class Server extends ProtocolDispatchServer
     return new FileCacheManager(this);
   }
 
+  /**
+   * Returns the distributed lock manager
+   */
+  public AbstractLockManager getDistributedLockManager()
+  {
+    if (_distributedLockManager == null)
+      _distributedLockManager = createDistributedLockManager();
+
+    return _distributedLockManager;
+  }
+
+  /**
+   * Returns the distributed cache manager
+   */
+  protected AbstractLockManager createDistributedLockManager()
+  {
+    return new SingleLockManager(this);
+  }
+
+  /**
+   * Returns the distributed vote manager
+   */
+  public AbstractVoteManager getDistributedVoteManager()
+  {
+    if (_distributedVoteManager == null)
+      _distributedVoteManager = createDistributedVoteManager();
+
+    return _distributedVoteManager;
+  }
+
+  /**
+   * Returns the distributed vote manager
+   */
+  protected AbstractVoteManager createDistributedVoteManager()
+  {
+    return new SingleVoteManager(this);
+  }
+
   public TempFileManager getTempFileManager()
   {
     if (! isResinServer())
@@ -748,6 +801,35 @@ public class Server extends ProtocolDispatchServer
    */
   public void addJvmClasspath(String args)
   {
+  }
+
+  /**
+   * Sets the stage id
+   */
+  public void setStage(String stage)
+  {
+    if (stage == null || "".equals(stage))
+      _stage = "default";
+    else
+      _stage = stage;
+
+    _isPreview = "preview".equals(_stage);
+  }
+
+  /**
+   * Returns the stage id
+   */
+  public String getStage()
+  {
+    return _stage;
+  }
+
+  /**
+   * Returns true in preview mode
+   */
+  public boolean isPreview()
+  {
+    return _isPreview;
   }
 
   /**
@@ -1181,15 +1263,25 @@ public class Server extends ProtocolDispatchServer
     return _hostContainer.createRewriteDispatch();
   }
 
+
   /**
-   * Adds the cache.
+   * Creates the proxy cache.
+   */
+  public AbstractCache createProxyCache()
+    throws ConfigException
+  {
+    log.warning(L.l("<proxy-cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
+
+    return new AbstractCache();
+  }
+
+  /**
+   * backward compatibility for proxy cache
    */
   public AbstractCache createCache()
     throws ConfigException
   {
-    log.warning(L.l("<cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
-
-    return new AbstractCache();
+    return createProxyCache();
   }
 
   /**
@@ -1409,6 +1501,62 @@ public class Server extends ProtocolDispatchServer
     return null;
   }
 
+  public double getCpuLoad()
+  {
+    return 0;
+  }
+
+  //
+  // listeners
+  //
+
+  public void addServerListener(ServerListener listener)
+  {
+    synchronized (_serverListeners) {
+      _serverListeners.add(listener);
+    }
+
+    for (ClusterServer server : _selfServer.getClusterPod().getServerList()) {
+      if (server.isActive())
+        listener.serverStart(server);
+    }
+  }
+
+  public void removeServerListener(ServerListener listener)
+  {
+    synchronized (_serverListeners) {
+      _serverListeners.remove(listener);
+    }
+  }
+
+  protected void notifyServerStart(ClusterServer server)
+  {
+    ArrayList<ServerListener> serverListeners
+      = new ArrayList<ServerListener>();
+
+    synchronized (_serverListeners) {
+      serverListeners.addAll(_serverListeners);
+    }
+
+    for (ServerListener listener : serverListeners) {
+      listener.serverStart(server);
+    }
+  }
+
+  protected void notifyServerStop(ClusterServer server)
+  {
+    ArrayList<ServerListener> serverListeners
+      = new ArrayList<ServerListener>();
+
+    synchronized (_serverListeners) {
+      serverListeners.addAll(_serverListeners);
+    }
+
+    for (ServerListener listener : serverListeners) {
+      listener.serverStop(server);
+    }
+  }
+
   //
   // runtime operations
   //
@@ -1417,7 +1565,7 @@ public class Server extends ProtocolDispatchServer
    * Sets the invocation
    */
   public Invocation buildInvocation(Invocation invocation)
-    throws Throwable
+    throws ConfigException
   {
     if (_configException != null) {
       invocation.setFilterChain(new ExceptionFilterChain(_configException));
@@ -1611,7 +1759,7 @@ public class Server extends ProtocolDispatchServer
         _globalStore = new GlobalCache();
         _globalStore.setName("resin:global");
         _globalStore.setGuid("resin:global");
-        _globalStore.setLocalReadTimeoutMillis(5000);
+        _globalStore.setLocalReadTimeoutMillis(60000);
         // XXX: need to set reliability values
       }
     }
@@ -1663,6 +1811,8 @@ public class Server extends ProtocolDispatchServer
       createManagement().setServer(this);
       createManagement().init();
     }
+
+    _admin = new ServerAdmin(this);
 
     if (_threadIdleMax > 0
         && _threadMax > 0
@@ -1781,6 +1931,7 @@ public class Server extends ProtocolDispatchServer
         }
 
         log.info("user.name  = " + System.getProperty("user.name"));
+        log.info("stage      = " + _stage);
       }
 
       _lifecycle.toStarting();
@@ -1992,6 +2143,7 @@ public class Server extends ProtocolDispatchServer
       for (int i = 0; i < ports.size(); i++) {
         Port port = ports.get(i);
 
+        port.setServer(this);
         port.start();
       }
     } finally {
@@ -2012,9 +2164,9 @@ public class Server extends ProtocolDispatchServer
 
       if (isModified()) {
         // XXX: message slightly wrong
-        log.warning("Resin restarting due to configuration change");
+        String msg = L.l("Resin restarting due to configuration change");
 
-        _selfServer.getCluster().getResin().destroy();
+        _selfServer.getCluster().getResin().startShutdown(msg);
         return;
       }
 
@@ -2236,6 +2388,24 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
+   * Creates an returns a load balancer based on the cluster name.
+   *
+   * @param clusterName the name of the cluster
+   */
+  public LoadBalanceManager createClusterLoadBalancer(String clusterName)
+  {
+    throw new ConfigException(L.l("Cluster LoadBalancer requires Resin Professional."));
+  }
+
+  /**
+   * Creates and returns a load balancer configured explicitly
+   */
+  public CustomLoadBalanceManager createProxyLoadBalancer(String probeCategory)
+  {
+    return new SingleLoadBalanceManager(probeCategory);
+  }
+
+  /**
    * Closes the server.
    */
   public void stop()
@@ -2258,6 +2428,21 @@ public class Server extends ProtocolDispatchServer
       if (alarm != null)
         alarm.dequeue();
 
+      if (getSelectManager() != null)
+        getSelectManager().stop();
+
+      ArrayList<Port> ports = _selfServer.getPorts();
+      for (int i = 0; i < ports.size(); i++) {
+        Port port = ports.get(i);
+
+        try {
+          if (port != _selfServer.getClusterPort())
+            port.close();
+        } catch (Throwable e) {
+          log.log(Level.WARNING, e.toString(), e);
+        }
+      }
+
       try {
         if (_systemStore != null)
           _systemStore.close();
@@ -2270,20 +2455,6 @@ public class Server extends ProtocolDispatchServer
           _globalStore.close();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
-      }
-
-      if (getSelectManager() != null)
-        getSelectManager().stop();
-
-      ArrayList<Port> ports = _selfServer.getPorts();
-      for (int i = 0; i < ports.size(); i++) {
-        Port port = ports.get(i);
-
-        try {
-          port.close();
-        } catch (Throwable e) {
-          log.log(Level.WARNING, e.toString(), e);
-        }
       }
 
       try {
@@ -2300,7 +2471,7 @@ public class Server extends ProtocolDispatchServer
       }
 
       try {
-        Thread.sleep(10);
+        Thread.sleep(1);
       } catch (Throwable e) {
       }
 
@@ -2381,13 +2552,14 @@ public class Server extends ProtocolDispatchServer
       Resin resin = _resin;
 
       if (resin != null)
-        resin.destroy();
+        resin.startShutdown(L.l("Resin shutdown from Server.destroy()"));
     }
   }
 
   public String toString()
   {
-    return (getClass().getSimpleName() + "[id=" + getServerId()
+    return (getClass().getSimpleName()
+            + "[id=" + getServerId()
             + ",cluster=" + _selfServer.getCluster().getId() + "]");
   }
 

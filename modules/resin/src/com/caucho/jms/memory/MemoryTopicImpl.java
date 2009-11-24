@@ -30,14 +30,14 @@
 package com.caucho.jms.memory;
 
 import java.io.Serializable;
-
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.logging.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import com.caucho.jms.message.*;
-import com.caucho.jms.queue.*;
-import com.caucho.jms.connection.*;
+import com.caucho.jms.queue.AbstractQueue;
+import com.caucho.jms.queue.AbstractTopic;
+import com.caucho.jms.queue.MessageException;
 
 /**
  * Implements a memory topic.
@@ -49,7 +49,7 @@ public class MemoryTopicImpl extends AbstractTopic
 
   private HashMap<String,MemoryQueue> _durableSubscriptionMap
     = new HashMap<String,MemoryQueue>();
-    
+
   private ArrayList<AbstractQueue> _subscriptionList
     = new ArrayList<AbstractQueue>();
 
@@ -70,18 +70,20 @@ public class MemoryTopicImpl extends AbstractTopic
 
   @Override
   public void send(String msgId,
-		   Serializable payload,
-		   int priority,
-		   long timeout)
+                   Serializable payload,
+                   int priority,
+                   long timeout,
+                   Object publisher)
     throws MessageException
   {
     for (int i = 0; i < _subscriptionList.size(); i++) {
-      _subscriptionList.get(i).send(msgId, payload, priority, timeout);
+      _subscriptionList.get(i).send(msgId, payload, priority, timeout,
+                                    publisher);
     }
   }
 
   @Override
-  public AbstractQueue createSubscriber(JmsSession session,
+  public AbstractQueue createSubscriber(Object publisher,
                                         String name,
                                         boolean noLocal)
   {
@@ -91,15 +93,15 @@ public class MemoryTopicImpl extends AbstractTopic
       queue = _durableSubscriptionMap.get(name);
 
       if (queue == null) {
-	queue = new MemorySubscriberQueue(session, noLocal);
-	queue.setName(getName() + ":sub-" + name);
+        queue = new MemorySubscriberQueue(publisher, noLocal);
+        queue.setName(getName() + ":sub-" + name);
 
-	_subscriptionList.add(queue);
-	_durableSubscriptionMap.put(name, queue);
+        _subscriptionList.add(queue);
+        _durableSubscriptionMap.put(name, queue);
       }
     }
     else {
-      queue = new MemorySubscriberQueue(session, noLocal);
+      queue = new MemorySubscriberQueue(publisher, noLocal);
       queue.setName(getName() + ":sub-" + _id++);
 
       _subscriptionList.add(queue);
@@ -116,7 +118,7 @@ public class MemoryTopicImpl extends AbstractTopic
   {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " close-subscriber(" + queue + ")");
-    
+
     if (! _durableSubscriptionMap.values().contains(queue))
       _subscriptionList.remove(queue);
   }

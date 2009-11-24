@@ -133,16 +133,8 @@ public class SimpleXMLAttribute extends SimpleXMLElement
   public StringValue asXML(Env env)
   {
     StringValue sb = env.createStringBuilder();
-    
-    if (_attributes != null) {
-      // this is an attribute list
-      for (SimpleXMLElement attr : _attributes) {
-        attr.toXMLImpl(sb);
-      }
-    }
-    else {
-      toXMLImpl(sb);
-    }
+
+    toXMLImpl(sb);
     
     return sb;
   }
@@ -190,5 +182,26 @@ public class SimpleXMLAttribute extends SimpleXMLElement
     }
     else
       return NullValue.NULL;
+  }
+  
+  @Override
+  protected void jsonEncodeImpl(Env env, StringValue sb, boolean isTop)
+  {
+    sb.append('"');
+    
+    if (_prefix != null && ! "".equals(_prefix)) {
+      sb.append(_prefix);
+      sb.append(":");
+    }
+    
+    sb.append(_name);
+    sb.append('"');
+    
+    sb.append(':');
+    
+    sb.append('"');
+    if (_text != null)
+      sb.append(_text);
+    sb.append('"');
   }
 }

@@ -77,16 +77,16 @@ public class ObjectExtValue extends ObjectValue
   public ObjectExtValue(Env env, ObjectExtValue copy, CopyRoot root)
   {
     super(copy.getQuercusClass());
-    
+
     root.putCopy(copy, this);
 
     _methodMap = copy._methodMap;
 
     _size = copy._size;
     _isFieldInit = copy._isFieldInit;
-    
+
     Entry []copyEntries = copy._entries;
-    
+
     _entries = new Entry[copyEntries.length];
     _hashMask = copy._hashMask;
 
@@ -95,22 +95,22 @@ public class ObjectExtValue extends ObjectValue
       Entry entry = copyEntries[i];
 
       for (; entry != null; entry = entry._next) {
-	Entry entryCopy = entry.copyTree(env, root);
+        Entry entryCopy = entry.copyTree(env, root);
 
-	entryCopy._next = _entries[i];
-	if (_entries[i] != null)
-	  _entries[i]._prev = entryCopy;
+        entryCopy._next = _entries[i];
+        if (_entries[i] != null)
+          _entries[i]._prev = entryCopy;
 
-	_entries[i] = entryCopy;
+        _entries[i] = entryCopy;
       }
     }
-    
+
     _incompleteObjectName = copy._incompleteObjectName;
   }
 
   public ObjectExtValue(Env env,
-			IdentityHashMap<Value,Value> copyMap,
-			ObjectExtValue copy)
+                        IdentityHashMap<Value,Value> copyMap,
+                        ObjectExtValue copy)
   {
     super(copy.getQuercusClass());
 
@@ -118,9 +118,9 @@ public class ObjectExtValue extends ObjectValue
 
     _size = copy._size;
     _isFieldInit = copy._isFieldInit;
-    
+
     Entry []copyEntries = copy._entries;
-    
+
     _entries = new Entry[copyEntries.length];
     _hashMask = copy._hashMask;
 
@@ -129,16 +129,16 @@ public class ObjectExtValue extends ObjectValue
       Entry entry = copyEntries[i];
 
       for (; entry != null; entry = entry._next) {
-	Entry entryCopy = new Entry(env, copyMap, entry);
+        Entry entryCopy = new Entry(env, copyMap, entry);
 
-	entryCopy._next = _entries[i];
-	if (_entries[i] != null)
-	  _entries[i]._prev = entryCopy;
+        entryCopy._next = _entries[i];
+        if (_entries[i] != null)
+          _entries[i]._prev = entryCopy;
 
-	_entries[i] = entryCopy;
+        _entries[i] = entryCopy;
       }
     }
-    
+
     _incompleteObjectName = copy._incompleteObjectName;
   }
 
@@ -148,15 +148,15 @@ public class ObjectExtValue extends ObjectValue
     _hashMask = _entries.length - 1;
     _size = 0;
   }
-  
+
   @Override
   protected void setQuercusClass(QuercusClass cl)
   {
     super.setQuercusClass(cl);
-    
+
     _methodMap = cl.getMethodMap();
   }
-  
+
   /*
    * Initializes the incomplete class.
    */
@@ -164,22 +164,23 @@ public class ObjectExtValue extends ObjectValue
   public void initObject(Env env, QuercusClass cls)
   {
     setQuercusClass(cls);
-    
-    Entry []entries = _entries;
-    
-    _entries = new Entry[_entries.length];
+    _incompleteObjectName = null;
+
+    Entry []existingEntries = _entries;
+
+    _entries = new Entry[DEFAULT_SIZE];
     _hashMask = _entries.length - 1;
     _size = 0;
-    
+
     cls.initObject(env, this);
-    
-    EntryIterator iter = new EntryIterator(entries);
-    
+
+    EntryIterator iter = new EntryIterator(existingEntries);
+
     while (iter.hasNext()) {
       Entry newField = iter.next();
-      
+
       Entry entry = getThisEntry(newField._key);
-      
+
       if (entry != null)
         entry._value = newField._value;
       else
@@ -203,19 +204,10 @@ public class ObjectExtValue extends ObjectValue
   public final Value getField(Env env, StringValue name)
   {
     Entry entry = getEntry(env, name);
-    
+
     // php/09ks vs php/091m
     if (entry != null) {
-      /*
-      if (entry._visibility == FieldVisibility.PRIVATE
-          && _quercusClass != env.getCallingClass()) {
-      }
-      else
-        return entry._value.toValue();
-      */
-      
       return entry._value.toValue();
-        
     }
 
     return getFieldExt(env, name);
@@ -228,13 +220,14 @@ public class ObjectExtValue extends ObjectValue
   public Value getThisField(Env env, StringValue name)
   {
     Entry entry = getThisEntry(name);
-    
-    if (entry != null)
+
+    if (entry != null) {
       return entry._value.toValue();
+    }
 
     return getFieldExt(env, name);
   }
-  
+
   /**
    * Returns fields not explicitly specified by this value.
    */
@@ -253,25 +246,25 @@ public class ObjectExtValue extends ObjectValue
 
     if (entry != null) {
       Value value = entry._value;
-      
+
       if (value instanceof Var)
         return (Var) value;
-      
+
       Var var = new Var(value);
       entry._value = var;
-      
+
       return var;
     }
-    
+
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET) {
       if (value instanceof Var)
         return (Var) value;
       else
         return new Var(value);
     }
-    
+
     // php/3d28
     entry = createEntry(name, FieldVisibility.PUBLIC);
 
@@ -294,28 +287,28 @@ public class ObjectExtValue extends ObjectValue
   public Var getThisFieldRef(Env env, StringValue name)
   {
     Entry entry = getThisEntry(name);
-    
+
     if (entry != null) {
       Value value = entry._value;
-      
+
       if (value instanceof Var)
         return (Var) value;
-      
+
       Var var = new Var(value);
       entry._value = var;
-      
+
       return var;
     }
-    
+
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET) {
       if (value instanceof Var)
         return (Var) value;
       else
         return new Var(value);
     }
-    
+
     entry = createEntry(name, FieldVisibility.PUBLIC);
 
     value = entry._value;
@@ -348,10 +341,10 @@ public class ObjectExtValue extends ObjectValue
     }
 
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET)
       return value;
-    
+
     return new ArgGetFieldValue(env, this, name);
   }
 
@@ -365,12 +358,12 @@ public class ObjectExtValue extends ObjectValue
 
     if (entry != null)
       return entry.toArg();
-    
+
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET)
       return value;
-    
+
     return new ArgGetFieldValue(env, this, name);
   }
 
@@ -384,12 +377,12 @@ public class ObjectExtValue extends ObjectValue
 
     if (entry != null)
       return entry.toArg();
-    
+
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET)
       return value;
-    
+
     return new ArgGetFieldValue(env, this, name);
   }
 
@@ -405,10 +398,10 @@ public class ObjectExtValue extends ObjectValue
       return entry.toArg();
 
     Value value = getFieldExt(env, name);
-    
+
     if (value != UnsetValue.UNSET)
       return value;
-    
+
     return new ArgGetFieldValue(env, this, name);
   }
 
@@ -426,7 +419,7 @@ public class ObjectExtValue extends ObjectValue
 
       if (oldValue != null)
         return oldValue;
-      
+
       if (! _isFieldInit) {
         AbstractFunction fieldSet = _quercusClass.getFieldSet();
 
@@ -434,12 +427,12 @@ public class ObjectExtValue extends ObjectValue
           _isFieldInit = true;
           Value retVal = fieldSet.callMethod(env, this, name, value);
           _isFieldInit = false;
-          
+
           return retVal;
         }
       }
     }
-    
+
     entry = createEntry(name, FieldVisibility.PUBLIC);
 
     Value oldValue = entry._value;
@@ -475,22 +468,26 @@ public class ObjectExtValue extends ObjectValue
 
       if (oldValue != null)
         return oldValue;
-      
+
       if (! _isFieldInit) {
         AbstractFunction fieldSet = _quercusClass.getFieldSet();
-    
+
         if (fieldSet != null) {
           //php/09k7
           _isFieldInit = true;
-          
-          Value retVal = fieldSet.callMethod(env, this, name, value);
-          
-          _isFieldInit = false;
-          return retVal;
+          Value retValue = NullValue.NULL;
+
+          try {
+            retValue = fieldSet.callMethod(env, this, name, value);
+          } finally {
+            _isFieldInit = false;
+          }
+
+          return retValue;
         }
       }
     }
-    
+
     entry = createEntry(name, FieldVisibility.PUBLIC);
 
     Value oldValue = entry._value;
@@ -512,10 +509,26 @@ public class ObjectExtValue extends ObjectValue
 
     return value;
   }
-  
+
   protected Value putFieldExt(Env env, StringValue name, Value value)
   {
     return null;
+  }
+  
+  @Override
+  public void setFieldInit(boolean isInit)
+  {
+    _isFieldInit = isInit;
+  }
+  
+  /**
+   * Returns true if the object is in a __set() method call.
+   * Prevents infinite recursion.
+   */
+  @Override
+  public boolean isFieldInit()
+  {
+    return _isFieldInit;
   }
 
   /**
@@ -540,25 +553,57 @@ public class ObjectExtValue extends ObjectValue
     int hash = name.hashCode() & _hashMask;
 
     for (Entry entry = _entries[hash];
-	 entry != null;
-	 entry = entry._next) {
+         entry != null;
+         entry = entry._next) {
       if (name.equals(entry.getKey())) {
-	Entry prev = entry._prev;
-	Entry next = entry._next;
+        Entry prev = entry._prev;
+        Entry next = entry._next;
 
-	if (prev != null)
-	  prev._next = next;
-	else
-	  _entries[hash] = next;
+        if (prev != null)
+          prev._next = next;
+        else
+          _entries[hash] = next;
 
-	if (next != null)
-	  next._prev = prev;
+        if (next != null)
+          next._prev = prev;
 
-	_size--;
+        _size--;
 
         return;
       }
     }
+  }
+
+  /**
+   * Removes the field array ref.
+   */
+  @Override
+  public void unsetArray(Env env, StringValue name, Value index)
+  {
+    // php/022b
+    if (_quercusClass.getFieldGet() != null)
+      return;
+
+    Entry entry = createEntry(name, FieldVisibility.PUBLIC);
+
+    // XXX
+    //if (entry._visibility == FieldVisibility.PRIVATE)
+      //return;
+
+    entry.toValue().remove(index);
+  }
+
+  /**
+   * Removes the field array ref.
+   */
+  public void unsetThisArray(Env env, StringValue name, Value index)
+  {
+    if (_quercusClass.getFieldGet() != null)
+      return;
+
+    Entry entry = createEntry(name, FieldVisibility.PUBLIC);
+
+    entry.toValue().remove(index);
   }
 
   /**
@@ -570,11 +615,11 @@ public class ObjectExtValue extends ObjectValue
 
     for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
       if (name.equals(entry._key)) {
-        
+
         /*
         if (entry._visibility == FieldVisibility.PRIVATE) {
           QuercusClass cls = env.getCallingClass();
-          
+
           // XXX: this really only checks access from outside of class scope
           // php/091m
           if (cls != _quercusClass) {
@@ -583,14 +628,14 @@ public class ObjectExtValue extends ObjectValue
           }
         }
         */
-        
+
         return entry;
       }
     }
 
     return null;
   }
-  
+
   /**
    * Gets a new value.
    */
@@ -614,17 +659,17 @@ public class ObjectExtValue extends ObjectValue
     int hash = name.hashCode() & _hashMask;
 
     for (Entry entry = _entries[hash];
-	 entry != null;
-	 entry = entry._next) {
+         entry != null;
+         entry = entry._next) {
       if (name.equals(entry._key))
         return entry;
     }
-    
+
     _size++;
 
     Entry newEntry = new Entry(name, visibility);
     Entry next = _entries[hash];
-    
+
     if (next != null) {
       newEntry._next = next;
       next._prev = newEntry;
@@ -635,97 +680,6 @@ public class ObjectExtValue extends ObjectValue
     // XXX: possibly resize
 
     return newEntry;
-  }
-
-  //
-  // array methods
-  //
-
-  /**
-   * Returns the array value with the given key.
-   */
-  @Override
-  public Value get(Value key)
-  {
-    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-
-    // php/066q vs. php/0906
-    //return getField(null, key.toString());
-
-    if (delegate != null)
-      return delegate.get(this, key);
-    else
-      return super.get(key);
-  }
-
-  /**
-   * Sets the array value with the given key.
-   */
-  @Override
-  public Value put(Value key, Value value)
-  {
-    // php/0d94
-    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-
-    if (delegate != null)
-      return delegate.put(this, key, value);
-    else
-      return super.put(key, value);
-  }
-
-  /**
-   * Appends a new array value
-   */
-  @Override
-  public Value put(Value value)
-  {
-    // php/0d94
-    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-
-    if (delegate != null)
-      return delegate.put(this, value);
-    else
-      return super.put(value);
-  }
-  
-  /**
-   * Sets the array value, returning the new array, e.g. to handle
-   * string update ($a[0] = 'A').  Creates an array automatically if
-   * necessary.
-   */
-  public Value append(Value index, Value value)
-  {
-    put(index, value);
-    
-    return this;
-  }
-
-  /**
-   * Unsets the array value
-   */
-  @Override
-  public Value remove(Value key)
-  {
-    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-
-    if (delegate != null)
-      return delegate.unset(this, key);
-    else
-      return super.remove(key);
-  }
-  
-  /**
-   * Returns the array value with the given key.
-   */
-  @Override
-  public boolean isset(Value key)
-  {
-    ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-
-    if (delegate != null)
-      return delegate.isset(this, key);
-    else
-      return get(key).isset();
   }
 
   //
@@ -795,14 +749,14 @@ public class ObjectExtValue extends ObjectValue
                           Expr []args)
   {
     AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-    
+
     if (fun != null)
       return fun.callMethod(env, this, args);
     else if (_quercusClass.getCall() != null) {
       Expr []newArgs = new Expr[args.length + 1];
       newArgs[0] = new StringLiteralExpr(toMethod(name, nameLen));
       System.arraycopy(args, 0, newArgs, 1, args.length);
-      
+
       return _quercusClass.getCall().callMethod(env, this, newArgs);
     }
     else
@@ -904,9 +858,9 @@ public class ObjectExtValue extends ObjectValue
    * calls the function.
    */
   @Override
-  public Value callMethod(Env env, 
+  public Value callMethod(Env env,
                           int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3)
+                          Value a1, Value a2, Value a3)
   {
     AbstractFunction fun = _methodMap.get(hash, name, nameLen);
 
@@ -924,15 +878,15 @@ public class ObjectExtValue extends ObjectValue
     else
       return env.error(L.l("Call to undefined method {0}::{1}()",
                            getName(), toMethod(name, nameLen)));
-  }  
+  }
 
   /**
    * calls the function.
    */
   @Override
-  public Value callMethod(Env env, 
+  public Value callMethod(Env env,
                           int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3, Value a4)
+                          Value a1, Value a2, Value a3, Value a4)
   {
     AbstractFunction fun = _methodMap.get(hash, name, nameLen);
 
@@ -951,7 +905,7 @@ public class ObjectExtValue extends ObjectValue
     else
       return env.error(L.l("Call to undefined method {0}::{1}()",
                            getName(), toMethod(name, nameLen)));
-  }  
+  }
 
   /**
    * calls the function.
@@ -959,7 +913,7 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public Value callMethod(Env env,
                           int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3, Value a4, Value a5)
+                          Value a1, Value a2, Value a3, Value a4, Value a5)
   {
     AbstractFunction fun = _methodMap.get(hash, name, nameLen);
 
@@ -979,7 +933,7 @@ public class ObjectExtValue extends ObjectValue
     else
       return env.error(L.l("Call to undefined method {0}::{1}()",
                            getName(), toMethod(name, nameLen)));
-  }  
+  }
 
   /**
    * Evaluates a method.
@@ -1209,7 +1163,7 @@ public class ObjectExtValue extends ObjectValue
       return oldValue;
 
     // php/4048 - needs to be deep copy
-    
+
     return new ObjectExtValue(env, map, this);
   }
 
@@ -1220,9 +1174,9 @@ public class ObjectExtValue extends ObjectValue
   public Value copyTree(Env env, CopyRoot root)
   {
     // php/420c
-    
+
     Value copy = root.getCopy(this);
-    
+
     if (copy != null)
       return copy;
     else
@@ -1233,14 +1187,26 @@ public class ObjectExtValue extends ObjectValue
    * Clone the object
    */
   @Override
-  public Value clone()
+  public Value clone(Env env)
   {
     ObjectExtValue newObject = new ObjectExtValue(_quercusClass);
 
+    Iterator<Entry> iter = new EntryIterator(_entries);
+
+    while (iter.hasNext()) {
+      Entry entry = iter.next();
+
+      Entry copy = newObject.createEntry(entry.getKey(),
+                                         entry.getVisibility());
+
+      copy.setValue(entry.getRawValue());
+
+    }
+
     for (Map.Entry<Value,Value> entry : entrySet()) {
-      newObject.putThisField(null,
-			     (StringValue) entry.getKey(),
-			     entry.getValue());
+      newObject.putThisField(env,
+                                         (StringValue) entry.getKey(),
+                                         entry.getValue());
     }
 
     return newObject;
@@ -1250,7 +1216,7 @@ public class ObjectExtValue extends ObjectValue
 
   /*
    * Serializes the value.
-   * 
+   *
    * @param sb holds result of serialization
    * @param serializeMap holds reference indexes
    */
@@ -1259,18 +1225,18 @@ public class ObjectExtValue extends ObjectValue
                         StringBuilder sb, SerializeMap serializeMap)
   {
     Integer index = serializeMap.get(this);
-    
+
     if (index != null) {
       sb.append("r:");
       sb.append(index);
       sb.append(";");
-      
+
       return;
     }
-    
+
     serializeMap.put(this);
     serializeMap.incrementIndex();
-    
+
     sb.append("O:");
     sb.append(_className.length());
     sb.append(":\"");
@@ -1280,38 +1246,38 @@ public class ObjectExtValue extends ObjectValue
     sb.append(":{");
 
     Iterator<Entry> iter = new EntryIterator(_entries);
-    
+
     while (iter.hasNext()) {
       Entry entry = iter.next();
-      
+
       sb.append("s:");
-      
+
       Value key = entry.getKey();
       int len = key.length();
-      
+
       if (entry._visibility == FieldVisibility.PROTECTED) {
         sb.append(len + 3);
-        
+
         sb.append(":\"");
         sb.append("\u0000*\u0000");
       }
       else if (entry._visibility == FieldVisibility.PRIVATE) {
         sb.append(len + 3);
-        
+
         sb.append(":\"");
         sb.append("\u0000A\u0000");
       }
       else {
         sb.append(len);
-        
+
         sb.append(":\"");
       }
-      
+
       sb.append(key);
       sb.append("\";");
 
       Value value = ((Entry) entry).getRawValue();
-      
+
       value.serialize(env, sb, serializeMap);
     }
 
@@ -1326,19 +1292,19 @@ public class ObjectExtValue extends ObjectValue
   {
     sb.append(getName());
     sb.append("::__set_state(array(\n");
-    
+
     for (Map.Entry<Value,Value> entry : entrySet()) {
       sb.append("   ");
       entry.getKey().varExport(sb);
-      
+
       sb.append(" => ");
       entry.getValue().varExport(sb);
       sb.append(",\n");
     }
-    
+
     sb.append("))");
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -1362,7 +1328,7 @@ public class ObjectExtValue extends ObjectValue
   {
     return sb.appendBytes(toString(Env.getInstance()));
   }
-  
+
   /**
    * Append to a binary builder.
    */
@@ -1370,7 +1336,7 @@ public class ObjectExtValue extends ObjectValue
   {
     return sb.append(toString(Env.getInstance()));
   }
-  
+
   /**
    * Converts to a string builder
    */
@@ -1379,7 +1345,7 @@ public class ObjectExtValue extends ObjectValue
   {
     return toString(env).toStringBuilder(env);
   }
-  
+
   /**
    * Converts to a java String object.
    */
@@ -1387,7 +1353,7 @@ public class ObjectExtValue extends ObjectValue
   {
     return toString(Env.getInstance()).toString();
   }
-  
+
   /**
    * Converts to a string.
    * @param env
@@ -1396,7 +1362,7 @@ public class ObjectExtValue extends ObjectValue
   public StringValue toString(Env env)
   {
     QuercusClass oldClass = env.setCallingClass(_quercusClass);
-    
+
     try {
       AbstractFunction fun = _quercusClass.findFunction("__toString");
 
@@ -1478,10 +1444,10 @@ public class ObjectExtValue extends ObjectValue
     throws IOException
   {
     int size = getSize();
-    
+
     if (isIncompleteObject())
       size++;
-    
+
     out.println("object(" + getName() + ") (" + size + ") {");
 
     if (isIncompleteObject()) {
@@ -1489,14 +1455,14 @@ public class ObjectExtValue extends ObjectValue
       out.println("[\"__Quercus_Incomplete_Class_name\"]=>");
 
       printDepth(out, 2 * (depth + 1));
-      
+
       Value value = env.createString(getIncompleteObjectName());
-      
+
       value.varDump(env, out, depth + 1, valueSet);
 
       out.println();
     }
-    
+
     for (Map.Entry<Value,Value> mapEntry : sortedEntrySet()) {
       ObjectExtValue.Entry entry = (ObjectExtValue.Entry) mapEntry;
 
@@ -1534,23 +1500,53 @@ public class ObjectExtValue extends ObjectValue
   //
   // Java Serialization
   //
-  
+
   private void writeObject(ObjectOutputStream out)
     throws IOException
   {
     out.writeObject(_className);
 
     out.writeInt(_size);
-    
-    for (Map.Entry<Value,Value> entry : entrySet()) {      
+
+    for (Map.Entry<Value,Value> entry : entrySet()) {
       out.writeObject(entry.getKey());
       out.writeObject(entry.getValue());
     }
   }
-  
+
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append('{');
+
+    int length = 0;
+
+    Iterator<Entry> iter = new EntryIterator(_entries);
+
+    while (iter.hasNext()) {
+      Entry entry = iter.next();
+
+      if (entry.getVisibility() != FieldVisibility.PUBLIC)
+        continue;
+
+      if (length > 0)
+        sb.append(',');
+
+      entry.getKey().toStringValue().jsonEncode(env, sb);
+      sb.append(':');
+      entry.getValue().jsonEncode(env, sb);
+      length++;
+    }
+
+    sb.append('}');
+  }
+
   private void readObject(ObjectInputStream in)
     throws ClassNotFoundException, IOException
-  { 
+  {
     Env env = Env.getInstance();
     String name = (String) in.readObject();
 
@@ -1565,23 +1561,23 @@ public class ObjectExtValue extends ObjectValue
       cl = env.getQuercus().getStdClass();
 
       setQuercusClass(cl);
-      
+
       setIncompleteObjectName(name);
     }
 
     int size = in.readInt();
-    
+
     for (int i = 0; i < size; i++) {
       putThisField(env,
-		   (StringValue) in.readObject(),
-		   (Value) in.readObject());
+                   (StringValue) in.readObject(),
+                   (Value) in.readObject());
     }
   }
 
   public void cleanup(Env env)
   {
     AbstractFunction fun = getQuercusClass().getDestructor();
-    
+
     if (fun != null)
       fun.callMethod(env, this);
   }
@@ -1596,7 +1592,7 @@ public class ObjectExtValue extends ObjectValue
   {
     return getClass().getSimpleName() + "@" + System.identityHashCode(this) +  "[" + _className + "]";
   }
-  
+
   public class EntrySet extends AbstractSet<Map.Entry<Value,Value>> {
     EntrySet()
     {
@@ -1614,7 +1610,7 @@ public class ObjectExtValue extends ObjectValue
       return new KeyValueIterator(ObjectExtValue.this._entries);
     }
   }
-  
+
   public static class EntryIterator
     implements Iterator<Entry>
   {
@@ -1631,7 +1627,7 @@ public class ObjectExtValue extends ObjectValue
     {
       if (_entry != null)
         return true;
-      
+
       for (; _index < _list.length && _list[_index] == null; _index++) {
       }
 
@@ -1680,8 +1676,8 @@ public class ObjectExtValue extends ObjectValue
     public boolean hasNext()
     {
       if (_entry != null)
-	return true;
-      
+        return true;
+
       for (; _index < _list.length && _list[_index] == null; _index++) {
       }
 
@@ -1691,10 +1687,10 @@ public class ObjectExtValue extends ObjectValue
     public Map.Entry<Value,Value> next()
     {
       if (_entry != null) {
-	Entry entry = _entry;
-	_entry = entry._next;
+        Entry entry = _entry;
+        _entry = entry._next;
 
-	return entry;
+        return entry;
       }
 
       for (; _index < _list.length && _list[_index] == null; _index++) {
@@ -1730,8 +1726,8 @@ public class ObjectExtValue extends ObjectValue
     public boolean hasNext()
     {
       if (_entry != null)
-	return true;
-      
+        return true;
+
       for (; _index < _list.length && _list[_index] == null; _index++) {
       }
 
@@ -1741,10 +1737,10 @@ public class ObjectExtValue extends ObjectValue
     public Value next()
     {
       if (_entry != null) {
-	Entry entry = _entry;
-	_entry = entry._next;
+        Entry entry = _entry;
+        _entry = entry._next;
 
-	return entry._value;
+        return entry._value;
       }
 
       for (; _index < _list.length && _list[_index] == null; _index++) {
@@ -1780,8 +1776,8 @@ public class ObjectExtValue extends ObjectValue
     public boolean hasNext()
     {
       if (_entry != null)
-	return true;
-      
+        return true;
+
       for (; _index < _list.length && _list[_index] == null; _index++) {
       }
 
@@ -1791,10 +1787,10 @@ public class ObjectExtValue extends ObjectValue
     public Value next()
     {
       if (_entry != null) {
-	Entry entry = _entry;
-	_entry = entry._next;
+        Entry entry = _entry;
+        _entry = entry._next;
 
-	return entry._key;
+        return entry._key;
       }
 
       for (; _index < _list.length && _list[_index] == null; _index++) {
@@ -1839,7 +1835,7 @@ public class ObjectExtValue extends ObjectValue
       _visibility = visibility;
       _value = NullValue.NULL;
     }
-    
+
     public Entry(StringValue key, Value value)
     {
       _key = key;
@@ -1865,15 +1861,20 @@ public class ObjectExtValue extends ObjectValue
     {
       return _value.toValue();
     }
-    
+
     public Value getRawValue()
     {
       return _value;
     }
 
-    public Value getKey()
+    public StringValue getKey()
     {
       return _key;
+    }
+
+    public FieldVisibility getVisibility()
+    {
+      return _visibility;
     }
 
     public final boolean isPrivate()
@@ -1896,7 +1897,7 @@ public class ObjectExtValue extends ObjectValue
       Var var = _value.toRefVar();
 
       _value = var;
-      
+
       return var;
     }
 
@@ -1927,10 +1928,10 @@ public class ObjectExtValue extends ObjectValue
       if (value instanceof Var)
         return new RefVar((Var) value);
       else {
-	Var var = new Var(_value);
-	
-	_value = var;
-	
+        Var var = new Var(_value);
+
+        _value = var;
+
         return new RefVar(var);
       }
     }
@@ -1945,10 +1946,10 @@ public class ObjectExtValue extends ObjectValue
       if (value instanceof Var)
         return new RefVar((Var) value);
       else {
-	Var var = new Var(_value);
-	
-	_value = var;
-	
+        Var var = new Var(_value);
+
+        _value = var;
+
         return new RefVar(var);
       }
     }
@@ -1960,10 +1961,10 @@ public class ObjectExtValue extends ObjectValue
       if (value instanceof Var)
         return value;
       else {
-	Var var = new Var(_value);
-	
-	_value = var;
-	
+        Var var = new Var(_value);
+
+        _value = var;
+
         return var;
       }
     }
@@ -1971,7 +1972,7 @@ public class ObjectExtValue extends ObjectValue
     Entry copyTree(Env env, CopyRoot root)
     {
       Value copy = root.getCopy(_value);
-      
+
       if (copy == null)
         copy = _value.copyTree(env, root);
 
@@ -2002,19 +2003,19 @@ public class ObjectExtValue extends ObjectValue
       throws IOException
     {
       String suffix = "";
-      
+
       if (_visibility == FieldVisibility.PROTECTED)
         suffix = ":protected";
       else if (_visibility == FieldVisibility.PRIVATE)
         suffix = ":private";
-      
+
       printDepth(out, 2 * depth);
       out.println("[\"" + getKey() + suffix + "\"]=>");
 
       printDepth(out, 2 * depth);
-      
+
       _value.varDump(env, out, depth, valueSet);
-      
+
       out.println();
     }
 
@@ -2025,15 +2026,15 @@ public class ObjectExtValue extends ObjectValue
       throws IOException
     {
       String suffix = "";
-      
+
       if (_visibility == FieldVisibility.PROTECTED)
         suffix = ":protected";
       else if (_visibility == FieldVisibility.PRIVATE)
         suffix = ":private";
-      
+
       printDepth(out, 4 * depth);
       out.print("[" + getKey() + suffix + "] => ");
-      
+
       _value.printR(env, out, depth + 1, valueSet);
 
       out.println();
@@ -2043,7 +2044,7 @@ public class ObjectExtValue extends ObjectValue
       throws java.io.IOException
     {
       for (int i = 0; i < depth; i++)
-	out.print(' ');
+        out.print(' ');
     }
 
     @Override

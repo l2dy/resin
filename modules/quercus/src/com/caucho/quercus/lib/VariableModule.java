@@ -86,8 +86,16 @@ public class VariableModule extends AbstractQuercusModule {
       
       return env.getClass(cls).getConstant(env, name);
     }
-    else
-      return env.getConstant(name);
+    else {
+      Value constant = env.getConstant(name, false);
+      
+      if (constant != null)
+        return constant;
+      else {
+        env.warning(L.l("cannot find constant '{0}'", name));
+        return NullValue.NULL;
+      }
+    }
   }
 
   /**
@@ -116,9 +124,9 @@ public class VariableModule extends AbstractQuercusModule {
    * @param value the constant value
    */
   public static Value define(Env env,
-			     StringValue name,
-			     Value value,
-			     @Optional boolean isCaseInsensitive)
+			                 StringValue name,
+			                 Value value,
+			                 @Optional boolean isCaseInsensitive)
   {
     return env.addConstant(name, value, isCaseInsensitive);
   }
@@ -546,9 +554,14 @@ public class VariableModule extends AbstractQuercusModule {
   /**
    * Returns the type string for the variable
    */
-  public static boolean isset(@ReadOnly Value v)
+  public static boolean isset(@ReadOnly Value ... vList)
   {
-    return v.isset();
+    for (Value v : vList) {
+      if (! v.isset())
+        return false;
+    }
+    
+    return true;
   }
 
   /**

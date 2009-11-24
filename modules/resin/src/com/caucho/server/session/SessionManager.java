@@ -29,7 +29,8 @@
 
 package com.caucho.server.session;
 
-import com.caucho.config.Config;
+import com.caucho.admin.AverageSample;
+import com.caucho.admin.ProbeManager;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.ByteStreamCache;
@@ -39,13 +40,11 @@ import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.hessian.io.*;
 import com.caucho.management.server.SessionManagerMXBean;
 import com.caucho.security.Authenticator;
-import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.cluster.ClusterServer;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.InvocationDecoder;
 import com.caucho.server.distcache.PersistentStoreConfig;
-import com.caucho.server.resin.Resin;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
@@ -54,13 +53,12 @@ import com.caucho.util.LruCache;
 import com.caucho.util.RandomUtil;
 import com.caucho.vfs.TempOutputStream;
 
-import javax.naming.Context;
-import javax.naming.InitialContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSessionActivationListener;
 import javax.servlet.http.HttpSessionAttributeListener;
 import javax.servlet.http.HttpSessionEvent;
 import javax.servlet.http.HttpSessionListener;
+import javax.servlet.SessionCookieConfig;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -73,7 +71,7 @@ import java.util.logging.Logger;
 /**
  * Manages sessions in a web-webApp.
  */
-public final class SessionManager implements AlarmListener
+public final class SessionManager implements SessionCookieConfig, AlarmListener
 {
   static protected final L10N L = new L10N(SessionManager.class);
   static protected final Logger log
@@ -137,12 +135,17 @@ public final class SessionManager implements AlarmListener
   // default cookie version
   private int _cookieVersion;
   private String _cookieDomain;
+  private boolean _isCookieUseContextPath;
+  private String _cookiePath;
   private long _cookieMaxAge;
   private boolean _cookieSecure;
   private int _isCookieHttpOnly;
+  private String _cookieComment;
   private String _cookiePort;
   private int _reuseSessionId = COOKIE;
   private int _cookieLength = 21;
+  //Servlet 3.0 plain | ssl session tracking cookies become secure when set to true
+  private boolean _isSecure;
 
   // persistence configuration
 
@@ -184,6 +187,8 @@ public final class SessionManager implements AlarmListener
   private volatile long _sessionCreateCount;
   private volatile long _sessionTimeoutCount;
   private volatile long _sessionInvalidateCount;
+
+  private final AverageSample _sessionSaveSample;
 
   /**
    * Creates and initializes a new session manager
@@ -236,6 +241,9 @@ public final class SessionManager implements AlarmListener
       _distributionId = name;
 
     _alarm = new Alarm(this);
+    _sessionSaveSample
+      = ProbeManager.createAverageProbe("Resin|WebApp|Session Save", "Size");
+    
     _admin = new SessionManagerAdmin(this);
   }
 
@@ -285,6 +293,14 @@ public final class SessionManager implements AlarmListener
   public void setCookiePort(String port)
   {
     _cookiePort = port;
+  }
+
+  /**
+   * Sets the cookie ports.
+   */
+  public void setCookieUseContextPath(boolean isCookieUseContextPath)
+  {
+    _isCookieUseContextPath = isCookieUseContextPath;
   }
 
   /**
@@ -788,6 +804,102 @@ public final class SessionManager implements AlarmListener
     _enableSessionUrls = enableUrls;
   }
 
+  //SessionCookieConfig implementation (Servlet 3.0)
+  public void setName(String name)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    setCookieName(name);
+  }
+
+  public String getName()
+  {
+    return getCookieName();
+  }
+
+  public void setDomain(String domain)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    setCookieDomain(domain);
+  }
+
+  public String getDomain()
+  {
+    return getCookieDomain();
+  }
+
+  public void setPath(String path)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    _cookiePath = path;
+  }
+
+  public String getPath()
+  {
+    return _cookiePath;
+  }
+
+  public void setComment(String comment)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    _cookieComment = comment;
+  }
+
+  public String getComment()
+  {
+    return _cookieComment;
+  }
+
+  public void setHttpOnly(boolean httpOnly)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    setCookieHttpOnly(httpOnly);
+  }
+
+  public boolean isHttpOnly()
+  {
+    return isCookieHttpOnly();
+  }
+
+  public void setSecure(boolean secure)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    _isSecure = secure;
+  }
+
+  public boolean isSecure()
+  {
+    return _isSecure;
+  }
+
+  public void setMaxAge(int maxAge)
+  {
+    if (! _webApp.isInitializing())
+      throw new IllegalStateException();
+
+    _cookieMaxAge = maxAge * 1000;
+  }
+
+  public int getMaxAge()
+  {
+    return (int) (_cookieMaxAge / 1000);
+  }
+
+  public void setCookieName(String cookieName)
+  {
+    _cookieName = cookieName;
+  }
   /**
    * Returns the default cookie name.
    */
@@ -821,6 +933,14 @@ public final class SessionManager implements AlarmListener
   public void setCookieDomain(String domain)
   {
     _cookieDomain = domain;
+  }
+
+  /**
+   * Sets the default session cookie domain.
+   */
+  public void setCookiePath(String path)
+  {
+    _cookiePath = path;
   }
 
   /**
@@ -866,7 +986,7 @@ public final class SessionManager implements AlarmListener
     if (_isCookieHttpOnly == SET_TRUE)
       return true;
     else if (_isCookieHttpOnly == SET_FALSE)
-      return true;
+      return false;
     else
       return getWebApp().getCookieHttpOnly();
   }
@@ -945,25 +1065,13 @@ public final class SessionManager implements AlarmListener
       _sessionStore = sessionCache;
     }
 
-    /*
-    if (_storeManager != null) {
-      _sessionStore = _storeManager.createStore(_distributionId,
-                                                _objectManager);
-      _sessionStore.setMaxIdleTime(_sessionTimeout);
-
-      if (_alwaysLoadSession == SET_TRUE)
-        _sessionStore.setAlwaysLoad(true);
-      else if (_alwaysLoadSession == SET_FALSE)
-        _sessionStore.setAlwaysLoad(false);
-
-      if (_alwaysSaveSession == SET_TRUE)
-        _sessionStore.setAlwaysSave(true);
-      else if (_alwaysSaveSession == SET_FALSE)
-        _sessionStore.setAlwaysSave(false);
+    if (_cookiePath != null) {
     }
+    else if (_isCookieUseContextPath)
+      _cookiePath = _webApp.getContextPath();
 
-    _objectManager.setStore(_sessionStore);
-    */
+    if (_cookiePath == null || "".equals(_cookiePath))
+      _cookiePath = "/";
   }
 
   public void start()
@@ -980,6 +1088,24 @@ public final class SessionManager implements AlarmListener
     return _sessionStore;
   }
 
+  public SessionSerializer createSessionSerializer(OutputStream os)
+    throws IOException
+  {
+    if (_isHessianSerialization)
+      return new HessianSessionSerializer(os);
+    else
+      return new JavaSessionSerializer(os);
+  }
+
+  public SessionDeserializer createSessionDeserializer(InputStream is)
+    throws IOException
+  {
+    if (_isHessianSerialization)
+      return new HessianSessionDeserializer(is);
+    else
+      return new JavaSessionDeserializer(is);
+  }
+
   /**
    * Returns true if the session exists in this manager.
    */
@@ -993,7 +1119,7 @@ public final class SessionManager implements AlarmListener
    * group matches, then use it because different webApps on the
    * same matchine should use the same cookie.
    *
-   * @param sessionGroup possibly assigned by the web server
+   * @param request current request
    */
   public String createSessionId(HttpServletRequest request)
   {
@@ -1005,7 +1131,7 @@ public final class SessionManager implements AlarmListener
    * group matches, then use it because different webApps on the
    * same machine should use the same cookie.
    *
-   * @param sessionGroup possibly assigned by the web server
+   * @param request current request
    */
   public String createSessionId(HttpServletRequest request,
                                 boolean create)
@@ -1086,6 +1212,13 @@ public final class SessionManager implements AlarmListener
 
     if (length > 0) {
       long time = Alarm.getCurrentTime();
+
+      // The QA needs to add a millisecond for each server start so the
+      // clustering test will work, but all the session ids are generated
+      // based on the timestamp.  So QA sessions don't have milliseconds
+      if (Alarm.isTest())
+        time -= time % 1000;
+      
       for (int i = 0; i < 7 && length-- > 0; i++) {
         sb.append(convert(time));
         time = time >> 6;
@@ -1111,8 +1244,9 @@ public final class SessionManager implements AlarmListener
   /**
    * Finds a session in the session store, creating one if 'create' is true
    *
-   * @param create if the session doesn't exist, create it
-   * @param requestId the session id from the request
+   * @param isCreate if the session doesn't exist, create it
+   * @param request current request
+   * @sessionId a desired sessionId or null
    * @param now the time in milliseconds
    * @param fromCookie true if the session id comes from a cookie
    *
@@ -1284,8 +1418,8 @@ public final class SessionManager implements AlarmListener
    * Create a new session.
    *
    * @param oldId the id passed to the request.  Reuse if possible.
-   * @param now the current date
-   * @param sessionGroup the srun index for this machine
+   * @param request - current HttpServletRequest
+   * @param fromCookie
    */
   public SessionImpl createSession(String oldId, long now,
                                    HttpServletRequest request,
@@ -1423,6 +1557,14 @@ public final class SessionManager implements AlarmListener
   void removeSession(SessionImpl session)
   {
     _sessions.remove(session.getId());
+  }
+
+  /**
+   * Adds a new session save event
+   */
+  void addSessionSaveSample(long size)
+  {
+    _sessionSaveSample.add(size);
   }
 
   /**

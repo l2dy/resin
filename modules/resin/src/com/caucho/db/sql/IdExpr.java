@@ -37,11 +37,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 
-class IdExpr extends Expr {
+final class IdExpr extends Expr {
   private static final L10N L = new L10N(IdExpr.class);
 
-  private FromItem _fromItem;
-  private Column _column;
+  private final FromItem _fromItem;
+  private final Column _column;
 
   private int _tableIndex = -1;
 
@@ -92,6 +92,15 @@ class IdExpr extends Expr {
   }
 
   /**
+   * Returns true if the column can contain a null value.
+   */
+  @Override
+  public boolean isNullable()
+  {
+    return ! _column.isNotNull();
+  }
+
+  /**
    * The cost of a match of the expr.
    */
   protected long lookupCost(ArrayList<FromItem> fromList)
@@ -101,7 +110,7 @@ class IdExpr extends Expr {
 
     if (fromList.indexOf(_fromItem) < fromList.size() - 1)
       return 0;
-      
+
     if (_column.isPrimaryKey())
       return COST_INDEX;
     else if (_column.isUnique())
@@ -117,11 +126,11 @@ class IdExpr extends Expr {
   {
     if (! fromList.contains(_fromItem))
       return Integer.MAX_VALUE;
-    
-      
+
+
     return 10 * 100 * 100 * 100;
   }
-			    
+
   public Expr bind(Query query)
     throws SQLException
   {
@@ -129,7 +138,7 @@ class IdExpr extends Expr {
 
     for (int i = 0; i < fromItems.length; i++) {
       if (fromItems[i] == _fromItem)
-	_tableIndex = i;
+        _tableIndex = i;
     }
 
     return this;
@@ -233,8 +242,8 @@ class IdExpr extends Expr {
    */
   @Override
   public int evalToBuffer(QueryContext context,
-			  byte []buffer,
-			  int offset)
+                          byte []buffer,
+                          int offset)
     throws SQLException
   {
     TableIterator []rows = context.getTableIterators();
@@ -269,7 +278,7 @@ class IdExpr extends Expr {
     IdExpr expr = (IdExpr) o;
 
     return (_fromItem == expr._fromItem &&
-	    _column == expr._column);
+            _column == expr._column);
   }
 
   public String toString()

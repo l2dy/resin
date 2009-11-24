@@ -55,7 +55,7 @@ public class FileTopicImpl extends AbstractTopic
 
   private HashMap<String,AbstractQueue> _durableSubscriptionMap
     = new HashMap<String,AbstractQueue>();
-    
+
   private ArrayList<AbstractQueue> _subscriptionList
     = new ArrayList<AbstractQueue>();
 
@@ -64,6 +64,23 @@ public class FileTopicImpl extends AbstractTopic
   public FileTopicImpl()
   {
     _store = FileQueueStore.create();
+  }
+
+  protected FileTopicImpl(Path path, String name, String serverId)
+  {
+    try {
+      path.mkdirs();
+    } catch (Exception e) {
+    }
+
+    if (serverId == null)
+      serverId = "anon";
+
+    _store = new FileQueueStore(path, serverId);
+
+    setName(name);
+
+    init();
   }
 
   //
@@ -94,7 +111,7 @@ public class FileTopicImpl extends AbstractTopic
   }
 
   @Override
-  public AbstractQueue createSubscriber(JmsSession session,
+  public AbstractQueue createSubscriber(Object publisher,
                                         String name,
                                         boolean noLocal)
   {
@@ -104,17 +121,17 @@ public class FileTopicImpl extends AbstractTopic
       queue = _durableSubscriptionMap.get(name);
 
       if (queue == null) {
-	queue = new FileSubscriberQueue(this, session, noLocal);
-	queue.setName(getName() + ":sub-" + name);
+        queue = new FileSubscriberQueue(this, publisher, noLocal);
+        queue.setName(getName() + ":sub-" + name);
 
-	_subscriptionList.add(queue);
-	_durableSubscriptionMap.put(name, queue);
+        _subscriptionList.add(queue);
+        _durableSubscriptionMap.put(name, queue);
       }
 
       return queue;
     }
     else {
-      queue = new FileSubscriberQueue(this, session, noLocal);
+      queue = new FileSubscriberQueue(this, publisher, noLocal);
       queue.setName(getName() + ":sub-" + _id++);
 
       _subscriptionList.add(queue);
@@ -132,13 +149,15 @@ public class FileTopicImpl extends AbstractTopic
 
   @Override
   public void send(String msgId,
-		   Serializable payload,
-		   int priority,
-		   long timeout)
+                   Serializable payload,
+                   int priority,
+                   long timeout,
+                   Object publisher)
     throws MessageException
   {
     for (int i = 0; i < _subscriptionList.size(); i++) {
-      _subscriptionList.get(i).send(msgId, payload, priority, timeout);
+      _subscriptionList.get(i).send(msgId, payload, priority, timeout,
+                                    publisher);
     }
   }
 

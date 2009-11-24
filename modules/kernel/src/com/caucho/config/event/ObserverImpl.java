@@ -32,30 +32,31 @@ package com.caucho.config.event;
 import java.util.*;
 import java.lang.annotation.*;
 import java.lang.reflect.*;
-import javax.enterprise.event.Observer;
 import javax.enterprise.event.Observes;
-import javax.enterprise.event.IfExists;
+import javax.enterprise.event.Reception;
 import javax.enterprise.context.spi.Context;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.ObserverMethod;
 
 import com.caucho.config.*;
 import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.AbstractObserverMethod;
 import com.caucho.util.*;
 import com.caucho.config.cfg.*;
 
 /**
  * Implements a single observer.
  */
-public class ObserverImpl implements Observer {
+public class ObserverImpl extends AbstractObserverMethod {
   private static final L10N L = new L10N(ObserverImpl.class);
 
   private static final Object []NULL_ARGS = new Object[0];
 
-  private final InjectManager _webBeans;
+  private final InjectManager _inject;
   private final AbstractBean _bean;
-  
+
   private final Method _method;
   private final int _paramIndex;
 
@@ -65,19 +66,21 @@ public class ObserverImpl implements Observer {
   private Bean []_args;
 
   public ObserverImpl(InjectManager webBeans,
-		      AbstractBean bean,
-		      Method method,
-		      int paramIndex)
+                      AbstractBean bean,
+                      Method method,
+                      int paramIndex)
   {
-    _webBeans = webBeans;
+    _inject = webBeans;
     _bean = bean;
     _method = method;
     _method.setAccessible(true);
     _paramIndex = paramIndex;
 
     for (Annotation ann : method.getParameterAnnotations()[paramIndex]) {
-      if (ann instanceof IfExists)
-	_ifExists = true;
+      if (ann instanceof Observes) {
+        Observes observes = (Observes) ann;
+        _ifExists = observes.notifyObserver() == Reception.IF_EXISTS;
+      }
     }
 
     bind();
@@ -100,15 +103,15 @@ public class ObserverImpl implements Observer {
       Named named = (Named) _cl.getAnnotation(Named.class);
 
       if (named != null)
-	_name = named.value();
+        _name = named.value();
 
       if (_name == null || "".equals(_name)) {
-	String className = _targetType.getName();
-	int p = className.lastIndexOf('.');
-      
-	char ch = Character.toLowerCase(className.charAt(p + 1));
-      
-	_name = ch + className.substring(p + 2);
+        String className = _targetType.getName();
+        int p = className.lastIndexOf('.');
+
+        char ch = Character.toLowerCase(className.charAt(p + 1));
+
+        _name = ch + className.substring(p + 2);
       }
     }
     */
@@ -118,36 +121,36 @@ public class ObserverImpl implements Observer {
   {
     synchronized (this) {
       if (_args != null)
-	return;
-      
+        return;
+
       Type []param = _method.getGenericParameterTypes();
       Annotation [][]annList = _method.getParameterAnnotations();
 
       _args = new Bean[param.length];
 
       String loc = LineConfigException.loc(_method);
-      
+
       for (int i = 0; i < param.length; i++) {
-	if (hasObserves(annList[i]))
-	  continue;
+        if (hasObserves(annList[i]))
+          continue;
 
-	Set beans = _webBeans.getBeans(param[i], annList[i]);
-	
-	if (beans == null || beans.size() == 0) {
-	  throw new ConfigException(loc
-				    + L.l("Parameter '{0}' binding does not have a matching component",
-					  getSimpleName(param[i])));
-	}
-	
-	Bean comp = null;
+        Set beans = _inject.getBeans(param[i], annList[i]);
 
-	// XXX: error checking
-	Iterator iter = beans.iterator();
-	if (iter.hasNext()) {
-	  comp = (Bean) iter.next();
-	}
+        if (beans == null || beans.size() == 0) {
+          throw new ConfigException(loc
+                                    + L.l("Parameter '{0}' binding does not have a matching component",
+                                          getSimpleName(param[i])));
+        }
 
-	_args[i] = comp;
+        Bean comp = null;
+
+        // XXX: error checking
+        Iterator iter = beans.iterator();
+        if (iter.hasNext()) {
+          comp = (Bean) iter.next();
+        }
+
+        _args[i] = comp;
       }
     }
   }
@@ -156,48 +159,46 @@ public class ObserverImpl implements Observer {
   {
     for (Annotation ann : annList) {
       if (ann instanceof Observes)
-	return true;
+        return true;
     }
 
     return false;
   }
 
-  public boolean notify(Object event)
+  public void notify(Object event)
   {
     Object obj = null;
 
     if (_ifExists) {
-      Context context = _webBeans.getContext(_bean.getScopeType());
+      Context context = _inject.getContext(_bean.getScope());
 
       if (context != null && context.isActive())
-	obj = context.get(_bean);
+        obj = context.get(_bean);
     }
     else {
       // XXX: perf
-      CreationalContext env = _webBeans.createCreationalContext();
-      
-      obj = _webBeans.getReference(_bean, _bean.getBeanClass(), env); 
-    }
+      CreationalContext env = _inject.createCreationalContext(_bean);
 
-    System.out.println("OBJ: " + obj);
+      obj = _inject.getReference(_bean, _bean.getBeanClass(), env);
+    }
 
     try {
       if (obj != null) {
-	Object []args = new Object[_args.length];
+        Object []args = new Object[_args.length];
 
-	for (int i = 0; i < _args.length; i++) {
-	  Bean bean = _args[i];
-	  
-	  if (bean != null) {
-	    CreationalContext env = _webBeans.createCreationalContext();
-	    
-	    args[i] = _webBeans.getReference(bean, bean.getBeanClass(), env);
-	  }
-	  else
-	    args[i] = event;
-	}
-	
-	_method.invoke(obj, args);
+        for (int i = 0; i < _args.length; i++) {
+          Bean bean = _args[i];
+
+          if (bean != null) {
+            CreationalContext env = _inject.createCreationalContext(bean);
+
+            args[i] = _inject.getReference(bean, bean.getBeanClass(), env);
+          }
+          else
+            args[i] = event;
+        }
+
+        _method.invoke(obj, args);
       }
     } catch (RuntimeException e) {
       throw e;
@@ -206,8 +207,6 @@ public class ObserverImpl implements Observer {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-
-    return false;
   }
 
   public boolean equals(Object obj)

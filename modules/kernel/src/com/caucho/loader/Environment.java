@@ -692,6 +692,25 @@ public class Environment {
   }
 
   /**
+   * Returns the environment name.
+   */
+  public static String getEnvironmentName(ClassLoader loader)
+  {
+    for (; loader != null; loader = loader.getParent()) {
+      if (loader instanceof EnvironmentClassLoader) {
+        String name = ((EnvironmentClassLoader) loader).getId();
+
+        if (name != null)
+          return name;
+        else
+          return "";
+      }
+    }
+
+    return Thread.currentThread().getContextClassLoader().toString();
+  }
+
+  /**
    * Apply the action to visible classloaders
    */
   public static void applyVisibleModules(EnvironmentApply apply)
@@ -777,11 +796,6 @@ public class Environment {
       } catch (Throwable e) {
       }
 
-      /*
-      if (System.getProperty("org.xml.sax.driver") == null)
-        System.setProperty("org.xml.sax.driver", "com.caucho.xml.Xml");
-      */
-
       Properties props = System.getProperties();
 
       /*
@@ -805,6 +819,14 @@ public class Environment {
         log().log(Level.FINER, e.toString(), e);
       }
 
+      // #3486
+      String namingPkgs = (String) props.get("java.naming.factory.url.pkgs");
+      if (namingPkgs == null)
+        namingPkgs = "com.caucho.naming";
+      else
+        namingPkgs = namingPkgs + ":" + "com.caucho.naming";
+      props.put("java.naming.factory.url.pkgs", namingPkgs);
+
       if (isGlobalLoadable) {
         // These properties require Resin to be at the system loader
 
@@ -813,7 +835,7 @@ public class Environment {
                     "com.caucho.naming.InitialContextFactoryImpl");
         }
 
-        props.put("java.naming.factory.url.pkgs", "com.caucho.naming");
+        // props.put("java.naming.factory.url.pkgs", "com.caucho.naming");
 
         EnvironmentProperties.enableEnvironmentSystemProperties(true);
 
@@ -828,8 +850,11 @@ public class Environment {
           "com.caucho.jmx.EnvironmentMBeanServerBuilder");
         */
 
+        // server/21ab
+        /*
         if (MBeanServerFactory.findMBeanServer(null).size() == 0)
           MBeanServerFactory.createMBeanServer("Resin");
+        */
 
         ManagementFactory.getPlatformMBeanServer();
       }
@@ -857,8 +882,6 @@ public class Environment {
         e.printStackTrace();
       }
       */
-
-      // J2EEManagedObject.register(new JTAResource(tm));
     } catch (NamingException e) {
       log().log(Level.FINE, e.toString(), e);
     } catch (Throwable e) {

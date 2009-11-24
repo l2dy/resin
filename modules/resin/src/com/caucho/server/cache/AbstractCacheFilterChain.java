@@ -28,10 +28,8 @@
 
 package com.caucho.server.cache;
 
-import com.caucho.server.connection.AbstractHttpResponse;
 import com.caucho.server.connection.CauchoRequest;
-
-import com.caucho.server.dispatch.AbstractFilterChain;
+import com.caucho.server.connection.CauchoResponse;
 
 import javax.servlet.FilterChain;
 import java.io.IOException;
@@ -43,7 +41,7 @@ import java.util.ArrayList;
  * Represents the final servlet in a filter chain.
  */
 abstract public class AbstractCacheFilterChain
-  extends AbstractFilterChain implements FilterChain {
+  implements FilterChain {
   /**
    * fillFromCache is called when the client needs the entire result, and
    * the result is already in the cache.
@@ -51,14 +49,12 @@ abstract public class AbstractCacheFilterChain
    * @param req the servlet request trying to get data from the cache
    * @param response the servlet response which will receive data
    * @param entry the cache entry to use
-   * @param isTop if true, the not-modified should be sent to the browser
    */
   abstract public boolean fillFromCache(CauchoRequest req,
-					AbstractHttpResponse response,
-					AbstractCacheEntry abstractEntry,
-					boolean isTop)
+                                        CauchoResponse response,
+                                        AbstractCacheEntry abstractEntry)
     throws IOException;
-  
+
   /**
    * Starts the caching after the headers have been sent.
    *
@@ -73,12 +69,12 @@ abstract public class AbstractCacheFilterChain
    *         uncacheable.
    */
   abstract public AbstractCacheEntry startCaching(CauchoRequest req,
-						  AbstractHttpResponse res,
-						  ArrayList<String> keys,
-						  ArrayList<String> values,
-						  String contentType,
-						  String charEncoding,
-						  long contentLength);
+                                                  CauchoResponse res,
+                                                  ArrayList<String> keys,
+                                                  ArrayList<String> values,
+                                                  String contentType,
+                                                  String charEncoding,
+                                                  long contentLength);
 
   /**
    * Update the headers when the caching has finished.

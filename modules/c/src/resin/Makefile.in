@@ -15,7 +15,7 @@ resin_home=@resin_home@
 JNI_INCLUDE=@JNI_INCLUDE@
 INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common
 CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @CFLAGS_JNI@ @CFLAGS_SHLIB@
-OBJ= ../resin_os/std.o ../resin_os/memory.o ../resin_os/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o
+OBJ= ../resin_os/std.o ../resin_os/memory.o ../resin_os/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o stat.o
 
 all	: libresin.$(SO)
 
@@ -34,6 +34,7 @@ boot.o		: resin.h Makefile
 profile.o	: resin.h Makefile
 symbol.o	: resin.h Makefile
 heap.o	: resin.h Makefile
+stat.o	: resin.h Makefile
 
 clean	:
 	- rm *.o *.lo *.la *.so *.jnilib *.dylib *.$(SO)

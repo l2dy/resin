@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -185,7 +185,9 @@ public class JavaOverloadMethod extends AbstractJavaMethod {
       }
       else {
         if (_restMethodTable.length == 0) {
-          return env.error(L.l("'{0}' overloaded method call with {1} arguments does not match any overloaded method", getName(), args.length));
+          env.warning(L.l("'{0}' overloaded method call with {1} arguments does not match any overloaded method", getName(), args.length));
+
+          return NullValue.NULL;
         }
 
         AbstractJavaMethod method
@@ -195,8 +197,11 @@ public class JavaOverloadMethod extends AbstractJavaMethod {
       }
     }
     else {
-      if (_restMethodTable.length == 0)
-        return env.error(L.l("'{0}' overloaded method call with {1} arguments has too many arguments", getName(), args.length));
+      if (_restMethodTable.length == 0) {
+        env.warning(L.l("'{0}' overloaded method call with {1} arguments has too many arguments", getName(), args.length));
+
+        return NullValue.NULL;
+      }
       else {
         AbstractJavaMethod method
           = getBestFitJavaMethod(null, _restMethodTable, args);
@@ -362,7 +367,6 @@ public class JavaOverloadMethod extends AbstractJavaMethod {
 
   public String toString()
   {
-
     return "JavaOverloadMethod[" + getName() + "]";
   }
 }

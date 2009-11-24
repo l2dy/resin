@@ -98,6 +98,14 @@ class PoolItem implements ConnectionEventListener, XAResource {
 
   private IllegalStateException _allocationStackTrace;
 
+  //
+  // statistics
+  //
+
+  private long _connectionStartTime;
+  private long _idleStartTime;
+  private long _activeStartTime;
+
   public PoolItem(ConnectionPool cm,
 		  ManagedConnectionFactory mcf,
 		  ManagedConnection conn)
@@ -111,6 +119,8 @@ class PoolItem implements ConnectionEventListener, XAResource {
 
     _poolStartTime = Alarm.getCurrentTime();
     _poolEventTime = Alarm.getCurrentTime();
+
+    _connectionStartTime = cm.getConnectionTimeProbe().start();
 
     // Gets the resource object from the driver
     try {
@@ -141,9 +151,9 @@ class PoolItem implements ConnectionEventListener, XAResource {
 	_localTransaction = conn.getLocalTransaction();
     } catch (NotSupportedException e) {
       _cm.setLocalTransaction(false);
-      log.log(Level.FINE, e.toString(), e);
+      log.log(Level.FINER, e.toString(), e);
     } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+      log.log(Level.FINER, e.toString(), e);
     }
     
     _mConn.addConnectionEventListener(this);
@@ -673,34 +683,12 @@ class PoolItem implements ConnectionEventListener, XAResource {
 	  xaHead._xaNext = this;
 	}
       }
-      
-      /* XXX: is this still an issue?
-      if (_xaDelegate != this)
-        throw new IllegalStateException("pool state exception");
-      
-      PoolItem delegate = _cm.getDelegatePoolItem(xid);
-
-      // set to the delegate
-      _xaDelegate = delegate._xaDelegate;
-      
-      // single link list of parents
-      _xaDelegateNext = _xaDelegate._xaDelegateNext;
-      _xaDelegate._xaDelegateNext = this;
-      */
-
-      /*
-      if (log.isLoggable(Level.FINER))
-        log.finer("start XA: using delegate " + _xaDelegate + " for XID " + xid);
-      return;
-      */
     }
 
     // local transaction optimization
     if (! _isXATransaction
 	&& flags != TMJOIN
 	&& _localTransaction != null) {
-      // XXX: server/1810, etc
-      // && _xaResource == null) { // XXX: temp disable for ActiveMQ
       try {
 	if (log.isLoggable(Level.FINER))
 	  log.finer("begin-local-XA: " + xid + " " + _localTransaction);
@@ -715,7 +703,6 @@ class PoolItem implements ConnectionEventListener, XAResource {
       return;
     }
 
-    
     if (_xaResource != null) {
       if (log.isLoggable(Level.FINER))
 	log.finer("start-XA: " + xid + " " + _xaResource);
@@ -833,14 +820,6 @@ class PoolItem implements ConnectionEventListener, XAResource {
   public void end(Xid xid, int flags)
     throws XAException
   {
-    /* XXX:
-    if (_xid == null)
-      throw new IllegalStateException("ending with no transaction");
-    */
-
-    //if (log.isLoggable(Level.FINER))
-    //  log.finer("connection pool end XA: " + this + " xa=" + xid + " flags=" + flags);
-
     _endFlags = flags;
 
     // XXX: In theory, drop the _xid.  The underlying XADataSource
@@ -857,18 +836,18 @@ class PoolItem implements ConnectionEventListener, XAResource {
     throws XAException
   {
     try {
-      if (_endFlags != -1) {
-	try {
-	  int endFlags = _endFlags;
-	  _endFlags = -1;
+      int endFlags = _endFlags;
+      _endFlags = -1;
 
-	  if (_isXATransaction)
-	    endResource(xid, endFlags);
-	} catch (Throwable e) {
-	  log.log(Level.WARNING, e.toString(), e);
-	  if (_isXATransaction)
+      if (endFlags != -1 && _isXATransaction) {
+        boolean isValid = false;
+        
+        try {
+          endResource(xid, endFlags);
+          isValid = true;
+	} finally {
+          if (! isValid)
 	    _xaResource.rollback(xid);
-	  return;
 	}
       }
     
@@ -902,22 +881,19 @@ class PoolItem implements ConnectionEventListener, XAResource {
     boolean logFiner = log.isLoggable(Level.FINER);
     
     try {
-      if (_endFlags != -1) {
+      int endFlags = _endFlags;
+      _endFlags = -1;
+      
+      if (endFlags != -1 && _isXATransaction) {
+        boolean isValid = false;
+        
 	try {
-	  int endFlags = _endFlags;
-	  _endFlags = -1;
-
-	  if (_isXATransaction)
-	    endResource(xid, endFlags);
-	} catch (XAException e) {
-	  log.log(Level.WARNING, e.toString(), e);
-	  _xaResource.rollback(xid);
-	  throw e;
-	} catch (Throwable e) {
-	  log.log(Level.WARNING, e.toString(), e);
-	  _xaResource.rollback(xid);
-	  throw new XAException(XAException.XA_RBOTHER);
-	}
+          endResource(xid, endFlags);
+          isValid = true;
+	} finally {
+          if (! isValid)
+            _xaResource.rollback(xid);
+        }
       }
 
       if (_isXATransaction) {
@@ -1021,7 +997,7 @@ class PoolItem implements ConnectionEventListener, XAResource {
     if (! isClosed) {
     }
     else if (_hasConnectionError) {
-      toDead();
+      destroy();
     }
     else {
       toIdle();
@@ -1038,7 +1014,7 @@ class PoolItem implements ConnectionEventListener, XAResource {
     else if (_xid != null || _isLocalTransaction)
       return;
     else if (_hasConnectionError) {
-      toDead();
+      destroy();
       return;
     }
 
@@ -1067,22 +1043,13 @@ class PoolItem implements ConnectionEventListener, XAResource {
    */
   void abortConnection()
   {
-    toDead();
-  }
-
-  /**
-   * Kills the connection.
-   */
-  private void toDead()
-  {
-    _cm.toDead(this);
+    destroy();
   }
 
   /**
    * Closes the connection.
    */
   void destroy()
-    throws ResourceException
   {
     ManagedConnection mConn = _mConn;
     _mConn = null;
@@ -1092,6 +1059,8 @@ class PoolItem implements ConnectionEventListener, XAResource {
 
     if (mConn == null)
       return;
+
+    _cm.removeItem(this, mConn);
 
     UserPoolItem userItem = _shareHead;
 
@@ -1113,14 +1082,20 @@ class PoolItem implements ConnectionEventListener, XAResource {
       log.log(Level.FINE, e.toString(), e);
     }
 
-    mConn.destroy();
+    try {
+      mConn.destroy();
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      _cm.getConnectionTimeProbe().end(_connectionStartTime);
+    }
   }
 
   public String toString()
   {
     if (_mConn != null) {
       return ("PoolItem[" + _cm.getName() + "," + _id + ","
-	      + _mConn.getClass().getSimpleName() + "]");
+              + _mConn.getClass().getSimpleName() + "]");
     }
     else {
       return ("PoolItem[" + _cm.getName() + "," + _id + ",null]");

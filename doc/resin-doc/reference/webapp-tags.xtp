@@ -67,6 +67,21 @@ element active-wait-time {
 
 </defun>
 
+<defun title="&lt;allow-forward-after-flush>">
+<parents>web-app</parents>
+
+<p>The &lt;allow-forward-after-flush> flag configures whether IllegalStateExcdeption
+  is thrown when using forward() method after response has been committed. Flag configures behavior of servlet and
+  jsp.</p>
+
+<def title="&lt;allow-forward-after-flush> schema">
+element allow-forward-after-flush {
+  r_boolean-Type
+}
+</def>
+
+</defun>
+
 <defun title="&lt;allow-servlet-el>">
 <parents>web-app</parents>
 
@@ -835,6 +850,11 @@ handle invalid .tld files</td>
 <tr>
   <td>velocity-enabled</td>
   <td>if true, velocity-style tags are allowed</td>
+  <td>false</td>
+</tr>
+<tr>
+  <td>character-encoding</td>
+  <td>Sets JSP response character encoding; overrides character encoding defined at web-app level</td>
   <td>false</td>
 </tr>
 </deftable-childtags>

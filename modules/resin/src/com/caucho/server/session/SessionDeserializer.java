@@ -39,7 +39,7 @@ abstract public class SessionDeserializer {
     throws IOException;
 
   abstract public Object readObject()
-    throws IOException;
+    throws IOException, ClassNotFoundException;
 
   public void close()
   {

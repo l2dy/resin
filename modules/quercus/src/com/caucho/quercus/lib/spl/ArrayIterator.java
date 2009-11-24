@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.lib.spl;
 
+import com.caucho.quercus.annotation.Hide;
 import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.This;
@@ -61,16 +62,12 @@ public class ArrayIterator
 
   private java.util.Iterator<Map.Entry<Value,Value>> _iterator;
   private Map.Entry<Value, Value> _current;
-
-  public ArrayIterator()
-  {
-  }
   
   @Name("__construct")
   public Value __construct(Env env,
-			   @This Value qThis,
-			   @Optional Value value,
-			   @Optional int flags)
+			               @This Value qThis,
+			               @Optional Value value,
+			               @Optional int flags)
   {
     _env = env;
     _qThis = qThis;
@@ -235,7 +232,7 @@ public class ArrayIterator
   }
 
 
-  static private void printDepth(WriteStream out, int depth)
+   private static void printDepth(WriteStream out, int depth)
     throws java.io.IOException
   {
     for (int i = depth; i > 0; i--)
@@ -243,19 +240,24 @@ public class ArrayIterator
   }
 
   public void varDumpImpl(Env env,
+                          Value obj,
                           WriteStream out,
                           int depth,
                           IdentityHashMap<Value, String> valueSet)
     throws IOException
   {
+    String name = "ArrayIterator";
+    
+    if (obj != null)
+      name = obj.getClassName();
+    
     if ((_flags & STD_PROP_LIST) != 0) {
       // XXX:  env.getThis().varDumpObject(env, out, depth, valueSet);
     }
     else {
       Value arrayValue = _value;
 
-      // XXX: ArrayIterator may be extended
-      out.println("object(ArrayIterator) (" + arrayValue.getCount(env) + ") {");
+      out.println("object(" + name + ") (" + arrayValue.getCount(env) + ") {");
 
       depth++;
 
@@ -272,7 +274,7 @@ public class ArrayIterator
 
         out.print("[");
 
-        if (key instanceof StringValue)
+        if (key.isString())
           out.print("\"" + key + "\"");
         else
           out.print(key);

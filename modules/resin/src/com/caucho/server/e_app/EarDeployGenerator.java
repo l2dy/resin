@@ -73,9 +73,9 @@ public class EarDeployGenerator
       
       String hostName = parentContainer.getHostName();
       if ("".equals(hostName))
-	hostName = "default";
+        hostName = "default";
     
-      setRepositoryTag("ears/" + hostName);
+      setRepositoryTag("ears/default/" + hostName);
     }
 
     _parentContainer = parentContainer;

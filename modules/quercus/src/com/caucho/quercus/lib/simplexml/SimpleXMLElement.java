@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,8 @@
 
 package com.caucho.quercus.lib.simplexml;
 
+import com.caucho.quercus.annotation.Hide;
+import com.caucho.quercus.annotation.JsonEncode;
 import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
@@ -72,7 +74,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     = Logger.getLogger(SimpleXMLElement.class.getName());
   private static final L10N L = new L10N(SimpleXMLElement.class);
   
-  SimpleXMLElement _parent;
+  protected SimpleXMLElement _parent;
   
   protected String _name;
   
@@ -82,10 +84,10 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   protected ArrayList<SimpleXMLElement> _children;
   protected ArrayList<SimpleXMLElement> _attributes;
   
-  String _namespace;
-  String _prefix;
+  protected String _namespace;
+  protected String _prefix;
   
-  LinkedHashMap<String, String> _namespaceMap;
+  protected LinkedHashMap<String, String> _namespaceMap;
   
   protected Env _env;
   protected QuercusClass _cls;
@@ -300,6 +302,11 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   {
     return true;
   }
+  
+  protected boolean isNamespaceAttribute()
+  {
+    return false;
+  }
 
   protected void setText(StringValue text)
   {
@@ -318,8 +325,12 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   {
     if (namespace == null || namespace.length() == 0)
       return true;
-    else
+    else if (_namespace != null && _namespace.length() > 0)
       return namespace.equals(_namespace);
+    else if (_parent != null)
+      return _parent.isSameNamespace(namespace);
+    else
+      return false;
   }
   
   protected boolean isSamePrefix(String prefix)
@@ -340,7 +351,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       SimpleXMLElement attr = _attributes.get(i);
 
       if (attr.getName().equals(name))
-	return attr;
+        return attr;
     }
 
     return null;
@@ -366,16 +377,22 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   // Map.Entry api for iterator
   //
 
+  @Hide
   public String getKey()
   {
     return _name;
   }
 
+  @Hide
   public Object getValue()
   {
-    return wrapJava(_env, _cls, this);
+    if (_children == null)
+      return _text;
+    else
+      return wrapJava(_env, _cls, this);
   }
 
+  @Hide
   public Object setValue(Object value)
   {
     return wrapJava(_env, _cls, this);
@@ -421,9 +438,9 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       _attributes = new ArrayList<SimpleXMLElement>();
 
     SimpleXMLAttribute attr
-      = new SimpleXMLAttribute(env, _cls,
-                               this, name, "",
-                               env.createString(namespace));
+      = new SimpleXMLNamespaceAttribute(env, _cls,
+                                        this, name, "",
+                                        env.createString(namespace));
 
     int p = name.indexOf(':');
     if (p > 0) {
@@ -441,9 +458,9 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       SimpleXMLElement oldAttr = _attributes.get(i);
 
       if (oldAttr.getName().equals(name)
-	  && oldAttr.getNamespace().equals(namespace)) {
-	_attributes.set(i, attr);
-	return;
+          && oldAttr.getNamespace().equals(namespace)) {
+        _attributes.set(i, attr);
+        return;
       }
     }
     
@@ -453,7 +470,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   /**
    * Adds an attribute to this node.
    */
-  public void addAttribute(SimpleXMLElement attr)
+  protected void addAttribute(SimpleXMLElement attr)
   {
     if (_attributes == null)
       _attributes = new ArrayList<SimpleXMLElement>();
@@ -477,14 +494,18 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
   {
     String namespace;
 
+    /*
     if (! namespaceV.isNull())
       namespace = namespaceV.toString();
     else
       namespace = _namespace;
+    */
+    
+    namespace = namespaceV.toString();
     
     SimpleXMLElement child
       = new SimpleXMLElement(env, _cls, this, name, namespace);
-    
+
     child.setText(env.createString(value));
 
     addChild(child);
@@ -515,12 +536,14 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       namespace = namespaceV.toString();
 
     SimpleXMLElement attrList
-      = new SimpleXMLAttribute(env, _cls, this, _name, namespace, null);
+      = new SimpleXMLAttributeList(env, _cls, this,
+                                   "#attrlist", namespace, null);
 
     if (_attributes != null) {
       for (SimpleXMLElement attr : _attributes) {
-	if (attrList.isSameNamespace(attr.getNamespace()))
-	  attrList.addAttribute(attr);
+        if (attr.isSameNamespace(namespace)
+            && ! attr.isNamespaceAttribute())
+          attrList.addAttribute(attr);
       }
     }
 
@@ -557,6 +580,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       for (SimpleXMLElement child : _children) {
         if (isPrefix) {
           if (child.isSamePrefix(namespace)) {
+            result.addChild(child);
           }
         }
         else {
@@ -1025,9 +1049,9 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
       ArrayValue array = new ArrayValueImpl();
       
       for (SimpleXMLElement attr : _attributes) {
-	StringValue value = attr._text;
+        StringValue value = attr._text;
 	
-	array.put(_env.createString(attr._name), value);
+        array.put(_env.createString(attr._name), value);
       }
 
       map.put(_env.createString("@attributes"), array);
@@ -1036,35 +1060,35 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     boolean hasElement = false;
     if (_children != null) {
       for (SimpleXMLElement child : _children) {
-	if (! child.isElement())
-	  continue;
+        if (! child.isElement())
+          continue;
 
-	hasElement = true;
-	
-	StringValue name = _env.createString(child.getName());
-	Value oldChild = map.get(name);
-	Value childValue;
+        hasElement = true;
+        
+        StringValue name = _env.createString(child.getName());
+        Value oldChild = map.get(name);
+        Value childValue;
 
-	if (child._text != null)
-	  childValue = child._text;
-	else
-	  childValue = wrapJava(_env, _cls, child);
+        if (child._text != null)
+          childValue = child._text;
+        else
+          childValue = wrapJava(_env, _cls, child);
 
-	if (oldChild == null) {
-	  map.put(name, childValue);
-	}
-	else if (oldChild instanceof ArrayValue) {
-	  ArrayValue array = (ArrayValue) oldChild;
+        if (oldChild == null) {
+          map.put(name, childValue);
+        }
+        else if (oldChild.isArray()) {
+          ArrayValue array = (ArrayValue) oldChild;
 
-	  array.append(childValue);
-	}
-	else {
-	  ArrayValue array = new ArrayValueImpl();
-	  array.append(oldChild);
-	  array.append(childValue);
+          array.append(childValue);
+        }
+        else {
+          ArrayValue array = new ArrayValueImpl();
+          array.append(oldChild);
+          array.append(childValue);
 
-	  map.put(name, array);
-	}
+          map.put(name, array);
+        }
       }
     }
     
@@ -1079,11 +1103,17 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
    * var_dump() implementation
    */
   public void varDumpImpl(Env env,
+                          Value obj,
                           WriteStream out,
                           int depth,
                           IdentityHashMap<Value, String> valueSet)
     throws IOException
   {
+    String name = "SimpleXMLElement";
+    
+    if (obj != null)
+      name = obj.getClassName();
+    
     // php/1x33
     if (_text != null && _children == null && _attributes == null) {
       if (depth > 0) {
@@ -1091,7 +1121,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
         return;
       }
       
-      out.println("object(SimpleXMLElement) (1) {");
+      out.println("object(" + name + ") (1) {");
       printDepth(out, 2 * (depth + 1));
       out.println("[0]=>");
       
@@ -1106,15 +1136,17 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     }
     
     Set<Map.Entry<Value,Value>> entrySet = entrySet();
-    out.println("object(SimpleXMLElement) (" + entrySet.size() + ") {");
+    out.println("object(" + name + ") (" + entrySet.size() + ") {");
 
     for (Map.Entry<Value,Value> entry : entrySet) {
       printDepth(out, 2 * (depth + 1));
       out.print("[");
-      if (entry.getKey() instanceof StringValue)
+      
+      if (entry.getKey().isString())
         out.print("\"" + entry.getKey() + "\"");
       else
         out.print(entry.getKey());
+      
       out.println("]=>");
 
       printDepth(out, 2 * (depth + 1));
@@ -1125,8 +1157,74 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     printDepth(out, 2 * depth);
     out.print('}');
   }
+  
+  @JsonEncode
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append('{');
+    
+    jsonEncodeImpl(env, sb, true);
+    
+    sb.append('}');
+  }
+  
+  protected void jsonEncodeImpl(Env env, StringValue sb, boolean isTop)
+  {  
+    if (! isTop) {
+      sb.append('"');
+      sb.append(getName());
+      sb.append('"');
+      
+      sb.append(':');
+    }
 
-  void printDepth(WriteStream out, int depth)
+    if (_attributes == null
+        && _children != null
+        && _children.size() == 1
+        && ! _children.get(0).isElement())
+    {
+      _children.get(0).jsonEncodeImpl(env, sb, false);
+    }
+    else {
+      int length = 0;
+      
+      boolean hasChildren = _attributes != null && _children != null;
+      
+      if (hasChildren)
+        sb.append('{');
+      
+      if (_attributes != null) {
+        length++;
+        
+        sb.append("\"@attributes\"");
+        sb.append(':');
+        sb.append('{');
+        
+        for (SimpleXMLElement attribute : _attributes) {
+          attribute.jsonEncodeImpl(env, sb, false);
+        }
+        
+        sb.append('}');
+      }
+      
+      if (_children != null) {
+        for (SimpleXMLElement child : _children) {
+          if (! child.isElement())
+            continue;
+          
+          if (length++ > 0)
+            sb.append(',');
+          
+          child.jsonEncodeImpl(env, sb, false);
+        }
+      }
+
+      if (hasChildren)
+        sb.append('}');
+    }
+  }
+
+  protected void printDepth(WriteStream out, int depth)
     throws IOException
   {
     for (int i = 0; i < depth; i++)
@@ -1170,10 +1268,10 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     public boolean hasNext()
     {
       for (; _index < _size; _index++) {
-	SimpleXMLElement elt = _children.get(_index);
+        SimpleXMLElement elt = _children.get(_index);
 
-	if (elt.isElement())
-	  return true;
+        if (elt.isElement())
+          return true;
       }
 
       return false;

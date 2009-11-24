@@ -48,8 +48,6 @@ import java.util.logging.*;
 import javax.annotation.*;
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.interceptor.InterceptorBindingType;
-import javax.enterprise.inject.Initializer;
 import javax.enterprise.inject.Produces;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
@@ -67,7 +65,7 @@ import javax.enterprise.inject.spi.InjectionTarget;
 public class NewBean extends InjectionTargetImpl
 {
   private AnnotatedType _beanType;
-  
+
   NewBean(InjectManager inject, AnnotatedType beanType)
   {
     super(inject, beanType);
@@ -93,7 +91,7 @@ public class NewBean extends InjectionTargetImpl
    * The scope for @New is dependent.
    */
   @Override
-  public Class<? extends Annotation> getScopeType()
+  public Class<? extends Annotation> getScope()
   {
     return Dependent.class;
   }
@@ -129,11 +127,11 @@ public class NewBean extends InjectionTargetImpl
   public Object create(CreationalContext env)
   {
     InjectionTarget target = this;
-    
+
     Object value = target.produce(env);
     target.inject(value, env);
     target.postConstruct(value);
-    
+
     return value;
   }
 }

@@ -31,14 +31,15 @@ package com.caucho.server.dispatch;
 
 import com.caucho.server.port.TcpConnection;
 import com.caucho.server.port.ServerRequest;
-  
-import com.caucho.servlet.comet.CometFilterChain;
+import com.caucho.server.connection.AbstractHttpRequest;
+
 import com.caucho.util.L10N;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.annotation.MultipartConfig;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -49,24 +50,27 @@ import java.util.logging.Level;
  * A repository for request information gleaned from the uri.
  */
 public class ServletInvocation {
-  static final Logger log
+  private static final Logger log
     = Logger.getLogger(ServletInvocation.class.getName());
-  static final L10N L = new L10N(ServletInvocation.class);
+  private static final L10N L = new L10N(ServletInvocation.class);
 
   private final boolean _isFiner;
 
   private ClassLoader _classLoader;
-  
+
   private String _contextPath = "";
-  
+
   private String _contextUri;
   private String _servletPath;
   private String _pathInfo;
-  
+
   private String _queryString;
-  
+
   private String _servletName;
   private FilterChain _filterChain;
+
+  private boolean _isAsyncSupported = true;
+  private MultipartConfig _multipartConfig;
 
   private AtomicLong _requestCount = new AtomicLong();
 
@@ -74,8 +78,6 @@ public class ServletInvocation {
 
   /**
    * Creates a new invocation
-   *
-   * @param contextUri the section of the URI after the context path
    */
   public ServletInvocation()
   {
@@ -235,14 +237,38 @@ public class ServletInvocation {
   }
 
   /**
+   * True if the invocation chain supports async (comet) requets.
+   */
+  public boolean isAsyncSupported()
+  {
+    return _isAsyncSupported;
+  }
+
+  /**
+   * Mark the invocation chain as not supporting async.
+   */
+  public void clearAsyncSupported()
+  {
+    _isAsyncSupported = false;
+  }
+
+  public MultipartConfig getMultipartConfig() {
+    return _multipartConfig;
+  }
+
+  public void setMultipartConfig(MultipartConfig multipartConfig) {
+    _multipartConfig = multipartConfig;
+  }
+
+  /**
    * Returns the thread request.
    */
   public static ServletRequest getContextRequest()
   {
     ServerRequest req = TcpConnection.getCurrentRequest();
 
-    if (req instanceof ServletRequest)
-      return (ServletRequest) req;
+    if (req instanceof AbstractHttpRequest)
+      return ((AbstractHttpRequest) req).getRequestFacade();
     else
       return null;
   }
@@ -260,26 +286,8 @@ public class ServletInvocation {
 
     if (_isFiner)
       log.finer("Dispatch '" + _contextUri + "' to " + _filterChain);
-      
+
     _filterChain.doFilter(request, response);
-  }
-
-  /**
-   * Resume a request.
-   *
-   * @param request the servlet request
-   * @param response the servlet response
-   */
-  public boolean doResume(ServletRequest request, ServletResponse response)
-    throws IOException, ServletException
-  {
-    if (_filterChain instanceof CometFilterChain) {
-      CometFilterChain filterChain = (CometFilterChain) _filterChain;
-
-      return filterChain.doResume(request, response);
-    }
-    else
-      return false;
   }
 
   /**
@@ -289,16 +297,16 @@ public class ServletInvocation {
   {
     _classLoader = invocation._classLoader;
     _contextPath = invocation._contextPath;
-  
+
     _contextUri = invocation._contextUri;
     _servletPath = invocation._servletPath;
     _pathInfo = invocation._pathInfo;
-  
+
     _queryString = invocation._queryString;
-  
+
     _servletName = invocation._servletName;
     _filterChain = invocation._filterChain;
-    
+
     _securityRoleMap = invocation._securityRoleMap;
   }
 
@@ -314,7 +322,7 @@ public class ServletInvocation {
       sb.append("?").append(_queryString);
 
     sb.append("]");
-    
+
     return sb.toString();
   }
 }

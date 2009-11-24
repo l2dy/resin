@@ -36,10 +36,10 @@ import java.util.logging.Logger;
 import javax.ejb.EJBHome;
 import javax.ejb.EJBLocalHome;
 import javax.ejb.SessionContext;
-import javax.enterprise.inject.Named;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
+import javax.inject.Named;
 
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
@@ -97,7 +97,8 @@ abstract public class SessionServer extends AbstractServer {
 
       InjectManager beanManager = InjectManager.create();
 
-      BeanFactory factory = beanManager.createBeanFactory(SessionContext.class);
+      BeanFactory factory
+        = beanManager.createBeanFactory(SessionContext.class);
 
       _component = factory.singleton(getSessionContext());
 
@@ -160,6 +161,11 @@ abstract public class SessionServer extends AbstractServer {
       // XXX: component
       // beanManager.addBean(factory.bean());
     }
+  }
+
+  protected Bean getBean()
+  {
+    return _bean;
   }
 
   @SuppressWarnings("unchecked")

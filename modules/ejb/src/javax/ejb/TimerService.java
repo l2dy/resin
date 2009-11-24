@@ -258,8 +258,8 @@ public interface TimerService {
    *           If this method could not complete due to a system-level failure.
    */
   public Timer createCalendarTimer(ScheduleExpression schedule,
-                                   Serializable info)
-    throws IllegalArgumentException, IllegalStateException, EJBException;
+      Serializable info) throws IllegalArgumentException,
+      IllegalStateException, EJBException;
 
   /**
    * Create a calendar-based timer based on the input schedule expression.
@@ -291,6 +291,6 @@ public interface TimerService {
    * @throws EJBException
    *           If this method could not complete due to a system-level failure.
    */
-  @SuppressWarnings("unchecked")
-  public Collection getTimers() throws IllegalStateException, EJBException;
+  public Collection<Timer> getTimers() throws IllegalStateException,
+      EJBException;
 }

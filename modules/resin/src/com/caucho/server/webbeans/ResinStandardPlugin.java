@@ -40,6 +40,8 @@ import com.caucho.config.inject.ProcessBeanImpl;
 import com.caucho.ejb.manager.EjbContainer;
 import com.caucho.ejb.inject.EjbGeneratedBean;
 import com.caucho.jms.JmsMessageListener;
+import com.caucho.hemp.broker.HempBroker;
+import com.caucho.remote.BamService;
 import com.caucho.vfs.Path;
 
 import java.lang.annotation.Annotation;
@@ -80,12 +82,15 @@ public class ResinStandardPlugin implements Extension
     if (annotatedType == null)
       return;
 
-    if (annotatedType.isAnnotationPresent(Stateful.class)
-	|| annotatedType.isAnnotationPresent(Stateless.class)
-	|| annotatedType.isAnnotationPresent(MessageDriven.class)
-	|| annotatedType.isAnnotationPresent(JmsMessageListener.class)) {
+    // ioc/0j08
+    boolean isXmlConfig = false;
+
+    if (isXmlConfig
+        && (annotatedType.isAnnotationPresent(Stateful.class)
+            || annotatedType.isAnnotationPresent(Stateless.class)
+            || annotatedType.isAnnotationPresent(MessageDriven.class)
+            || annotatedType.isAnnotationPresent(JmsMessageListener.class))) {
       EjbContainer ejbContainer = EjbContainer.create();
-      System.out.println("NULLSOZ:");
       ejbContainer.createBean(annotatedType, null);
       event.veto();
     }
@@ -115,6 +120,10 @@ public class ResinStandardPlugin implements Extension
 	ejbContainer.createBean(annType, absBean.getInjectionTarget());
 	event.veto();
       }
+    }
+
+    if (annotated.isAnnotationPresent(BamService.class)) {
+      HempBroker.getCurrent().registerActor(event);
     }
   }
 

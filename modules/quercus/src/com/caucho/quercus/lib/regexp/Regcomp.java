@@ -70,6 +70,8 @@ class Regcomp {
 
   static final ConcurrentHashMap<String,RegexpSet> _unicodeBlockMap
     = new ConcurrentHashMap<String,RegexpSet>();
+
+  private PeekStream _pattern;
   
   int _nGroup;
   int _nLoop;
@@ -127,6 +129,8 @@ class Regcomp {
 
   RegexpNode parse(PeekStream pattern) throws IllegalRegexpException
   {
+    _pattern = pattern;
+    
     _nGroup = 1;
 
     RegexpNode begin = null;
@@ -628,7 +632,7 @@ class Regcomp {
 
   private IllegalRegexpException error(String msg)
   {
-    return new IllegalRegexpException(msg);
+    return new IllegalRegexpException(msg + " " + _pattern.getPattern());
   }
 
   /**
@@ -1216,7 +1220,7 @@ class Regcomp {
       pattern.ungetc(ch2);
     
     if (ch == '8' || ch == '9'
-	|| '0' <= ch3 && ch3 <= '9' && value * 10 + ch3 - '0' > 0xFF) {
+        || '0' <= ch3 && ch3 <= '9' && value * 10 + ch3 - '0' > 0xFF) {
       //out of byte range or not an octal,
       //need to parse backslash as the NULL character
       
@@ -1227,10 +1231,12 @@ class Regcomp {
     int oct = parseOctal(ch, pattern);
     
     return parseString(oct, pattern, true);
+    
+    //return createString((char) oct);
   }
 
   private RegexpNode parseString(int ch,
-				 PeekStream pattern)
+				                 PeekStream pattern)
     throws IllegalRegexpException
   {
     return parseString(ch, pattern, false);
@@ -1240,8 +1246,8 @@ class Regcomp {
    * parseString
    */
   private RegexpNode parseString(int ch,
-				 PeekStream pattern,
-				 boolean isEscaped)
+                                 PeekStream pattern,
+                                 boolean isEscaped)
     throws IllegalRegexpException
   {
     CharBuffer cb = new CharBuffer();
@@ -1250,35 +1256,35 @@ class Regcomp {
     for (ch = pattern.read(); ch >= 0; ch = pattern.read()) {
       switch (ch) {
       case ' ': case '\t': case '\n': case '\r':
-	if (! isIgnoreWs() || isEscaped)
-	  cb.append((char) ch);
-	break;
+        if (! isIgnoreWs() || isEscaped)
+          cb.append((char) ch);
+        break;
 
       case '#':
-	if (! isIgnoreWs() || isEscaped)
-	  cb.append((char) ch);
-	else {
-	  while ((ch = pattern.read()) != '\n' && ch >= 0) {
-	  }
-	}
-	break;
+        if (! isIgnoreWs() || isEscaped)
+          cb.append((char) ch);
+        else {
+          while ((ch = pattern.read()) != '\n' && ch >= 0) {
+          }
+        }
+        break;
 
       case '(': case ')': case '[':
       case '+': case '?': case '*': case '.':
       case '$': case '^': case '|':
-	pattern.ungetc(ch);
-	return createString(cb);
+        pattern.ungetc(ch);
+        return createString(cb);
 
       case '{':
-	if ('0' <= pattern.peek() && pattern.peek() <= '9') {
-	  pattern.ungetc(ch);
-	  return createString(cb);
-	}
-	cb.append('{');
-	break;
+        if ('0' <= pattern.peek() && pattern.peek() <= '9') {
+          pattern.ungetc(ch);
+          return createString(cb);
+        }
+        cb.append('{');
+        break;
 	
       case '\\':
-	ch = pattern.read();
+        ch = pattern.read();
 	
 	switch (ch) {
 	case -1:
@@ -1368,7 +1374,7 @@ class Regcomp {
 	break;
 
       default:
-	cb.append((char) ch);
+        cb.append((char) ch);
       }
     }
 
@@ -1381,6 +1387,14 @@ class Regcomp {
       return new RegexpNode.StringIgnoreCase(cb);
     else
       return new RegexpNode.StringNode(cb);
+  }
+  
+  private RegexpNode createString(char ch)
+  {
+    if (isIgnoreCase())
+      return new RegexpNode.StringIgnoreCase(ch);
+    else
+      return new RegexpNode.StringNode(ch);
   }
   
   private int parseOctal(int ch, PeekStream pattern)

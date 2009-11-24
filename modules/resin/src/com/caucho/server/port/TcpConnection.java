@@ -36,15 +36,19 @@ import com.caucho.management.server.TcpConnectionMXBean;
 import com.caucho.server.connection.*;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.util.CauchoSystem;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.servlet.DuplexListener;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ClientDisconnectException;
 import com.caucho.vfs.QSocket;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.WriteStream;
+import com.caucho.vfs.StreamImpl;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.net.InetAddress;
 import java.net.SocketTimeoutException;
@@ -69,51 +73,45 @@ public class TcpConnection extends Connection
   private static final ThreadLocal<ServerRequest> _currentRequest
     = new ThreadLocal<ServerRequest>();
 
-  private static final AtomicInteger _connectionCount = new AtomicInteger();
-
   private static ClassLoader _systemClassLoader;
 
-  private int _connectionId;  // The connection's id
+  private final int _connectionId;  // The connection's id
   private final String _id;
+  private final String _name;
   private String _dbgId;
-  private String _name;
 
   private final Port _port;
   private final QSocket _socket;
+  private final ServerRequest _request;
+  private final byte []_testBuffer = new byte[1];
 
   private final AcceptTask _acceptTask = new AcceptTask();
-  private final KeepaliveTask _keepaliveTask = new KeepaliveTask();
+  // HTTP keepalive task
+  private final KeepaliveRequestTask _keepaliveTask
+    = new KeepaliveRequestTask();
+  // Comet resume task
   private final ResumeTask _resumeTask = new ResumeTask();
-
-  private ServerRequest _request;
-
-  private boolean _isSecure; // port security overrisde
+  // duplex (websocket) task
+  private DuplexReadTask _duplexReadTask;
 
   private final Admin _admin = new Admin();
 
   private ConnectionState _state = ConnectionState.IDLE;
   private ConnectionController _controller;
-
-  private boolean _isClosed;
-
-  private boolean _isKeepalive;
   private boolean _isWake;
 
-  private Runnable _readTask = _acceptTask;
+  private long _idleTimeout;
 
-  private long _idleTimeMax;
-
-  private long _accessTime;   // Time the current request started
   private long _connectionStartTime;
-  private long _keepaliveStartTime;
-
-  private long _keepaliveExpireTime;
   private long _requestStartTime;
-  private long _suspendTime;
+
+  private long _idleStartTime;
+  private long _idleExpireTime;
+
+  // statistics state
+  private String _displayState;
 
   private Thread _thread;
-
-  public boolean _isFree;
 
   private Exception _startThread;
 
@@ -123,18 +121,22 @@ public class TcpConnection extends Connection
    * @param server The TCP server controlling the connections
    * @param request The protocol Request
    */
-  TcpConnection(Port port, QSocket socket)
+  TcpConnection(int connId,
+                Port port,
+                QSocket socket)
   {
-    _connectionId = _connectionCount.incrementAndGet();
+    _connectionId = connId;
 
     _port = port;
     _socket = socket;
 
-    _isSecure = port.isSecure();
-
     int id = getId();
 
-    String protocol = port.getProtocol().getProtocolName();
+    Protocol protocol = port.getProtocol();
+
+    _request = protocol.createRequest(this);
+
+    String protocolName = protocol.getProtocolName();
 
     if (port.getAddress() == null) {
       Resin resin = Resin.getLocal();
@@ -142,13 +144,13 @@ public class TcpConnection extends Connection
       if (serverId == null)
         serverId = "";
 
-      _id = protocol + "-" + serverId + "-" + port.getPort() + "-" + id;
-      _name = protocol + "-" + port.getPort() + "-" + id;
+      _id = protocolName + "-" + serverId + "-" + port.getPort() + "-" + id;
+      _name = protocolName + "-" + port.getPort() + "-" + id;
     }
     else {
-      _id = (protocol + "-" + port.getAddress() + ":" +
+      _id = (protocolName + "-" + port.getAddress() + ":" +
              port.getPort() + "-" + id);
-      _name = (protocol + "-" + port.getAddress() + "-" +
+      _name = (protocolName + "-" + port.getAddress() + "-" +
                port.getPort() + "-" + id);
     }
   }
@@ -170,104 +172,11 @@ public class TcpConnection extends Connection
   }
 
   /**
-   * Sets an exception to mark the location of the thread start.
-   */
-  public void setStartThread()
-  {
-    _startThread = new Exception();
-    _startThread.fillInStackTrace();
-  }
-
-  /**
-   * Returns an exception marking the location of the thread start
-   */
-  public Exception getStartThread()
-  {
-    return _startThread;
-  }
-
-  /**
-   * Sets the time of the request start.  ServerRequests can use
-   * setAccessTime() to put off connection reaping.  HttpRequest calls
-   * setAccessTime() at the beginning of each request.
-   *
-   * @param now the current time in milliseconds as by Alarm.getCurrentTime().
-   */
-  public void setAccessTime(long now)
-  {
-    _accessTime = now;
-  }
-
-  /**
-   * Returns the time the last Request began in milliseconds.
-   */
-  public long getAccessTime()
-  {
-    return _accessTime;
-  }
-
-  /**
-   * Returns true for active.
-   */
-  public boolean isActive()
-  {
-    return _state.isActive();
-  }
-
-  /**
-   * Returns true for active.
-   */
-  public boolean isRequestActive()
-  {
-    return _state.isRequestActive();
-  }
-
-  /**
    * Returns the connection id.  Primarily for debugging.
    */
   public int getId()
   {
     return _connectionId;
-  }
-
-  /**
-   * Returns true for closed.
-   */
-  public boolean isClosed()
-  {
-    return _isClosed;
-  }
-
-  /**
-   * Sets the idle time for a keepalive connection.
-   */
-  public void setIdleTimeMax(long idleTime)
-  {
-    _idleTimeMax = idleTime;
-  }
-
-  /**
-   * The idle time for a keepalive connection
-   */
-  public long getIdleTimeMax()
-  {
-    return _idleTimeMax;
-  }
-
-  /**
-   * Returns the keepalive expire time.
-   */
-  public long getKeepaliveExpireTime()
-  {
-    return _keepaliveExpireTime;
-  }
-
-  /**
-   * Returns the keepalive start time
-   */
-  public long getKeepaliveStartTime()
-  {
-    return _keepaliveStartTime;
   }
 
   /**
@@ -287,69 +196,11 @@ public class TcpConnection extends Connection
   }
 
   /**
-   * Returns the current read task
-   */
-  public Runnable getReadTask()
-  {
-    if (_state.isClosed())
-      Thread.dumpStack();
-    /* XXX: debugging
-    setStartThread();
-    */
-
-    return _readTask;
-  }
-
-  /**
-   * Returns the current write task
-   */
-  public Runnable getResumeTask()
-  {
-    return _resumeTask;
-  }
-
-  /**
    * Returns the request for the connection.
    */
   public final ServerRequest getRequest()
   {
     return _request;
-  }
-
-  /**
-   * Sets the connection's request.
-   */
-  public final void setRequest(ServerRequest request)
-  {
-    _request = request;
-  }
-
-  /**
-   * Returns true if the connection is secure, i.e. a SSL connection
-   */
-  @Override
-  public boolean isSecure()
-  {
-    if (_isClosed)
-      return false;
-    else
-      return _socket.isSecure() || _isSecure;
-  }
-
-  /**
-   * Returns the connection's socket
-   */
-  public QSocket getSocket()
-  {
-    return _socket;
-  }
-
-  /**
-   * Returns the time the comet suspend started
-   */
-  public long getSuspendTime()
-  {
-    return _suspendTime;
   }
 
   /**
@@ -361,28 +212,113 @@ public class TcpConnection extends Connection
   }
 
   //
-  // port/socket predicates
+  // timeout properties
   //
+
+  /**
+   * Sets the idle time for a keepalive connection.
+   */
+  public void setIdleTimeout(long idleTimeout)
+  {
+    _idleTimeout = idleTimeout;
+  }
+
+  /**
+   * The idle time for a keepalive connection
+   */
+  public long getIdleTimeout()
+  {
+    return _idleTimeout;
+  }
+
+  //
+  // state information
+  //
+
+  /**
+   * Returns the state.
+   */
+  public ConnectionState getState()
+  {
+    return _state;
+  }
+
+  /**
+   * Returns true for active.
+   */
+  public boolean isActive()
+  {
+    return _state.isActive();
+  }
+
+  /**
+   * Returns true for active.
+   */
+  public boolean isRequestActive()
+  {
+    return _state.isRequestActive();
+  }
+
+  /**
+   * Returns true for closed.
+   */
+  public boolean isClosed()
+  {
+    return _state.isClosed();
+  }
+
+  public final boolean isDestroyed()
+  {
+    return _state.isDestroyed();
+  }
+
+  @Override
+  public boolean isKeepalive()
+  {
+    // return _state.isKeepalive();
+    return _state.isAllowKeepalive();
+  }
+
+  @Override
+  public boolean isComet()
+  {
+    return _state.isComet();
+  }
+
+  public boolean isSuspend()
+  {
+    return _state.isCometSuspend();
+  }
+
+  @Override
+  public boolean isDuplex()
+  {
+    return _state.isDuplex();
+  }
+
+  public boolean isWake()
+  {
+    return _isWake;
+  }
+
+  //
+  // port/socket information
+  //
+
+  /**
+   * Returns the connection's socket
+   */
+  public QSocket getSocket()
+  {
+    return _socket;
+  }
 
   /**
    * Returns the local address of the socket.
    */
   public InetAddress getLocalAddress()
   {
-    // The extra cases handle Kaffe problems.
-    try {
-      return _socket.getLocalAddress();
-    } catch (Exception e) {
-      try {
-        return InetAddress.getLocalHost();
-      } catch (Exception e1) {
-        try {
-          return InetAddress.getByName("127.0.0.1");
-        } catch (Exception e2) {
-          return null;
-        }
-      }
-    }
+    return _socket.getLocalAddress();
   }
 
   /**
@@ -428,6 +364,18 @@ public class TcpConnection extends Connection
   }
 
   /**
+   * Returns true if the connection is secure, i.e. a SSL connection
+   */
+  @Override
+  public boolean isSecure()
+  {
+    if (_state.isClosed())
+      return false;
+    else
+      return _socket.isSecure() || _port.isSecure();
+  }
+
+  /**
    * Returns the virtual host.
    */
   @Override
@@ -437,63 +385,7 @@ public class TcpConnection extends Connection
   }
 
   //
-  // state predicates
-  //
-
-  /**
-   * Returns the state string.
-   */
-  public final String getState()
-  {
-    return _state.toString();
-  }
-
-  public final boolean isDestroyed()
-  {
-    return _state.isDestroyed();
-  }
-
-  @Override
-  public boolean isComet()
-  {
-    return _state.isComet();
-  }
-
-  public boolean isSuspend()
-  {
-    return _controller != null && _controller.isSuspended();
-  }
-
-  @Override
-  public boolean isDuplex()
-  {
-    return _state.isDuplex();
-  }
-
-  public boolean isWake()
-  {
-    return _isWake;
-  }
-
-  //
-  // comet predicates
-  //
-
-  public ConnectionController getController()
-  {
-    return _controller;
-  }
-
-  public String getCometPath()
-  {
-    if (_controller != null)
-      return _controller.getForwardPath();
-    else
-      return null;
-  }
-
-  //
-  // statistics
+  // thread information
   //
 
   /**
@@ -509,6 +401,18 @@ public class TcpConnection extends Connection
       return -1;
   }
 
+  //
+  // request information
+  //
+
+  /**
+   * Returns the time the request started
+   */
+  public final long getRequestStartTime()
+  {
+    return _requestStartTime;
+  }
+
   /**
    * Returns the time the current request has taken.
    */
@@ -520,9 +424,112 @@ public class TcpConnection extends Connection
       return -1;
   }
 
-  public final long getRequestStartTime()
+  /**
+   * Returns the idle expire time (keepalive or suspend).
+   */
+  public long getIdleExpireTime()
   {
-    return _requestStartTime;
+    return _idleExpireTime;
+  }
+
+  /**
+   * Returns the idle start time (keepalive or suspend)
+   */
+  public long getIdleStartTime()
+  {
+    return _idleStartTime;
+  }
+
+  /**
+   * Returns the current keepalive task
+   */
+  public Runnable getAcceptTask()
+  {
+    return _acceptTask;
+  }
+
+  /**
+   * Returns the current keepalive task (request or duplex)
+   */
+  public Runnable getKeepaliveTask()
+  {
+    if (_state.isDuplex())
+      return _duplexReadTask;
+    else
+      return _keepaliveTask;
+  }
+
+  /**
+   * Returns the current write task
+   */
+  public Runnable getResumeTask()
+  {
+    return _resumeTask;
+  }
+
+  //
+  // statistics state
+  //
+
+  /**
+   * Returns the user statistics state
+   */
+  public String getDisplayState()
+  {
+    return _displayState;
+  }
+
+  /**
+   * Sets the user statistics state
+   */
+  public void setStatState(String state)
+  {
+    _displayState = state;
+  }
+
+  //
+  // async/comet predicates
+  //
+
+  public ConnectionController getController()
+  {
+    return _controller;
+  }
+
+  public WebApp getAsyncDispatchWebApp()
+  {
+    return null;
+  }
+
+  public String getAsyncDispatchUrl()
+  {
+    if (_controller != null)
+      return _controller.getForwardPath();
+    else
+      return null;
+  }
+
+  /**
+   * Poll the socket to test for an end-of-file.
+   */
+  public boolean isReadEof()
+  {
+    QSocket socket = _socket;
+
+    if (socket == null)
+      return true;
+
+    try {
+      StreamImpl s = socket.getStream();
+
+      int len = s.read(_testBuffer, 0, 0);
+
+      return len < 0;
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+
+      return true;
+    }
   }
 
   //
@@ -530,22 +537,15 @@ public class TcpConnection extends Connection
   //
 
   /**
-   * Starts the connection.
-   */
-  public void start()
-  {
-  }
-
-  /**
    * Handles a new connection/socket from the client.
    */
   RequestState handleRequests()
+    throws IOException
   {
     Thread thread = Thread.currentThread();
-    ClassLoader systemLoader = _systemClassLoader;
 
     boolean isValid = false;
-    RequestState result = RequestState.EXIT;
+    RequestState result = null;
 
    try {
      // clear the interrupted flag
@@ -553,85 +553,91 @@ public class TcpConnection extends Connection
 
      _currentRequest.set(_request);
 
-     boolean isStatKeepalive = _state.isKeepalive();
-     boolean isKeepalive;
-     do {
-       thread.setContextClassLoader(systemLoader);
-
-       if (_controller != null)
-         throw new IllegalStateException(L.l("can't shift to active from duplex {0} controller {1}",
-                                             _state, _controller));
-
-       _state = _state.toActive();
-
-       if (_port.isClosed()) {
-         return RequestState.EXIT;
-       }
-
-       result = RequestState.EXIT;
-
-       _isWake = false;
-
-       if ((result = keepaliveRead()) != RequestState.REQUEST) {
-         break;
-       }
-
-       boolean isRequestValid = getRequest().handleRequest();
-
-       // statistics
-       gatherStatistics(isStatKeepalive);
-
-       if (! isRequestValid) {
-         _isKeepalive = false;
-       }
-
-       if (_state == ConnectionState.DUPLEX) {
-         // duplex (xmpp/hmtp) handling
-         isValid = true;
-         _readTask.run();
-
-         return RequestState.THREAD_DETACHED;
-       }
-       else if (_state == ConnectionState.COMET) {
-         if (_port.suspend(this)) {
-           isValid = true;
-
-           return RequestState.THREAD_DETACHED;
-         }
-         else {
-           return RequestState.EXIT;
-         }
-       }
-     } while (_isKeepalive
-              && (result = keepaliveRead()) == RequestState.REQUEST);
-
-     isValid = true;
-
-     return result;
+     result = handleRequestsImpl();
    } catch (ClientDisconnectException e) {
      _port.addLifetimeClientDisconnectCount();
 
-      if (log.isLoggable(Level.FINER)) {
-        log.finer(dbgId() + e);
-      }
-    } catch (InterruptedIOException e) {
-      if (log.isLoggable(Level.FINEST)) {
-        log.log(Level.FINEST, dbgId() + e, e);
-      }
-    } catch (IOException e) {
-      if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, dbgId() + e, e);
-      }
-    } finally {
+     if (log.isLoggable(Level.FINER)) {
+       log.finer(dbgId() + e);
+     }
+   } catch (InterruptedIOException e) {
+     if (log.isLoggable(Level.FINEST)) {
+       log.log(Level.FINEST, dbgId() + e, e);
+     }
+   } catch (IOException e) {
+     if (log.isLoggable(Level.FINE)) {
+       log.log(Level.FINE, dbgId() + e, e);
+     }
+   } finally {
+     thread.setContextClassLoader(_systemClassLoader);
+
+     _currentRequest.set(null);
+
+     if (result == null)
+       destroy();
+   }
+
+   if (result == RequestState.DUPLEX)
+     return _duplexReadTask.doTask();
+   else
+     return result;
+  }
+
+  /**
+   * Handles a new connection/socket from the client.
+   */
+  private RequestState handleRequestsImpl()
+    throws IOException
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader systemLoader = _systemClassLoader;
+
+    RequestState result = null;
+
+    do {
       thread.setContextClassLoader(systemLoader);
 
-      _currentRequest.set(null);
+      if (_port.isClosed()) {
+        return RequestState.EXIT;
+      }
 
-      if (! isValid)
-        destroy();
-    }
+      boolean isStatKeepalive = _state.isKeepalive();
+      _isWake = false;
 
-    return RequestState.EXIT;
+      if ((result = processKeepalive()) != RequestState.REQUEST) {
+        return result;
+      }
+
+      ConnectionState state = _state;
+
+      _state = _state.toActive();
+
+      if (state.isKeepalive()) {
+        getPort().keepaliveEnd(this);
+      }
+
+      if (! getRequest().handleRequest()) {
+        _state = _state.toKillKeepalive();
+      }
+
+      // statistics
+      gatherStatistics(isStatKeepalive);
+
+      if (_state == ConnectionState.DUPLEX) {
+        // duplex (xmpp/hmtp) handling
+        return RequestState.DUPLEX;
+      }
+      else if (_state.isCometActive()) {
+        _port.suspend(this);
+
+        return RequestState.THREAD_DETACHED;
+      }
+
+      // server/1l80
+      _state = _state.toFinishRequest();
+    } while (_state.isAllowKeepalive());
+
+    return result;
   }
 
   private void gatherStatistics(boolean isStatKeepalive)
@@ -647,16 +653,6 @@ public class TcpConnection extends Connection
 
       long now = Alarm.getCurrentTime();
       _port.addLifetimeRequestTime(now - startTime);
-
-      ReadStream rs = getReadStream();
-      long readCount = rs.getPosition();
-      rs.clearPosition();
-      _port.addLifetimeReadBytes(readCount);
-
-      WriteStream ws = getWriteStream();
-      long writeCount = ws.getPosition();
-      ws.clearPosition();
-      _port.addLifetimeWriteBytes(writeCount);
     }
   }
 
@@ -668,38 +664,40 @@ public class TcpConnection extends Connection
    * If it returns false, either the connection is closed,
    * or the connection has been registered with the select.
    */
-  private RequestState keepaliveRead()
+  private RequestState processKeepalive()
     throws IOException
   {
-    if (waitForKeepalive()) {
+    Port port = _port;
+
+    // quick timed read to see if data is already available
+    if (port.keepaliveThreadRead(getReadStream())) {
       return RequestState.REQUEST;
     }
 
-    Port port = _port;
+    _idleStartTime = Alarm.getCurrentTime();
+    _idleExpireTime = _idleStartTime + _idleTimeout;
 
-    _suspendTime = Alarm.getCurrentTime();
-    _keepaliveExpireTime = _suspendTime + _idleTimeMax;
-
+    // start keepalive, checking that Port allows another keepalive
     if (! _port.keepaliveBegin(this, _connectionStartTime)) {
       close();
 
       return RequestState.EXIT;
     }
 
-    _state = _state.toKeepaliveSelect();
+    _state = _state.toKeepalive();
 
+    // use select manager if available
     if (_port.getSelectManager() != null) {
+      // keepalive to select manager succeeds
       if (_port.getSelectManager().keepalive(this)) {
         if (log.isLoggable(Level.FINE))
           log.fine(dbgId() + " keepalive (select)");
 
         return RequestState.THREAD_DETACHED;
       }
+      // keepalive to select manager fails (e.g. filled select manager)
       else {
         log.warning(dbgId() + " failed keepalive (select)");
-
-        _state = _state.toActive();
-        port.keepaliveEnd(this);
 
         close();
 
@@ -710,6 +708,7 @@ public class TcpConnection extends Connection
       if (log.isLoggable(Level.FINE))
         log.fine(dbgId() + " keepalive (thread)");
 
+      // if blocking read has available data
       if (getReadStream().waitForRead()) {
         port.keepaliveEnd(this);
 
@@ -717,85 +716,12 @@ public class TcpConnection extends Connection
 
         return RequestState.REQUEST;
       }
+      // blocking read timed out or closed
       else {
-        _state = _state.toActive();
-        port.keepaliveEnd(this);
-
         close();
 
         return RequestState.EXIT;
       }
-    }
-  }
-
-  /**
-   * Try to read nonblock
-   */
-  private boolean waitForKeepalive()
-    throws IOException
-  {
-    if (_state.isClosed())
-      return false;
-
-    Port port = getPort();
-
-    if (port.isClosed())
-      return false;
-
-    ReadStream is = getReadStream();
-
-    if (getReadStream().getBufferAvailable() > 0)
-      return true;
-
-    long timeout = port.getKeepaliveTimeout();
-
-    boolean isSelectManager = port.getServer().isSelectManagerEnabled();
-
-    if (isSelectManager) {
-      timeout = port.getBlockingTimeoutForSelect();
-    }
-
-    if (port.getSocketTimeout() < timeout)
-      timeout = port.getSocketTimeout();
-
-    if (timeout < 0)
-      timeout = 0;
-
-    // server/2l02
-
-    port.keepaliveThreadBegin();
-
-    try {
-      boolean result = is.fillWithTimeout(timeout);
-
-      return result;
-    } finally {
-      port.keepaliveThreadEnd();
-    }
-
-    /*
-    if (isSelectManager)
-      return false;
-    else
-      return true;
-    */
-  }
-
-  /**
-   * Closes on shutdown.
-   */
-  public void closeOnShutdown()
-  {
-    QSocket socket = _socket;
-
-    if (socket != null) {
-      try {
-        socket.close();
-      } catch (Throwable e) {
-        log.log(Level.FINE, e.toString(), e);
-      }
-
-      // Thread.yield();
     }
   }
 
@@ -804,47 +730,18 @@ public class TcpConnection extends Connection
   //
 
   /**
-   * Initialize the socket for a new connection
-   */
-  public void initSocket()
-    throws IOException
-  {
-    _idleTimeMax = _port.getKeepaliveTimeout();
-
-    getWriteStream().init(_socket.getStream());
-    getReadStream().init(_socket.getStream(), getWriteStream());
-
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(dbgId() + "starting connection " + this + ", total=" + _port.getConnectionCount());
-    }
-  }
-
-  /**
-   * Returns the connection's socket
-   */
-  public QSocket startSocket()
-  {
-    _isClosed = false;
-
-    return _socket;
-  }
-
-
-  /**
    * Sets the keepalive state.  Called only by the SelectManager and Port.
    */
   public void clearKeepalive()
   {
+    // to init?
+
+    /*
     if (! _isKeepalive)
       log.warning(this + " illegal state: clearing keepalive with inactive keepalive");
 
-    _isKeepalive = false;
-  }
-
-  void setResume()
-  {
-    _isWake = false;
-    _suspendTime = 0;
+    _state = _state.isKeepalive = false;
+    */
   }
 
   /**
@@ -877,19 +774,53 @@ public class TcpConnection extends Connection
     if (controller != null)
       controller.closeImpl();
 
+    /*
     // XXX: to finishRequest
-    _state = _state.toCompleteComet();
+    _state = _state.toCometComplete();
+    */
   }
 
+  @Override
+  public void killKeepalive()
+  {
+    _state = _state.toKillKeepalive();
+  }
+
+  @Override
   public boolean toKeepalive()
   {
-    if (! _isKeepalive)
+    if (! _state.isAllowKeepalive()) {
       return false;
+    }
 
-    _isKeepalive = _port.allowKeepalive(_connectionStartTime);
-
-    return _isKeepalive;
+    if (! _port.allowKeepalive(_connectionStartTime)) {
+      _state = _state.toKillKeepalive();
+      return false;
+    }
+    else
+      return true;
   }
+
+  /**
+   * Closes on shutdown.
+   */
+  public void closeOnShutdown()
+  {
+    QSocket socket = _socket;
+
+    if (socket != null) {
+      try {
+        socket.close();
+      } catch (Throwable e) {
+        log.log(Level.FINE, e.toString(), e);
+      }
+
+      // Thread.yield();
+    }
+  }
+
+  //
+  // async/comet state transitions
 
   /**
    * Starts a comet request
@@ -899,9 +830,7 @@ public class TcpConnection extends Connection
                                            ServletRequest request,
                                            ServletResponse response)
   {
-    if (_controller != null)
-      throw new IllegalStateException(L.l("comet mode can't start in state '{0}'",
-                                          _state));
+    _state = _state.toComet();
 
     ConnectionCometController controller
       = super.toComet(isTop, request, response);
@@ -911,12 +840,16 @@ public class TcpConnection extends Connection
     if (log.isLoggable(Level.FINER))
       log.finer(this + " starting comet");
 
-    _state = ConnectionState.COMET;
-
     return controller;
   }
 
-  void setWake()
+  void toResume()
+  {
+    _isWake = false;
+    _idleStartTime = 0;
+  }
+
+  void toWake()
   {
     _isWake = true;
   }
@@ -927,16 +860,16 @@ public class TcpConnection extends Connection
       _controller.suspend();
   }
 
-  void toSuspend()
+  public void toSuspend()
   {
-    _suspendTime = Alarm.getCurrentTime();
-    _keepaliveExpireTime = _suspendTime + _idleTimeMax;
+    _idleStartTime = Alarm.getCurrentTime();
+    _idleExpireTime = _idleStartTime + _idleTimeout;
   }
 
   /**
    * Wakes the connection (comet-style).
    */
-  protected boolean wake()
+  public boolean wake()
   {
     if (! _state.isComet())
       return false;
@@ -953,21 +886,39 @@ public class TcpConnection extends Connection
     }
   }
 
+  void toTimeout()
+  {
+    ConnectionState state = _state;
+
+    if (state.isKeepalive())
+      getPort().keepaliveEnd(this);
+
+    _state = _state.toCometComplete();
+
+    ConnectionController async = getController();
+
+    if (async != null)
+      async.timeout();
+
+    wake();
+  }
+
+  @Override
+  public void toCometComplete()
+  {
+    _state = _state.toCometComplete();
+  }
+
+  //
+  // duplex/websocket
+  //
+
   /**
    * Starts a full duplex (tcp style) request for hmtp/xmpp
    */
-  public TcpDuplexController toDuplex(TcpDuplexHandler handler)
+  public TcpDuplexController startDuplex(TcpDuplexHandler handler)
   {
-    if (_controller != null) {
-      ConnectionState state = _state;
-
-      log.warning(this + " toDuplex call failed for state " + state);
-
-      destroy();
-
-      throw new IllegalStateException(L.l("duplex mode can't start in state '{0}'",
-                                          state));
-    }
+    _state = _state.toDuplex();
 
     TcpDuplexController duplex = new TcpDuplexController(this, handler);
 
@@ -976,9 +927,7 @@ public class TcpConnection extends Connection
     if (log.isLoggable(Level.FINER))
       log.finer(this + " starting duplex");
 
-    _state = ConnectionState.DUPLEX;
-    _isKeepalive = false;
-    _readTask = new DuplexReadTask(duplex);
+    _duplexReadTask = new DuplexReadTask(duplex);
 
     return duplex;
   }
@@ -997,7 +946,7 @@ public class TcpConnection extends Connection
    */
   protected void closeControllerImpl()
   {
-    _state = _state.toCompleteComet();
+    _state = _state.toCometComplete();
 
     getPort().resume(this);
   }
@@ -1012,21 +961,18 @@ public class TcpConnection extends Connection
    */
   private void closeImpl()
   {
-    ConnectionState state;
+    ConnectionState state = _state;
 
-    synchronized (this) {
-      state = _state;
+    _state = _state.toClosed();
 
-      if (state == ConnectionState.IDLE || state.isClosed())
-        return;
-
-      _state = _state.toClosed();
-    }
+    if (state.isClosed())
+      return;
 
     QSocket socket = _socket;
 
     // detach any comet
-    getPort().detach(this);
+    if (state.isComet() || state.isCometSuspend())
+      getPort().detach(this);
 
     getRequest().protocolCloseEvent();
 
@@ -1035,8 +981,6 @@ public class TcpConnection extends Connection
 
     if (controller != null)
       controller.closeImpl();
-
-    _isKeepalive = false;
 
     Port port = getPort();
 
@@ -1074,6 +1018,22 @@ public class TcpConnection extends Connection
     }
   }
 
+  public final void toInit()
+  {
+    _state = _state.toInit();
+  }
+
+  public final void toIdle()
+  {
+    ConnectionState state = _state;
+
+    _state = state.toIdle();
+
+    if (state.isKeepalive()) {
+      getPort().keepaliveEnd(this);
+    }
+  }
+
   /**
    * Destroys the connection()
    */
@@ -1085,6 +1045,10 @@ public class TcpConnection extends Connection
 
     ConnectionState state = _state;
     _state = ConnectionState.DESTROYED;
+
+    if (state.isKeepalive()) {
+      getPort().keepaliveEnd(this);
+    }
 
     if (state != ConnectionState.DESTROYED) {
       getPort().kill(this);
@@ -1098,18 +1062,10 @@ public class TcpConnection extends Connection
   {
     closeImpl();
 
-    if (_state != ConnectionState.IDLE
-        && _state != ConnectionState.DESTROYED) {
-      if (_controller != null) {
-        throw new IllegalStateException(L.l("{0} can't switch to idle from {1} with an active controller {2}",
-                                            this, _state, _controller));
-      }
-
-      _state = _state.toIdle();
-      _readTask = _acceptTask;
-
+    if (! _state.isDestroyed())
       getPort().free(this);
-    }
+    else
+      getPort().kill(this);
   }
 
   protected String dbgId()
@@ -1136,247 +1092,48 @@ public class TcpConnection extends Connection
   enum RequestState {
     REQUEST,
     THREAD_DETACHED,
+    DUPLEX,
     EXIT
   };
 
-  enum ConnectionState {
-    IDLE,
-    ACCEPT,
-    REQUEST,
-    REQUEST_ACTIVE,
-    REQUEST_KEEPALIVE,
-    COMET,
-    DUPLEX,
-    DUPLEX_KEEPALIVE,
-    COMPLETE,
-    CLOSED,
-    DESTROYED;
-
-    boolean isComet()
-    {
-      return this == COMET;
-    }
-
-    boolean isDuplex()
-    {
-      return this == DUPLEX || this == DUPLEX_KEEPALIVE;
-    }
-
+  abstract class ConnectionReadTask implements Runnable {
     /**
-     * True if the state is one of the keepalive states, either
-     * a true keepalive-select, or comet or duplex.
+     * Handles the read request for the connection
      */
-    boolean isKeepalive()
-    {
-      // || this == COMET
-      return (this == REQUEST_KEEPALIVE
-              || this == DUPLEX_KEEPALIVE);
-    }
+    abstract RequestState doTask()
+      throws IOException;
 
-    boolean isActive()
-    {
-      switch (this) {
-      case IDLE:
-      case ACCEPT:
-      case REQUEST:
-      case REQUEST_ACTIVE:
-        return true;
-
-      default:
-        return false;
-      }
-    }
-
-    boolean isRequestActive()
-    {
-      switch (this) {
-      case REQUEST:
-      case REQUEST_ACTIVE:
-        return true;
-
-      default:
-        return false;
-      }
-    }
-
-    boolean isClosed()
-    {
-      return this == CLOSED || this == DESTROYED;
-    }
-
-    boolean isDestroyed()
-    {
-      return this == DESTROYED;
-    }
-
-    ConnectionState toKeepaliveSelect()
-    {
-      switch (this) {
-      case REQUEST:
-      case REQUEST_ACTIVE:
-      case REQUEST_KEEPALIVE:
-        return REQUEST_KEEPALIVE;
-
-      case DUPLEX:
-      case DUPLEX_KEEPALIVE:
-        return DUPLEX_KEEPALIVE;
-
-      default:
-        throw new IllegalStateException(this + " is an illegal keepalive state");
-      }
-    }
-
-    ConnectionState toActive()
-    {
-      switch (this) {
-      case ACCEPT:
-      case REQUEST:
-      case REQUEST_ACTIVE:
-      case REQUEST_KEEPALIVE:
-        return REQUEST_ACTIVE;
-
-      case DUPLEX_KEEPALIVE:
-      case DUPLEX:
-        return DUPLEX;
-
-      case COMET:
-        return COMET;
-
-      default:
-        throw new IllegalStateException(this + " is an illegal active state");
-      }
-    }
-
-    ConnectionState toAccept()
-    {
-      if (this != DESTROYED)
-        return ACCEPT;
-      else
-        throw new IllegalStateException(this + " is an illegal accept state");
-    }
-
-    ConnectionState toIdle()
-    {
-      if (this != DESTROYED)
-        return IDLE;
-      else
-        throw new IllegalStateException(this + " is an illegal idle state");
-    }
-
-    ConnectionState toComplete()
-    {
-      switch (this) {
-      case CLOSED:
-      case DESTROYED:
-        return this;
-
-      default:
-        return COMPLETE;
-      }
-    }
-
-    ConnectionState toCompleteComet()
-    {
-      if (this == COMET)
-        return REQUEST;
-      else
-        return this;
-    }
-
-    ConnectionState toClosed()
-    {
-      if (this != DESTROYED)
-        return CLOSED;
-      else
-        throw new IllegalStateException(this + " is an illegal closed state");
-    }
-  }
-
-  class AcceptTask implements Runnable {
     public void run()
     {
-      doAccept(true);
+      runThread();
     }
 
-    /**
-     * Loop to accept new connections.
-     *
-     * @param isThreadStart true if the thread has just started to
-     * properly account for thread housekeeping
-     */
-    void doAccept(boolean isThreadStart)
+    public void runThread()
     {
-      Port port = _port;
-
-      // next state is keepalive
-      _readTask = _keepaliveTask;
-
-      ServerRequest request = getRequest();
-      boolean isWaitForRead = request.isWaitForRead();
-
       Thread thread = Thread.currentThread();
       String oldThreadName = thread.getName();
 
       thread.setName(_id);
-
-      port.threadBegin(TcpConnection.this);
+      _thread = thread;
 
       ClassLoader systemLoader = _systemClassLoader;
       thread.setContextClassLoader(systemLoader);
 
-      boolean isValid = false;
-      RequestState result = RequestState.EXIT;
+      RequestState result = null;
+
+      _port.threadBegin(TcpConnection.this);
 
       try {
-        _thread = thread;
-
-        // _state = _state.toAccept();
-
-        while (! _port.isClosed() && _state != ConnectionState.DESTROYED) {
-          if (_controller != null) {
-            throw new IllegalStateException(L.l("{0} cannot change from {1} to accept with an active controller {2}", this, _state, _controller));
-          }
-
-          _state = _state.toAccept();
-
-          if (! _port.accept(TcpConnection.this, isThreadStart)) {
-            close();
-            break;
-          }
-
-          if (_readTask != _keepaliveTask)
-            Thread.dumpStack();
-
-          isThreadStart = false;
-
-          _connectionStartTime = Alarm.getCurrentTime();
-
-          _request.startConnection();
-          _isKeepalive = true;
-
-          result = handleRequests();
-
-          if (result == RequestState.THREAD_DETACHED) {
-            break;
-          }
-
-          close();
-        }
-
-        isValid = true;
+        result = doTask();
       } catch (OutOfMemoryError e) {
         CauchoSystem.exitOom(getClass(), e);
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       } finally {
-        thread.setContextClassLoader(systemLoader);
-
-        port.threadEnd(TcpConnection.this);
-
-        _thread = null;
         thread.setName(oldThreadName);
+        _port.threadEnd(TcpConnection.this);
 
-        if (! isValid)
+        if (result == null)
           destroy();
 
         if (result != RequestState.THREAD_DETACHED)
@@ -1391,60 +1148,123 @@ public class TcpConnection extends Connection
     }
   }
 
-  class KeepaliveTask implements Runnable {
+  class AcceptTask extends ConnectionReadTask {
     public void run()
     {
-      Thread thread = Thread.currentThread();
-      String oldThreadName = thread.getName();
+      Port port = _port;
 
-      thread.setName(_id);
+      port.startConnection(TcpConnection.this);
 
-      if (_state.isKeepalive()) {
-        _port.keepaliveEnd(TcpConnection.this);
-      }
+      runThread();
+    }
 
-      _port.threadBegin(TcpConnection.this);
+    /**
+     * Loop to accept new connections.
+     */
+    @Override
+    RequestState doTask()
+      throws IOException
+    {
+      Port port = _port;
+
+      ServerRequest request = getRequest();
 
       RequestState result = RequestState.EXIT;
 
-      boolean isValid = false;
-      try {
-        _state = _state.toActive();
+      // _state = _state.toAccept();
+
+      while (! _port.isClosed() && ! _state.isDestroyed()) {
+        _state = _state.toAccept();
+        setStatState("accept");
+
+        if (! _port.accept(_socket)) {
+          setStatState(null);
+          close();
+
+          return RequestState.EXIT;
+        }
+
+        _connectionStartTime = Alarm.getCurrentTime();
+
+        setStatState("read");
+        initSocket();
+
+        _request.startConnection();
 
         result = handleRequests();
 
-        isValid = true;
-      } catch (OutOfMemoryError e) {
-        CauchoSystem.exitOom(getClass(), e);
-      } catch (Throwable e) {
-        log.log(Level.WARNING, e.toString(), e);
-        return;
-      } finally {
-        thread.setName(oldThreadName);
-        _port.threadEnd(TcpConnection.this);
+        if (result == RequestState.THREAD_DETACHED) {
+          return result;
+        }
+        else if (result == RequestState.DUPLEX) {
+          setStatState("duplex");
 
-        if (! isValid)
-          destroy();
+          return _duplexReadTask.doTask();
+        }
 
-        else if (result != RequestState.THREAD_DETACHED)
-          close();
+        setStatState(null);
+
+        close();
       }
 
-      if (isValid && result != RequestState.THREAD_DETACHED) {
-        // acceptTask significantly faster than finishing
-        _acceptTask.doAccept(false);
-      }
+      return RequestState.EXIT;
     }
 
-    @Override
-    public String toString()
+    /**
+     * Initialize the socket for a new connection
+     */
+    private void initSocket()
+      throws IOException
     {
-      return getClass().getSimpleName() + "[" + TcpConnection.this + "]";
+      _idleTimeout = _port.getKeepaliveTimeout();
+
+      getWriteStream().init(_socket.getStream());
+      getReadStream().init(_socket.getStream(), getWriteStream());
+
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(dbgId() + "starting connection " + TcpConnection.this + ", total=" + _port.getConnectionCount());
+      }
     }
   }
 
-  class DuplexReadTask implements Runnable {
-    private TcpDuplexController _duplex;
+  class KeepaliveRequestTask extends ConnectionReadTask {
+    public void run()
+    {
+      Port port = _port;
+
+      runThread();
+    }
+
+    @Override
+    public RequestState doTask()
+      throws IOException
+    {
+      ConnectionState state = _state;
+
+      _state = _state.toActive();
+
+      if (state.isKeepalive()) {
+        getPort().keepaliveEnd(TcpConnection.this);
+      }
+
+      RequestState result = handleRequests();
+
+      if (result == RequestState.THREAD_DETACHED) {
+        return result;
+      }
+      else if (result == RequestState.DUPLEX) {
+        return _duplexReadTask.doTask();
+      }
+
+      close();
+
+      // acceptTask significantly faster than finishing
+      return _acceptTask.doTask();
+    }
+  }
+
+  class DuplexReadTask extends ConnectionReadTask {
+    private final TcpDuplexController _duplex;
 
     DuplexReadTask(TcpDuplexController duplex)
     {
@@ -1453,47 +1273,38 @@ public class TcpConnection extends Connection
 
     public void run()
     {
-      Thread thread = Thread.currentThread();
-      String oldThreadName = thread.getName();
+      Port port = _port;
 
-      thread.setName(_id);
+      runThread();
+    }
 
-      if (_state.isKeepalive()) {
-        _port.keepaliveEnd(TcpConnection.this);
+    @Override
+    public RequestState doTask()
+      throws IOException
+    {
+      _state = _state.toDuplexActive();
+
+      RequestState result;
+      long position = 0;
+      int retry = 256;
+
+      ReadStream readStream = getReadStream();
+
+      while ((result = processKeepalive()) == RequestState.REQUEST) {
+        _duplex.serviceRead();
+
+        if (position != readStream.getPosition()) {
+          retry = 256;
+          position = readStream.getPosition();
+        }
+        else if (retry-- < 0) {
+          log.warning(_duplex + " was not processing any data. Shutting down.");
+          close();
+          return RequestState.EXIT;
+        }
       }
 
-      _port.threadBegin(TcpConnection.this);
-
-      boolean isValid = false;
-      RequestState result = RequestState.EXIT;
-
-      try {
-        _state = _state.toActive();
-
-        do {
-          result = RequestState.EXIT;
-
-          if (! _duplex.serviceRead())
-            break;
-        } while ((result = keepaliveRead()) == RequestState.REQUEST);
-
-        isValid = true;
-      } catch (IOException e) {
-        log.log(Level.FINE, e.toString(), e);
-      } catch (OutOfMemoryError e) {
-        CauchoSystem.exitOom(getClass(), e);
-      } catch (Throwable e) {
-        log.log(Level.WARNING, e.toString(), e);
-      } finally {
-        thread.setName(oldThreadName);
-        _port.threadEnd(TcpConnection.this);
-
-        if (! isValid)
-          destroy();
-
-        if (result != RequestState.THREAD_DETACHED)
-          finishThread();
-      }
+      return result;
     }
   }
 
@@ -1511,11 +1322,14 @@ public class TcpConnection extends Connection
 
         _isWake = false;
 
-        if (getRequest().handleResume()
-            && _port.suspend(TcpConnection.this)) {
+        if (getRequest().handleResume()) {
+          // XXX:keepalive?
+          _port.suspend(TcpConnection.this);
+
           isValid = true;
         }
-        else if (_isKeepalive) {
+        else if (_state.isAllowKeepalive()) {
+          _state = _state.toFinishRequest();
           isValid = true;
           _keepaliveTask.run();
         }
@@ -1582,7 +1396,17 @@ public class TcpConnection extends Connection
 
     public String getState()
     {
-      return TcpConnection.this.getState();
+      return TcpConnection.this.getState().toString();
+    }
+
+    public String getDisplayState()
+    {
+      return TcpConnection.this.getDisplayState();
+    }
+
+    public String getRemoteAddress()
+    {
+      return TcpConnection.this.getRemoteHost();
     }
 
     void register()

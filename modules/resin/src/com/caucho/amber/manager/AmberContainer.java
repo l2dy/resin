@@ -32,10 +32,7 @@ package com.caucho.amber.manager;
 import java.io.InputStream;
 import java.lang.reflect.Modifier;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -59,8 +56,10 @@ import com.caucho.amber.type.MappedSuperclassType;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.LineConfigException;
+import com.caucho.config.Names;
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
@@ -70,10 +69,8 @@ import com.caucho.loader.EnvironmentLocal;
 import com.caucho.loader.enhancer.EnhancerManager;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.loader.enhancer.ScanMatch;
-import com.caucho.util.CharBuffer;
-import com.caucho.util.L10N;
-import com.caucho.vfs.JarPath;
-import com.caucho.vfs.Path;
+import com.caucho.util.*;
+import com.caucho.vfs.*;
 
 /**
  * Environment-based container.
@@ -83,7 +80,8 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
   private static final Logger log = Logger.getLogger(AmberContainer.class
       .getName());
 
-  private static final EnvironmentLocal<AmberContainer> _localContainer = new EnvironmentLocal<AmberContainer>();
+  private static final EnvironmentLocal<AmberContainer> _localContainer
+    = new EnvironmentLocal<AmberContainer>();
 
   private EnvironmentClassLoader _parentLoader;
   private ClassLoader _tempLoader;
@@ -98,43 +96,61 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
 
   private boolean _createDatabaseTables;
 
-  private ArrayList<ConfigProgram> _unitDefaultList = new ArrayList<ConfigProgram>();
+  private ArrayList<ConfigProgram> _unitDefaultList
+    = new ArrayList<ConfigProgram>();
 
-  private HashMap<String, ArrayList<ConfigProgram>> _unitDefaultMap = new HashMap<String, ArrayList<ConfigProgram>>();
+  private HashMap<String, ArrayList<ConfigProgram>> _unitDefaultMap
+    = new HashMap<String, ArrayList<ConfigProgram>>();
 
-  private ArrayList<PersistenceUnitConfig> _unitConfigList = new ArrayList<PersistenceUnitConfig>();
+  private ArrayList<PersistenceUnitConfig> _unitConfigList
+    = new ArrayList<PersistenceUnitConfig>();
 
-  private HashMap<String, AmberPersistenceUnit> _unitMap = new HashMap<String, AmberPersistenceUnit>();
+  private HashMap<String, AmberPersistenceUnit> _unitMap
+    = new HashMap<String, AmberPersistenceUnit>();
 
-  private HashMap<String, EntityManagerFactory> _factoryMap = new HashMap<String, EntityManagerFactory>();
+  private HashMap<String, EntityManagerFactory> _factoryMap
+    = new HashMap<String, EntityManagerFactory>();
 
-  private HashMap<String, EntityManager> _persistenceContextMap = new HashMap<String, EntityManager>();
+  private HashMap<String, EntityManager> _persistenceContextMap
+    = new HashMap<String, EntityManager>();
 
-  private HashMap<String, EmbeddableType> _embeddableMap = new HashMap<String, EmbeddableType>();
+  private HashMap<String, EmbeddableType> _embeddableMap
+    = new HashMap<String, EmbeddableType>();
 
-  private HashMap<String, EntityType> _entityMap = new HashMap<String, EntityType>();
+  private HashMap<String, EntityType> _entityMap
+    = new HashMap<String, EntityType>();
 
-  private HashMap<String, MappedSuperclassType> _mappedSuperclassMap = new HashMap<String, MappedSuperclassType>();
+  private HashMap<String, MappedSuperclassType> _mappedSuperclassMap
+    = new HashMap<String, MappedSuperclassType>();
 
-  private HashMap<String, ListenerType> _defaultListenerMap = new HashMap<String, ListenerType>();
+  private HashMap<String, ListenerType> _defaultListenerMap
+    = new HashMap<String, ListenerType>();
 
-  private HashMap<String, ArrayList<ListenerType>> _entityListenerMap = new HashMap<String, ArrayList<ListenerType>>();
+  private HashMap<String, ArrayList<ListenerType>> _entityListenerMap
+    = new HashMap<String, ArrayList<ListenerType>>();
 
   private Throwable _exception;
 
-  private HashMap<String, Throwable> _embeddableExceptionMap = new HashMap<String, Throwable>();
+  private HashMap<String, Throwable> _embeddableExceptionMap
+    = new HashMap<String, Throwable>();
 
-  private HashMap<String, Throwable> _entityExceptionMap = new HashMap<String, Throwable>();
+  private HashMap<String, Throwable> _entityExceptionMap
+    = new HashMap<String, Throwable>();
 
-  private HashMap<String, Throwable> _listenerExceptionMap = new HashMap<String, Throwable>();
+  private HashMap<String, Throwable> _listenerExceptionMap
+    = new HashMap<String, Throwable>();
 
-  private HashMap<Path, RootContext> _persistenceRootMap = new HashMap<Path, RootContext>();
+  private HashMap<Path, RootContext> _persistenceRootMap
+    = new HashMap<Path, RootContext>();
 
-  private ArrayList<RootContext> _pendingRootList = new ArrayList<RootContext>();
+  private ArrayList<RootContext> _pendingRootList
+    = new ArrayList<RootContext>();
 
-  private ArrayList<AmberPersistenceUnit> _pendingUnitList = new ArrayList<AmberPersistenceUnit>();
+  private ArrayList<AmberPersistenceUnit> _pendingUnitList
+    = new ArrayList<AmberPersistenceUnit>();
 
-  private ArrayList<LazyEntityManagerFactory> _pendingFactoryList = new ArrayList<LazyEntityManagerFactory>();
+  private ArrayList<LazyEntityManagerFactory> _pendingFactoryList
+    = new ArrayList<LazyEntityManagerFactory>();
 
   private HashSet<URL> _persistenceURLSet = new HashSet<URL>();
 
@@ -147,8 +163,6 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
     _localContainer.set(this, _parentLoader);
 
     _tempLoader = _parentLoader.getNewTempClassLoader();
-
-    // --- ok
 
     _enhancer = new AmberEnhancer(this);
 
@@ -575,8 +589,8 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
   public void addEntityListener(String entityClassName,
       ListenerType listenerType)
   {
-    ArrayList<ListenerType> listenerList = _entityListenerMap
-        .get(entityClassName);
+    ArrayList<ListenerType> listenerList
+      = _entityListenerMap.get(entityClassName);
 
     if (listenerList == null) {
       listenerList = new ArrayList<ListenerType>();
@@ -768,8 +782,12 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
 
       for (PersistenceUnitConfig unitConfig : unitList) {
         Class provider = unitConfig.getProvider();
+
+        if (provider == null)
+          provider = getServiceProvider();
+
         if (provider != null
-            && !AmberPersistenceProvider.class.equals(provider)) {
+            && ! AmberPersistenceProvider.class.equals(provider)) {
           addProviderUnit(unitConfig);
 
           continue;
@@ -779,7 +797,7 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
           log.config("Amber PersistenceUnit[" + unitConfig.getName()
               + "] configuring " + rootContext.getRoot().getURL());
 
-        if (!unitConfig.isExcludeUnlistedClasses()) {
+        if (! unitConfig.isExcludeUnlistedClasses()) {
           classMap.clear();
 
           for (String className : rootContext.getClassNameList())
@@ -844,6 +862,55 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
     }
   }
 
+  private Class getServiceProvider()
+  {
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+    try {
+      Enumeration e = loader.getResources("META-INF/services/" + PersistenceProvider.class.getName());
+      while (e.hasMoreElements()) {
+        URL url  = (URL) e.nextElement();
+
+        Class providerClass = loadProvider(url);
+
+        if (providerClass != null
+            && ! providerClass.equals(AmberPersistenceProvider.class)) {
+          return providerClass;
+        }
+      }
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
+
+    return null;
+  }
+
+  private Class loadProvider(URL url)
+  {
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    InputStream is = null;
+
+    try {
+      is = url.openStream();
+
+      ReadStream in = Vfs.openRead(is);
+      String line;
+      while ((line = in.readLine()) != null) {
+        line = line.trim();
+
+        if (! "".equals(line) && ! line.startsWith("#")) {
+          return Class.forName(line, false, loader);
+        }
+      }
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      IoUtil.close(is);
+    }
+
+    return null;
+  }
+
   /**
    * Adds the URLs for the classpath.
    */
@@ -882,6 +949,12 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
     try {
       Class cl = unit.getProvider();
 
+      if (cl == null)
+        cl = getServiceProvider();
+
+      if (cl == null)
+        cl = AmberPersistenceProvider.class;
+
       if (log.isLoggable(Level.CONFIG)) {
         log.config("JPA PersistenceUnit[" + unit.getName() + "] handled by "
             + cl.getName());
@@ -893,30 +966,42 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
       Map props = null;
 
       synchronized (this) {
-        LazyEntityManagerFactory lazyFactory = new LazyEntityManagerFactory(
-            unit, provider, props);
+        LazyEntityManagerFactory lazyFactory
+          = new LazyEntityManagerFactory(unit, provider, props);
 
         _pendingFactoryList.add(lazyFactory);
       }
 
-      EntityManagerTransactionProxy persistenceContext = new EntityManagerTransactionProxy(
-          this, unitName, props);
+      EntityManagerTransactionProxy persistenceContext
+        = new EntityManagerTransactionProxy(this, unitName, props);
 
       _persistenceContextMap.put(unitName, persistenceContext);
 
       InjectManager manager = InjectManager.create(_parentLoader);
       BeanFactory factory;
       factory = manager.createBeanFactory(EntityManagerFactory.class);
-      EntityManagerFactoryComponent emf = new EntityManagerFactoryComponent(
-          manager, this, provider, unit);
+      /*
+      EntityManagerFactoryComponent emf
+        = new EntityManagerFactoryComponent(manager, this, provider, unit);
+      */
 
+      EntityManagerFactoryProxy emf
+        = new EntityManagerFactoryProxy(this, unitName);
+
+      factory.binding(CurrentLiteral.CURRENT);
+      factory.binding(Names.create(unitName));
       manager.addBean(factory.singleton(emf));
 
-      factory = manager.createBeanFactory(PersistenceContext.class);
-      PersistenceContextComponent pcComp = new PersistenceContextComponent(
-          unitName, persistenceContext);
+      factory = manager.createBeanFactory(EntityManager.class);
+      factory.binding(CurrentLiteral.CURRENT);
+      factory.binding(Names.create(unitName));
 
-      manager.addBean(factory.singleton(pcComp));
+      /*
+      PersistenceContextComponent pcComp
+        = new PersistenceContextComponent(unitName, persistenceContext);
+      */
+
+      manager.addBean(factory.singleton(persistenceContext));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -1000,20 +1085,20 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
 
     if (type != null) {
       boolean isEntity = type.getAnnotation(javax.persistence.Entity.class) != null;
-      boolean isEmbeddable = type
-          .getAnnotation(javax.persistence.Embeddable.class) != null;
-      boolean isMappedSuperclass = type
-          .getAnnotation(javax.persistence.MappedSuperclass.class) != null;
+      boolean isEmbeddable
+        = type.getAnnotation(javax.persistence.Embeddable.class) != null;
+      boolean isMappedSuperclass
+        = type.getAnnotation(javax.persistence.MappedSuperclass.class) != null;
 
       MappedSuperclassConfig mappedSuperclassOrEntityConfig = null;
 
       if (entityMappings != null) {
-        mappedSuperclassOrEntityConfig = entityMappings
-            .getEntityConfig(className);
+        mappedSuperclassOrEntityConfig =
+          entityMappings.getEntityConfig(className);
 
         if (mappedSuperclassOrEntityConfig == null)
-          mappedSuperclassOrEntityConfig = entityMappings
-              .getMappedSuperclass(className);
+          mappedSuperclassOrEntityConfig
+            = entityMappings.getMappedSuperclass(className);
       }
 
       if (isEntity || isEmbeddable || isMappedSuperclass
@@ -1040,7 +1125,7 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
    */
   public boolean isRootScannable(Path root)
   {
-    if (!root.lookup("META-INF/persistence.xml").canRead())
+    if (! root.lookup("META-INF/persistence.xml").canRead())
       return false;
 
     RootContext context = _persistenceRootMap.get(root);
@@ -1152,7 +1237,7 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
     private final Map _props;
 
     LazyEntityManagerFactory(PersistenceUnitConfig unit,
-        PersistenceProvider provider, Map props)
+                             PersistenceProvider provider, Map props)
     {
       _unit = unit;
       _provider = provider;
@@ -1167,20 +1252,16 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
         EntityManagerFactory factory = _factoryMap.get(unitName);
 
         if (factory == null) {
-          factory = _provider
-              .createContainerEntityManagerFactory(_unit, _props);
+          factory = _provider.createContainerEntityManagerFactory(_unit, _props);
 
           if (factory == null)
             throw new ConfigException(L.l(
-                "'{0}' must return an EntityManagerFactory", _provider
-                    .getClass().getName()));
+                "'{0}' must return an EntityManagerFactory",
+                _provider.getClass().getName()));
 
           if (log.isLoggable(Level.FINE)) {
-            log
-                .fine(L
-                    .l(
-                        "Amber creating persistence unit '{0}' created with provider '{1}'",
-                        unitName, _provider.getClass().getName()));
+            log.fine(L.l("Amber creating persistence unit '{0}' created with provider '{1}'",
+                         unitName, _provider.getClass().getName()));
           }
 
           _factoryMap.put(unitName, factory);

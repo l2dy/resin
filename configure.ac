@@ -8,7 +8,7 @@ AC_SUBST(FULL_VERSION)
 dnl Get os info
 AC_CANONICAL_SYSTEM
 
-AM_INIT_AUTOMAKE(resin, 4.0.0)
+AM_INIT_AUTOMAKE(resin, 4.0.2)
 
 dnl Checks for programs.
 AC_PROG_CC
@@ -35,9 +35,6 @@ AC_SUBST(resin_home)
 # --with-resin-root
 #
 
-echo "ROOT: ${resin_root}"
-echo "ROOT2: ${resin_home}"
-
 AC_ARG_WITH(resin-root,
 [  --with-resin-root=DIR  resin data directory
 ], [
@@ -47,8 +44,6 @@ resin_root=${withval}
 if test -z "$resin_root"; then
   resin_root="${resin_home}"
 fi
-
-echo "ROOT3: ${resin_root}"
 
 AC_SUBST(resin_root)
 
@@ -93,10 +88,14 @@ AC_SUBST(resin_init_d)
 #
 # --with-java-home
 #
+JAVA_EXE=java
+
 AC_ARG_WITH(java-home,
 [  --with-java-home=DIR  java home
 ], [
 JAVA_HOME=${withval}
+
+JAVA_EXE="$JAVA_HOME/bin/java"
 ])
 
 if test -z "$JAVA_HOME"; then
@@ -577,7 +576,9 @@ echo -n "checking if Java is 64-bit... "
 
 tmpname="/tmp/java$$.out"
 	       	
-$JAVA_HOME/bin/java -version 2> $tmpname
+#$JAVA_HOME/bin/java -version 2> $tmpname
+
+$JAVA_EXE -version 2> $tmpname
 
 grep "64-Bit" $tmpname 1> /dev/null
 if test "$?" = "0"; then
@@ -710,11 +711,11 @@ if test -z "${LD_SHLIB}"; then
  	LDFLAGS_SHLIB="-dynamiclib -undefined suppress -flat_namespace"
 	if test -n "$b64"; then
   	  CFLAGS="$CFLAGS -arch x86_64"
-  	  LDFLAGS_SHLIB="-arch x86_64 $LD_FLAGS_SHLIB"
+  	  LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
 	fi
 	if test -n "$b64_jni"; then
   	  CFLAGS_JNI="$CFLAGS_JNI -m64"
-  	  LDFLAGS_SHLIB="-arch x86_64 $LD_FLAGS_SHLIB"
+  	  LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
    	fi
         ;;
 
@@ -926,28 +927,35 @@ AC_ARG_ENABLE(jni,
  *) AC_MSG_ERROR(bad value ${enableval} for --enable-jni) ;;
  esac],[JNI=""])
 
+JNI_INCLUDE_DIR=""
+
 if test -n "$JNI_INCLUDE"; then
   JNI=yes
 elif test -r "$JAVA_HOME/include/jni_md.h"; then
-  JNI_INCLUDE="-I$JAVA_HOME/include"
+  JNI_INCLUDE_DIR="${JAVA_HOME}/include"
+  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
   JNI=yes
   echo "checking for JNI in $JAVA_HOME/include ... found"
 elif test -r "$JAVA_HOME/include/$jni_os/jni_md.h"; then
+  JNI_INCLUDE_DIR="${JAVA_HOME}/include"
   JNI_INCLUDE="-I$JAVA_HOME/include -I$JAVA_HOME/include/$jni_os"
   JNI=yes
   echo "checking for JNI in $JAVA_HOME/include/$jni_os ... found"
 elif test -r "/System/Library/Frameworks/JavaVM.framework/Headers/jni_md.h"; then
   # Darwin
   echo "checking for JNI in /System/Library/Frameworks/JavaVM.framework/Headers ... found"
-  JNI_INCLUDE="-I/System/Library/Frameworks/JavaVM.framework/Headers"
+  JNI_INCLUDE_DIR="/System/Library/Frameworks/JavaVM.framework/Headers"
+  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
   JNI=yes
 elif test -r "$JAVA_HOME/../Headers/jni_md.h"; then
   # Darwin
   echo "checking for JNI in $JAVA_HOME/../Headers ... found"
-  JNI_INCLUDE="-I$JAVA_HOME/../Headers"
+  JNI_INCLUDE_DIR="$JAVA_HOME/../Headers"
+  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
   JNI=yes
 elif test -r "$JAVA_HOME/include/jni.h"; then
-  JNI_INCLUDE="-I$JAVA_HOME/include"
+  JNI_INCLUDE_DIR="$JAVA_HOME/include"
+  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
   JNI=yes
   echo "checking for JNI in $JAVA_HOME/include ... found"
 else
@@ -955,24 +963,12 @@ else
   AC_MSG_WARN([Can't find JNI directory ${JAVA_HOME}/include/$jni_os])
 fi
 
-if test -r "$JAVA_HOME/include/jvmti.h"; then
+if test -r "$JNI_INCLUDE_DIR/jvmti.h"; then
   echo "Using JVMTI for class reloading"
   
   CFLAGS="$CFLAGS -DHAS_JVMTI"
-elif test -r "$JAVA_HOME/../Headers/jvmti.h"; then
-  echo "Using JVMTI for class reloading"
-  
-  CFLAGS="$CFLAGS -DHAS_JVMTI"
-fi
-
-if test -r "$JAVA_HOME/include/jvmdi.h"; then
-  echo "Using JVMDI for class reloading"
-  
-  CFLAGS="$CFLAGS -DHAS_JVMDI"
-elif test -r "$JAVA_HOME/../Headers/jvmdi.h"; then
-  echo "Using JVMDI for class reloading"
-  
-  CFLAGS="$CFLAGS -DHAS_JVMDI"
+else
+  AC_MSG_WARN([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
 fi
 	
 if test -n "$JNI"; then

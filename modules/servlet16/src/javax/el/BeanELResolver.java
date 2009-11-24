@@ -51,7 +51,7 @@ import java.util.logging.Logger;
  */
 public class BeanELResolver extends ELResolver {
   private final static Logger log
-    = Logger.getLogger(MapELResolver.class.getName());
+    = Logger.getLogger(BeanELResolver.class.getName());
 
   private static WeakHashMap<Class,SoftReference<BeanProperties>> _classMap
     = new WeakHashMap<Class,SoftReference<BeanProperties>>();
@@ -391,6 +391,7 @@ public class BeanELResolver extends ELResolver {
   protected static final class BeanProperty {
     private Class _base;
     private PropertyDescriptor _descriptor;
+    private Method _readMethod;
     
     public BeanProperty(Class<?> baseClass,
 			PropertyDescriptor descriptor)
@@ -398,22 +399,37 @@ public class BeanELResolver extends ELResolver {
       _base = baseClass;
       _descriptor = descriptor;
 
-      if (descriptor.getReadMethod() != null)
-	descriptor.getReadMethod().setAccessible(true);
+      // #3598
+      Method readMethod = descriptor.getReadMethod();
+      try {
+        if (readMethod != null)
+          //create a copy of the method
+          _readMethod = _base.getMethod(readMethod.getName(),
+                                        readMethod.getParameterTypes());
+      } catch (NoSuchMethodException e) {
+      }
+
+      if (_readMethod != null)
+	_readMethod.setAccessible(true);
 
       initDescriptor();
     }
     
     private BeanProperty(Class baseClass,
-			String name,
-			Method getter)
+                         String name,
+                         Method getter)
     {
       try {
 	_base = baseClass;
 	_descriptor = new PropertyDescriptor(name, getter, null);
 
-	if (getter != null)
-	  getter.setAccessible(true);
+        //create a copy of the method
+        if (getter != null)
+          _readMethod = _base.getMethod(getter.getName(),
+                                        getter.getParameterTypes());
+
+        if (_readMethod != null)
+          getter.setAccessible(true);
       } catch (Exception e) {
 	throw new RuntimeException(e);
       }
@@ -423,7 +439,7 @@ public class BeanELResolver extends ELResolver {
 
     private void initDescriptor()
     {
-      Method readMethod = _descriptor.getReadMethod();
+      Method readMethod = _readMethod;
 
       if (readMethod != null)
 	_descriptor.setValue(ELResolver.TYPE, readMethod.getReturnType());
@@ -444,7 +460,7 @@ public class BeanELResolver extends ELResolver {
 
     public Method getReadMethod()
     {
-      return _descriptor.getReadMethod();
+      return _readMethod;
     }
 
     public Method getWriteMethod()

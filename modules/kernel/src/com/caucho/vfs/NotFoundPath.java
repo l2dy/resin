@@ -45,19 +45,18 @@ public class NotFoundPath extends Path {
   /**
    * Creates new NotFoundPath
    */
-  public NotFoundPath(String url)
+  public NotFoundPath(SchemeMap schemeMap, String url)
   {
-    super(null);
+    super(schemeMap);
 
     _url = url;
-    _schemeMap = SchemeMap.getNullSchemeMap();
   }
 
   /**
    * Dummy return.
    */
   public Path schemeWalk(String userPath,
-			 Map<String,Object> attributes,
+                         Map<String,Object> attributes,
                          String path, int offset)
   {
     return this;
@@ -68,7 +67,7 @@ public class NotFoundPath extends Path {
    */
   public String getURL()
   {
-    return "error:" + _url;
+    return _url;
   }
 
   public String getScheme()
@@ -85,20 +84,12 @@ public class NotFoundPath extends Path {
   }
 
   /**
-   * Dummy return.
-   */
-  public Path lookupImpl(String userPath, Map<String,Object> newAttributes)
-  {
-    return this;
-  }
-
-  /**
    * Throws a FileNotFoundException for any read.
    */
   public StreamImpl openReadImpl()
     throws IOException
   {
-    throw new FileNotFoundException(_url);
+    throw new FileNotFoundException(getURL());
   }
 
   protected Path copyCache()

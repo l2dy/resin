@@ -34,6 +34,7 @@ import java.util.*;
 
 import com.caucho.vfs.*;
 import com.caucho.quercus.QuercusRuntimeException;
+import com.caucho.quercus.marshal.Marshal;
 import com.caucho.util.*;
 
 /**
@@ -50,7 +51,7 @@ public class BinaryBuilderValue
   {
     _buffer = new byte[128];
   }
-  
+
   public BinaryBuilderValue(BinaryBuilderValue v)
   {
     if (v._isCopy) {
@@ -91,14 +92,14 @@ public class BinaryBuilderValue
   public BinaryBuilderValue(String s)
   {
     int len = s.length();
-    
+
     _buffer = new byte[len];
     _length = len;
 
     for (int i = 0; i < len; i++)
       _buffer[i] = (byte) s.charAt(i);
   }
-  
+
   public BinaryBuilderValue(char []buffer)
   {
     _buffer = new byte[buffer.length];
@@ -107,7 +108,7 @@ public class BinaryBuilderValue
     for (int i = 0; i < buffer.length; i++)
       _buffer[i] = (byte) buffer[i];
   }
-  
+
   public BinaryBuilderValue(char []s, Value v1)
   {
     int len = s.length;
@@ -116,7 +117,7 @@ public class BinaryBuilderValue
       _buffer = new byte[128];
     else
       _buffer = new byte[len + 32];
-    
+
     _length = len;
 
     for (int i = 0; i < len; i++) {
@@ -125,14 +126,22 @@ public class BinaryBuilderValue
 
     v1.appendTo(this);
   }
-  
+
+  public BinaryBuilderValue(TempBuffer head)
+  {
+    this();
+
+    // php/0c4l
+    append(head);
+  }
+
   public BinaryBuilderValue(Byte []buffer)
   {
     int length = buffer.length;
-    
+
     _buffer =  new byte[length];
     _length = length;
-    
+
     for (int i = 0; i < length; i++) {
       _buffer[i] = buffer[i].byteValue();
     }
@@ -158,12 +167,131 @@ public class BinaryBuilderValue
   }
 
   /**
+   * Creates the string.
+   */
+  public static StringValue create(char value)
+  {
+    // php/3jb1
+    if (value < CHAR_STRINGS.length)
+      return CHAR_STRINGS[value];
+    else
+      return new BinaryBuilderValue(value);
+  }
+
+  /**
    * Returns the type.
    */
   @Override
   public String getType()
   {
     return "string";
+  }
+
+  /**
+   * Returns true for a BinaryValue.
+   */
+  public boolean isBinary()
+  {
+    return true;
+  }
+
+  //
+  // marshal costs
+  //
+
+  /**
+   * Cost to convert to a byte
+   */
+  @Override
+  public int toByteMarshalCost()
+  {
+    if (isLongConvertible())
+      return Marshal.COST_NUMERIC_LOSSLESS;
+    else if (isDoubleConvertible())
+      return Marshal.COST_NUMERIC_LOSSY;
+    else
+      return Marshal.COST_BINARY_TO_BYTE;
+  }
+
+  /**
+   * Cost to convert to a String
+   */
+  @Override
+  public int toStringMarshalCost()
+  {
+    return Marshal.COST_BINARY_TO_STRING;
+  }
+
+  /**
+   * Cost to convert to a char[]
+   */
+  @Override
+  public int toCharArrayMarshalCost()
+  {
+    return Marshal.COST_BINARY_TO_STRING + 5;
+  }
+
+  /**
+   * Cost to convert to a byte[]
+   */
+  @Override
+  public int toByteArrayMarshalCost()
+  {
+    return Marshal.COST_EQUAL;
+  }
+
+  /**
+   * Cost to convert to a binary value
+   */
+  @Override
+  public int toBinaryValueMarshalCost()
+  {
+    return Marshal.COST_IDENTICAL;
+  }
+
+  /**
+   * Cost to convert to a string value
+   */
+  @Override
+  public int toStringValueMarshalCost()
+  {
+    return Marshal.COST_IDENTICAL + 1;
+  }
+
+  /**
+   * Converts to a Unicode, 16-bit string.
+   */
+  @Override
+  public StringValue toUnicode(Env env)
+  {
+    return new UnicodeBuilderValue(this);
+  }
+
+  /**
+   * Converts to a UnicodeValue.
+   */
+  @Override
+  public StringValue toUnicodeValue()
+  {
+    return new UnicodeBuilderValue(this);
+  }
+
+  /**
+   * Converts to a UnicodeValue.
+   */
+  @Override
+  public StringValue toUnicodeValue(Env env)
+  {
+    return new UnicodeBuilderValue(this);
+  }
+
+  /**
+   * Converts to a UnicodeValue in desired charset.
+   */
+  @Override
+  public StringValue toUnicodeValue(Env env, String charset)
+  {
+    return toUnicodeValue(env);
   }
 
   /**
@@ -175,7 +303,7 @@ public class BinaryBuilderValue
     // XXX: can this just return this, or does it need to return a copy?
     return new BinaryBuilderValue(this);
   }
-  
+
   /**
    * Returns the character at an index
    */
@@ -209,15 +337,15 @@ public class BinaryBuilderValue
   public StringValue toLowerCase()
   {
     int length = _length;
-    
+
     BinaryBuilderValue string = new BinaryBuilderValue(length);
-    
+
     byte []srcBuffer = _buffer;
     byte []dstBuffer = string._buffer;
 
     for (int i = 0; i < length; i++) {
       byte ch = srcBuffer[i];
-      
+
       if ('A' <= ch && ch <= 'Z')
         dstBuffer[i] = (byte) (ch + 'a' - 'A');
       else
@@ -228,7 +356,7 @@ public class BinaryBuilderValue
 
     return string;
   }
-  
+
   /**
    * Convert to lower case.
    */
@@ -236,7 +364,7 @@ public class BinaryBuilderValue
   public StringValue toUpperCase()
   {
     int length = _length;
-    
+
     BinaryBuilderValue string = new BinaryBuilderValue(_length);
 
     byte []srcBuffer = _buffer;
@@ -244,7 +372,7 @@ public class BinaryBuilderValue
 
     for (int i = 0; i < length; i++) {
       byte ch = srcBuffer[i];
-      
+
       if ('a' <= ch && ch <= 'z')
         dstBuffer[i] = (byte) (ch + 'A' - 'a');
       else
@@ -264,7 +392,7 @@ public class BinaryBuilderValue
    * Creates a string builder of the same type.
    */
   @Override
-  public StringValue createStringBuilder()
+  public BinaryBuilderValue createStringBuilder()
   {
     return new BinaryBuilderValue();
   }
@@ -273,7 +401,17 @@ public class BinaryBuilderValue
    * Creates a string builder of the same type.
    */
   @Override
-  public StringValue createStringBuilder(int length)
+  public BinaryBuilderValue createStringBuilder(int length)
+  {
+    return new BinaryBuilderValue(length);
+  }
+
+  /**
+   * Creates a string builder of the same type.
+   */
+  @Override
+  public BinaryBuilderValue
+    createStringBuilder(byte []buffer, int offset, int length)
   {
     return new BinaryBuilderValue(length);
   }
@@ -286,7 +424,7 @@ public class BinaryBuilderValue
   {
     return new BinaryBuilderValue(_buffer, 0, _length);
   }
-  
+
   /**
    * Converts to a string builder
    */
@@ -295,20 +433,20 @@ public class BinaryBuilderValue
   {
     if (value.isUnicode()) {
       UnicodeBuilderValue sb = new UnicodeBuilderValue(this);
-      
+
       value.appendTo(sb);
-      
+
       return sb;
     }
     else {
       BinaryBuilderValue v = new BinaryBuilderValue(this);
 
       value.appendTo(v);
-      
+
       return v;
     }
   }
-  
+
   /**
    * Converts to a string builder
    */
@@ -316,16 +454,16 @@ public class BinaryBuilderValue
   {
     if (value.isUnicode()) {
       UnicodeBuilderValue sb = new UnicodeBuilderValue(this);
-      
+
       value.appendTo(sb);
-      
+
       return sb;
     }
     else {
       BinaryBuilderValue v = new BinaryBuilderValue(this);
 
       value.appendTo(v);
-      
+
       return v;
     }
   }
@@ -337,7 +475,7 @@ public class BinaryBuilderValue
   public final StringValue append(BinaryBuilderValue sb, int head, int tail)
   {
     int length = tail - head;
-    
+
     if (_buffer.length < _length + length)
       ensureCapacity(_length + length);
 
@@ -361,7 +499,7 @@ public class BinaryBuilderValue
 
     return sb;
   }
-  
+
   /**
    * Append a Java string to the value.
    */
@@ -445,7 +583,7 @@ public class BinaryBuilderValue
   public StringValue appendUnicode(long v)
   {
     // XXX: this probably is frequent enough to special-case
-    
+
     return append(String.valueOf(v));
   }
 
@@ -469,7 +607,7 @@ public class BinaryBuilderValue
     else
       return append(v.toString());
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -477,12 +615,12 @@ public class BinaryBuilderValue
   {
     if (length() == 0)
       return sb;
-    
+
     Env env = Env.getInstance();
 
     try {
       Reader reader = env.getRuntimeEncodingFactory().create(toInputStream());
-      
+
       if (reader != null) {
         sb.append(reader);
 
@@ -494,7 +632,7 @@ public class BinaryBuilderValue
       throw new QuercusRuntimeException(e);
     }
   }
-  
+
   /**
    * Returns true for equality
    */
@@ -521,12 +659,12 @@ public class BinaryBuilderValue
     }
 
     rValue = rValue.toValue();
-    
+
     if (rValue instanceof BinaryBuilderValue) {
       BinaryBuilderValue value = (BinaryBuilderValue) rValue;
 
       int length = _length;
-      
+
       if (length != value._length)
         return false;
 
@@ -550,12 +688,12 @@ public class BinaryBuilderValue
   {
     if (o == this)
       return true;
-    
+
     if (o instanceof BinaryBuilderValue) {
       BinaryBuilderValue value = (BinaryBuilderValue) o;
 
       int length = _length;
-      
+
       if (length != value._length)
         return false;
 
@@ -572,7 +710,7 @@ public class BinaryBuilderValue
     /*
     else if (o instanceof UnicodeValue) {
       UnicodeValue value = (UnicodeValue)o;
-      
+
       return value.equals(this);
     }
     */
@@ -584,15 +722,15 @@ public class BinaryBuilderValue
   public boolean eql(Value o)
   {
     o = o.toValue();
-    
+
     if (o == this)
       return true;
-    
+
     if (o instanceof BinaryBuilderValue) {
       BinaryBuilderValue value = (BinaryBuilderValue) o;
 
       int length = _length;
-      
+
       if (length != value._length)
         return false;
 
@@ -651,7 +789,7 @@ public class BinaryBuilderValue
       out.print("binary");
     else
       out.print("string");
-    
+
     out.print("(");
     out.print(length);
     out.print(") \"");
@@ -660,22 +798,22 @@ public class BinaryBuilderValue
       char ch = charAt(i);
 
       if (0x20 <= ch && ch <= 0x7f || ch == '\t' || ch == '\r' || ch == '\n')
-	out.print(ch);
+        out.print(ch);
       else if (ch <= 0xff)
-	out.print("\\x" + Integer.toHexString(ch / 16) + Integer.toHexString(ch % 16));
+        out.print("\\x" + Integer.toHexString(ch / 16) + Integer.toHexString(ch % 16));
       else {
-	out.print("\\u"
-		  + Integer.toHexString((ch >> 12) & 0xf)
-		  + Integer.toHexString((ch >> 8) & 0xf)
-		  + Integer.toHexString((ch >> 4) & 0xf)
-		  + Integer.toHexString((ch) & 0xf));
+        out.print("\\u"
+                  + Integer.toHexString((ch >> 12) & 0xf)
+                  + Integer.toHexString((ch >> 8) & 0xf)
+                  + Integer.toHexString((ch >> 4) & 0xf)
+                  + Integer.toHexString((ch) & 0xf));
       }
     }
 
     out.print("\"");
   }
 
-  
+
   static {
     CHAR_STRINGS = new BinaryBuilderValue[256];
 

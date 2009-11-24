@@ -53,11 +53,11 @@ public interface WebBeanMXBean extends ManagedObjectMXBean {
    * Returns the scope type attribute
    */
   @Description("The @ScopeType")
-  public String getScopeType();
+  public String getScope();
 
   /**
    * Returns the binding types
    */
   @Description("The @BindingType")
-  public String []getBindingTypes();
+  public String []getQualifiers();
 }

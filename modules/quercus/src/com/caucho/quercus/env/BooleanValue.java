@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.marshal.Marshal;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -94,7 +95,7 @@ public class BooleanValue extends Value
   {
     return true;
   }
-  
+
   /**
    * Returns true for a scalar
    */
@@ -119,6 +120,23 @@ public class BooleanValue extends Value
   {
     return ! _value;
   }
+
+  //
+  // marshal costs
+  //
+
+  /**
+   * Cost to convert to a boolean
+   */
+  @Override
+  public int toBooleanMarshalCost()
+  {
+    return Marshal.COST_EQUAL;
+  }
+
+  //
+  // conversions
+  //
 
   /**
    * Converts to a long.
@@ -151,7 +169,7 @@ public class BooleanValue extends Value
   public StringValue toStringBuilder(Env env)
   {
     StringValue sb = env.createUnicodeBuilder();
-    
+
     if (_value)
       sb.append("1");
 
@@ -224,19 +242,19 @@ public class BooleanValue extends Value
   {
     return _value == rValue.toBoolean();
   }
-  
+
   /**
    * Returns true for equality
    */
   public int cmp(Value rValue)
   {
     boolean rBool = rValue.toBoolean();
-    
+
     if (! _value && rBool)
       return -1;
     if (_value && ! rBool)
       return 1;
-    
+
     return 0;
   }
 
@@ -301,6 +319,18 @@ public class BooleanValue extends Value
   }
 
   /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    if (_value)
+      sb.append("true");
+    else
+      sb.append("false");
+  }
+
+  /**
    * Exports the value.
    */
   public void varExport(StringBuilder sb)
@@ -351,11 +381,11 @@ public class BooleanValue extends Value
     else
       out.print("bool(false)");
   }
-  
+
   //
   // Java Serialization
   //
-  
+
   private Object readResolve()
   {
     if (_value == true)

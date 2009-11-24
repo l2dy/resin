@@ -67,7 +67,12 @@ public class WebAppController
 
   // The context path is the URL prefix for the web-app
   private String _contextPath;
+  private final String _versionContextPath;
+  private final String _baseContextPath;
   private String _version = "";
+
+  // true if the versioned web-app is an alias for the base web-app
+  private boolean _isVersionAlias;
 
   // Any old version web-app
   private WebAppController _oldWebAppController;
@@ -100,38 +105,42 @@ public class WebAppController
     this("/", "/", null, null);
   }
 
-  public WebAppController(String name,
-			  String contextPath,
-			  Path rootDirectory,
-			  WebAppContainer container)
+  public WebAppController(String contextPath,
+                          String baseContextPath,
+                          Path rootDirectory,
+                          WebAppContainer container)
   {
-    super(name, rootDirectory);
+    super(contextPath, rootDirectory);
 
     _container = container;
 
-    setContextPath(contextPath);
+    _versionContextPath = contextPath;
+    _baseContextPath = baseContextPath;
+
+    _contextPath = contextPath;
   }
 
   /**
-   * Returns the webApp's context path
+   * Returns the webApp's canonical context path, e.g. /foo-1.0
    */
   public String getContextPath()
   {
     return _contextPath;
   }
 
-  /**
-   * Sets the webApp's context path
-   */
-  public void setContextPath(String contextPath)
+  void setContextPath(String contextPath)
   {
-    if (! contextPath.equals("") && ! contextPath.startsWith("/"))
-      contextPath = "/" + contextPath;
-
-    if (contextPath.endsWith("/"))
-      contextPath = contextPath.substring(0, contextPath.length() - 1);
-
+    // server/1h10
+    
     _contextPath = contextPath;
+  }
+
+  /**
+   * Returns the webApp's base context path, e.g. /foo for /foo-1.0
+   */
+  public String getBaseContextPath()
+  {
+    return _baseContextPath;
   }
 
   /**
@@ -139,8 +148,12 @@ public class WebAppController
    */
   public String getContextPath(String uri)
   {
-    if (getConfig() == null || getConfig().getURLRegexp() == null)
-      return getContextPath();
+    if (getConfig() == null || getConfig().getURLRegexp() == null) {
+      if (uri.startsWith(getContextPath()))
+        return getContextPath();
+      else
+        return getBaseContextPath();
+    }
 
     Pattern regexp = getConfig().getURLRegexp();
     Matcher matcher = regexp.matcher(uri);
@@ -152,15 +165,15 @@ public class WebAppController
       matcher.reset(prefix);
 
       if (matcher.find() && matcher.start() == 0)
-	return matcher.group();
+        return matcher.group();
 
       if (tail < uri.length()) {
-	tail = uri.indexOf('/', tail + 1);
-	if (tail < 0)
-	  tail = uri.length();
+        tail = uri.indexOf('/', tail + 1);
+        if (tail < 0)
+          tail = uri.length();
       }
       else
-	break;
+        break;
     }
 
     return _contextPath;
@@ -325,6 +338,24 @@ public class WebAppController
   }
 
   /**
+   * versionAlias is true if a versioned web-app is currently acting
+   * as the primary web-app.
+   */
+  public void setVersionAlias(boolean isVersionAlias)
+  {
+    _isVersionAlias = isVersionAlias;
+  }
+
+  /**
+   * versionAlias is true if a versioned web-app is currently acting
+   * as the primary web-app.
+   */
+  public boolean isVersionAlias()
+  {
+    return _isVersionAlias;
+  }
+
+  /**
    * Sets the old version web-app.
    */
   public void setOldWebApp(WebAppController oldWebApp, long expireTime)
@@ -337,7 +368,7 @@ public class WebAppController
     if (webApp != null)
       webApp.setOldWebApp(oldWebApp.request(), expireTime);
   }
-  
+
   /**
    * Adds a version to the controller list.
    */
@@ -397,30 +428,30 @@ public class WebAppController
     if (getConfig() != null && getConfig().getURLRegexp() != null)
       return newController;
     else if (newController.getConfig() != null
-	     && newController.getConfig().getURLRegexp() != null)
+             && newController.getConfig().getURLRegexp() != null)
       return this;
     else {
       Thread thread = Thread.currentThread();
       ClassLoader oldLoader = thread.getContextClassLoader();
 
       try {
-	thread.setContextClassLoader(getParentClassLoader());
+        thread.setContextClassLoader(getParentClassLoader());
 
-	//  The contextPath comes from current web-app
-	WebAppController mergedController
-	  = new WebAppController(getContextPath(),
-				 getContextPath(),
-				 getRootDirectory(),
-				 _container);
+        //  The contextPath comes from current web-app
+        WebAppController mergedController
+          = new WebAppController(getContextPath(),
+                                 getBaseContextPath(),
+                                 getRootDirectory(),
+                                 _container);
 
-	// server/1h1{2,3}
-	// This controller overrides configuration from the new controller
-	mergedController.mergeController(this);
-	mergedController.mergeController(newController);
+        // server/1h1{2,3}
+        // This controller overrides configuration from the new controller
+        mergedController.mergeController(this);
+        mergedController.mergeController(newController);
 
-	return mergedController;
+        return mergedController;
       } finally {
-	thread.setContextClassLoader(oldLoader);
+        thread.setContextClassLoader(oldLoader);
       }
     }
   }
@@ -463,9 +494,10 @@ public class WebAppController
   /**
    * Adding any dependencies.
    */
+  @Override
   protected void addDependencies()
-    throws Exception
   {
+    super.addDependencies();
   }
 
   /**
@@ -490,12 +522,12 @@ public class WebAppController
   {
     if (_container != null) {
       for (WebAppConfig config : _container.getWebAppDefaultList()) {
-	if (config.getPrologue() != null)
-	  initList.add(config.getPrologue());
+        if (config.getPrologue() != null)
+          initList.add(config.getPrologue());
       }
-      
+
       for (WebAppConfig config : _container.getWebAppDefaultList())
-	initList.add(config);
+        initList.add(config);
     }
 
     super.fillInitList(initList);
@@ -513,7 +545,7 @@ public class WebAppController
    * Creates the webApp.
    */
   @Override
-  protected void configureInstanceVariables(WebApp app)
+  protected void configureInstanceVariables(WebApp webApp)
     throws Throwable
   {
     InjectManager beanManager = InjectManager.create();
@@ -522,23 +554,23 @@ public class WebAppController
     factory.type(ServletContext.class);
     // factory.stereotype(CauchoDeploymentLiteral.create());
 
-    beanManager.addBean(factory.singleton(app));
+    beanManager.addBean(factory.singleton(webApp));
 
     Config.setProperty("webApp", getVar());
     Config.setProperty("app", getVar());
-    
-    app.setRegexp(_regexpValues);
-    app.setDynamicDeploy(isDynamicDeploy());
+
+    webApp.setRegexp(_regexpValues);
+    webApp.setDynamicDeploy(isDynamicDeploy());
 
     if (_oldWebAppController != null
-	&& Alarm.getCurrentTime() < _oldWebAppExpireTime) {
-      app.setOldWebApp(_oldWebAppController.request(),
-		       _oldWebAppExpireTime);
+        && Alarm.getCurrentTime() < _oldWebAppExpireTime) {
+      webApp.setOldWebApp(_oldWebAppController.request(),
+                          _oldWebAppExpireTime);
     }
 
-    super.configureInstanceVariables(app);
+    super.configureInstanceVariables(webApp);
   }
-  
+
   @Override
   protected void extendJMXContext(Map<String,String> context)
   {
@@ -642,7 +674,7 @@ public class WebAppController
   {
     return log;
   }
-  
+
   /**
    * Returns a printable view.
    */
@@ -677,16 +709,16 @@ public class WebAppController
     public String getName()
     {
       String name;
-      
+
       if (getWarName() != null)
         name = getWarName();
       else
         name = getId();
 
       if (name.startsWith("/"))
-	return name;
+        return name;
       else
-	return "/" + name;
+        return "/" + name;
     }
 
     public Path getAppDir()

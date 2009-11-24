@@ -130,11 +130,20 @@ public class XmppBrokerStream
     return _xmppContext;
   }
   
-  public boolean serviceRead(ReadStream is,
-			     TcpDuplexController controller)
+  public void onRead(TcpDuplexController context)
     throws IOException
   {
-    return _reader.readNext();
+    _reader.readNext();
+  }
+  
+  public void onComplete(TcpDuplexController context)
+    throws IOException
+  {
+  }
+  
+  public void onTimeout(TcpDuplexController context)
+    throws IOException
+  {
   }
   
   public boolean serviceWrite(WriteStream os,
@@ -150,8 +159,7 @@ public class XmppBrokerStream
     
     _uid = uid + _broker.getJid();
     
-    _conn = _broker.getConnection(_uid, password);
-    _conn.setActorStream(_toClient);
+    _conn = _broker.getConnection(_toClient, _uid, password);
 
     _jid = _conn.getJid();
     
@@ -164,8 +172,7 @@ public class XmppBrokerStream
   {
     String password = null;
     
-    _conn = _broker.getConnection(_uid, resource);
-    _conn.setActorStream(_toClient);
+    _conn = _broker.getConnection(_toClient, _uid, resource);
 
     _jid = _conn.getJid();
     

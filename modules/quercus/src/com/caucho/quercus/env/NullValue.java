@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.marshal.Marshal;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -98,6 +99,64 @@ public class NullValue extends Value
   public boolean isEmpty()
   {
     return true;
+  }
+
+  //
+  // marshal cost
+  //
+
+  /**
+   * Cost to convert to a double
+   */
+  @Override
+  public int toDoubleMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
+  }
+
+  /**
+   * Cost to convert to a long
+   */
+  @Override
+  public int toLongMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
+  }
+
+  /**
+   * Cost to convert to an integer
+   */
+  @Override
+  public int toIntegerMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
+  }
+
+  /**
+   * Cost to convert to a short
+   */
+  @Override
+  public int toShortMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
+  }
+
+  /**
+   * Cost to convert to a byte
+   */
+  @Override
+  public int toByteMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
+  }
+
+  /**
+   * Cost to convert to a boolean
+   */
+  @Override
+  public int toBooleanMarshalCost()
+  {
+    return Marshal.COST_FROM_NULL;
   }
 
   /**
@@ -180,8 +239,8 @@ public class NullValue extends Value
   public Object toJavaObjectNotNull(Env env, Class type)
   {
     env.warning(L.l("null is an unexpected argument; expected '{0}'",
-		    type.getName()));
-    
+                    type.getName()));
+
     return null;
   }
 
@@ -301,7 +360,7 @@ public class NullValue extends Value
   {
     return null;
   }
-  
+
   /**
    * Converts to a Java Date.
    */
@@ -310,7 +369,7 @@ public class NullValue extends Value
   {
     return null;
   }
-  
+
   /**
    * Converts to a Java URL.
    */
@@ -319,7 +378,7 @@ public class NullValue extends Value
   {
     return null;
   }
-  
+
   /**
    * Converts to a Java BigDecimal.
    */
@@ -328,7 +387,7 @@ public class NullValue extends Value
   {
     return BigDecimal.ZERO;
   }
-  
+
   /**
    * Converts to a Java BigInteger.
    */
@@ -337,7 +396,7 @@ public class NullValue extends Value
   {
     return BigInteger.ZERO;
   }
-  
+
   /**
    * Takes the values of this array, unmarshalls them to objects of type
    * <i>elementType</i>, and puts them in a java array.
@@ -347,7 +406,7 @@ public class NullValue extends Value
   {
     return null;
   }
-  
+
   /**
    * Converts to an object.
    */
@@ -432,6 +491,15 @@ public class NullValue extends Value
   }
 
   /**
+   * Converts to a reference variable
+   */
+  @Override
+  public Value toRefArgument()
+  {
+    return this;
+  }
+
+  /**
    * Converts to a key.
    */
   @Override
@@ -466,7 +534,7 @@ public class NullValue extends Value
   {
     return LongValue.create( - rLong);
   }
-  
+
   /**
    * Returns true for equality
    */
@@ -498,11 +566,11 @@ public class NullValue extends Value
       double r = rValue.toDouble();
 
       if (l == r)
-	return 0;
+        return 0;
       else if (l < r)
-	return -1;
+        return -1;
       else
-	return 1;
+        return 1;
     }
     else
       return "".compareTo(rValue.toString());
@@ -533,6 +601,15 @@ public class NullValue extends Value
   public void varExport(StringBuilder sb)
   {
     sb.append("NULL");
+  }
+
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append("null");
   }
 
   /**
@@ -570,7 +647,7 @@ public class NullValue extends Value
   {
     return sb;
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -620,11 +697,11 @@ public class NullValue extends Value
   {
     out.print("NULL");
   }
-  
+
   //
   // Java Serialization
   //
-  
+
   private Object readResolve()
   {
     return NULL;

@@ -259,14 +259,6 @@ public class ResponseAdapter extends ResponseWrapper
     return false;
   }
 
-  public int getStatusCode()
-  {
-    if (_response instanceof CauchoResponse)
-      return ((CauchoResponse) _response).getStatusCode();
-
-    throw new UnsupportedOperationException();
-  }
-
   public String getStatusMessage()
   {
     if (_response instanceof CauchoResponse)
@@ -322,6 +314,26 @@ public class ResponseAdapter extends ResponseWrapper
   {
     if (getResponse() instanceof CauchoResponse)
       ((CauchoResponse) getResponse()).setSessionId(id);
+  }
+
+  public boolean isNoCacheUnlessVary()
+  {
+    CauchoResponse cRes = getCauchoResponse();
+
+    if (cRes != null)
+      return cRes.isNoCacheUnlessVary();
+    else
+      return false;
+  }
+
+  public CauchoResponse getCauchoResponse()
+  {
+    ServletResponse response = getResponse();
+
+    if (response instanceof CauchoResponse)
+      return (CauchoResponse) response;
+    else
+      return null;
   }
 
   public void finish()
@@ -380,6 +392,13 @@ public class ResponseAdapter extends ResponseWrapper
   public Iterable<String> getHeaderNames()
   {
     throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public void setForwardEnclosed(boolean isForwardEnclosed) {
+  }
+
+  public boolean isForwardEnclosed() {
+    return false;
   }
 
   public static void free(ResponseAdapter resAdapt)

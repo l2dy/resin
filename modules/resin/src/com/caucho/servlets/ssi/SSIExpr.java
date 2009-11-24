@@ -41,4 +41,22 @@ abstract public class SSIExpr {
    */
   abstract public String evalString(HttpServletRequest request,
 				    HttpServletResponse response);
+  /**
+   * Evaluate as a boolean.
+   */
+  public boolean evalBoolean(HttpServletRequest request,
+                             HttpServletResponse response)
+  {
+    String value = evalString(request, response);
+
+    if (value == null
+        || "".equals(value)
+        || "null".equals(value)
+        || "false".equals(value)
+        || "0".equals(value)) {
+      return false;
+    }
+    else
+      return true;
+  }
 }

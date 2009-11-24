@@ -57,13 +57,9 @@ public class JMSException extends Exception {
     return _cause;
   }
 
-  public void setLinkedException(Exception cause)
+  public synchronized void setLinkedException(Exception cause)
   {
     _cause = cause;
   }
 
-  public Throwable getCause()
-  {
-    return _cause;
-  }
 }

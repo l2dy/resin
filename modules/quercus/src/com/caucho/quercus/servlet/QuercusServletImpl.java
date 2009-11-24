@@ -76,7 +76,7 @@ public class QuercusServletImpl extends HttpServlet
   protected Quercus _quercus;
   protected ServletConfig _config;
   protected ServletContext _servletContext;
-
+  
   /**
    * initialize the script manager.
    */
@@ -161,9 +161,13 @@ public class QuercusServletImpl extends HttpServlet
       try {
         env.start();
         
-        env.setGlobalValue("request", env.wrapJava(request));
-        env.setGlobalValue("response", env.wrapJava(response));
-        env.setGlobalValue("servletContext", env.wrapJava(_servletContext));
+        // php/2030, php/2032, php/2033
+        // Jetty hides server classes from web-app
+        // http://docs.codehaus.org/display/JETTY/Classloading
+        //
+        // env.setGlobalValue("request", env.wrapJava(request));
+        // env.setGlobalValue("response", env.wrapJava(response));
+        // env.setGlobalValue("servletContext", env.wrapJava(_servletContext));
 
         StringValue prepend
           = quercus.getIniValue("auto_prepend_file").toStringValue(env);
@@ -224,9 +228,9 @@ public class QuercusServletImpl extends HttpServlet
       finally {
         if (env != null)
           env.close();
-        
+
         // don't want a flush for an exception
-        if (ws != null)
+        if (ws != null && env.getDuplex() == null)
           ws.close();
       }
     }
@@ -267,7 +271,7 @@ public class QuercusServletImpl extends HttpServlet
     String scriptPath = QuercusRequestAdapter.getPageServletPath(req);
     String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
-    Path pwd = new FilePath(System.getProperty("user.dir"));
+    Path pwd = Vfs.lookup();
 
     Path path = pwd.lookup(req.getRealPath(scriptPath));
 

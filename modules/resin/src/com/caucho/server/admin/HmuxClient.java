@@ -63,7 +63,7 @@ public class HmuxClient
   }
 
   public HmuxClient(String host,
-		    int port)
+                    int port)
   {
     _pool = createClient(host, port);
   }
@@ -98,8 +98,11 @@ public class HmuxClient
   private ServerPool createClient(String address, int port)
   {
     try {
-      ServerPool conn = new ServerPool("hmux", address + ":" + port,
-				       address, port, false);
+      ServerPool conn = new ServerPool("hmux",
+                                       address + ":" + port,
+                                       "Resin|Hmux",
+                                       address + ":" + port,
+                                       address, port, false);
 
       conn.init();
 

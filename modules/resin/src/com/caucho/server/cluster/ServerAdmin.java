@@ -29,8 +29,12 @@
 
 package com.caucho.server.cluster;
 
+import com.caucho.admin.TotalProbe;
+import com.caucho.admin.Probe;
+import com.caucho.admin.ProbeManager;
 import com.caucho.management.server.AbstractEmitterObject;
 import com.caucho.management.server.ClusterMXBean;
+import com.caucho.management.server.ClusterServerMXBean;
 import com.caucho.management.server.EnvironmentMXBean;
 import com.caucho.management.server.PortMXBean;
 import com.caucho.management.server.ServerMXBean;
@@ -47,11 +51,20 @@ import java.util.Date;
 public class ServerAdmin extends AbstractEmitterObject
   implements ServerMXBean
 {
+  private static final String BYTES_PROBE = "Resin|Request|Http Request Bytes";
+  private TotalProbe _httpBytesProbe;
+
   private Server _server;
 
   ServerAdmin(Server server)
   {
     _server = server;
+
+    ProbeManager.createAverageProbe(BYTES_PROBE, "");
+
+    String name = BYTES_PROBE;
+
+    _httpBytesProbe = (TotalProbe) ProbeManager.getProbe(name);
 
     registerSelf();
   }
@@ -71,10 +84,23 @@ public class ServerAdmin extends AbstractEmitterObject
     return _server.getServerId();
   }
 
+  public int getServerIndex()
+  {
+    return _server.getServerIndex();
+  }
+
   //
   // Hierarchy
   //
-  
+
+  /**
+   * Returns the cluster server owning this server
+   */
+  public ClusterServerMXBean getSelfServer()
+  {
+    return _server.getSelfServer().getAdmin();
+  }
+
   /**
    * Returns the cluster owning this server
    */
@@ -102,7 +128,7 @@ public class ServerAdmin extends AbstractEmitterObject
     for (Port port : portList) {
       ports[i++] = port.getAdmin();
     }
-    
+
     return ports;
   }
 
@@ -126,6 +152,11 @@ public class ServerAdmin extends AbstractEmitterObject
   // Configuration attributes
   //
 
+  public boolean isBindPortsAfterStart()
+  {
+    return _server.isBindPortsAfterStart();
+  }
+
   /**
    * Returns true if detailed statistics are being kept.
    */
@@ -134,20 +165,44 @@ public class ServerAdmin extends AbstractEmitterObject
     return false;
   }
 
-  /**
-   * Returns true if a {@link com.caucho.server.port.AbstractSelectManager} is enabled and active
-   */
+  public boolean isDevelopmentModeErrorPage()
+  {
+    return _server.isDevelopmentModeErrorPage();
+  }
+
+  public long getMemoryFreeMin()
+  {
+    return _server.getMemoryFreeMin();
+  }
+
+  public long getPermGenFreeMin()
+  {
+    return _server.getPermGenFreeMin();
+  }
+
+  public String getServerHeader()
+  {
+    return _server.getServerHeader();
+  }
+
   public boolean isSelectManagerEnabled()
   {
     return _server.isSelectManagerEnabled();
   }
 
-  /**
-   * The maximum time to spend waiting for the server to stop gracefully
-   */
   public long getShutdownWaitMax()
   {
     return _server.getShutdownWaitMax();
+  }
+
+  public String getStage()
+  {
+    return _server.getStage();
+  }
+
+  public int getUrlLengthMax()
+  {
+    return _server.getUrlLengthMax();
   }
 
   //
@@ -176,6 +231,14 @@ public class ServerAdmin extends AbstractEmitterObject
   public Date getStartTime()
   {
     return new Date(_server.getStartTime());
+  }
+
+  /**
+   * Returns the time since the last start time.
+   */
+  public long getUptime()
+  {
+    return Alarm.getExactTime() - _server.getStartTime();
   }
 
   //
@@ -291,7 +354,10 @@ public class ServerAdmin extends AbstractEmitterObject
    */
   public long getRequestWriteBytesTotal()
   {
-    return -1;
+    if (_httpBytesProbe != null)
+      return (long) _httpBytesProbe.getTotal();
+    else
+      return 0;
   }
 
   /**
@@ -339,9 +405,9 @@ public class ServerAdmin extends AbstractEmitterObject
   {
     try {
       if (Alarm.isTest())
-	return 0;
+        return 0;
       else
-	return CauchoSystem.getLoadAvg();
+        return CauchoSystem.getLoadAvg();
     } catch (Exception e) {
       return 0;
     }

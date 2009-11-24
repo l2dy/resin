@@ -43,16 +43,17 @@ import javax.xml.stream.*;
 /**
  * xmpp client to broker
  */
-class XmppClientBrokerStream extends AbstractActorStream
+class XmppClientBrokerStream extends XmppWriter
 {
   private static final Logger log
     = Logger.getLogger(XmppClientBrokerStream.class.getName());
 
   private WriteStream _os;
-  private XmppWriter _out;
+  private XmppWriterImpl _out;
 
-  XmppClientBrokerStream(XmppClient client, XmppWriter out)
+  XmppClientBrokerStream(XmppClient client, XmppWriterImpl out)
   {
+    super(out);
     _out = out;
   }
 
@@ -65,118 +66,6 @@ class XmppClientBrokerStream extends AbstractActorStream
   public ActorStream getBrokerStream()
   {
     return this;
-  }
-
-  /**
-   * Sends a message to the stream
-   */
-  @Override
-  public void message(String to, String from, Serializable value)
-  {
-    _out.sendMessage(to, from, value);
-  }
-
-  /**
-   * Sends a query get message to the stream
-   */
-  @Override
-  public void queryGet(long id, String to, String from,
-			  Serializable value)
-  {
-    _out.sendQuery(String.valueOf(id), to, from, value, "get");
-  }
-
-  /**
-   * Sends a query set message to the stream
-   */
-  @Override
-  public void querySet(long id, String to, String from,
-			  Serializable value)
-  {
-    _out.sendQuery(String.valueOf(id), to, from, value, "set");
-  }
-
-  /**
-   * Sends a query result message to the stream
-   */
-  @Override
-  public void queryResult(long id, String to, String from,
-			  Serializable value)
-  {
-    _out.sendQuery(String.valueOf(id), to, from, value, "result");
-  }
-
-  /**
-   * Sends a presence message to the stream
-   */
-  @Override
-  public void presence(String to, String from, Serializable value)
-  {
-    _out.sendPresence(to, from, value, null);
-  }
-
-  /**
-   * Sends a presence probe to the stream
-   */
-  @Override
-  public void presenceProbe(String to, String from, Serializable value)
-  {
-    _out.sendPresence(to, from, value, "probe");
-  }
-
-  /**
-   * Sends a presence unavailable to the stream
-   */
-  @Override
-  public void presenceUnavailable(String to,
-				      String from,
-				      Serializable value)
-  {
-    _out.sendPresence(to, from, value, "unavailable");
-  }
-
-  /**
-   * Sends a presence subscribe to the stream
-   */
-  @Override
-  public void presenceSubscribe(String to,
-				    String from,
-				    Serializable value)
-  {
-    _out.sendPresence(to, from, value, "subscribe");
-  }
-
-  /**
-   * Sends a presence subscribed to the stream
-   */
-  @Override
-  public void presenceSubscribed(String to,
-				    String from,
-				    Serializable value)
-  {
-    _out.sendPresence(to, from, value, "subscribed");
-  }
-
-  /**
-   * Sends a presence unsubscribe to the stream
-   */
-  @Override
-  public void presenceUnsubscribe(String to,
-				      String from,
-				      Serializable value)
-  {
-    _out.sendPresence(to, from, value, "unsubscribe");
-  }
-
-  /**
-   * Sends a presence unsubscribed to the stream
-   */
-  @Override
-  public void presenceUnsubscribed(String to,
-				      String from,
-				      Serializable value)
-  {
-    _out.sendPresence(to, from, value, "unsubscribed");
   }
 
   @Override

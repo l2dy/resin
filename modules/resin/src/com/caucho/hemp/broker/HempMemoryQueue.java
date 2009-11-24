@@ -33,6 +33,7 @@ import com.caucho.hemp.packet.*;
 import com.caucho.bam.Broker;
 import com.caucho.bam.ActorStream;
 import com.caucho.bam.ActorError;
+import com.caucho.loader.Environment;
 import com.caucho.server.resin.*;
 import com.caucho.server.util.*;
 import com.caucho.util.*;
@@ -42,11 +43,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.*;
 import java.lang.ref.*;
 import java.io.Serializable;
+import java.io.*;
 
 /**
  * Queue of hmtp packets
  */
-public class HempMemoryQueue implements ActorStream, Runnable
+public class HempMemoryQueue implements ActorStream, Runnable, Closeable
 {
   private static final Logger log
     = Logger.getLogger(HempMemoryQueue.class.getName());
@@ -55,12 +57,12 @@ public class HempMemoryQueue implements ActorStream, Runnable
   private static long _gid;
 
   // how long the thread should wait for a new request before exiting
-  private long _queueIdleTimeout = 250L;
-  
-  private final Executor _executor = ScheduledThreadPool.getLocal();
+  private long _queueIdleTimeout = 2000L;
+
+  private final ThreadPool _threadPool = ThreadPool.getCurrent();
   private final ClassLoader _loader
     = Thread.currentThread().getContextClassLoader();
-  
+
   private final Broker _broker;
   private final ActorStream _brokerStream;
   private final ActorStream _actorStream;
@@ -78,25 +80,29 @@ public class HempMemoryQueue implements ActorStream, Runnable
   private volatile boolean _isClosed;
 
   public HempMemoryQueue(Broker broker,
-			 ActorStream actorStream)
+                         ActorStream actorStream)
   {
     this(null, broker, actorStream);
   }
 
   public HempMemoryQueue(String name,
-			 Broker broker,
-			 ActorStream actorStream)
+                         Broker broker,
+                         ActorStream actorStream)
   {
     if (broker == null)
       throw new NullPointerException();
-    
+
     if (actorStream == null)
       throw new NullPointerException();
-    
+
     _broker = broker;
     _brokerStream = broker.getBrokerStream();
     _actorStream = actorStream;
-    _threadMax = 5;
+
+    if (Alarm.isTest())
+      _threadMax = 1;
+    else
+      _threadMax = 5;
 
     if (name == null)
       name = _actorStream.getJid();
@@ -106,10 +112,12 @@ public class HempMemoryQueue implements ActorStream, Runnable
     int maxDiscardSize = -1;
     int maxBlockSize = 1024;
     long expireTimeout = -1;
-    
+
     _queue = new PacketQueue(name, maxDiscardSize, maxBlockSize, expireTimeout);
+
+    Environment.addCloseListener(this);
   }
-  
+
   /**
    * Returns the actor's jid
    */
@@ -138,9 +146,9 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Sends a message
    */
   public void messageError(String to,
-			       String from,
-			       Serializable value,
-			       ActorError error)
+                               String from,
+                               Serializable value,
+                               ActorError error)
   {
     enqueue(new MessageError(to, from, value, error));
   }
@@ -149,14 +157,14 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Query an entity
    */
   public void queryGet(long id,
-		       String to,
-		       String from,
-		       Serializable query)
+                       String to,
+                       String from,
+                       Serializable query)
   {
     if (from == null) {
       throw new NullPointerException();
     }
-    
+
     enqueue(new QueryGet(id, to, from, query));
   }
 
@@ -164,9 +172,9 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Query an entity
    */
   public void querySet(long id,
-		       String to,
-		       String from,
-		       Serializable query)
+                       String to,
+                       String from,
+                       Serializable query)
   {
     enqueue(new QuerySet(id, to, from, query));
   }
@@ -175,9 +183,9 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Query an entity
    */
   public void queryResult(long id,
-			      String to,
-			      String from,
-			      Serializable value)
+                              String to,
+                              String from,
+                              Serializable value)
   {
     enqueue(new QueryResult(id, to, from, value));
   }
@@ -186,10 +194,10 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Query an entity
    */
   public void queryError(long id,
-			     String to,
-			     String from,
-			     Serializable query,
-			     ActorError error)
+                             String to,
+                             String from,
+                             Serializable query,
+                             ActorError error)
   {
     enqueue(new QueryError(id, to, from, query, error));
   }
@@ -206,8 +214,8 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence unavailable
    */
   public void presenceUnavailable(String to,
-				      String from,
-				      Serializable data)
+                                      String from,
+                                      Serializable data)
   {
     enqueue(new PresenceUnavailable(to, from, data));
   }
@@ -216,8 +224,8 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence probe
    */
   public void presenceProbe(String to,
-			        String from,
-			        Serializable data)
+                                String from,
+                                Serializable data)
   {
     enqueue(new PresenceProbe(to, from, data));
   }
@@ -226,8 +234,8 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence subscribe
    */
   public void presenceSubscribe(String to,
-				    String from,
-				    Serializable data)
+                                    String from,
+                                    Serializable data)
   {
     enqueue(new PresenceSubscribe(to, from, data));
   }
@@ -236,8 +244,8 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence subscribed
    */
   public void presenceSubscribed(String to,
-				     String from,
-				     Serializable data)
+                                     String from,
+                                     Serializable data)
   {
     enqueue(new PresenceSubscribed(to, from, data));
   }
@@ -246,18 +254,18 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence unsubscribe
    */
   public void presenceUnsubscribe(String to,
-				      String from,
-				      Serializable data)
+                                      String from,
+                                      Serializable data)
   {
     enqueue(new PresenceUnsubscribe(to, from, data));
   }
-  
+
   /**
    * Presence unsubscribed
    */
   public void presenceUnsubscribed(String to,
-				       String from,
-				       Serializable data)
+                                       String from,
+                                       Serializable data)
   {
     enqueue(new PresenceUnsubscribed(to, from, data));
   }
@@ -266,9 +274,9 @@ public class HempMemoryQueue implements ActorStream, Runnable
    * Presence error
    */
   public void presenceError(String to,
-			        String from,
-			        Serializable data,
-			        ActorError error)
+                                String from,
+                                Serializable data,
+                                ActorError error)
   {
     enqueue(new PresenceError(to, from, data, error));
   }
@@ -287,49 +295,67 @@ public class HempMemoryQueue implements ActorStream, Runnable
 
     _queue.enqueue(packet);
 
-    long lastExitTime = _lastExitTime;
-    _lastExitTime = Alarm.getCurrentTime();
-
     /*
     if (_dequeueCount.get() > 0)
       return;
     */
 
-    if (_wait.wake())
+    wakeConsumer(packet);
+
+    /*
+    if (Alarm.isTest()) {
+      // wait a millisecond for the dequeue to avoid spawing extra
+      // processing threads
+      packet.waitForDequeue(10);
+    }
+    */
+  }
+
+  private void wakeConsumer(Packet packet)
+  {
+    long lastExitTime = _lastExitTime;
+    _lastExitTime = Alarm.getCurrentTime();
+
+    if (_wait.wake()) {
       return;
-    
-    while (true) {
+    }
+
+    while (! isClosed()) {
+      if (_queue.isEmpty()) {
+        // empty queue
+        return;
+      }
+
       int size = _queue.getSize();
       int threadCount = _threadCount.get();
       long now = Alarm.getCurrentTime();
 
-      if (size == 0) {
-	// empty queue
-	return;
-      }
-      else if (threadCount == _threadMax) {
-	// thread max
-	return;
+      if (threadCount == _threadMax) {
+        // thread max
+        return;
       }
       else if (threadCount >= 2 && size / 3 < threadCount) {
-	// too little work to spawn a new thread
-	return;
+        // too little work to spawn a new thread
+        return;
       }
-      else if (threadCount > 0 && now <= lastExitTime + 1) {
-	// last spawn too recent
-	return;
+      else if (threadCount > 0 && now <= lastExitTime + 10) {
+        // last spawn too recent
+        return;
       }
 
       if (isClosed()) {
-	return;
+        return;
       }
       else if (_threadCount.compareAndSet(threadCount, threadCount + 1)) {
-	_executor.execute(this);
-	return;
+        // 10ms start is primarily for QA
+        if (! _threadPool.start(this, 100)) {
+          _threadPool.schedule(this);
+        }
+        return;
       }
       else if (_threadCount.get() > 0) {
-	// other thread already added
-	return;
+        // other thread already added
+        return;
       }
     }
   }
@@ -337,75 +363,86 @@ public class HempMemoryQueue implements ActorStream, Runnable
   /**
    * Dispatches the packet to the stream
    */
-  protected void dispatch(Packet packet)
+  protected void dispatch(Packet packet, WaitQueue.Item item)
   {
     packet.dispatch(getActorStream(), _brokerStream);
   }
 
-  protected Packet dequeue()
+  protected Packet dequeue(WaitQueue.Item item, long timeout)
   {
-    return _queue.dequeue();
+    item.startPark();
+
+    try {
+      Packet packet = _queue.dequeue();
+
+      if (packet == null) {
+        if (timeout <= 0)
+          return null;
+
+        item.park(timeout);
+
+        packet = _queue.dequeue();
+      }
+
+      if (packet != null)
+        packet.unparkDequeue();
+
+      return packet;
+    } finally {
+      item.endPark();
+    }
   }
 
   private void consumeQueue(WaitQueue.Item item)
   {
     while (! isClosed()) {
       try {
-	Packet packet;
+        Packet packet;
 
-	// _dequeueCount.incrementAndGet();
-	packet = _queue.dequeue();
-	// _dequeueCount.decrementAndGet();
+        // _dequeueCount.incrementAndGet();
+        packet = _queue.dequeue();
+        // _dequeueCount.decrementAndGet();
 
-	if (packet != null) {
-	  // reset last exit with a new packet
-	  _lastExitTime = Alarm.getCurrentTime();
+        if (packet != null) {
+          // reset last exit with a new packet
+          _lastExitTime = Alarm.getCurrentTime();
 
-	  if (log.isLoggable(Level.FINEST))
-	    log.finest(this + " dequeue " + packet);
+          if (log.isLoggable(Level.FINEST))
+            log.finest(this + " dequeue " + packet);
 
-	  dispatch(packet);
-	}
-	else if (! waitForQueue(item)) {
-	  return;
-	}
+          packet.unparkDequeue();
+
+          dispatch(packet, item);
+        }
+        else if (! waitForQueue(item)) {
+          return;
+        }
       } catch (Exception e) {
-	log.log(Level.WARNING, e.toString(), e);
+        log.log(Level.WARNING, e.toString(), e);
       }
     }
   }
 
   private boolean waitForQueue(WaitQueue.Item item)
   {
-    try {
-      if (! isClosed() && _queue.getSize() == 0) {
-	item.park(_queueIdleTimeout);
+    long expires = Alarm.getCurrentTimeActual() + _queueIdleTimeout;
+    int spinMax = 8;
+
+    while (! isClosed()) {
+      for (int i = spinMax; i >= 0; i--) {
+        if (! _queue.isEmpty()) {
+          // check for queue values
+          return true;
+        }
       }
-    } catch (Exception e) {
-    }
 
-    long now = Alarm.getCurrentTime();
-	  
-    if (_queue.getSize() > 0) {
-      // check for queue values
-      return true;
-    }
-    else if (_lastExitTime + _queueIdleTimeout < now
-	     || Alarm.isTest()) {
-      // if thread hasn't exited recently
-      _lastExitTime = now;
-	    
-      int threadCount = _threadCount.decrementAndGet();
+      long now = Alarm.getCurrentTimeActual();
 
-      if (_queue.getSize() > 0
-	  && threadCount < _threadMax
-	  && _threadCount.compareAndSet(threadCount, threadCount + 1)) {
-	// second check needed in case a packet arrived
-	return true;
+      if (now < expires) {
+        _wait.parkUntil(item, expires);
       }
       else {
-	// exit the thread
-	return false;
+        return false;
       }
     }
 
@@ -416,38 +453,47 @@ public class HempMemoryQueue implements ActorStream, Runnable
   {
     Thread thread = Thread.currentThread();
 
+    String oldName = thread.getName();
     String name = _name;
-    
+
     thread.setName(name + "-" + _gid++);
 
     thread.setContextClassLoader(_loader);
 
-    boolean isValid = false;
     WaitQueue.Item item = _wait.create();
-    
+
     try {
-      if (log.isLoggable(Level.FINEST)) {
-	log.finest(this + " spawn {threadCount:" + _threadCount.get()
-		 + ", queueSize:" + _queue.getSize() + "}");
+      while (! isClosed()) {
+        try {
+          if (log.isLoggable(Level.FINEST)) {
+            log.finest(this + " spawn {threadCount:" + _threadCount.get()
+                       + ", queueSize:" + _queue.getSize() + "}");
+          }
+
+          consumeQueue(item);
+        } finally {
+          _threadCount.decrementAndGet();
+        }
+
+        if (_queue.isEmpty()) {
+          // queue check after the _threadCount decrement for threading
+          // timing issues
+          return;
+        }
+
+        _threadCount.incrementAndGet();
       }
-
-      consumeQueue(item);
-
-      isValid = true;
     } finally {
-      // fix semaphore in case of thread death
-      if (! isValid) {
-	_threadCount.decrementAndGet();
-      }
-
       item.remove();
+
+      thread.setName(oldName);
     }
   }
 
   public void close()
   {
     _isClosed = true;
-    
+
     _wait.wakeAll();
   }
 
@@ -455,7 +501,7 @@ public class HempMemoryQueue implements ActorStream, Runnable
   {
     return _isClosed || _broker.isClosed();
   }
-  
+
   @Override
   public String toString()
   {

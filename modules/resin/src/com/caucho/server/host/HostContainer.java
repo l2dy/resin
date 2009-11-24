@@ -290,7 +290,6 @@ public class HostContainer implements DispatchBuilder {
    * Creates the invocation.
    */
   public Invocation buildInvocation(Invocation invocation)
-    throws Throwable
   {
     String rawHost = invocation.getHost();
     int rawPort = invocation.getPort();
@@ -339,8 +338,12 @@ public class HostContainer implements DispatchBuilder {
 	WebApp webApp = server.getDefaultWebApp();
         invocation.setWebApp(webApp);
 
-	if (webApp != null)
+	if (webApp != null) {
 	  rewriteChain = new WebAppFilterChain(rewriteChain, webApp);
+
+          if (webApp.getAccessLog() != null)
+            rewriteChain = new AccessLogFilterChain(rewriteChain, webApp);
+        }
 	
         invocation.setFilterChain(rewriteChain);
         isAlwaysModified = false;

@@ -361,20 +361,26 @@ public class ServletMapper {
 
     invocation.setServletName(servletName);
     
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(_servletContext + " invoke (uri:"   
-	       + contextURI + " -> " + servletName + ")");
+    if (log.isLoggable(Level.FINER)) {
+      log.finer(_servletContext + " map (uri:"   
+                + contextURI + " -> " + servletName + ")");
     }
 
+    /*
     if (config == null)
       config = _servletManager.getServlet(servletName);
+    */
+    // server/13f1
+    ServletConfigImpl newConfig = _servletManager.getServlet(servletName);
+    if (newConfig != null)
+      config = newConfig;
 
     if (config != null) {
       invocation.setSecurityRoleMap(config.getRoleMap());
     }
 
     FilterChain chain
-      = _servletManager.createServletChain(servletName, config);
+      = _servletManager.createServletChain(servletName, config, invocation);
 
     if (chain instanceof PageFilterChain) {
       PageFilterChain pageChain = (PageFilterChain) chain;

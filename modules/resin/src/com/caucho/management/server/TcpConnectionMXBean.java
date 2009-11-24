@@ -65,9 +65,21 @@ public interface TcpConnectionMXBean extends ManagedObjectMXBean {
   @Description("The current url")
   public String getUrl();
 
+  /**
+   * Returns the remote address of the connection
+   */
+  @Description("The current remote client")
+  public String getRemoteAddress();
+
   //
   // Statistics
   //
+
+  /**
+   * Returns the connection state.
+   */
+  @Description("The user display state")
+  public String getDisplayState();
 
   /**
    * Returns the time this request has spent in the active state.

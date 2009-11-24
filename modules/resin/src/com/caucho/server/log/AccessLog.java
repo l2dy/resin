@@ -64,7 +64,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   protected static final L10N L = new L10N(AccessLog.class);
   protected static final Logger log
     = Logger.getLogger(AccessLog.class.getName());
-  
+
   // Default maximum log size = 1G
   private static final long ROLLOVER_SIZE = 1024L * 1024L * 1024L;
   // Milliseconds in a day
@@ -74,13 +74,14 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
 
   public static final int BUFFER_SIZE = 64 * 1024;
   private static final int BUFFER_GAP = 8 * 1024;
-  
+
   private QDate _calendar = QDate.createLocal();
   private String _timeFormat;
   private int _timeFormatSecondOffset = -1;
+  private int _timeFormatMinuteOffset = -1;
 
   private final AccessLogWriter _logWriter = new AccessLogWriter(this);
-  
+
   // AccessStream
   private Object _streamLock = new Object();
 
@@ -91,14 +92,14 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   private Pattern []_excludes = new Pattern[0];
 
   private boolean _isAutoFlush;
-  
+
   private boolean _isSharedBuffer = false;
   private Object _sharedBufferLock;
 
   private long _autoFlushTime = 60000;
 
   private final CharBuffer _cb = new CharBuffer();
-  
+
   private final CharBuffer _timeCharBuffer = new CharBuffer();
   private final ByteBuffer _timeBuffer = new ByteBuffer();
   private long _lastTime;
@@ -125,7 +126,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   public void setPath(Path path)
   {
     super.setPath(path);
-    
+
     _logWriter.setPath(path);
   }
 
@@ -136,7 +137,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     throws ConfigException
   {
     super.setPathFormat(pathFormat);
-    
+
     _logWriter.setPathFormat(pathFormat);
   }
 
@@ -206,6 +207,11 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     _isAutoFlush =  isAutoFlush;
   }
 
+  boolean isAutoFlush()
+  {
+    return _isAutoFlush;
+  }
+
   /**
    * Sets the autoFlushTime
    */
@@ -231,7 +237,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     _excludes = new Pattern[_excludeList.size()];
     _excludeList.toArray(_excludes);
   }
-  
+
   /**
    * Initialize the log.
    */
@@ -243,7 +249,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
 
     if (_alarm != null)
       _alarm.queue(60000);
-    
+
     if (_format == null)
       _format = "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-Agent}i\"";
 
@@ -251,10 +257,11 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
 
     _segments = new Segment[segments.size()];
     segments.toArray(_segments);
-    
+
     if (_timeFormat == null || _timeFormat.equals("")) {
       _timeFormat = "[%d/%b/%Y:%H:%M:%S %z]";
       _timeFormatSecondOffset = 0;
+      _timeFormatMinuteOffset = 0;
     }
 
     _logWriter.init();
@@ -277,24 +284,24 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
       char ch = _format.charAt(i++);
 
       if (ch != '%' || i >= _format.length()) {
-	cb.append((char) ch);
-	continue;
+        cb.append((char) ch);
+        continue;
       }
-      
+
       String arg = null;
       ch = _format.charAt(i++);
       if (ch == '>')
-	ch = _format.charAt(i++);
+        ch = _format.charAt(i++);
       else if (ch == '{') {
-	if (cb.length() > 0)
-	  segments.add(new Segment(this, Segment.TEXT, cb.toString()));
-	cb.clear();
-	while (i < _format.length() && _format.charAt(i++) != '}')
-	  cb.append(_format.charAt(i - 1));
-	arg = cb.toString();
-	cb.clear();
+        if (cb.length() > 0)
+          segments.add(new Segment(this, Segment.TEXT, cb.toString()));
+        cb.clear();
+        while (i < _format.length() && _format.charAt(i++) != '}')
+          cb.append(_format.charAt(i - 1));
+        arg = cb.toString();
+        cb.clear();
 
-	ch = _format.charAt(i++);
+        ch = _format.charAt(i++);
       }
 
       switch (ch) {
@@ -304,25 +311,25 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
       case 'T': case 'D': case 'o':
       case 'u': case 'U':
       case 'v':
-	if (cb.length() > 0)
-	  segments.add(new Segment(this, Segment.TEXT, cb.toString()));
-	cb.clear();
-	segments.add(new Segment(this, ch, arg));
-	break;
+        if (cb.length() > 0)
+          segments.add(new Segment(this, Segment.TEXT, cb.toString()));
+        cb.clear();
+        segments.add(new Segment(this, ch, arg));
+        break;
 
       case 't':
-	if (cb.length() > 0)
-	  segments.add(new Segment(this, Segment.TEXT, cb.toString()));
-	cb.clear();
-	if (arg != null)
-	  _timeFormat = arg;
-	segments.add(new Segment(this, ch, arg));
-	break;
-        
+        if (cb.length() > 0)
+          segments.add(new Segment(this, Segment.TEXT, cb.toString()));
+        cb.clear();
+        if (arg != null)
+          _timeFormat = arg;
+        segments.add(new Segment(this, ch, arg));
+        break;
+
       default:
-	cb.append('%');
-	i--;
-	break;
+        cb.append('%');
+        i--;
+        break;
       }
     }
 
@@ -336,54 +343,49 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
    * Logs a request using the current format.
    */
   public void log(HttpServletRequest req,
-		  HttpServletResponse res,
-		  ServletContext application)
+                  HttpServletResponse res,
+                  ServletContext application)
     throws IOException
   {
-    CauchoRequest requestImpl = (CauchoRequest) req;
+    // server/1kk7
+    CauchoRequest cRequest = (CauchoRequest) req;
     HttpServletResponseImpl responseImpl = (HttpServletResponseImpl) res;
 
-    AbstractHttpRequest request = requestImpl.getAbstractHttpRequest();
+    AbstractHttpRequest absRequest = cRequest.getAbstractHttpRequest();
+    HttpServletRequestImpl request = absRequest.getRequestFacade();
     AbstractHttpResponse response = responseImpl.getAbstractHttpResponse();
 
     // skip excluded urls
     if (_excludes.length > 0) {
-      byte []data = request.getUriBuffer();
-      int sublen = request.getUriLength();
+      byte []data = absRequest.getUriBuffer();
+      int sublen = absRequest.getUriLength();
 
       String uri = new String(data, 0, sublen);
 
       for (Pattern pattern : _excludes) {
-	if (pattern.matcher(uri).find()) {
-	  return;
-	}
+        if (pattern.matcher(uri).find()) {
+          return;
+        }
       }
     }
 
-    LogBuffer logBuffer = LogBuffer.allocate();
+    LogBuffer logBuffer = _logWriter.allocateBuffer();
 
     try {
       byte []buffer = logBuffer.getBuffer();
 
-      int length = log(request, response, buffer, 0, buffer.length);
+      int length = log(request, responseImpl, response, buffer, 0, buffer.length);
 
       logBuffer.setLength(length);
 
-      if (_isAutoFlush && _autoFlushTime > 0) {
-        _logWriter.writeThrough(buffer, 0, length);
-        _logWriter.flush();
-      }
-      else {
-	_logWriter.writeBuffer(logBuffer);
-      
-        logBuffer = null;
-      }
+      _logWriter.writeBuffer(logBuffer);
+      logBuffer = null;
     } finally {
       if (logBuffer != null)
-	logBuffer.free();
+        _logWriter.freeBuffer(logBuffer);
     }
   }
-  
+
   /**
    * Logs a request using the current format.
    *
@@ -395,11 +397,14 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
    *
    * @return the new tail of the buffer
    */
-  private int log(AbstractHttpRequest request,
+  private int log(HttpServletRequestImpl request,
+                  HttpServletResponseImpl responseFacade,
                   AbstractHttpResponse response,
                   byte []buffer, int offset, int length)
     throws IOException
   {
+    AbstractHttpRequest absRequest = request.getAbstractHttpRequest();
+
     int len = _segments.length;
     for (int i = 0; i < len; i++) {
       Segment segment = _segments[i];
@@ -413,33 +418,33 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
         byte []data = segment._data;
         for (int j = 0; j < sublen; j++)
           buffer[offset++] = data[j];
-	break;
-        
+        break;
+
       case Segment.CHAR:
         buffer[offset++] = segment._ch;
-	break;
+        break;
 
       case 'b':
-        if (response.getStatusCode() == 304)
+        if (responseFacade.getStatus() == 304)
           buffer[offset++] = (byte) '-';
         else
           offset = print(buffer, offset, response.getContentLength());
-	break;
+        break;
 
         // cookie
       case 'c':
         Cookie cookie = request.getCookie(segment._string);
         if (cookie == null)
-          cookie = response.getCookie(segment._string);
+          cookie = responseFacade.getCookie(segment._string);
         if (cookie == null)
           buffer[offset++] = (byte) '-';
         else
           offset = print(buffer, offset, cookie.getValue());
-	break;
-        
+        break;
+
         // set cookie
       case Segment.SET_COOKIE:
-        ArrayList cookies = response.getCookies();
+        ArrayList cookies = responseFacade.getCookies();
         if (cookies == null || cookies.size() == 0)
           buffer[offset++] = (byte) '-';
         else {
@@ -448,31 +453,31 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
 
           offset = print(buffer, offset, _cb.getBuffer(), 0, _cb.getLength());
         }
-	break;
+        break;
 
       case 'h':
-	if (isHostnameDnsLookup()) {
-	  String addrName = request.getRemoteAddr();
-	  InetAddress addr = InetAddress.getByName(addrName);
+        if (isHostnameDnsLookup()) {
+          String addrName = request.getRemoteAddr();
+          InetAddress addr = InetAddress.getByName(addrName);
 
-	  offset = print(buffer, offset, addr.getHostName());
-	}
-	else
-	  offset = request.printRemoteAddr(buffer, offset);
-	break;
+          offset = print(buffer, offset, addr.getHostName());
+        }
+        else
+          offset = absRequest.printRemoteAddr(buffer, offset);
+        break;
 
         // input header
       case 'i':
-	csValue = request.getHeaderBuffer(segment._string);
+        csValue = absRequest.getHeaderBuffer(segment._string);
         if (csValue == null)
           buffer[offset++] = (byte) '-';
         else
           offset = print(buffer, offset, csValue);
-	break;
+        break;
 
       case 'l':
         buffer[offset++] = (byte) '-';
-	break;
+        break;
 
         // request attribute
       case 'n':
@@ -481,87 +486,87 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
           buffer[offset++] = (byte) '-';
         else
           offset = print(buffer, offset, String.valueOf(oValue));
-	break;
+        break;
 
         // output header
       case 'o':
-	value = response.getHeader(segment._string);
+        value = response.getHeader(segment._string);
         if (value == null)
           buffer[offset++] = (byte) '-';
         else
           offset = print(buffer, offset, value);
-	break;
+        break;
 
       case 'r':
-	offset = print(buffer, offset, request.getMethod());
-        
+        offset = print(buffer, offset, request.getMethod());
+
         buffer[offset++] = (byte) ' ';
-        
-        data = request.getUriBuffer();
-        sublen = request.getUriLength();
-	
-	// server/02e9
-	if (buffer.length - offset - 128 < sublen) {
-	  sublen = buffer.length - offset - 128;
-	  System.arraycopy(data, 0, buffer, offset, sublen);
-	  offset += sublen;
-	  buffer[offset++] = (byte) '.';
-	  buffer[offset++] = (byte) '.';
-	  buffer[offset++] = (byte) '.';
-	}
-	else {
-	  System.arraycopy(data, 0, buffer, offset, sublen);
-	  offset += sublen;
-	}
-	
+
+        data = absRequest.getUriBuffer();
+        sublen = absRequest.getUriLength();
+
+        // server/02e9
+        if (buffer.length - offset - 128 < sublen) {
+          sublen = buffer.length - offset - 128;
+          System.arraycopy(data, 0, buffer, offset, sublen);
+          offset += sublen;
+          buffer[offset++] = (byte) '.';
+          buffer[offset++] = (byte) '.';
+          buffer[offset++] = (byte) '.';
+        }
+        else {
+          System.arraycopy(data, 0, buffer, offset, sublen);
+          offset += sublen;
+        }
+
         buffer[offset++] = (byte) ' ';
-        
-	offset = print(buffer, offset, request.getProtocol());
-	break;
+
+        offset = print(buffer, offset, request.getProtocol());
+        break;
 
       case 's':
-        int status = response.getStatusCode();
+        int status = responseFacade.getStatus();
         buffer[offset++] = (byte) ('0' + (status / 100) % 10);
         buffer[offset++] = (byte) ('0' + (status / 10) % 10);
         buffer[offset++] = (byte) ('0' + status % 10);
-	break;
+        break;
 
       case 't':
         long date = Alarm.getCurrentTime();
-        
+
         if (date / 1000 != _lastTime / 1000)
           fillTime(date);
 
-	sublen = _timeBuffer.getLength();
-	data = _timeBuffer.getBuffer();
-	
-	synchronized (_timeBuffer) {
-	  System.arraycopy(data, 0, buffer, offset, sublen);
-	}
+        sublen = _timeBuffer.getLength();
+        data = _timeBuffer.getBuffer();
+
+        synchronized (_timeBuffer) {
+          System.arraycopy(data, 0, buffer, offset, sublen);
+        }
 
         offset += sublen;
-	break;
+        break;
 
       case 'T':
-	{
-	  long startTime = request.getStartTime();
-	  long endTime = Alarm.getExactTime();
+        {
+          long startTime = request.getStartTime();
+          long endTime = Alarm.getExactTime();
 
-	  offset = print(buffer, offset, (int) ((endTime - startTime + 500) / 1000));
-	  break;
-	}
+          offset = print(buffer, offset, (int) ((endTime - startTime + 500) / 1000));
+          break;
+        }
 
       case 'D':
-	{
-	  long startTime = request.getStartTime();
-	  long endTime = Alarm.getExactTime();
+        {
+          long startTime = request.getStartTime();
+          long endTime = Alarm.getExactTime();
 
-	  offset = print(buffer, offset, (int) ((endTime - startTime) * 1000));
-	  break;
-	}
+          offset = print(buffer, offset, (int) ((endTime - startTime) * 1000));
+          break;
+        }
 
       case 'u':
-	value = request.getRemoteUser(false);
+        value = request.getRemoteUser(false);
         if (value == null)
           buffer[offset++] = (byte) '-';
         else {
@@ -569,23 +574,23 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
           offset = print(buffer, offset, value);
           buffer[offset++] = (byte) '"';
         }
-	break;
+        break;
 
       case 'v':
-	value = request.getServerName();
+        value = request.getServerName();
         if (value == null)
           buffer[offset++] = (byte) '-';
         else {
           offset = print(buffer, offset, value);
         }
-	break;
+        break;
 
       case 'U':
         offset = print(buffer, offset, request.getRequestURI());
-	break;
+        break;
 
       default:
-	throw new IOException();
+        throw new IOException();
       }
     }
 
@@ -678,7 +683,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
 
     int length = 0;
     int exp = 10;
-    
+
     for (; exp <= v && exp > 0; length++)
       exp = 10 * exp;
 
@@ -712,7 +717,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     } finally {
       alarm = _alarm;
       if (alarm != null && _isActive && _autoFlushTime > 0)
-	alarm.queue(_autoFlushTime);
+        alarm.queue(_autoFlushTime);
     }
   }
 
@@ -724,7 +729,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     throws IOException
   {
     _isActive = false;
-    
+
     Alarm alarm = _alarm;
     _alarm = null;
 
@@ -743,27 +748,36 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   private void fillTime(long date)
     throws IOException
   {
-    if (date / 1000 == _lastTime / 1000)
-      return;
-
     synchronized (_timeBuffer) {
-      if (_timeFormatSecondOffset >= 0 && date / 60000 == _lastTime / 60000) {
-	byte []bBuf = _timeBuffer.getBuffer();
-	
-	int sec = (int) (date / 1000 % 60);
+      if (date / 1000 == _lastTime / 1000)
+        return;
 
-	bBuf[_timeFormatSecondOffset + 0] = (byte) ('0' + sec / 10);
-	bBuf[_timeFormatSecondOffset + 1] = (byte) ('0' + sec % 10);
+      if (_timeFormatSecondOffset >= 0
+          && date / 3600000 == _lastTime / 3600000) {
+        byte []bBuf = _timeBuffer.getBuffer();
 
-	return;
+        int min = (int) (date / 60000 % 60);
+        int sec = (int) (date / 1000 % 60);
+
+        bBuf[_timeFormatMinuteOffset + 0] = (byte) ('0' + min / 10);
+        bBuf[_timeFormatMinuteOffset + 1] = (byte) ('0' + min % 10);
+
+        bBuf[_timeFormatSecondOffset + 0] = (byte) ('0' + sec / 10);
+        bBuf[_timeFormatSecondOffset + 1] = (byte) ('0' + sec % 10);
+
+        _lastTime = date;
+
+        return;
       }
-      
+
       _timeCharBuffer.clear();
       QDate.formatLocal(_timeCharBuffer, date, _timeFormat);
 
-      if (_timeFormatSecondOffset >= 0)
-	_timeFormatSecondOffset = _timeCharBuffer.lastIndexOf(':') + 1;
-      
+      if (_timeFormatSecondOffset >= 0) {
+        _timeFormatSecondOffset = _timeCharBuffer.lastIndexOf(':') + 1;
+        _timeFormatMinuteOffset = _timeFormatSecondOffset - 3;
+      }
+
       char []cBuf = _timeCharBuffer.getBuffer();
       int length = _timeCharBuffer.getLength();
 
@@ -771,9 +785,9 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
       byte []bBuf = _timeBuffer.getBuffer();
 
       for (int i = length - 1; i >= 0; i--)
-	bBuf[i] = (byte) cBuf[i];
+        bBuf[i] = (byte) cBuf[i];
     }
-      
+
     _lastTime = date;
   }
 
@@ -784,7 +798,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     final static int TEXT = 0;
     final static int CHAR = 1;
     final static int SET_COOKIE = 2;
-    
+
     int _code;
     byte []_data;
     byte _ch;
@@ -802,12 +816,12 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     {
       _log = log;
       _code = code;
-      
+
       _string = string;
       if (string != null) {
         if (code == 'o' && string.equalsIgnoreCase("Set-Cookie"))
           _code = SET_COOKIE;
-          
+
         _data = _string.getBytes();
         if (code == TEXT && _string.length() == 1) {
           _ch = (byte) _string.charAt(0);

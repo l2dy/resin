@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -77,12 +77,14 @@ import com.caucho.util.CompileException;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 import com.caucho.util.RandomUtil;
+import com.caucho.util.Shutdown;
 import com.caucho.util.ThreadPool;
 import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.QJniServerSocket;
 import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.Vfs;
+import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.WriteStream;
 
 import javax.annotation.PostConstruct;
@@ -97,6 +99,7 @@ import java.net.SocketTimeoutException;
 import java.security.Provider;
 import java.security.Security;
 import java.util.*;
+import java.util.concurrent.locks.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -104,10 +107,13 @@ import java.util.logging.Logger;
  * The Resin class represents the top-level container for Resin.
  * It exactly matches the &lt;resin> tag in the resin.xml
  */
-public class Resin implements EnvironmentBean, SchemaBean
+public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 {
   private static Logger _log;
   private static L10N _L;
+
+  public static final int EXIT_OK = 0;
+  public static final int EXIT_HALT = 3;
 
   private static final String OBJECT_NAME= "resin:type=Resin";
 
@@ -165,7 +171,10 @@ public class Resin implements EnvironmentBean, SchemaBean
   private Path _resinConf;
 
   private ClassLoader _systemClassLoader;
+
   private Thread _mainThread;
+  private FailSafeHaltThread _failSafeHaltThread;
+  private ShutdownThread _shutdownThread;
 
   private ArrayList<BoundPort> _boundPortList
     = new ArrayList<BoundPort>();
@@ -187,6 +196,8 @@ public class Resin implements EnvironmentBean, SchemaBean
   private InputStream _waitIn;
 
   private Socket _pingSocket;
+
+  private String _stage = null;
 
   /**
    * Creates a new resin server.
@@ -646,7 +657,7 @@ public class Resin implements EnvironmentBean, SchemaBean
    */
   public void setAdminPath(Path path)
   {
-    setResinDataDirectory(path);
+    // setResinDataDirectory(path);
   }
 
   /**
@@ -919,6 +930,13 @@ public class Resin implements EnvironmentBean, SchemaBean
     return _server;
   }
 
+  public void setServer(Server server)
+  {
+    assert(_server == null);
+
+    _server = server;
+  }
+
   /**
    * Returns the management api.
    */
@@ -945,7 +963,12 @@ public class Resin implements EnvironmentBean, SchemaBean
                                         _serverId));
 
 
-      _server = clusterServer.startServer();
+      Server server = clusterServer.startServer();
+
+      assert(server == _server);
+
+      if (_stage != null)
+        _server.setStage(_stage);
 
       _server.start();
     }
@@ -1114,20 +1137,54 @@ public class Resin implements EnvironmentBean, SchemaBean
   }
 
   /**
-   * Closes the server.
+   * Start the server shutdown
    */
+  public void startShutdown(String msg)
+  {
+    // start the fail-safe thread in case the shutdown fails
+    FailSafeHaltThread haltThread = _failSafeHaltThread;
+    if (haltThread != null)
+      haltThread.startShutdown();
+
+    if (_lifecycle.isDestroying())
+      return;
+
+    log().severe(msg);
+
+    ShutdownThread shutdownThread = _shutdownThread;
+    if (shutdownThread != null)
+      shutdownThread.startShutdown();
+    else
+      shutdownImpl();
+  }
+
   public void destroy()
   {
-    if (! _lifecycle.toDestroying())
+    // start the fail-safe thread in case the shutdown fails
+    FailSafeHaltThread haltThread = _failSafeHaltThread;
+    if (haltThread != null)
+      haltThread.startShutdown();
+
+    if (_lifecycle.isDestroying())
       return;
+
+    log().severe("Resin shutdown from destroy() call");
+
+    shutdownImpl();
+  }
+
+  /**
+   * Closes the server.
+   */
+  private void shutdownImpl()
+  {
+    // start the fail-safe thread in case the shutdown fails
+    FailSafeHaltThread haltThread = _failSafeHaltThread;
+    if (haltThread != null)
+      haltThread.startShutdown();
 
     try {
       try {
-        // notify watchdog thread before starting shutdown
-        synchronized (this) {
-          notifyAll();
-        }
-
         Socket socket = _pingSocket;
 
         if (socket != null)
@@ -1138,12 +1195,13 @@ public class Resin implements EnvironmentBean, SchemaBean
 
       try {
         Server server = _server;
-        _server = null;
 
         if (server != null)
           server.destroy();
       } catch (Throwable e) {
         log().log(Level.WARNING, e.toString(), e);
+      } finally {
+        _server = null;
       }
 
       try {
@@ -1166,7 +1224,7 @@ public class Resin implements EnvironmentBean, SchemaBean
       _lifecycle.toDestroy();
 
       if (_mainThread != null)
-        System.exit(0); // XXX: check exit code with config errors
+        System.exit(EXIT_OK); // check exit code with config errors
     }
   }
 
@@ -1358,6 +1416,24 @@ public class Resin implements EnvironmentBean, SchemaBean
                || argv[i].startsWith("-X")) {
         i += 1;
       }
+      else if ("-stage".equals(argv[i])
+               || "--stage".equals(argv[i])) {
+        _stage = argv[i + 1];
+        i += 2;
+      }
+      else if ("-preview".equals(argv[i])
+               || "--preview".equals(argv[i])) {
+        _stage = "preview";
+        i += 1;
+      }
+      else if ("-debug-port".equals(argv[i])
+               || "--debug-port".equals(argv[i])) {
+        i += 2;
+      }
+      else if ("-jmx-port".equals(argv[i])
+               || "--jmx-port".equals(argv[i])) {
+        i += 2;
+      }
       else {
         System.out.println(L().l("unknown argument '{0}'", argv[i]));
         System.out.println();
@@ -1379,6 +1455,7 @@ public class Resin implements EnvironmentBean, SchemaBean
     System.err.println(L().l("   -server <id>          : select a <server> to run"));
     System.err.println(L().l("   -watchdog-port <port> : override the watchdog-port"));
     System.err.println(L().l("   -verbose              : print verbose starting information"));
+    System.err.println(L().l("   -preview              : run as a preview server"));
   }
 
   /**
@@ -1393,6 +1470,14 @@ public class Resin implements EnvironmentBean, SchemaBean
     _mainThread.setContextClassLoader(_systemClassLoader);
 
     addRandom();
+
+    _failSafeHaltThread = new FailSafeHaltThread();
+    _failSafeHaltThread.start();
+
+    _shutdownThread = new ShutdownThread();
+    _shutdownThread.start();
+
+    setShutdown(this);
 
     System.out.println(com.caucho.Version.FULL_VERSION);
     System.out.println(com.caucho.Version.COPYRIGHT);
@@ -1422,8 +1507,12 @@ public class Resin implements EnvironmentBean, SchemaBean
 
     // validateEnvironment();
 
+    Thread thread = Thread.currentThread();
+
+    thread.setContextClassLoader(_systemClassLoader);
+
     if (_classLoader != null)
-      _mainThread.setContextClassLoader(_classLoader);
+      thread.setContextClassLoader(_classLoader);
 
     Path pwd = Vfs.getPwd();
 
@@ -1470,8 +1559,6 @@ public class Resin implements EnvironmentBean, SchemaBean
     _resinConf = resinConf;
 
     // server.setServerRoot(_serverRoot);
-
-    _mainThread.setContextClassLoader(_systemClassLoader);
 
     Vfs.setPwd(getRootDirectory());
 
@@ -1543,42 +1630,11 @@ public class Resin implements EnvironmentBean, SchemaBean
       try {
         Thread.sleep(10);
 
-        long minFreeMemory = getMinFreeMemory();
+        if (! checkMemory(runtime))
+          return;
 
-        if (minFreeMemory <= 0) {
-          // memory check disabled
-        }
-        else if (2 * minFreeMemory < getFreeMemory(runtime)) {
-          // plenty of free memory
-        }
-        else {
-          if (log().isLoggable(Level.FINER)) {
-            log().finer(L().l("free memory {0} max:{1} total:{2} free:{3}",
-                          "" + getFreeMemory(runtime),
-                          "" + runtime.maxMemory(),
-                          "" + runtime.totalMemory(),
-                          "" + runtime.freeMemory()));
-          }
-
-          log().info(L().l("Forcing GC due to low memory. {0} free bytes.",
-                       getFreeMemory(runtime)));
-
-          runtime.gc();
-
-          Thread.sleep(1000);
-
-          runtime.gc();
-
-          if (getFreeMemory(runtime) < minFreeMemory) {
-            log().severe(L().l("Restarting due to low free memory. {0} free bytes",
-                           getFreeMemory(runtime)));
-
-            return;
-          }
-        }
-
-        // second memory check
-        memoryTest = new Integer(0);
+        if (! checkFileDescriptor())
+          return;
 
         if (_waitIn != null) {
           int len;
@@ -1629,6 +1685,66 @@ public class Resin implements EnvironmentBean, SchemaBean
     }
   }
 
+  private boolean checkMemory(Runtime runtime)
+    throws InterruptedException
+  {
+    long minFreeMemory = getMinFreeMemory();
+
+    if (minFreeMemory <= 0) {
+      // memory check disabled
+      return true;
+    }
+    else if (2 * minFreeMemory < getFreeMemory(runtime)) {
+      // plenty of free memory
+      return true;
+    }
+    else {
+      if (log().isLoggable(Level.FINER)) {
+        log().finer(L().l("free memory {0} max:{1} total:{2} free:{3}",
+                          "" + getFreeMemory(runtime),
+                          "" + runtime.maxMemory(),
+                          "" + runtime.totalMemory(),
+                          "" + runtime.freeMemory()));
+      }
+
+      log().info(L().l("Forcing GC due to low memory. {0} free bytes.",
+                       getFreeMemory(runtime)));
+
+      runtime.gc();
+
+      Thread.sleep(1000);
+
+      runtime.gc();
+
+      if (getFreeMemory(runtime) < minFreeMemory) {
+        log().severe(L().l("Restarting due to low free memory. {0} free bytes",
+                           getFreeMemory(runtime)));
+
+        return false;
+      }
+    }
+
+    // second memory check
+    Object memoryTest = new Integer(0);
+
+    return true;
+  }
+
+  private boolean checkFileDescriptor()
+  {
+    try {
+      ReadStream is = _resinConf.openRead();
+      is.close();
+
+      return true;
+    } catch (IOException e) {
+      log().severe(L().l("Restarting due to file descriptor failure:\n{0}",
+                         e));
+
+      return false;
+    }
+  }
+
   public String toString()
   {
     return getClass().getSimpleName() + "[id=" + _serverId + "]";
@@ -1645,18 +1761,6 @@ public class Resin implements EnvironmentBean, SchemaBean
       return freeMemory;
     else
       return maxMemory - totalMemory + freeMemory;
-  }
-
-  /**
-   * Shuts the server down.
-   */
-  public static void shutdown()
-  {
-    Resin resin = getLocal();
-
-    if (resin != null) {
-      resin.destroy();
-    }
   }
 
   /**
@@ -1684,34 +1788,13 @@ public class Resin implements EnvironmentBean, SchemaBean
 
       Server server = resin.getServer();
 
-      DestroyThread destroyThread = new DestroyThread(resin);
-      destroyThread.start();
-
       resin.startResinActor();
 
       resin.waitForExit();
 
-      destroyThread.shutdown();
+      resin.startShutdown("Resin shutdown from watchdog exit");
 
-      long stopTime = System.currentTimeMillis();
-      long endTime = stopTime + 15000L;
-
-      if (server != null)
-        endTime = stopTime + server.getShutdownWaitMax() ;
-
-      while (System.currentTimeMillis() < endTime && ! resin.isClosed()) {
-        try {
-          Thread.interrupted();
-          Thread.sleep(100);
-        } catch (Throwable e) {
-        }
-      }
-
-      if (! resin.isClosed()) {
-        EnvironmentStream.getOriginalSystemErr().println("Resin halting due to stalled shutdown");
-        Runtime.getRuntime().halt(1);
-      }
-
+      Thread.sleep(resin.getShutdownWaitMax() + 600000);
       System.exit(0);
     } catch (Throwable e) {
       boolean isCompile = false;
@@ -1895,8 +1978,13 @@ public class Resin implements EnvironmentBean, SchemaBean
     public String getAddress()
     {
       try {
-        if (Alarm.isTest())
-          return "127.0.0.1";
+        Server server = _server;
+
+        if (server != null) {
+          ClusterServer clusterServer = server.getSelfServer();
+
+          return clusterServer.getAddress();
+        }
         else
           return InetAddress.getLocalHost().getHostAddress();
       } catch (Exception e) {
@@ -1911,7 +1999,15 @@ public class Resin implements EnvironmentBean, SchemaBean
      */
     public int getPort()
     {
-      return 0;
+      Server server = _server;
+
+      if (server != null) {
+        ClusterServer clusterServer = server.getSelfServer();
+
+        return clusterServer.getPort();
+      }
+      else
+        return 0;
     }
 
     /**
@@ -2149,40 +2245,76 @@ public class Resin implements EnvironmentBean, SchemaBean
     }
   }
 
-  static class DestroyThread extends Thread {
-    private final Resin _resin;
-    private boolean _isDestroy;
+  class ShutdownThread extends Thread {
+    private volatile boolean _isShutdown;
 
-    DestroyThread(Resin resin)
+    ShutdownThread()
     {
-      _resin = resin;
-
-      setName("resin-destroy");
+      setName("resin-shutdown");
       setDaemon(true);
     }
 
-    public void shutdown()
+    /**
+     * Starts the destroy sequence
+     */
+    public void startShutdown()
     {
-      synchronized (this) {
-        _isDestroy = true;
-        notifyAll();
-      }
+      _isShutdown = true;
+      LockSupport.unpark(this);
     }
 
     public void run()
     {
-      synchronized (this) {
-        while (! _isDestroy) {
-          try {
-            wait();
-          } catch (Exception e) {
-          }
+      while (! _isShutdown) {
+        try {
+          LockSupport.park();
+        } catch (Exception e) {
         }
       }
 
-      EnvironmentStream.logStderr("closing server");
+      shutdownImpl();
+    }
+  }
 
-      _resin.destroy();
+  class FailSafeHaltThread extends Thread {
+    private volatile boolean _isShutdown;
+
+    FailSafeHaltThread()
+    {
+      setName("resin-fail-safe-halt");
+      setDaemon(true);
+    }
+
+    /**
+     * Starts the shutdown sequence
+     */
+    public void startShutdown()
+    {
+      _isShutdown = true;
+      LockSupport.unpark(this);
+    }
+
+    public void run()
+    {
+      while (! _isShutdown) {
+        try {
+          LockSupport.park();
+        } catch (Exception e) {
+        }
+      }
+
+      long expire = System.currentTimeMillis() + _shutdownWaitMax;
+      long now;
+
+      while ((now = System.currentTimeMillis()) < expire) {
+        try {
+          Thread.interrupted();
+          Thread.sleep(expire - now);
+        } catch (Exception e) {
+        }
+      }
+
+      Runtime.getRuntime().halt(Resin.EXIT_HALT);
     }
   }
 

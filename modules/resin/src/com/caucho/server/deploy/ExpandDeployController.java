@@ -29,10 +29,17 @@
 
 package com.caucho.server.deploy;
 
+import java.io.IOException;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
 import com.caucho.config.types.FileSetType;
-import com.caucho.git.GitCommit;
-import com.caucho.git.GitRepository;
-import com.caucho.git.GitTree;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
 import com.caucho.server.repository.Repository;
@@ -44,22 +51,14 @@ import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
 
-import java.io.IOException;
-import java.util.*;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
-
 /**
  * A deployment entry that expands from an archive (Jar/Zip) file.
  */
 abstract public class ExpandDeployController<I extends DeployInstance>
   extends DeployController<I> {
   private static final L10N L = new L10N(ExpandDeployController.class);
-  private static final Logger log = Log.open(ExpandDeployController.class);
+  private static final Logger log
+    = Logger.getLogger(ExpandDeployController.class.getName());
 
   private Object _archiveExpandLock = new Object();
 
@@ -68,6 +67,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
 
   private Repository _repository;
   private String _repositoryTag;
+  private String _baseRepositoryTag;
 
   private FileSetType _expandCleanupFileSet;
 
@@ -154,6 +154,22 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   public void setRepositoryTag(String tag)
   {
     _repositoryTag = tag;
+  }
+
+  /**
+   * The base repository tag
+   */
+  public String getBaseRepositoryTag()
+  {
+    return _baseRepositoryTag;
+  }
+
+  /**
+   * The base repository tag
+   */
+  public void setBaseRepositoryTag(String tag)
+  {
+    _baseRepositoryTag = tag;
   }
 
   /**
@@ -526,6 +542,19 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     }
 
     return true;
+  }
+
+  protected void addDependencies()
+  {
+    if (getArchivePath() != null)
+      Environment.addDependency(getArchivePath());
+
+    if (getRepository() != null && getRepositoryTag() != null) {
+      String tag = getRepositoryTag();
+      String value = getRepository().getTagRoot(tag);
+
+      Environment.addDependency(new RepositoryDependency(tag, value));
+    }
   }
 
   /**

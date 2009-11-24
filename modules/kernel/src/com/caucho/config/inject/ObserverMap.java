@@ -37,14 +37,17 @@ import java.lang.annotation.*;
 import java.lang.reflect.*;
 import java.util.ArrayList;
 import java.util.Set;
-import javax.enterprise.event.Observer;
+import java.util.logging.*;
+import javax.enterprise.inject.spi.ObserverMethod;
 
 /**
  * Matches bindings
  */
 public class ObserverMap {
+  private static final Logger log
+    = Logger.getLogger(ObserverMap.class.getName());
   private static final L10N L = new L10N(ObserverMap.class);
-  
+
   private Class _type;
 
   private ArrayList<ObserverEntry> _observerList
@@ -55,37 +58,40 @@ public class ObserverMap {
     _type = type;
   }
 
-  public void addObserver(Observer observer,
-			  BaseType type,
-			  Annotation []bindings)
+  public void addObserver(ObserverMethod observer,
+                          BaseType type,
+                          Annotation []bindings)
   {
     ObserverEntry entry = new ObserverEntry(observer, type, bindings);
 
     _observerList.add(entry);
   }
 
-  public <T> void resolveObservers(Set<Observer<T>> set,
-				   BaseType eventType,
-				   Annotation []bindings)
+  public <T> void resolveObservers(Set<ObserverMethod<? super T>> set,
+                                   BaseType eventType,
+                                   Annotation []bindings)
   {
     for (int i = 0; i < _observerList.size(); i++) {
       ObserverEntry observer = _observerList.get(i);
 
       if (observer.isMatch(eventType, bindings)) {
-	set.add(observer.getObserver());
+        set.add(observer.getObserver());
       }
     }
   }
 
   public void fireEvent(Object event,
-			BaseType eventType,
-			Annotation []bindings)
+                        BaseType eventType,
+                        Annotation []qualifiers)
   {
     for (int i = 0; i < _observerList.size(); i++) {
       ObserverEntry observer = _observerList.get(i);
 
-      if (observer.isMatch(eventType, bindings)) {
- 	observer.getObserver().notify(event);
+      if (observer.isMatch(eventType, qualifiers)) {
+        if (log.isLoggable(Level.FINEST))
+          log.finest(observer.getObserver() + " notify " + event);
+
+        observer.getObserver().notify(event);
       }
     }
   }
@@ -97,24 +103,24 @@ public class ObserverMap {
   }
 
   static class ObserverEntry {
-    private final Observer _observer;
+    private final ObserverMethod _observer;
     private final BaseType _type;
     private final Binding []_bindings;
 
-    ObserverEntry(Observer observer,
-		  BaseType type,
-		  Annotation []bindings)
+    ObserverEntry(ObserverMethod observer,
+                  BaseType type,
+                  Annotation []bindings)
     {
       _observer = observer;
       _type = type;
 
       _bindings = new Binding[bindings.length];
       for (int i = 0; i < bindings.length; i++) {
-	_bindings[i] = new Binding(bindings[i]);
+        _bindings[i] = new Binding(bindings[i]);
       }
     }
 
-    Observer getObserver()
+    ObserverMethod getObserver()
     {
       return _observer;
     }
@@ -122,16 +128,16 @@ public class ObserverMap {
     boolean isMatch(BaseType type, Annotation []bindings)
     {
       if (! _type.isAssignableFrom(type)) {
-	return false;
+        return false;
       }
-      
+
       if (bindings.length < _bindings.length)
-	return false;
-      
+        return false;
+
       for (Binding binding : _bindings) {
-	if (! binding.isMatch(bindings)) {
-	  return false;
-	}
+        if (! binding.isMatch(bindings)) {
+          return false;
+        }
       }
 
       return true;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,6 +49,7 @@ import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
@@ -79,6 +80,7 @@ public class JavaClassDef extends ClassDef {
   private final boolean _isAbstract;
   private final boolean _isInterface;
   private final boolean _isDelegate;
+  private boolean _isPhpClass;
   
   private String _resourceType;
 
@@ -117,6 +119,7 @@ public class JavaClassDef extends ClassDef {
 
   private Method _printRImpl;
   private Method _varDumpImpl;
+  private Method _jsonEncode;
   private Method _entrySet;
 
   private TraversableDelegate _traversableDelegate;
@@ -183,7 +186,7 @@ public class JavaClassDef extends ClassDef {
   }
 
   public static JavaClassDef create(ModuleContext moduleContext,
-				    String name, Class type)
+                                    String name, Class type)
   {
     if (Double.class.isAssignableFrom(type)
         || Float.class.isAssignableFrom(type))
@@ -290,13 +293,11 @@ public class JavaClassDef extends ClassDef {
                                Class type,
                                boolean isTop)
   {
-    if (type == null || Object.class.equals(type))
+    if (type == null)
       return;
     
-    if (isTop)
-      interfaceSet.add(_name.toLowerCase());
-    else
-      interfaceSet.add(type.getSimpleName().toLowerCase());
+    interfaceSet.add(_name.toLowerCase());
+    interfaceSet.add(type.getSimpleName().toLowerCase());
 
     if (type.getInterfaces() != null) {
       for (Class iface : type.getInterfaces()) {
@@ -345,6 +346,11 @@ public class JavaClassDef extends ClassDef {
   public boolean isDelegate()
   {
     return _isDelegate;
+  }
+  
+  public void setPhpClass(boolean isPhpClass)
+  {
+    _isPhpClass = isPhpClass;
   }
 
   public JavaClassDef getComponentDef()
@@ -468,13 +474,19 @@ public class JavaClassDef extends ClassDef {
       }
     }
     
+    AbstractFunction phpGet = qThis.getQuercusClass().getFieldGet();
+    
+    if (phpGet != null) {
+      return phpGet.callMethod(env, qThis, name);    
+    }
+    
     if (__fieldGet != null) {
       try {
         return __fieldGet.callMethod(env, qThis, name);
       } catch (Exception e) {
         log.log(Level.FINE,  L.l(e.getMessage()), e);
 
-	return null;
+        return null;
       }
     }
 
@@ -513,6 +525,22 @@ public class JavaClassDef extends ClassDef {
         return NullValue.NULL;
       }
     }
+    
+    if (! qThis.isFieldInit()) {
+      AbstractFunction phpSet = qThis.getQuercusClass().getFieldSet();
+      
+      if (phpSet != null) {
+        qThis.setFieldInit(true);
+        
+        try {
+          return phpSet.callMethod(env, qThis, name, value);          
+          
+        } finally {
+          qThis.setFieldInit(false);
+        }
+      }
+    }
+    
 
     if (__fieldSet != null) {
       try {
@@ -565,13 +593,18 @@ public class JavaClassDef extends ClassDef {
   public Value callNew(Env env, Value []args)
   {
     if (_cons != null) {
-      Value value = _cons.callMethod(env, null, args);
+      if (__construct != null) {
+        Value value = _cons.callMethod(env, null, Value.NULL_ARGS);
 
-      if (__construct != null)
-	__construct.callMethod(env, value, args);
-
-      return value;
+        __construct.callMethod(env, value, args);
+        
+        return value;
+      }
+      else
+        return _cons.callMethod(env, null, args);
     }
+    else if (__construct != null)
+      return __construct.callMethod(env, null, args);
     else
       return NullValue.NULL;
   }
@@ -801,6 +834,7 @@ public class JavaClassDef extends ClassDef {
     }
     
     if (__construct != null) {
+      cl.setConstructor(__construct);
       cl.addMethod("__construct", __construct);
     }
 
@@ -889,16 +923,16 @@ public class JavaClassDef extends ClassDef {
     
     synchronized (this) {
       if (_isInit)
-	return;
+        return;
 
       super.init();
 
       try {
-	initInterfaceList(_type);
-	introspect();
+        initInterfaceList(_type);
+        introspect();
       }
       finally {
-	_isInit = true;
+        _isInit = true;
       }
     }
   }
@@ -932,14 +966,26 @@ public class JavaClassDef extends ClassDef {
 
     _marshal = new JavaMarshal(this, false);
 
-    Method consMethod = getConsMethod(_type);
+    AbstractJavaMethod consMethod = getConsMethod();
     
     if (consMethod != null) {
-      if (Modifier.isStatic(consMethod.getModifiers()))
-	_cons = new JavaMethod(_moduleContext, consMethod);
+      if (consMethod.isStatic())
+        _cons = consMethod;
       else
-	__construct = new JavaMethod(_moduleContext, consMethod);
+        __construct = consMethod;
     }
+    
+    
+    //Method consMethod = getConsMethod(_type);
+    
+    /*
+    if (consMethod != null) {
+      if (Modifier.isStatic(consMethod.getModifiers()))
+        _cons = new JavaMethod(_moduleContext, consMethod);
+      else
+        __construct = new JavaMethod(_moduleContext, consMethod);
+    }
+    */
     
     if (_cons == null) {
       Constructor []cons = _type.getConstructors();
@@ -964,7 +1010,12 @@ public class JavaClassDef extends ClassDef {
       } else
         _cons = null;
     }
+    
+    if (_cons != null)
+      _cons.setConstructor(true);
 
+    if (__construct != null)
+      __construct.setConstructor(true);
 
     introspectAnnotations(_type);
   }
@@ -972,7 +1023,7 @@ public class JavaClassDef extends ClassDef {
   private void introspectAnnotations(Class type)
   {
     try {
-      if (type == null || type == Object.class)
+      if (type == null)
 	return;
 
       // interfaces
@@ -1057,6 +1108,7 @@ public class JavaClassDef extends ClassDef {
     return true;
   }
 
+  /*
   private Method getConsMethod(Class type)
   {
     Method []methods = type.getMethods();
@@ -1065,19 +1117,25 @@ public class JavaClassDef extends ClassDef {
       Method method = methods[i];
 
       if (! method.getName().equals("__construct"))
-	continue;
+        continue;
       if (! Modifier.isPublic(method.getModifiers()))
-	continue;
+        continue;
       
       return method;
     }
 
     return null;
   }
-
-  protected void setCons(Method method)
+  */
+  
+  private AbstractJavaMethod getConsMethod()
   {
-    _cons = new JavaMethod(_moduleContext, method);
+    for (AbstractJavaMethod method : _functionMap.values()) {
+      if (method.getName().equals("__construct"))
+        return method;
+    }
+    
+    return null;
   }
 
   /**
@@ -1085,7 +1143,7 @@ public class JavaClassDef extends ClassDef {
    */
   private void introspectFields(ModuleContext moduleContext, Class type)
   {
-    if (type == null || type.equals(Object.class))
+    if (type == null)
       return;
 
     if (! Modifier.isPublic(type.getModifiers()))
@@ -1098,6 +1156,9 @@ public class JavaClassDef extends ClassDef {
     for (Method method : methods) {
       if (Modifier.isStatic(method.getModifiers()))
         continue;
+      
+      if (method.isAnnotationPresent(Hide.class))
+        continue;
 
       String methodName = method.getName();
       int length = methodName.length();
@@ -1105,7 +1166,7 @@ public class JavaClassDef extends ClassDef {
       if (length > 3) {
         if (methodName.startsWith("get")) {
           StringValue quercusName
-	    = javaToQuercusConvert(methodName.substring(3, length));
+            = javaToQuercusConvert(methodName.substring(3, length));
 	  
           AbstractJavaMethod existingGetter = _getMap.get(quercusName);
           AbstractJavaMethod newGetter = new JavaMethod(moduleContext, method);
@@ -1118,7 +1179,7 @@ public class JavaClassDef extends ClassDef {
         }
         else if (methodName.startsWith("is")) {
           StringValue quercusName
-	    = javaToQuercusConvert(methodName.substring(2, length));
+            = javaToQuercusConvert(methodName.substring(2, length));
           
           AbstractJavaMethod existingGetter = _getMap.get(quercusName);
           AbstractJavaMethod newGetter = new JavaMethod(moduleContext, method);
@@ -1131,7 +1192,7 @@ public class JavaClassDef extends ClassDef {
         }
         else if (methodName.startsWith("set")) {
           StringValue quercusName
-	    = javaToQuercusConvert(methodName.substring(3, length));
+            = javaToQuercusConvert(methodName.substring(3, length));
           
           AbstractJavaMethod existingSetter = _setMap.get(quercusName);
           AbstractJavaMethod newSetter = new JavaMethod(moduleContext, method);
@@ -1139,10 +1200,10 @@ public class JavaClassDef extends ClassDef {
           if (existingSetter != null)
             newSetter = existingSetter.overload(newSetter);
 	    
-	  _setMap.put(quercusName, newSetter);
+          _setMap.put(quercusName, newSetter);
         } else if ("__get".equals(methodName)) {
-	  if (_funArrayDelegate == null)
-	    _funArrayDelegate = new FunctionArrayDelegate();
+          if (_funArrayDelegate == null)
+            _funArrayDelegate = new FunctionArrayDelegate();
 	  
           _funArrayDelegate.setArrayGet(new JavaMethod(moduleContext, method));
         } else if ("__set".equals(methodName)) {
@@ -1162,11 +1223,22 @@ public class JavaClassDef extends ClassDef {
       }
     }
 
+    // server/2v00
+    /*
+    if (__fieldGet != null)
+      _getMap.clear();
+    
+    if (__fieldSet != null)
+      _setMap.clear();
+    */
+
     // Introspect public non-static fields
     Field[] fields = type.getFields();
 
     for (Field field : fields) {
       if (Modifier.isStatic(field.getModifiers()))
+        continue;
+      else if (field.isAnnotationPresent(Hide.class))
         continue;
 
       MarshalFactory factory = moduleContext.getMarshalFactory();
@@ -1212,19 +1284,21 @@ public class JavaClassDef extends ClassDef {
    */
   private void introspectConstants(Class type)
   {
-    if (type == null || type.equals(Object.class))
+    if (type == null)
       return;
 
     if (! Modifier.isPublic(type.getModifiers()))
       return;
 
+    /* not needed because Class.getFields() is recursive
     Class []ifcs = type.getInterfaces();
 
     for (Class ifc : ifcs) {
       introspectConstants(ifc);
     }
+    */
 
-    Field []fields = type.getDeclaredFields();
+    Field []fields = type.getFields();
 
     for (Field field : fields) {
       if (_constMap.get(field.getName()) != null)
@@ -1234,6 +1308,8 @@ public class JavaClassDef extends ClassDef {
       else if (! Modifier.isStatic(field.getModifiers()))
         continue;
       else if (! Modifier.isFinal(field.getModifiers()))
+        continue;
+      else if (field.isAnnotationPresent(Hide.class))
         continue;
 
       try {
@@ -1246,15 +1322,16 @@ public class JavaClassDef extends ClassDef {
       }
     }
 
-    introspectConstants(type.getSuperclass());
+    //introspectConstants(type.getSuperclass());
   }
-
+  
   /**
    * Introspects the Java class.
    */
-  private void introspectMethods(ModuleContext moduleContext, Class type)
+  private void introspectMethods(ModuleContext moduleContext,
+                                 Class<?> type)
   {
-    if (type == null || type.equals(Object.class))
+    if (type == null)
       return;
 
     Method []methods = type.getMethods();
@@ -1262,20 +1339,25 @@ public class JavaClassDef extends ClassDef {
     for (Method method : methods) {
       if (! Modifier.isPublic(method.getModifiers()))
         continue;
+      
+      if (method.isAnnotationPresent(Hide.class))
+        continue;
 
-      if (method.getDeclaringClass() == Object.class)
+      if (_isPhpClass && method.getDeclaringClass() == Object.class)
         continue;
       
       if ("iterator".equals(method.getName())
-	  && method.getParameterTypes().length == 0
-	  && Iterator.class.isAssignableFrom(method.getReturnType())) {
-	_iteratorMethod = method;
+          && method.getParameterTypes().length == 0
+          && Iterator.class.isAssignableFrom(method.getReturnType())) {
+        _iteratorMethod = method;
       }
 
       if ("printRImpl".equals(method.getName())) {
         _printRImpl = method;
       } else if ("varDumpImpl".equals(method.getName())) {
         _varDumpImpl = method;
+      } else if (method.isAnnotationPresent(JsonEncode.class)) {
+        _jsonEncode = method;
       } else if (method.isAnnotationPresent(EntrySet.class)) {
         _entrySet = method;
       } else if ("__call".equals(method.getName())) {
@@ -1285,7 +1367,7 @@ public class JavaClassDef extends ClassDef {
       } else {
         if (method.getName().startsWith("quercus_"))
           throw new UnsupportedOperationException(L.l("{0}: use @Name instead", method.getName()));
-
+        
         JavaMethod newFun = new JavaMethod(moduleContext, method);
         AbstractJavaMethod fun = _functionMap.get(newFun.getName());
 
@@ -1297,7 +1379,8 @@ public class JavaClassDef extends ClassDef {
         _functionMap.put(fun.getName(), fun);
       }
     }
-
+    
+    /* Class.getMethods() is recursive
     introspectMethods(moduleContext, type.getSuperclass());
 
     Class []ifcs = type.getInterfaces();
@@ -1305,6 +1388,7 @@ public class JavaClassDef extends ClassDef {
     for (Class ifc : ifcs) {
       introspectMethods(moduleContext, ifc);
     }
+    */
   }
   
   public JavaMethod getToString()
@@ -1321,16 +1405,32 @@ public class JavaClassDef extends ClassDef {
     return __toString.callMethod(env, value, new Expr[0]).toStringValue();
   }
   
+  public boolean jsonEncode(Env env, Object obj, StringValue sb)
+  {
+    if (_jsonEncode == null)
+      return false;
+    
+    try {
+      _jsonEncode.invoke(obj, env, sb);
+      return true;
+      
+    } catch (InvocationTargetException e) {
+      throw new QuercusRuntimeException(e);
+    } catch (IllegalAccessException e) {
+      throw new QuercusRuntimeException(e);
+    }
+  }
+  
   /**
    *
    * @return false if printRImpl not implemented
    * @throws IOException
    */
   public boolean printRImpl(Env env,
-                               Object obj,
-                               WriteStream out,
-                               int depth,
-                               IdentityHashMap<Value, String> valueSet)
+                            Object obj,
+                            WriteStream out,
+                            int depth,
+                            IdentityHashMap<Value, String> valueSet)
     throws IOException
   {
 
@@ -1342,13 +1442,16 @@ public class JavaClassDef extends ClassDef {
 
       _printRImpl.invoke(obj, env, out, depth, valueSet);
       return true;
-    } catch (Exception e) {
-      throw new QuercusException(e);
+    } catch (InvocationTargetException e) {
+      throw new QuercusRuntimeException(e);
+    } catch (IllegalAccessException e) {
+      throw new QuercusRuntimeException(e);
     }
   }
 
   public boolean varDumpImpl(Env env,
-                             Object obj,
+                             Value obj,
+                             Object javaObj,
                              WriteStream out,
                              int depth,
                              IdentityHashMap<Value, String> valueSet)
@@ -1358,10 +1461,12 @@ public class JavaClassDef extends ClassDef {
       if (_varDumpImpl == null)
         return false;
 
-      _varDumpImpl.invoke(obj, env, out, depth, valueSet);
+      _varDumpImpl.invoke(javaObj, env, obj, out, depth, valueSet);
       return true;
-    } catch (Exception e) {
-      throw new QuercusException(e);
+    } catch (InvocationTargetException e) {
+      throw new QuercusRuntimeException(e);
+    } catch (IllegalAccessException e) {
+      throw new QuercusRuntimeException(e);
     }
   }
   
@@ -1380,11 +1485,12 @@ public class JavaClassDef extends ClassDef {
     {
       try {
         Iterator iterator
-	  = (Iterator) _iteratorMethod.invoke(qThis.toJavaObject());
+          = (Iterator) _iteratorMethod.invoke(qThis.toJavaObject());
         
         return new JavaIterator(env, iterator);
-      }
-      catch (Exception e) {
+      } catch (InvocationTargetException e) {
+        throw new QuercusRuntimeException(e);
+      } catch (IllegalAccessException e) {
         throw new QuercusRuntimeException(e);
       }
     }
@@ -1396,8 +1502,9 @@ public class JavaClassDef extends ClassDef {
           (Iterator) _iteratorMethod.invoke(qThis.toJavaObject());
         
         return new JavaKeyIterator(iterator);
-      }
-      catch (Exception e) {
+      } catch (InvocationTargetException e) {
+        throw new QuercusRuntimeException(e);
+      } catch (IllegalAccessException e) {
         throw new QuercusRuntimeException(e);
       }
     }
@@ -1409,8 +1516,9 @@ public class JavaClassDef extends ClassDef {
           (Iterator) _iteratorMethod.invoke(qThis.toJavaObject());
 
         return new JavaValueIterator(env, iterator);
-      }
-      catch (Exception e) {
+      } catch (InvocationTargetException e) {
+        throw new QuercusRuntimeException(e);
+      } catch (IllegalAccessException e) {
         throw new QuercusRuntimeException(e);
       }
     }
@@ -1465,9 +1573,9 @@ public class JavaClassDef extends ClassDef {
     public boolean hasNext()
     {
       if (_iterator != null)
-	return _iterator.hasNext();
+        return _iterator.hasNext();
       else
-	return false;
+        return false;
     }
     
     public void remove()

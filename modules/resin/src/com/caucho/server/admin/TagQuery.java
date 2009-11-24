@@ -37,6 +37,9 @@ public class TagQuery implements Serializable {
   private String _host;
   private String _url;
 
+  // root hash of the tag
+  private String _root;
+
   public TagQuery()
   {
   }
@@ -65,6 +68,16 @@ public class TagQuery implements Serializable {
   public void setHost(String host)
   {
     _host = host;
+  }
+
+  public String getRoot()
+  {
+    return _root;
+  }
+
+  public void setRoot(String root)
+  {
+    _root = root;
   }
 
   public String getUrl()

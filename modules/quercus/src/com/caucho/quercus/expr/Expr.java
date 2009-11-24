@@ -429,6 +429,16 @@ abstract public class Expr {
   }
   
   /**
+   * Evaluates as an array index assign ($a[index] = value).
+   */
+  public void evalArrayAssign(Env env, Value index, Value value)
+  {
+    Value array = evalArray(env);
+
+    array.put(index, value);
+  }
+  
+  /**
    * Handles post increments.
    */
   public Value evalPostIncrement(Env env, int incr)
@@ -531,6 +541,16 @@ abstract public class Expr {
   public boolean evalIsset(Env env)
   {
     return eval(env).isset();
+  }
+  
+  /**
+   * Evaluates the expression as an array index unset
+   */
+  public void evalUnsetArray(Env env, Value index)
+  {
+    Value array = evalDirty(env);
+
+    array.remove(index);
   }
 
   /**

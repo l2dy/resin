@@ -32,6 +32,7 @@ package com.caucho.jms.queue;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -40,7 +41,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import javax.jms.JMSException;
+
 import javax.jms.ObjectMessage;
 import javax.jms.TextMessage;
 
@@ -95,12 +96,23 @@ abstract public class AbstractQueue extends AbstractDestination
    * Sends a message to the queue
    */
   public void send(String msgId,
-		   Serializable msg,
-		   int priority,
-		   long expires)
+                   Serializable msg,
+                   int priority,
+                   long expires)
     throws MessageException
   {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+
+
+  public void send(String msgId,
+                   Serializable msg,
+                   int priority,
+                   long expires,
+                   Object publisher)
+    throws MessageException
+  {
+    send(msgId, msg, priority, expires);
   }
 
   /**
@@ -108,16 +120,22 @@ abstract public class AbstractQueue extends AbstractDestination
    * message.
    */
   public QueueEntry receiveEntry(long timeout, boolean isAutoAck)
+  {
+    return null;//receiveEntry(timeout, isAutoAck, null);
+  }
+  
+  public QueueEntry receiveEntry(long timeout, boolean isAutoAck, 
+                                 QueueEntrySelector selector)
     throws MessageException
   {
-    return null;
+    return receiveEntry(timeout, isAutoAck);
   }
-
+  
   /**
    * Adds the callback to the listening list.
    */
   public EntryCallback addMessageCallback(MessageCallback callback,
-					  boolean isAutoAck)
+                                          boolean isAutoAck)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
@@ -129,16 +147,16 @@ abstract public class AbstractQueue extends AbstractDestination
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Acknowledge receipt of the message.
-   * 
+   *
    * @param msgId message to acknowledge
    */
   public void acknowledge(String msgId)
   {
   }
-  
+
   /**
    * Rollback the message read.
    */
@@ -165,7 +183,7 @@ abstract public class AbstractQueue extends AbstractDestination
    * available.
    */
   public Serializable receive(long expireTime,
-			      boolean isAutoAcknowledge)
+                              boolean isAutoAcknowledge)
     throws MessageException
   {
     QueueEntry entry = receiveEntry(expireTime, isAutoAcknowledge);
@@ -176,9 +194,9 @@ abstract public class AbstractQueue extends AbstractDestination
       return null;
   }
 
-  public ArrayList<MessageImpl> getBrowserList()
+  public ArrayList<QueueEntry> getBrowserList()
   {
-    return new ArrayList<MessageImpl>();
+    return new ArrayList<QueueEntry>();
   }
 
   //
@@ -201,11 +219,11 @@ abstract public class AbstractQueue extends AbstractDestination
   public boolean offer(Object value, long timeout, TimeUnit unit)
   {
     int priority = 0;
-      
+
     timeout = unit.toMillis(timeout);
 
     long expires = Alarm.getCurrentTime() + timeout;
-      
+
     send(generateMessageID(), (Serializable) value, priority, expires);
 
     return true;
@@ -224,22 +242,24 @@ abstract public class AbstractQueue extends AbstractDestination
   public Object poll(long timeout, TimeUnit unit)
   {
     long msTimeout = unit.toMillis(timeout);
-    
+
     Serializable payload = receive(msTimeout);
 
     try {
       if (payload == null)
-	return null;
+        return null;
       else if (payload instanceof ObjectMessage)
-	return ((ObjectMessage) payload).getObject();
+        return ((ObjectMessage) payload).getObject();
       else if (payload instanceof TextMessage)
-	return ((TextMessage) payload).getText();
+        return ((TextMessage) payload).getText();
       else if (payload instanceof Serializable)
-	return payload;
+        return payload;
       else
-	throw new MessageException(L.l("'{0}' is an unsupported message for the BlockingQueue API.",
-				       payload));
-    } catch (JMSException e) {
+        throw new MessageException(L.l("'{0}' is an unsupported message for the BlockingQueue API.",
+                                       payload));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
       throw new MessageException(e);
     }
   }
@@ -285,15 +305,15 @@ abstract public class AbstractQueue extends AbstractDestination
   {
     return 0;
   }
-  
+
   /**
    * Returns the number of receivers.
-   * 
+   *
    * @return
    */
-  public int getReceiverCount() 
+  public int getReceiverCount()
   {
-    return 0;    
+    return 0;
   }
 
   /**
@@ -344,7 +364,7 @@ abstract public class AbstractQueue extends AbstractDestination
   public void close()
   {
     stopPoll();
-    
+
     super.close();
   }
 }

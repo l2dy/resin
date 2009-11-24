@@ -29,12 +29,12 @@
 
 package com.caucho.server.http;
 
+import com.caucho.admin.ActiveTimeProbe;
+import com.caucho.admin.AverageProbe;
+import com.caucho.admin.SampleCountProbe;
+import com.caucho.admin.ProbeManager;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.AbstractHttpRequest;
-import com.caucho.server.connection.Connection;
-import com.caucho.server.connection.HttpBufferStore;
-import com.caucho.server.connection.HttpServletRequestImpl;
-import com.caucho.server.connection.HttpServletResponseImpl;
+import com.caucho.server.connection.*;
 import com.caucho.server.dispatch.BadRequestException;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.Invocation;
@@ -45,6 +45,7 @@ import com.caucho.server.port.TcpConnection;
 import com.caucho.server.port.TcpCometController;
 import com.caucho.server.cluster.*;
 import com.caucho.server.webapp.*;
+import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CharSegment;
 import com.caucho.vfs.ClientDisconnectException;
@@ -61,6 +62,7 @@ import java.util.Enumeration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * Handles a new request from an HTTP connection.
@@ -68,7 +70,8 @@ import javax.servlet.http.HttpServletRequest;
 public class HttpRequest extends AbstractHttpRequest
   implements TcpServerRequest
 {
-  static final Logger log = Logger.getLogger(HttpRequest.class.getName());
+  private static final Logger log
+    = Logger.getLogger(HttpRequest.class.getName());
 
   static final int HTTP_0_9 = 0x0009;
   static final int HTTP_1_0 = 0x0100;
@@ -84,22 +87,28 @@ public class HttpRequest extends AbstractHttpRequest
   static final CharBuffer _http11Cb = new CharBuffer("HTTP/1.1");
   static final CharBuffer _http10Cb = new CharBuffer("HTTP/1.0");
 
-  private String _scheme;           // "http:" or "https:"
-  private boolean _isSecure;
+  private static final String REQUEST_TIME_PROBE
+    = "Resin|Request|Http Request";
+  private static final String REQUEST_COUNT_PROBE
+    = "Resin|Request|Http Request Count";
+  private static final String REQUEST_BYTES_PROBE
+    = "Resin|Request|Http Request Bytes";
 
-  private CharBuffer _method;       // "GET"
+  private final CharBuffer _method     // "GET"
+    = new CharBuffer();
   private String _methodString;
 
-  private CharBuffer _uriHost;      // www.caucho.com:8080
+  private final CharBuffer _uriHost    // www.caucho.com:8080
+    = new CharBuffer();
+  private final CharBuffer _hostBuffer
+    = new CharBuffer();
   private CharSequence _host;
-  private CharBuffer _hostBuffer = new CharBuffer();
 
-  private byte []_uri;              // "/path/test.jsp/Junk?query=7"
+  private byte []_uri;                 // "/path/test.jsp/Junk?query=7"
   private int _uriLength;
 
-  private int _urlLengthMax = 8192;
-
-  private CharBuffer _protocol;     // "HTTP/1.0"
+  private final CharBuffer _protocol   // "HTTP/1.0"
+    = new CharBuffer();
   private int _version;
 
   private final InvocationKey _invocationKey = new InvocationKey();
@@ -110,58 +119,28 @@ public class HttpRequest extends AbstractHttpRequest
   private CharSegment []_headerValues;
   private int _headerSize;
 
-  private boolean _hasRequest;
-
   private ChunkedInputStream _chunkedInputStream = new ChunkedInputStream();
   private ContentLengthStream _contentLengthStream = new ContentLengthStream();
+  private RawInputStream _rawInputStream = new RawInputStream();
 
-  private HttpServletRequestImpl _requestFacade;
-  private HttpServletResponseImpl _responseFacade;
-
-  private boolean _initAttributes;
+  private ActiveTimeProbe _requestTimeProbe;
+  private SampleCountProbe _requestCountProbe;
+  private AverageProbe _requestBytesProbe;
 
   /**
    * Creates a new HttpRequest.  New connections reuse the request.
    *
    * @param server the owning server.
    */
-  public HttpRequest(DispatchServer server, Connection conn)
+  public HttpRequest(Server server, Connection conn)
   {
     super(server, conn);
 
-    // _response.init(conn.getWriteStream());
+    _requestTimeProbe
+      = ProbeManager.createActiveTimeProbe(REQUEST_TIME_PROBE);
 
-    /*
-    if (server instanceof Server)
-      _urlLengthMax = ((Server) server).getUrlLengthMax();
-
-    // XXX: response.setIgnoreClientDisconnect(server.getIgnoreClientDisconnect());
-
-    _uri = new byte[_urlLengthMax];
-    */
-
-    _method = new CharBuffer();
-    _uriHost = new CharBuffer();
-    _protocol = new CharBuffer();
-
-    /*
-    if (TempBuffer.isSmallmem()) {
-      _headerBuffer = new char[4 * 1024];
-      _headerCapacity = 64;
-    }
-    else {
-      _headerBuffer = new char[16 * 1024];
-      _headerCapacity = 256;
-    }
-    
-    _headerSize = 0;
-    _headerKeys = new CharSegment[_headerCapacity];
-    _headerValues = new CharSegment[_headerCapacity];
-    for (int i = 0; i < _headerCapacity; i++) {
-      _headerKeys[i] = new CharSegment();
-      _headerValues[i] = new CharSegment();
-    }
-    */
+    _requestBytesProbe
+      = ProbeManager.createAverageProbe(REQUEST_BYTES_PROBE, "");
   }
 
   @Override
@@ -184,260 +163,7 @@ public class HttpRequest extends AbstractHttpRequest
   @Override
   public boolean hasRequest()
   {
-    return _hasRequest;
-  }
-  
-  /**
-   * Handles a new HTTP request.
-   *
-   * <p>Note: ClientDisconnectException must be rethrown to
-   * the caller.
-   *
-   * @return true if the connection should stay open (keepalive)
-   */
-  public boolean handleRequest()
-    throws IOException
-  {
-    _hasRequest = false;
-
-    Thread thread = Thread.currentThread();
-    ClassLoader oldLoader = thread.getContextClassLoader();
-    
-    try {
-      thread.setContextClassLoader(_server.getClassLoader());
-      
-      HttpBufferStore httpBuffer = HttpBufferStore.allocate((Server) _server);
-      
-      startRequest(httpBuffer);
-      _response.startRequest(httpBuffer);
-
-      startInvocation();
-
-      // XXX: use same one for keepalive?
-      _requestFacade = new HttpServletRequestImpl(this);
-      _responseFacade = new HttpServletResponseImpl(_response);
-      _requestFacade.setResponse(_responseFacade);
-
-      try {
-	if (! readRequest(_rawRead)) {
-	  if (log.isLoggable(Level.FINE))
-	    log.fine(dbgId() + "read timeout");
-
-	  return false;
-	}
-
-	setStartTime();
-
-	_hasRequest = true;
-
-	_isSecure = _conn.isSecure() || _conn.getLocalPort() == 443;
-
-	if (_protocol.length() == 0)
-	  _protocol.append("HTTP/0.9");
-
-	if (log.isLoggable(Level.FINE)) {
-	  log.fine(dbgId() + _method + " " +
-		   new String(_uri, 0, _uriLength) + " " + _protocol);
-	  log.fine(dbgId() + "Remote-IP: " + _conn.getRemoteHost() + ":" + _conn.getRemotePort());
-	}
-
-	parseHeaders(_rawRead);
-
-	if (getVersion() >= HTTP_1_1 && isForce10()) {
-	  _protocol.clear();
-	  _protocol.append("HTTP/1.0");
-	  _version = HTTP_1_0;
-	}
-      } catch (ClientDisconnectException e) {
-	throw e;
-      } catch (Throwable e) {
-	log.log(Level.FINER, e.toString(), e);
-
-	throw new BadRequestException(String.valueOf(e), e);
-      }
-
-      CharSequence host = getHost();
-      if (host == null && getVersion() >= HTTP_1_1)
-	throw new BadRequestException("HTTP/1.1 requires host");
-
-      String ipHost = _conn.getVirtualHost();
-      if (ipHost != null)
-	host = ipHost;
-
-      _invocationKey.init(_isSecure,
-			  host, _conn.getLocalPort(),
-			  _uri, _uriLength);
-
-      Invocation invocation = getInvocation(host);
-
-      if (invocation == null)
-	return false;
-
-      setInvocation(invocation);
-
-      startInvocation();
-
-      invocation.service(_requestFacade, _responseFacade);
-    } catch (ClientDisconnectException e) {
-      _response.killCache();
-
-      throw e;
-    } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
-
-      _response.killCache();
-      killKeepalive();
-
-      try {
-        getErrorManager().sendServletError(e, this, _response);
-      } catch (ClientDisconnectException e1) {
-        throw e1;
-      } catch (Throwable e1) {
-        log.log(Level.FINE, e1.toString(), e1);
-      }
-
-      if (_server instanceof Server) {
-	WebApp webApp = ((Server) _server).getDefaultWebApp();
-	if (webApp != null)
-	  webApp.accessLog(_requestFacade, _responseFacade);
-      }
-
-      return false;
-    } finally {
-      finishInvocation();
-
-      if (! isSuspend()) {
-	finishRequest();
-      }
-      
-      thread.setContextClassLoader(oldLoader);
-    }
-
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(dbgId() +
-               (isKeepalive() ? "keepalive" : "no-keepalive"));
-    }
-
-    return isKeepalive();
-  }
-
-  private Invocation getInvocation(CharSequence host)
-    throws Throwable
-  {
-    Invocation invocation = _server.getInvocation(_invocationKey);
-
-    if (invocation == null) {
-      invocation = _server.createInvocation();
-      invocation.setSecure(_isSecure);
-
-      if (host != null) {
-	String hostName = host.toString().toLowerCase();
-
-	invocation.setHost(hostName);
-	invocation.setPort(_conn.getLocalPort());
-
-	// Default host name if the host doesn't have a canonical
-	// name
-	int p = hostName.indexOf(':');
-	if (p > 0)
-	  invocation.setHostName(hostName.substring(0, p));
-	else
-	  invocation.setHostName(hostName);
-      }
-
-      InvocationDecoder decoder = _server.getInvocationDecoder();
-
-      decoder.splitQueryAndUnescape(invocation, _uri, _uriLength);
-
-      if (_server.isModified()) {
-	_server.logModified(log);
-
-	_invocation = invocation;
-	if (_server instanceof Server)
-	  _invocation.setWebApp(((Server) _server).getDefaultWebApp());
-
-	restartServer();
-	
-	return null;
-      }
-
-      invocation = _server.buildInvocation(_invocationKey.clone(),
-					   invocation);
-    }
-
-    invocation = invocation.getRequestInvocation(this);
-
-    return invocation;
-  }
-  
-  /**
-   * Handles a comet-style resume.
-   *
-   * @return true if the connection should stay open (keepalive)
-   */
-  @Override
-  public boolean handleResume()
-    throws IOException
-  {
-    try {
-      startInvocation();
-
-      if (! isComet())
-	return false;
-
-      String url = _tcpConn.getCometPath();
-
-      // servlet 3.0 spec defaults to suspend
-      _tcpConn.suspend();
-	  
-      if (url != null) {
-	WebApp webApp = getWebApp();
-
-	RequestDispatcherImpl disp
-	  = (RequestDispatcherImpl) webApp.getRequestDispatcher(url);
-
-	if (disp != null) {
-	  disp.forwardResume(_requestFacade, _responseFacade);
-	  
-	  return isSuspend();
-	}
-      }
-	
-      _invocation.doResume(_requestFacade, _responseFacade);
-    } catch (ClientDisconnectException e) {
-      _response.killCache();
-
-      throw e;
-    } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
-
-      // isResume = false;
-      _response.killCache();
-      killKeepalive();
-
-      return false;
-    } finally {
-      finishInvocation();
-	
-      if (! isSuspend())
-	finishRequest();
-    }
-
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(dbgId() +
-               (isKeepalive() ? "keepalive" : "no-keepalive"));
-    }
-
-    return isSuspend();
-  }
-
-  /**
-   * There are some bogus clients that can't deal with HTTP/1.1 even
-   * though they advertise it.
-   */
-  private boolean isForce10()
-  {
-    return false;
+    return getRequestFacade() != null;
   }
 
   /**
@@ -454,452 +180,20 @@ public class HttpRequest extends AbstractHttpRequest
     return true;
   }
 
+  //
+  // HTTP request properties
+  //
+
   /**
-   * Clear the request variables in preparation for a new request.
-   *
-   * @param s the read stream for the request
+   * Returns a buffer containing the request method.
    */
-  @Override
-  protected void startRequest(HttpBufferStore httpBuffer)
-    throws IOException
+  public CharSegment getMethodBuffer()
   {
-    super.startRequest(httpBuffer);
-
-    _method.clear();
-    _methodString = null;
-    _protocol.clear();
-    
-    _uriLength = 0;
-    _uri = httpBuffer.getUriBuffer();
-    
-    _uriHost.clear();
-    _host = null;
-
-    _headerSize = 0;
-    _headerBuffer = httpBuffer.getHeaderBuffer();
-    _headerKeys = httpBuffer.getHeaderKeys();
-    _headerValues = httpBuffer.getHeaderValues();
-    _initAttributes = false;
+    return _method;
   }
 
   /**
-   * Returns true for a secure connection.
-   */
-  public boolean isSecure()
-  {
-    return _isSecure;
-  }
-
-  /**
-   * Read the first line of a request:
-   *
-   * GET [http://www.caucho.com[:80]]/path [HTTP/1.x]
-   *
-   * @return true if the request is valid
-   */
-  private boolean readRequest(ReadStream s)
-    throws IOException
-  {
-    int i = 0;
-
-    byte []readBuffer = s.getBuffer();
-    int readOffset = s.getOffset();
-    int readLength = s.getLength();
-    int ch;
-
-    if (readOffset >= readLength) {
-      try {
-        if ((readLength = s.fillBuffer()) < 0)
-          return false;
-      } catch (InterruptedIOException e) {
-        log.fine(dbgId() + "keepalive timeout");
-        return false;
-      }
-      readOffset = 0;
-    }
-    ch = readBuffer[readOffset++];
-
-    // conn.setAccessTime(getDate());
-
-    // skip leading whitespace
-    while (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') {
-      if (readOffset >= readLength) {
-        if ((readLength = s.fillBuffer()) < 0)
-          return false;
-
-        readOffset = 0;
-      }
-      ch = readBuffer[readOffset++];
-    }
-
-    char []buffer = _method.getBuffer();
-    int length = buffer.length;
-    int offset = 0;
-
-    // scan method
-    while (true) {
-      if (length <= offset) {
-      }
-      else if (ch >= 'a' && ch <= 'z')
-	buffer[offset++] = ((char) (ch + 'A' - 'a'));
-      else if (ch > ' ')
-	buffer[offset++] = (char) ch;
-      else
-	break;
-
-      if (readLength <= readOffset) {
-        if ((readLength = s.fillBuffer()) < 0)
-          return false;
-
-        readOffset = 0;
-      }
-      ch = readBuffer[readOffset++];
-    }
-
-    _method.setLength(offset);
-
-    // skip whitespace
-    while (ch == ' ' || ch == '\t') {
-      if (readOffset >= readLength) {
-        if ((readLength = s.fillBuffer()) < 0)
-          return false;
-
-        readOffset = 0;
-      }
-
-      ch = readBuffer[readOffset++];
-    }
-
-    byte []uriBuffer = _uri;
-    int uriLength = 0;
-
-    // skip 'http:'
-    if (ch != '/') {
-      while (ch > ' ' && ch != '/') {
-        if (readOffset >= readLength) {
-          if ((readLength = s.fillBuffer()) < 0)
-            return false;
-          readOffset = 0;
-        }
-        ch = readBuffer[readOffset++];
-      }
-
-      if (readOffset >= readLength) {
-        if ((readLength = s.fillBuffer()) < 0) {
-          if (ch == '/') {
-            uriBuffer[uriLength++] = (byte) ch;
-            _uriLength = uriLength;
-          }
-
-          return true;
-        }
-        readOffset = 0;
-      }
-
-      int ch1 = readBuffer[readOffset++];
-
-      if (ch1 != '/') {
-        uriBuffer[uriLength++] = (byte) ch;
-        ch = ch1;
-      }
-      else {
-        // read host
-        host:
-        while (true) {
-          if (readOffset >= readLength) {
-            if ((readLength = s.fillBuffer()) < 0) {
-              return true;
-            }
-            readOffset = 0;
-          }
-          ch = readBuffer[readOffset++];
-
-          switch (ch) {
-          case ' ': case '\t': case '\n': case '\r':
-            break host;
-
-          case '?':
-            break host;
-
-          case '/':
-            break host;
-
-          default:
-            _uriHost.append((char) ch);
-            break;
-          }
-        }
-      }
-    }
-
-    // read URI
-    uri:
-    while (true) {
-      switch (ch) {
-      case ' ': case '\t': case '\n': case '\r':
-	break uri;
-
-      default:
-        // There's no check for overrunning the length because
-        // allowing resizing would allow a DOS memory attack and
-        // also lets us save a bit of efficiency.
-        uriBuffer[uriLength++] = (byte) ch;
-        break;
-      }
-
-      if (readOffset >= readLength) {
-        readOffset = 0;
-        if ((readLength = s.fillBuffer()) < 0) {
-          _uriLength = uriLength;
-          return true;
-        }
-      }
-      ch = readBuffer[readOffset++];
-    }
-
-    _uriLength = uriLength;
-
-    // skip whitespace
-    while (ch == ' ' || ch == '\t') {
-      if (readOffset >= readLength) {
-        readOffset = 0;
-        if ((readLength = s.fillBuffer()) < 0)
-          return true;
-      }
-      ch = readBuffer[readOffset++];
-    }
-
-    buffer = _protocol.getBuffer();
-    length = buffer.length;
-    offset = 0;
-    // scan protocol
-    while (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
-      if (offset >= length) {
-      }
-      else if (ch >= 'a' && ch <= 'z')
-	buffer[offset++] = ((char) (ch + 'A' - 'a'));
-      else
-	buffer[offset++] = (char) ch;
-
-      if (readOffset >= readLength) {
-        readOffset = 0;
-        if ((readLength = s.fillBuffer()) < 0) {
-          _protocol.setLength(offset);
-          return true;
-        }
-      }
-      ch = readBuffer[readOffset++];
-    }
-    _protocol.setLength(offset);
-
-    if (offset != 8) {
-      _protocol.append("HTTP/0.9");
-      _version = HTTP_0_9;
-    }
-    else if (buffer[7] == '1') // && _protocol.equals(_http11Cb))
-      _version = HTTP_1_1;
-    else if (buffer[7] == '0') // && _protocol.equals(_http10Cb))
-      _version = HTTP_1_0;
-    else
-      _version = HTTP_0_9;
-
-    // skip to end of line
-    while (ch != '\n') {
-      if (readOffset >= readLength) {
-        if ((readLength = s.fillBuffer()) < 0)
-          return true;
-        readOffset = 0;
-      }
-      ch = readBuffer[readOffset++];
-    }
-
-    s.setOffset(readOffset);
-
-    return true;
-  }
-
-  /**
-   * Parses headers from the read stream.
-   *
-   * @param s the input read stream
-   */
-  private void parseHeaders(ReadStream s) throws IOException
-  {
-    // This is still slowest part of the web server.  I don't see how
-    // to improve it much more, but there must be a way.
-    int version = getVersion();
-
-    if (version < HTTP_1_0) {
-      return;
-    }
-
-    if (version < HTTP_1_1)
-      killKeepalive();
-
-    byte []readBuffer = s.getBuffer();
-    int readOffset = s.getOffset();
-    int readLength = s.getLength();
-
-    char []headerBuffer = _headerBuffer;
-    int headerOffset = 1;
-    int headerBufferSize = headerBuffer.length;
-    headerBuffer[0] = 'z';
-    int headerSize = 0;
-    _headerSize = 0;
-
-    CharSegment []headerKeys = _headerKeys;
-    CharSegment []headerValues = _headerValues;
-
-    boolean debug = log.isLoggable(Level.FINE);
-
-    while (true) {
-      int ch;
-
-      int keyOffset = headerOffset;
-
-      // scan the key
-      while (true) {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
-            return;
-        }
-        ch = readBuffer[readOffset++];
-
-        if (ch == '\n') {
-          s.setOffset(readOffset);
-          return;
-        }
-        else if (ch == ':')
-          break;
-
-        headerBuffer[headerOffset++] = (char) ch;
-      }
-
-      while (headerBuffer[headerOffset - 1] == ' ')
-        headerOffset--;
-
-      int keyLength = headerOffset - keyOffset;
-      headerKeys[headerSize].init(headerBuffer, keyOffset, keyLength);
-
-      do {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
-            return;
-        }
-        ch = readBuffer[readOffset++];
-      } while (ch == ' ' || ch == '\t');
-
-      int valueOffset = headerOffset;
-
-      // scan the value
-      while (true) {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
-            break;
-        }
-
-        if (ch == '\n') {
-          int ch1 = readBuffer[readOffset];
-
-          if (ch1 == ' ' || ch1 == '\t') {
-            ch = ' ';
-            readOffset++;
-
-            if (headerBuffer[headerOffset - 1] == '\r')
-              headerOffset--;
-          }
-          else
-            break;
-        }
-
-        headerBuffer[headerOffset++] = (char) ch;
-
-        ch = readBuffer[readOffset++];
-      }
-
-      while (headerBuffer[headerOffset - 1] <= ' ')
-        headerOffset--;
-
-      int valueLength = headerOffset - valueOffset;
-      headerValues[headerSize].init(headerBuffer, valueOffset, valueLength);
-
-      if (debug) {
-        log.fine(dbgId() +
-                 headerKeys[headerSize] + ": " + headerValues[headerSize]);
-      }
-
-      if (addHeaderInt(headerBuffer, keyOffset, keyLength,
-                       headerValues[headerSize])) {
-        headerSize++;
-      }
-
-      _headerSize = headerSize;
-    }
-  }
-
-  /**
-   * Returns the HTTP version of the request based on getProtocol().
-   */
-  int getVersion()
-  {
-    if (_version > 0)
-      return _version;
-
-    CharSegment protocol = getProtocolBuffer();
-    if (protocol.length() < 8) {
-      _version = HTTP_0_9;
-      return _version;
-    }
-
-    if (protocol.equals("HTTP/1.0")) {
-      _version = HTTP_1_0;
-      return _version;
-    }
-    else if (protocol.equals("HTTP/1.1")) {
-      _version = HTTP_1_1;
-      return HTTP_1_1;
-    }
-    else if (protocol.equals("HTTP/0.9")) {
-      _version = HTTP_0_9;
-      return HTTP_0_9;
-    }
-
-    int i = protocol.indexOf('/');
-    int len = protocol.length();
-    int major = 0;
-    for (i++; i < len; i++) {
-      char ch = protocol.charAt(i);
-
-      if (ch >= '0' && ch <= '9')
-	major = 10 * major + ch - '0';
-      else if (ch == '.')
-	break;
-      else {
-	_version = HTTP_1_0;
-	return _version;
-      }
-    }
-
-    int minor = 0;
-    for (i++; i < len; i++) {
-      char ch = protocol.charAt(i);
-
-      if (ch >= '0' && ch <= '9')
-	minor = 10 * minor + ch - '0';
-      else
-	break;
-    }
-
-    _version = 256 * major + minor;
-
-    return _version;
-  }
-
-  /**
-   * Returns the header.
+   * Returns the HTTP method (GET, POST, HEAD, etc.)
    */
   public String getMethod()
   {
@@ -929,15 +223,6 @@ public class HttpRequest extends AbstractHttpRequest
     }
 
     return _methodString;
-
-  }
-
-  /**
-   * Returns a buffer containing the request method.
-   */
-  public CharSegment getMethodBuffer()
-  {
-    return _method;
   }
 
   /**
@@ -955,6 +240,32 @@ public class HttpRequest extends AbstractHttpRequest
       _host = _uriHost;
     else
       _host = _hostHeader;
+
+    return _host;
+  }
+
+  /**
+   * Returns the virtual host from the invocation
+   */
+  private CharSequence getInvocationHost()
+    throws IOException
+  {
+    if (_host != null)
+      return _host;
+
+    String virtualHost = _conn.getVirtualHost();
+    if (virtualHost != null)
+      return virtualHost;
+    else if (_host != null) {
+    }
+    else if (_uriHost.length() > 0) {
+      _host = _uriHost;
+    }
+    else if (_hostHeader != null) {
+      _host = _hostHeader;
+    }
+    else if (HTTP_1_1 <= getVersion())
+      throw new BadRequestException("HTTP/1.1 requires a Host header (Remote IP=" + getRemoteHost() + ")");
 
     return _host;
   }
@@ -1000,36 +311,77 @@ public class HttpRequest extends AbstractHttpRequest
   }
 
   /**
-   * Adds a new header.  Used only by the caching to simulate
-   * If-Modified-Since.
-   *
-   * @param key the key of the new header
-   * @param value the value for the new header
+   * Returns the HTTP version of the request based on getProtocol().
    */
-  public void setHeader(String key, String value)
+  int getVersion()
   {
-    int tail;
+    if (_version > 0)
+      return _version;
 
-    if (_headerSize > 0) {
-      tail = (_headerValues[_headerSize - 1].getOffset() +
-              _headerValues[_headerSize - 1].getLength());
+    CharSegment protocol = getProtocolBuffer();
+    if (protocol.equals("HTTP/1.1")) {
+      _version = HTTP_1_1;
+      return HTTP_1_1;
     }
+    if (protocol.equals("HTTP/1.0")) {
+      _version = HTTP_1_0;
+      return _version;
+    }
+    else if (protocol.equals("HTTP/0.9")) {
+      _version = HTTP_0_9;
+      return HTTP_0_9;
+    }
+    else if (protocol.length() < 8) {
+      _version = HTTP_0_9;
+      return _version;
+    }
+
+
+    int i = protocol.indexOf('/');
+    int len = protocol.length();
+    int major = 0;
+    for (i++; i < len; i++) {
+      char ch = protocol.charAt(i);
+
+      if ('0' <= ch && ch <= '9')
+        major = 10 * major + ch - '0';
+      else if (ch == '.')
+        break;
+      else {
+        _version = HTTP_1_0;
+        return _version;
+      }
+    }
+
+    int minor = 0;
+    for (i++; i < len; i++) {
+      char ch = protocol.charAt(i);
+
+      if ('0' <= ch && ch <= '9')
+        minor = 10 * minor + ch - '0';
+      else
+        break;
+    }
+
+    _version = 256 * major + minor;
+
+    return _version;
+  }
+
+  //
+  // HTTP request headers
+  //
+
+  /**
+   * Returns the header.
+   */
+  public String getHeader(String key)
+  {
+    CharSegment buf = getHeaderBuffer(key);
+    if (buf != null)
+      return buf.toString();
     else
-      tail = 0;
-
-    char []headerBuffer = _headerBuffer;
-    for (int i = key.length() - 1; i >= 0; i--)
-      headerBuffer[tail + i] = key.charAt(i);
-
-    _headerKeys[_headerSize].init(headerBuffer, tail, key.length());
-
-    tail += key.length();
-
-    for (int i = value.length() - 1; i >= 0; i--)
-      headerBuffer[tail + i] = value.charAt(i);
-
-    _headerValues[_headerSize].init(headerBuffer, tail, value.length());
-    _headerSize++;
+      return null;
   }
 
   /**
@@ -1057,18 +409,6 @@ public class HttpRequest extends AbstractHttpRequest
   public CharSegment getHeaderValue(int index)
   {
     return _headerValues[index];
-  }
-
-  /**
-   * Returns the header.
-   */
-  public String getHeader(String key)
-  {
-    CharSegment buf = getHeaderBuffer(key);
-    if (buf != null)
-      return buf.toString();
-    else
-      return null;
   }
 
   /**
@@ -1210,16 +550,131 @@ public class HttpRequest extends AbstractHttpRequest
 
       int j;
       for (j = 0; j < names.size(); j++) {
-	String oldName = names.get(j);
-	if (name.matches(oldName))
-	  break;
+        String oldName = names.get(j);
+        if (name.matches(oldName))
+          break;
       }
       if (j == names.size())
-	names.add(j, name.toString());
+        names.add(j, name.toString());
     }
 
     return Collections.enumeration(names);
   }
+
+  /**
+   * Adds a new header.  Used only by the caching to simulate
+   * If-Modified-Since.
+   *
+   * @param key the key of the new header
+   * @param value the value for the new header
+   */
+  public void setHeader(String key, String value)
+  {
+    int tail;
+
+    if (_headerSize > 0) {
+      tail = (_headerValues[_headerSize - 1].getOffset()
+              + _headerValues[_headerSize - 1].getLength());
+    }
+    else
+      tail = 0;
+
+    char []headerBuffer = _headerBuffer;
+    for (int i = key.length() - 1; i >= 0; i--)
+      headerBuffer[tail + i] = key.charAt(i);
+
+    _headerKeys[_headerSize].init(headerBuffer, tail, key.length());
+
+    tail += key.length();
+
+    for (int i = value.length() - 1; i >= 0; i--)
+      headerBuffer[tail + i] = value.charAt(i);
+
+    _headerValues[_headerSize].init(headerBuffer, tail, value.length());
+    _headerSize++;
+  }
+
+  //
+  // attribute management
+  //
+
+  /**
+   * Initialize any special attributes.
+   */
+  @Override
+  protected void initAttributes(HttpServletRequestImpl request)
+  {
+    TcpConnection tcpConn = _tcpConn;
+
+    if (tcpConn == null || ! tcpConn.isSecure())
+      return;
+
+    QSocket socket = tcpConn.getSocket();
+
+    String cipherSuite = socket.getCipherSuite();
+    request.setAttribute("javax.servlet.request.cipher_suite", cipherSuite);
+
+    int keySize = socket.getCipherBits();
+    if (keySize != 0)
+      request.setAttribute("javax.servlet.request.key_size",
+                           new Integer(keySize));
+
+    try {
+      X509Certificate []certs = socket.getClientCertificates();
+      if (certs != null && certs.length > 0) {
+        request.setAttribute("javax.servlet.request.X509Certificate",
+                             certs[0]);
+        request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
+                             certs[0].getSubjectDN());
+      }
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+  }
+
+  //
+  // session management
+  //
+
+  /**
+   * For SSL connections, use the SSL identifier.
+   */
+  public String findSessionIdFromConnection()
+  {
+    TcpConnection tcpConn = _tcpConn;
+
+    if (tcpConn == null || ! tcpConn.isSecure())
+      return null;
+
+    QSocket socket = tcpConn.getSocket(); // XXX:
+    /*
+    if (! (socket instanceof SSLSocket))
+      return null;
+
+    SSLSession sslSession = ((SSLSocket) socket).getSession();
+    if (sslSession == null)
+      return null;
+
+    byte []sessionId = sslSession.getId();
+    if (sessionId == null)
+      return null;
+
+    CharBuffer cb = CharBuffer.allocate();
+    Base64.encode(cb, sessionId, 0, sessionId.length);
+    for (int i = cb.length() - 1; i >= 0; i--) {
+      char ch = cb.charAt(i);
+      if (ch == '/')
+        cb.setCharAt(i, '-');
+    }
+
+    return cb.close();
+    */
+    return null;
+  }
+
+  //
+  // stream management
+  //
 
   /**
    * Returns a stream for reading POST data.
@@ -1227,15 +682,21 @@ public class HttpRequest extends AbstractHttpRequest
   public boolean initStream(ReadStream readStream, ReadStream rawRead)
     throws IOException
   {
-    long contentLength = getLongContentLength();
-
     // needed to avoid auto-flush on read conflicting with partially
     // generated response
     rawRead.setSibling(null);
 
+    if (getConnection().isDuplex()) {
+      _rawInputStream.init(rawRead);
+      readStream.init(_rawInputStream, null);
+      return true;
+    }
+    
+    long contentLength = getLongContentLength();
+
     String te;
     if (contentLength < 0 && HTTP_1_1 <= getVersion()
-	&& (te = getHeader("Transfer-Encoding")) != null) {
+        && (te = getHeader("Transfer-Encoding")) != null) {
       _chunkedInputStream.init(rawRead);
       readStream.init(_chunkedInputStream, null);
       return true;
@@ -1272,215 +733,6 @@ public class HttpRequest extends AbstractHttpRequest
   }
 
   /**
-   * Prints the remote address into a buffer.
-   *
-   * @param buffer the buffer which will contain the address.
-   * @param offset the initial offset into the buffer.
-   *
-   * @return the final offset into the buffer.
-   */
-  /*
-  public int printRemoteAddr(byte []buffer, int offset)
-    throws IOException
-  {
-    Connection conn = getConnection();
-
-    if (! (conn instanceof TcpConnection))
-      return super.printRemoteAddr(buffer, offset);
-
-    QSocket socket = ((TcpConnection) conn).getSocket();
-
-    if (socket instanceof QJniSocket) {
-      QJniSocket jniSocket = (QJniSocket) socket;
-      long ip = jniSocket.getRemoteIP();
-
-      for (int i = 24; i >= 0; i -= 8) {
-        int value = (int) (ip >> i) & 0xff;
-
-        if (value < 10)
-          buffer[offset++] = (byte) (value + '0');
-        else if (value < 100) {
-          buffer[offset++] = (byte) (value / 10 + '0');
-          buffer[offset++] = (byte) (value % 10 + '0');
-        }
-        else {
-          buffer[offset++] = (byte) (value / 100 + '0');
-          buffer[offset++] = (byte) (value / 10 % 10 + '0');
-          buffer[offset++] = (byte) (value % 10 + '0');
-        }
-
-        if (i != 0)
-          buffer[offset++] = (byte) '.';
-      }
-    }
-    else {
-      InetAddress addr = conn.getRemoteAddress();
-
-      if (addr == null) {
-        buffer[offset++] = (byte) '0';
-        buffer[offset++] = (byte) '.';
-        buffer[offset++] = (byte) '0';
-        buffer[offset++] = (byte) '.';
-        buffer[offset++] = (byte) '0';
-        buffer[offset++] = (byte) '.';
-        buffer[offset++] = (byte) '0';
-
-        return offset;
-      }
-
-      byte []bytes = addr.getAddress();
-      for (int i = 0; i < bytes.length; i++) {
-        if (i != 0)
-          buffer[offset++] = (byte) '.';
-
-        int value = bytes[i] & 0xff;
-
-        if (value < 10)
-          buffer[offset++] = (byte) (value + '0');
-        else if (value < 100) {
-          buffer[offset++] = (byte) (value / 10 + '0');
-          buffer[offset++] = (byte) (value % 10 + '0');
-        }
-        else {
-          buffer[offset++] = (byte) (value / 100 + '0');
-          buffer[offset++] = (byte) (value / 10 % 10 + '0');
-          buffer[offset++] = (byte) (value % 10 + '0');
-        }
-      }
-    }
-
-    return offset;
-  }
-  */
-
-  /**
-   * Returns the client's remote host name.
-   */
-  /*
-  public String getRemoteHost()
-  {
-    Connection conn = getConnection();
-
-    if (conn instanceof TcpConnection) {
-      QSocket socket = ((TcpConnection) conn).getSocket();
-
-      if (socket instanceof QJniSocket) {
-        QJniSocket jniSocket = (QJniSocket) socket;
-        long ip = jniSocket.getRemoteIP();
-
-        CharBuffer cb = _cb;
-        cb.clear();
-
-        for (int i = 24; i >= 0; i -= 8) {
-          int value = (int) (ip >> i) & 0xff;
-
-          if (value < 10)
-            cb.append((char) (value + '0'));
-          else if (value < 100) {
-            cb.append((char) (value / 10 + '0'));
-            cb.append((char) (value % 10 + '0'));
-          }
-          else {
-            cb.append((char) (value / 100 + '0'));
-            cb.append((char) (value / 10 % 10 + '0'));
-            cb.append((char) (value % 10 + '0'));
-          }
-
-          if (i != 0)
-            cb.append('.');
-        }
-
-        return cb.toString();
-      }
-    }
-
-    InetAddress addr = conn.getRemoteAddress();
-
-    byte []bytes = addr.getAddress();
-    CharBuffer cb = _cb;
-    cb.clear();
-    for (int i = 0; i < bytes.length; i++) {
-      int value = bytes[i] & 0xff;
-
-      if (i != 0)
-        cb.append('.');
-
-      if (value < 10)
-        cb.append((char) (value + '0'));
-      else if (value < 100) {
-        cb.append((char) (value / 10 + '0'));
-        cb.append((char) (value % 10 + '0'));
-      }
-      else {
-        cb.append((char) (value / 100 + '0'));
-        cb.append((char) (value / 10 % 10 + '0'));
-        cb.append((char) (value % 10 + '0'));
-      }
-    }
-
-    return cb.toString();
-  }
-  */
-
-  /**
-   * Returns the named attribute.
-   */
-  public Object getAttribute(String name)
-  {
-    if (! _initAttributes)
-      initAttributes();
-
-    return super.getAttribute(name);
-  }
-
-  /**
-   * Returns an enumeration of the attribute names.
-   */
-  public Enumeration<String> getAttributeNames()
-  {
-    if (! _initAttributes)
-      initAttributes();
-
-    return super.getAttributeNames();
-  }
-
-  /**
-   * For SSL connections, use the SSL identifier.
-   */
-  public String findSessionIdFromConnection()
-  {
-    TcpConnection tcpConn = _tcpConn;
-    
-    if (! _isSecure || tcpConn == null)
-      return null;
-
-    QSocket socket = tcpConn.getSocket(); // XXX:
-    /*
-    if (! (socket instanceof SSLSocket))
-      return null;
-
-    SSLSession sslSession = ((SSLSocket) socket).getSession();
-    if (sslSession == null)
-      return null;
-
-    byte []sessionId = sslSession.getId();
-    if (sessionId == null)
-      return null;
-
-    CharBuffer cb = CharBuffer.allocate();
-    Base64.encode(cb, sessionId, 0, sessionId.length);
-    for (int i = cb.length() - 1; i >= 0; i--) {
-      char ch = cb.charAt(i);
-      if (ch == '/')
-        cb.setCharAt(i, '-');
-    }
-
-    return cb.close();
-    */
-    return null;
-  }
-
-  /**
    * Returns the raw input stream.
    */
   public ReadStream getRawInput()
@@ -1488,46 +740,499 @@ public class HttpRequest extends AbstractHttpRequest
     return _rawRead;
   }
 
-  @Override
-  public HttpServletRequest getRequestFacade()
+  /**
+   * Handles a new HTTP request.
+   *
+   * <p>Note: ClientDisconnectException must be rethrown to
+   * the caller.
+   *
+   * @return true if the connection should stay open (keepalive)
+   */
+  public boolean handleRequest()
+    throws IOException
   {
-    return _requestFacade;
+    boolean isInvocation = false;
+    
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+    long startTime = 0;
+
+    try {
+      thread.setContextClassLoader(_server.getClassLoader());
+      
+      startRequest(HttpBufferStore.allocate((Server) _server));
+
+      if (! parseRequest()) {
+        return false;
+      }
+
+      CharSequence host = getInvocationHost();
+
+      Invocation invocation = getInvocation(host, _uri, _uriLength);
+
+      if (invocation == null)
+        return false;
+
+      HttpServletRequestImpl requestFacade = getRequestFacade();
+
+      requestFacade.setInvocation(invocation);
+
+      isInvocation = true;
+      startTime = _requestTimeProbe.start();
+      startInvocation();
+
+      invocation.service(requestFacade, getResponseFacade());
+    } catch (ClientDisconnectException e) {
+      getResponseFacade().killCache();
+      killKeepalive();
+
+      throw e;
+    } catch (Throwable e) {
+      log.log(Level.FINE, e.toString(), e);
+
+      getResponseFacade().killCache();
+      killKeepalive();
+
+      sendRequestError(e);
+
+      return false;
+    } finally {
+      if (isInvocation) {
+        finishInvocation();
+      }
+
+      if (! isSuspend()) {
+        finishRequest();
+      }
+
+      if (startTime > 0) {
+        _requestTimeProbe.end(startTime);
+        _requestBytesProbe.add(getResponse().getContentLength());
+      }
+
+      thread.setContextClassLoader(oldLoader);
+    }
+
+    return true;
+  }
+
+  private boolean parseRequest()
+    throws IOException
+  {
+    try {
+      if (! readRequest(_rawRead)) {
+        if (log.isLoggable(Level.FINE))
+          log.fine(dbgId() + "read timeout");
+
+        clearRequest();
+
+        return false;
+      }
+
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(dbgId() + _method + " "
+                 + new String(_uri, 0, _uriLength) + " " + _protocol);
+        log.fine(dbgId() + "Remote-IP: " + _conn.getRemoteHost()
+                 + ":" + _conn.getRemotePort());
+      }
+
+      parseHeaders(_rawRead);
+
+      return true;
+    } catch (ClientDisconnectException e) {
+      throw e;
+    } catch (Throwable e) {
+      log.log(Level.FINER, e.toString(), e);
+
+      throw new BadRequestException(String.valueOf(e), e);
+    }
   }
 
   /**
-   * Initialize any special attributes.
+   * Clear the request variables in preparation for a new request.
+   *
+   * @param s the read stream for the request
    */
-  private void initAttributes()
+  @Override
+  protected void startRequest(HttpBufferStore httpBuffer)
+    throws IOException
   {
-    _initAttributes = true;
+    super.startRequest(httpBuffer);
 
-    TcpConnection tcpConn = _tcpConn;
-    
-    if (! _isSecure || tcpConn == null)
-      return;
+    _method.clear();
+    _methodString = null;
+    _protocol.clear();
 
-    QSocket socket = tcpConn.getSocket();
+    _uriLength = 0;
+    _uri = httpBuffer.getUriBuffer();
 
-    String cipherSuite = socket.getCipherSuite();
-    super.setAttribute("javax.servlet.request.cipher_suite", cipherSuite);
+    _uriHost.clear();
+    _host = null;
 
-    int keySize = socket.getCipherBits();
-    if (keySize != 0)
-      super.setAttribute("javax.servlet.request.key_size",
-                         new Integer(keySize));
+    _headerSize = 0;
+    _headerBuffer = httpBuffer.getHeaderBuffer();
+    _headerKeys = httpBuffer.getHeaderKeys();
+    _headerValues = httpBuffer.getHeaderValues();
+  }
 
-    try {
-      X509Certificate []certs = socket.getClientCertificates();
-      if (certs != null && certs.length > 0) {
-        super.setAttribute("javax.servlet.request.X509Certificate", certs[0]);
-        super.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
-                           certs[0].getSubjectDN());
+  /**
+   * Read the first line of a request:
+   *
+   * GET [http://www.caucho.com[:80]]/path [HTTP/1.x]
+   *
+   * @return true if the request is valid
+   */
+  private boolean readRequest(ReadStream s)
+    throws IOException
+  {
+    int i = 0;
+
+    byte []readBuffer = s.getBuffer();
+    int readOffset = s.getOffset();
+    int readLength = s.getLength();
+    int ch;
+
+    // skip leading whitespace
+    do {
+      if (readLength <= readOffset) {
+        if ((readLength = s.fillBuffer()) < 0)
+          return false;
+
+        readOffset = 0;
       }
-    } catch (Exception e) {
-      log.log(Level.FINER, e.toString(), e);
+      
+      ch = readBuffer[readOffset++];
+    } while (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n');
+
+    char []buffer = _method.getBuffer();
+    int length = buffer.length;
+    int offset = 0;
+
+    // scan method
+    while (true) {
+      if (length <= offset) {
+      }
+      else if ('a' <= ch && ch <= 'z')
+        buffer[offset++] = ((char) (ch + 'A' - 'a'));
+      else if (ch > ' ')
+        buffer[offset++] = (char) ch;
+      else
+        break;
+
+      if (readLength <= readOffset) {
+        if ((readLength = s.fillBuffer()) < 0)
+          return false;
+
+        readOffset = 0;
+      }
+      ch = readBuffer[readOffset++];
+    }
+
+    _method.setLength(offset);
+
+    // skip whitespace
+    while (ch == ' ' || ch == '\t') {
+      if (readLength <= readOffset) {
+        if ((readLength = s.fillBuffer()) < 0)
+          return false;
+
+        readOffset = 0;
+      }
+
+      ch = readBuffer[readOffset++];
+    }
+
+    byte []uriBuffer = _uri;
+    int uriLength = 0;
+
+    // skip 'http:'
+    if (ch != '/') {
+      while (ch > ' ' && ch != '/') {
+        if (readOffset >= readLength) {
+          if ((readLength = s.fillBuffer()) < 0)
+            return false;
+          readOffset = 0;
+        }
+        ch = readBuffer[readOffset++];
+      }
+
+      if (readLength <= readOffset) {
+        if ((readLength = s.fillBuffer()) < 0) {
+          if (ch == '/') {
+            uriBuffer[uriLength++] = (byte) ch;
+            _uriLength = uriLength;
+          }
+
+          return true;
+        }
+        readOffset = 0;
+      }
+
+      int ch1 = readBuffer[readOffset++];
+
+      if (ch1 != '/') {
+        uriBuffer[uriLength++] = (byte) ch;
+        ch = ch1;
+      }
+      else {
+        // read host
+        host:
+        while (true) {
+          if (readLength <= readOffset) {
+            if ((readLength = s.fillBuffer()) < 0) {
+              return true;
+            }
+            readOffset = 0;
+          }
+          ch = readBuffer[readOffset++];
+
+          switch (ch) {
+          case ' ': case '\t': case '\n': case '\r':
+            break host;
+
+          case '?':
+            break host;
+
+          case '/':
+            break host;
+
+          default:
+            _uriHost.append((char) ch);
+            break;
+          }
+        }
+      }
+    }
+
+    // read URI
+    uri:
+    while (true) {
+      switch (ch) {
+      case ' ': case '\t': case '\n': case '\r':
+        break uri;
+
+      default:
+        // There's no check for overrunning the length because
+        // allowing resizing would allow a DOS memory attack and
+        // also lets us save a bit of efficiency.
+        uriBuffer[uriLength++] = (byte) ch;
+        break;
+      }
+
+      if (readOffset >= readLength) {
+        readOffset = 0;
+        if ((readLength = s.fillBuffer()) < 0) {
+          _uriLength = uriLength;
+          return true;
+        }
+      }
+      ch = readBuffer[readOffset++];
+    }
+
+    _uriLength = uriLength;
+
+    // skip whitespace
+    while (ch == ' ' || ch == '\t') {
+      if (readLength <= readOffset) {
+        readOffset = 0;
+        if ((readLength = s.fillBuffer()) < 0)
+          return true;
+      }
+      ch = readBuffer[readOffset++];
+    }
+
+    buffer = _protocol.getBuffer();
+    length = buffer.length;
+    offset = 0;
+    // scan protocol
+    while (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+      if (length <= offset) {
+      }
+      else if ('a' <= ch && ch <= 'z')
+        buffer[offset++] = ((char) (ch + 'A' - 'a'));
+      else
+        buffer[offset++] = (char) ch;
+
+      if (readLength <= readOffset) {
+        readOffset = 0;
+        if ((readLength = s.fillBuffer()) < 0) {
+          _protocol.setLength(offset);
+          return true;
+        }
+      }
+      ch = readBuffer[readOffset++];
+    }
+    _protocol.setLength(offset);
+
+    if (offset != 8) {
+      _protocol.append("HTTP/0.9");
+      _version = HTTP_0_9;
+    }
+    else if (buffer[7] == '1') // && _protocol.equals(_http11Cb))
+      _version = HTTP_1_1;
+    else if (buffer[7] == '0') // && _protocol.equals(_http10Cb))
+      _version = HTTP_1_0;
+    else
+      _version = HTTP_0_9;
+
+    // skip to end of line
+    while (ch != '\n') {
+      if (readLength <= readOffset) {
+        if ((readLength = s.fillBuffer()) < 0)
+          return true;
+        readOffset = 0;
+      }
+      ch = readBuffer[readOffset++];
+    }
+
+    s.setOffset(readOffset);
+
+    return true;
+  }
+
+  /**
+   * Parses headers from the read stream.
+   *
+   * @param s the input read stream
+   */
+  private void parseHeaders(ReadStream s) throws IOException
+  {
+    // This is still slowest part of the web server.  I don't see how
+    // to improve it much more, but there must be a way.
+    int version = getVersion();
+
+    if (version < HTTP_1_0) {
+      return;
+    }
+
+    if (version < HTTP_1_1)
+      killKeepalive();
+
+    byte []readBuffer = s.getBuffer();
+    int readOffset = s.getOffset();
+    int readLength = s.getLength();
+
+    char []headerBuffer = _headerBuffer;
+    int headerOffset = 1;
+    int headerBufferSize = headerBuffer.length;
+    headerBuffer[0] = 'z';
+    int headerSize = 0;
+    _headerSize = 0;
+
+    CharSegment []headerKeys = _headerKeys;
+    CharSegment []headerValues = _headerValues;
+
+    boolean debug = log.isLoggable(Level.FINE);
+
+    while (true) {
+      int ch;
+
+      int keyOffset = headerOffset;
+
+      // scan the key
+      while (true) {
+        if (readLength <= readOffset) {
+          readOffset = 0;
+          if ((readLength = s.fillBuffer()) <= 0)
+            return;
+        }
+        ch = readBuffer[readOffset++];
+
+        if (ch == '\n') {
+          s.setOffset(readOffset);
+          return;
+        }
+        else if (ch == ':')
+          break;
+
+        headerBuffer[headerOffset++] = (char) ch;
+      }
+
+      while (headerBuffer[headerOffset - 1] == ' ')
+        headerOffset--;
+
+      int keyLength = headerOffset - keyOffset;
+      headerKeys[headerSize].init(headerBuffer, keyOffset, keyLength);
+
+      do {
+        if (readLength <= readOffset) {
+          readOffset = 0;
+          if ((readLength = s.fillBuffer()) <= 0)
+            return;
+        }
+        ch = readBuffer[readOffset++];
+      } while (ch == ' ' || ch == '\t');
+
+      int valueOffset = headerOffset;
+
+      // scan the value
+      while (true) {
+        if (readLength <= readOffset) {
+          readOffset = 0;
+          if ((readLength = s.fillBuffer()) <= 0)
+            break;
+        }
+
+        if (ch == '\n') {
+          int ch1 = readBuffer[readOffset];
+
+          if (ch1 == ' ' || ch1 == '\t') {
+            ch = ' ';
+            readOffset++;
+
+            if (headerBuffer[headerOffset - 1] == '\r')
+              headerOffset--;
+          }
+          else
+            break;
+        }
+
+        headerBuffer[headerOffset++] = (char) ch;
+
+        ch = readBuffer[readOffset++];
+      }
+
+      while (headerBuffer[headerOffset - 1] <= ' ')
+        headerOffset--;
+
+      int valueLength = headerOffset - valueOffset;
+      headerValues[headerSize].init(headerBuffer, valueOffset, valueLength);
+
+      if (debug) {
+        log.fine(dbgId() +
+                 headerKeys[headerSize] + ": " + headerValues[headerSize]);
+      }
+
+      if (addHeaderInt(headerBuffer, keyOffset, keyLength,
+                       headerValues[headerSize])) {
+        headerSize++;
+      }
+
+      _headerSize = headerSize;
     }
   }
-  
+
+  //
+  // upgrade to duplex
+  //
+
+
+  /**
+   * Upgrade to duplex
+   */
+  @Override
+  public TcpDuplexController startDuplex(TcpDuplexHandler handler)
+  {
+    TcpConnection conn = (TcpConnection) _conn;
+
+    TcpDuplexController context = conn.startDuplex(handler);
+
+    _rawInputStream.init(conn.getReadStream());
+    _readStream.setSource(_rawInputStream);
+
+    return context;
+  }
+
   public final void protocolCloseEvent()
   {
   }
@@ -1540,7 +1245,7 @@ public class HttpRequest extends AbstractHttpRequest
     throws IOException
   {
     super.finishRequest();
-    
+
     skip();
   }
 
@@ -1558,7 +1263,7 @@ public class HttpRequest extends AbstractHttpRequest
       return "HttpRequest[" + _conn.getId() + "]";
     else {
       return ("HttpRequest[" + _server.getServerId()
-	      + ", " + _conn.getId() + "]");
+              + ", " + _conn.getId() + "]");
     }
   }
 }

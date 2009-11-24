@@ -42,8 +42,10 @@ import javax.annotation.PostConstruct;
 public class CharacterEncoding {
   private static final L10N L = new L10N(CharacterEncoding.class);
 
-  private static final EnvironmentLocal<String> _localEncoding =
-    new EnvironmentLocal<String>("caucho.i18n.encoding");
+  private static final EnvironmentLocal<String> _localEncoding
+    = new EnvironmentLocal<String>();
+
+  private static final String _systemEncoding;
 
   private String _encoding;
 
@@ -57,7 +59,12 @@ public class CharacterEncoding {
 
   public static String getLocalEncoding()
   {
-    return _localEncoding.get();
+    String encoding = _localEncoding.get();
+
+    if (encoding != null)
+      return encoding;
+    else
+      return _systemEncoding;
   }
 
   /**
@@ -75,7 +82,18 @@ public class CharacterEncoding {
 
   public String toString()
   {
-    return "CharacterEncoding[" + _encoding + "]";
+    return getClass().getSimpleName() + "[" + _encoding + "]";
+  }
+
+  static {
+    String encoding = System.getProperty("file.encoding");
+
+    if (encoding != null)
+      encoding = Encoding.getMimeName(encoding);
+    else
+      encoding = "utf-8";
+
+    _systemEncoding = encoding;
   }
 }
 

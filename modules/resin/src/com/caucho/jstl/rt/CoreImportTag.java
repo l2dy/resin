@@ -33,6 +33,7 @@ import com.caucho.jsp.BodyContentImpl;
 import com.caucho.jsp.ResinJspWriter;
 import com.caucho.jstl.NameValueTag;
 import com.caucho.server.connection.CauchoResponse;
+import com.caucho.server.webapp.WebApp;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ReadStream;
@@ -247,6 +248,30 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
     return EVAL_PAGE;
   }
 
+  private String getCharEncoding()
+  {
+    if (_charEncoding != null && !"".equals(_charEncoding))
+      return _charEncoding;
+
+    String charEncoding = _charEncoding;
+
+    if (_charEncoding == null || "".equals(_charEncoding))
+      charEncoding = null;
+
+    if (charEncoding == null) {
+      //XXX performance?
+      WebApp webApp = WebApp.getCurrent();
+
+      if (webApp.getJsp() != null)
+        charEncoding = webApp.getJsp().getPageEncoding();
+
+      if (charEncoding == null)
+        charEncoding = webApp.getCharacterEncoding();
+    }
+
+    return charEncoding;
+  }
+
   private void handleBody(BodyContentImpl body)
     throws JspException, ServletException, IOException
   {
@@ -261,7 +286,8 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
     }
     else if ((p = url.indexOf('?')) > 0) {
       // jsp/1cip
-      url = url.substring(0, p) + '?' + _query + '&' + url.substring(p + 1);
+      url = url + '&' + _query; 
+      //url = url.substring(0, p) + '?' + _query + '&' + url.substring(p + 1);
     }
     else
       url = url + '?' + _query;
@@ -290,14 +316,17 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
                                      url));
 	
 	CauchoResponse response = (CauchoResponse) pageContext.getResponse();
-        
-        if (_charEncoding != null && ! "".equals(_charEncoding))
-          response.getResponseStream().setEncoding(_charEncoding);
+
+        String charEncoding = getCharEncoding();
+
+        if (charEncoding != null)
+          response.getResponseStream().setEncoding(charEncoding);
 
         final ServletRequest request = pageContext.getRequest();
 
         disp.include(request, response);
 
+/*
         final Integer statusCode
           = (Integer) request.getAttribute("com.caucho.dispatch.response.statusCode");
 
@@ -314,7 +343,18 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
             throw new JspException(message);
           }
         }
+*/
+        //jsp/1jif
+        int status = response.getStatus();
 
+        if (status < 200 || status > 299) {
+          String message = L.l(
+            "c:import status code {0} recieved while serving {1}",
+            status,
+            context + url);
+
+          throw new JspException(message);
+        }
       }
       else
         handleExternalBody(context + url);
@@ -328,13 +368,16 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
       ServletRequest request = pageContext.getRequest();
       CauchoResponse response = (CauchoResponse) pageContext.getResponse();
 
-      if (_charEncoding != null && ! "".equals(_charEncoding))
-        response.getResponseStream().setEncoding(_charEncoding);
-      
+      String charEncoding = getCharEncoding();
+
+      if (charEncoding != null)
+        response.getResponseStream().setEncoding(charEncoding);
+
       RequestDispatcher disp = request.getRequestDispatcher(url);
 
       disp.include(request, response);
 
+/*
       final Integer statusCode
         = (Integer) request.getAttribute("com.caucho.dispatch.response.statusCode");
 
@@ -351,6 +394,19 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
           throw new JspException(message);
         }
       }
+*/
+      //jsp/1jie
+      int status = response.getStatus();
+
+      if (status < 200 || status > 299) {
+        String message = L.l(
+          "c:import status code {0} recieved while serving {1}",
+          status,
+          url);
+
+        throw new JspException(message);
+      }
+
     }
     else
       handleExternalBody(url);

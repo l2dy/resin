@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -62,15 +62,9 @@ public class StaticStatement extends Statement {
       if (_staticName == null)
         _staticName = env.createStaticName();
 
-      QuercusClass cls = env.getCallingClass();
-
       String staticName = _staticName;
       
-      if (cls != null)
-	staticName = cls.getName() + "::" + staticName;
-
       Var var = env.getStaticVar(staticName);
-      
       env.setValue(_var.getName(), var);
 
       if (! var.isset() && _initValue != null)

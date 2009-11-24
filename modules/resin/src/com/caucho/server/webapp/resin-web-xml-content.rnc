@@ -169,6 +169,9 @@ r_filter = element filter {
    & (attribute filter-class { r_class-Type }
       | element filter-class { r_class-Type })
 
+   & (attribute async-supported { r_class-Type }
+      | element async-supported { r_class-Type })?
+
    & r_init*
    & r_init-param*
 }
@@ -306,6 +309,9 @@ r_jsp = element jsp {
 
  & (attribute velocity-enabled { r_boolean-Type }
     | element velocity-enabled { r_boolean-Type })?
+
+ & (attribute  character-encoding { string }
+    | element character-encoding { string })?
 }
 
 r_jsf = element jsf {
@@ -844,7 +850,10 @@ r_servlet = element servlet {
 }
 
 r_servlet-Content =
-   r_jndi-name?
+   (attribute async-supported { r_boolean-Type }
+      | element async-supported { r_boolean-Type })?
+
+   & r_jndi-name?
 
    & r_var?
 
@@ -926,6 +935,12 @@ r_session-config = element session-config {
 
   & (attribute cookie-modulo-cluster { r_boolean-Type }
      | element cookie-modulo-cluster { r_boolean-Type })?
+
+  & (attribute cookie-use-context-path { r_boolean-Type }
+     | element cookie-use-context-path { r_boolean-Type })?
+
+  & (attribute cookie-path { string }
+     | element cookie-pathdport { string })?
 
   & (attribute cookie-port { string }
      | element cookie-port { string })?
@@ -1051,6 +1066,7 @@ r_versioning =
   | element versioning { r_boolean-Type }
 
 r_web-app-default = element web-app-default {
+  attribute metadata-complete { r_boolean-Type }?,
   r_web-app-Content
 }
 
@@ -1108,6 +1124,9 @@ r_web-app-Basis =
 
   & r_access-log*
 
+  & (attribute allow-forward-after-flush { r_boolean-Type }
+     | element allow-forward-after-flush { r_boolean-Type })?
+     
   & (attribute active-wait-time { r_period }
      | element active-wait-time { r_period })?
 
@@ -1249,7 +1268,7 @@ r_web-app-Content =
 r_web-app = element web-app {
   attribute version { string }?,
   attribute xsi:schemaLocation { string }?,
-
+  attribute metadata-complete { r_boolean-Type }?,
   r_web-app-Content
 }
 
@@ -1257,7 +1276,8 @@ rc_web-app = element web-app {
   (attribute id { string }
   | attribute url-prefix { string } | element url-prefix { string }
   | attribute url-regexp { string } | element url-regexp { string }),
-
+  attribute metadata-complete { r_boolean-Type }?,
+  
   (r_context-path?
 
   & (r_root-directory | r_document-directory)?

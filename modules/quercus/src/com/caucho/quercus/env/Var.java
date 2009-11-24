@@ -32,6 +32,7 @@ package com.caucho.quercus.env;
 import com.caucho.quercus.Location;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.marshal.Marshal;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -86,7 +87,8 @@ public class Var extends Value
 
     _value = value;
 
-    return value;
+    // php/151m
+    return this;
   }
 
   /**
@@ -97,7 +99,7 @@ public class Var extends Value
     // quercus/0431
     _value = value;
 
-    return _value;
+    return this;
   }
 
   /**
@@ -108,7 +110,7 @@ public class Var extends Value
   {
     return _value.getType();
   }
-  
+
   /*
    * Returns the type of the resource.
    */
@@ -135,7 +137,7 @@ public class Var extends Value
   {
     return _value.getClassName();
   }
-  
+
   /**
    * Returns true for an object.
    */
@@ -144,7 +146,7 @@ public class Var extends Value
   {
     return _value.isObject();
   }
-  
+
   /*
    * Returns true for a resource.
    */
@@ -189,7 +191,7 @@ public class Var extends Value
   {
     return _value.isNumberConvertible();
   }
-  
+
   /**
    * Returns true for a long-value.
    */
@@ -197,7 +199,7 @@ public class Var extends Value
   {
     return _value.isLong();
   }
-  
+
   /**
    * Returns true for a long-value.
    */
@@ -251,7 +253,7 @@ public class Var extends Value
   {
     return _value.isUnicode();
   }
-  
+
   /**
    * Returns true for a BooleanValue
    */
@@ -260,7 +262,7 @@ public class Var extends Value
   {
     return _value.isBoolean();
   }
-  
+
   /**
    * Returns true for a DefaultValue
    */
@@ -372,7 +374,7 @@ public class Var extends Value
     else
       return toString();
   }
-  
+
   /**
    * Converts to an object.
    */
@@ -408,7 +410,7 @@ public class Var extends Value
   {
     return _value.toJavaCollection(env, type);
   }
-  
+
   /**
    * Converts to a java List object.
    */
@@ -435,7 +437,7 @@ public class Var extends Value
   {
     return _value.toJavaCalendar();
   }
-  
+
   /**
    * Converts to a Java Date.
    */
@@ -444,7 +446,7 @@ public class Var extends Value
   {
     return _value.toJavaDate();
   }
-  
+
   /**
    * Converts to a Java URL.
    */
@@ -461,7 +463,7 @@ public class Var extends Value
   {
     return _value.toBigDecimal();
   }
-  
+
   /**
    * Converts to a Java BigInteger.
    */
@@ -469,7 +471,7 @@ public class Var extends Value
   {
     return _value.toBigInteger();
   }
-  
+
   /**
    * Converts to an array
    */
@@ -510,6 +512,136 @@ public class Var extends Value
     return _value.toObject(env);
   }
 
+  //
+  // marshal costs
+  //
+
+  /**
+   * Cost to convert to a boolean
+   */
+  public int toBooleanMarshalCost()
+  {
+    return _value.toBooleanMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a byte
+   */
+  public int toByteMarshalCost()
+  {
+    return _value.toByteMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a short
+   */
+  public int toShortMarshalCost()
+  {
+    return _value.toShortMarshalCost();
+  }
+
+  /**
+   * Cost to convert to an integer
+   */
+  public int toIntegerMarshalCost()
+  {
+    return _value.toIntegerMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a long
+   */
+  public int toLongMarshalCost()
+  {
+    return _value.toLongMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a double
+   */
+  public int toDoubleMarshalCost()
+  {
+    return _value.toDoubleMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a float
+   */
+  public int toFloatMarshalCost()
+  {
+    return _value.toFloatMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a character
+   */
+  public int toCharMarshalCost()
+  {
+    return _value.toCharMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a string
+   */
+  @Override
+  public int toStringMarshalCost()
+  {
+    return _value.toStringMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a byte[]
+   */
+  @Override
+  public int toByteArrayMarshalCost()
+  {
+    return _value.toByteArrayMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a char[]
+   */
+  @Override
+  public int toCharArrayMarshalCost()
+  {
+    return _value.toCharArrayMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a Java object
+   */
+  public int toJavaObjectMarshalCost()
+  {
+    return _value.toJavaObjectMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a binary value
+   */
+  @Override
+  public int toBinaryValueMarshalCost()
+  {
+    return _value.toBinaryValueMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a StringValue
+   */
+  @Override
+  public int toStringValueMarshalCost()
+  {
+    return _value.toStringValueMarshalCost();
+  }
+
+  /**
+   * Cost to convert to a UnicdeValue
+   */
+  @Override
+  public int toUnicodeValueMarshalCost()
+  {
+    return _value.toUnicodeValueMarshalCost();
+  }
+
   /**
    * Append to a unicode builder.
    */
@@ -536,7 +668,7 @@ public class Var extends Value
   {
     return _value.appendTo(sb);
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -615,6 +747,17 @@ public class Var extends Value
   }
 
   /**
+   * Converts to a reference variable
+   */
+  @Override
+  public Value toRefArgument()
+  {
+    _refCount = 2;
+
+    return this;
+  }
+
+  /**
    * Converts to a key.
    */
   @Override
@@ -628,7 +771,7 @@ public class Var extends Value
   {
     return _value.toStringValue();
   }
-  
+
   @Override
   public StringValue toStringValue(Env env)
   {
@@ -639,6 +782,12 @@ public class Var extends Value
   public StringValue toBinaryValue(Env env)
   {
     return _value.toBinaryValue(env);
+  }
+
+  @Override
+  public StringValue toUnicode(Env env)
+  {
+    return _value.toUnicode(env);
   }
 
   @Override
@@ -658,7 +807,7 @@ public class Var extends Value
   {
     return _value.toStringBuilder(env);
   }
-  
+
   /**
    * Converts to a string builder
    */
@@ -667,7 +816,7 @@ public class Var extends Value
   {
     return _value.toStringBuilder(env, value);
   }
-  
+
   /**
    * Converts to a string builder
    */
@@ -707,9 +856,10 @@ public class Var extends Value
   /**
    * Clone for the clone keyword
    */
-  public Value clone()
+  @Override
+  public Value clone(Env env)
   {
-    return _value.clone();
+    return _value.clone(env);
   }
 
   /**
@@ -782,7 +932,7 @@ public class Var extends Value
   {
     return _value.add(rValue);
   }
-  
+
   /**
    * Pre-increment the following value.
    */
@@ -833,7 +983,7 @@ public class Var extends Value
   {
     return _value.sub(rValue);
   }
-  
+
   /**
    * Multiplies to the following value.
    */
@@ -878,7 +1028,32 @@ public class Var extends Value
   {
     return _value.rshift(rValue);
   }
-  
+
+  /**
+   * Binary And.
+   */
+  public Value bitAnd(Value rValue)
+  {
+    return _value.bitAnd(rValue);
+  }
+
+  /**
+   * Binary or.
+   */
+  public Value bitOr(Value rValue)
+  {
+    return _value.bitOr(rValue);
+  }
+
+  /**
+   * Binary xor.
+   */
+  @Override
+  public Value bitXor(Value rValue)
+  {
+    return _value.bitXor(rValue);
+  }
+
   /**
    * Absolute value.
    */
@@ -962,7 +1137,7 @@ public class Var extends Value
   {
     return _value.length();
   }
-  
+
   /**
    * Returns the array/object size
    */
@@ -971,7 +1146,7 @@ public class Var extends Value
   {
     return _value.getSize();
   }
-  
+
   /**
    * Returns the count, as returned by the global php count() function
    */
@@ -1059,7 +1234,7 @@ public class Var extends Value
   public Value getArg(Value index, boolean isTop)
   {
     // php/0921, php/3921
-    
+
     if (_value.isset())
       return _value.getArg(index, isTop);
     else
@@ -1111,7 +1286,7 @@ public class Var extends Value
 
     return value;
   }
-  
+
   /**
    * Sets the array value, returning the new array, e.g. to handle
    * string update ($a[0] = 'A').
@@ -1119,7 +1294,7 @@ public class Var extends Value
   public Value append(Value index, Value value)
   {
     _value = _value.append(index, value);
-    
+
     return this;
   }
 
@@ -1130,7 +1305,7 @@ public class Var extends Value
   public Value put(Value value)
   {
     _value = _value.toAutoArray();
-    
+
     return _value.put(value);
   }
 
@@ -1141,7 +1316,7 @@ public class Var extends Value
   public Var putRef()
   {
     _value = _value.toAutoArray();
-    
+
     return _value.putRef();
   }
 
@@ -1184,7 +1359,7 @@ public class Var extends Value
   {
     // php/3a0r
     _value = _value.toAutoObject(env);
-    
+
     return _value.getFieldRef(env, name);
   }
 
@@ -1210,7 +1385,7 @@ public class Var extends Value
   {
     // php/3d1q
     _value = _value.toAutoObject(env);
-    
+
     return _value.getFieldArray(env, name);
   }
 
@@ -1221,7 +1396,7 @@ public class Var extends Value
   public Value getFieldObject(Env env, StringValue name)
   {
     _value = _value.toAutoObject(env);
-    
+
     return _value.getFieldObject(env, name);
   }
 
@@ -1236,7 +1411,7 @@ public class Var extends Value
 
     return _value.putField(env, name, value);
   }
-  
+
   /**
    * Returns true if the field is set.
    */
@@ -1245,7 +1420,7 @@ public class Var extends Value
   {
     return _value.issetField(name);
   }
-  
+
   /**
    * Unsets the field.
    */
@@ -1299,7 +1474,7 @@ public class Var extends Value
   {
     return _value.getThisFieldObject(env, name);
   }
-  
+
   /**
    * Initializes a new field, does not call __set if it is defined.
    */
@@ -1318,7 +1493,7 @@ public class Var extends Value
   {
     return _value.putThisField(env, name, value);
   }
-  
+
   /**
    * Returns true if the field is set.
    */
@@ -1327,7 +1502,7 @@ public class Var extends Value
   {
     return _value.issetThisField(name);
   }
-  
+
   /**
    * Unsets the field.
    */
@@ -1340,7 +1515,7 @@ public class Var extends Value
   //
   // array routines
   //
-  
+
   /**
    * Takes the values of this array, unmarshalls them to objects of type
    * <i>elementType</i>, and puts them in a java array.
@@ -1367,7 +1542,7 @@ public class Var extends Value
   public Value setCharValueAt(long index, Value value)
   {
     // php/03mg
-    
+
     _value = _value.setCharValueAt(index, value);
 
     return _value;
@@ -1408,7 +1583,7 @@ public class Var extends Value
   {
     return _value.next();
   }
-  
+
   /**
    * Returns the previous value
    */
@@ -1417,7 +1592,7 @@ public class Var extends Value
   {
     return _value.prev();
   }
-  
+
   /**
    * Returns the end value.
    */
@@ -1426,7 +1601,7 @@ public class Var extends Value
   {
     return _value.end();
   }
-  
+
   /**
    * Returns the array pointer.
    */
@@ -1435,7 +1610,7 @@ public class Var extends Value
   {
     return _value.reset();
   }
-  
+
   /**
    * Shuffles the array.
    */
@@ -1444,7 +1619,7 @@ public class Var extends Value
   {
     return _value.shuffle();
   }
-  
+
   /**
    * Pops the top array element.
    */
@@ -1512,7 +1687,7 @@ public class Var extends Value
   @Override
   public Value callMethod(Env env,
                           int hash, char []name, int nameLen,
-			  Value a0, Value a1, Value a2)
+                          Value a0, Value a1, Value a2)
   {
     return _value.callMethod(env, hash, name, nameLen,
                              a0, a1, a2);
@@ -1523,7 +1698,7 @@ public class Var extends Value
    */
   @Override
   public Value callMethod(Env env, int hash, char []name, int nameLen,
-			  Value a0, Value a1, Value a2, Value a3)
+                          Value a0, Value a1, Value a2, Value a3)
   {
     return _value.callMethod(env, hash, name, nameLen,
                              a0, a1, a2, a3);
@@ -1534,7 +1709,7 @@ public class Var extends Value
    */
   @Override
   public Value callMethod(Env env, int hash, char []name, int nameLen,
-			  Value a0, Value a1, Value a2, Value a3, Value a4)
+                          Value a0, Value a1, Value a2, Value a3, Value a4)
   {
     return _value.callMethod(env, hash, name, nameLen,
                              a0, a1, a2, a3, a4);
@@ -1665,10 +1840,10 @@ public class Var extends Value
   {
     _value.serialize(env, sb);
   }
-  
+
   /*
    * Serializes the value.
-   * 
+   *
    * @param sb holds result of serialization
    * @param serializeMap holds reference indexes
    */
@@ -1685,9 +1860,18 @@ public class Var extends Value
     }
     else {
       serializeMap.put(this);
-      
+
       _value.serialize(env, sb, serializeMap);
     }
+  }
+
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    _value.jsonEncode(env, sb);
   }
 
   @Override
@@ -1700,7 +1884,7 @@ public class Var extends Value
     out.print("&");
     _value.varDump(env, out, depth, valueSet);
   }
-  
+
   //
   // Java Serialization
   //

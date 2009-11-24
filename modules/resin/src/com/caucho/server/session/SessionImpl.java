@@ -525,7 +525,6 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     _accessTime = Alarm.getCurrentTime();
     // update cache access?
-
     if (_useCount.decrementAndGet() > 0)
       return;
 
@@ -574,7 +573,7 @@ public class SessionImpl implements HttpSession, CacheListener {
       if (cache.get(_id, os)) {
         InputStream is = os.getInputStream();
 
-        SessionDeserializer in = new HessianSessionDeserializer(is);
+        SessionDeserializer in = _manager.createSessionDeserializer(is);
 
         if (log.isLoggable(Level.FINE)) {
           log.fine(this + " session load valueHash="
@@ -736,11 +735,13 @@ public class SessionImpl implements HttpSession, CacheListener {
       _isModified = false;
 
       TempOutputStream os = new TempOutputStream();
-      SessionSerializer out = new HessianSessionSerializer(os);
+      SessionSerializer out = _manager.createSessionSerializer(os);
 
       store(out);
 
       out.close();
+
+      _manager.addSessionSaveSample(os.getLength());
 
       _cacheEntry = _manager.getCache().put(_id, os.getInputStream(),
                                             _idleTimeout);

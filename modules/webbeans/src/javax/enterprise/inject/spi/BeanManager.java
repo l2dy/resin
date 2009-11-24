@@ -35,11 +35,12 @@ import java.util.List;
 import java.util.Set;
 
 import javax.el.ELResolver;
-import javax.enterprise.context.ScopeType;
+import javax.el.ExpressionFactory;
 import javax.enterprise.context.spi.Context;
+import javax.enterprise.context.spi.Contextual;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.event.Observer;
-import javax.enterprise.inject.TypeLiteral;
+import javax.enterprise.util.TypeLiteral;
+import javax.inject.Scope;
 
 /**
  * API for the Java Injection (JSR-299) BeanManager.
@@ -59,24 +60,24 @@ public interface BeanManager
   //
 
   /**
-   * Returns the enabled deployment types
+   * Tests if an annotation is an enabled scope type
    */
-  public List<Class<? extends Annotation>> getEnabledDeploymentTypes();
+  public boolean isScope(Class<? extends Annotation> annotationType);
 
   /**
    * Tests if an annotation is an enabled scope type
    */
-  public boolean isScopeType(Class<? extends Annotation> annotationType);
+  public boolean isPassivatingScope(Class<? extends Annotation> annotationType);
 
   /**
-   * Returns the scope definition for a scope type
+   * Tests if an annotation is an enabled scope type
    */
-  public ScopeType getScopeDefinition(Class<? extends Annotation> scopeType);
+  public boolean isNormalScope(Class<? extends Annotation> annotationType);
 
   /**
-   * Tests if an annotation is an enabled binding type
+   * Tests if an annotation is an enabled qualifier type
    */
-  public boolean isBindingType(Class<? extends Annotation> annotationType);
+  public boolean isQualifier(Class<? extends Annotation> annotationType);
 
   /**
    * Tests if an annotation is an enabled interceptor binding type
@@ -97,8 +98,8 @@ public interface BeanManager
    * Returns the annotations associated with a stereotype
    */
   public Set<Annotation> getStereotypeDefinition(Class<? extends Annotation> stereotype);
-  
-  
+
+
   //
   // bean registration and discovery
   //
@@ -113,11 +114,6 @@ public interface BeanManager
    */
   public <T> InjectionTarget<T> createInjectionTarget(AnnotatedType<T> type);
 
-  /**
-   * Internal callback during creation to get a new injection instance.
-   */
-  public void validate(InjectionPoint injectionPoint);
-
   //
   // Bean resolution
   //
@@ -126,9 +122,9 @@ public interface BeanManager
    * Returns the beans matching a class and annotation set
    *
    * @param type the bean's class
-   * @param bindings array of required @BindingType annotations
+   * @param qualifiers array of required @Qualifier annotations
    */
-  public Set<Bean<?>> getBeans(Type beanType, Annotation... bindings);
+  public Set<Bean<?>> getBeans(Type beanType, Annotation... qualiviers);
 
   /**
    * Returns the bean definitions matching a given name
@@ -138,20 +134,18 @@ public interface BeanManager
   public Set<Bean<?>> getBeans(String name);
 
   /**
-   * Returns the most specialized bean, i.e. the most specific subclass
-   * with a @Specialized annotation.
+   * Returns the bean with the highest precedence deployment type from a set.
    *
-   * @param bean the bean to specialize
+   * @param beans the set of beans to select from
    */
-  public <X> Bean<? extends X> getMostSpecializedBean(Bean<X> bean);
+  public <X> Bean<? extends X> resolve(Set<Bean<? extends X>> beans);
 
   /**
    * Returns the bean with the highest precedence deployment type from a set.
    *
    * @param beans the set of beans to select from
    */
-  public <X> Bean<? extends X>
-  getHighestPrecedenceBean(Set<Bean<? extends X>> beans);
+  public <X> Bean<? extends X> getMostSpecializedBean(Bean<X> bean);
 
   /**
    * Returns the passivation-capable bean with the given id.  Used by
@@ -162,6 +156,11 @@ public interface BeanManager
    */
   public Bean<?> getPassivationCapableBean(String id);
 
+  /**
+   * Internal callback during creation to get a new injection instance.
+   */
+  public void validate(InjectionPoint injectionPoint);
+
   //
   // Bean instantiation
   //
@@ -170,7 +169,8 @@ public interface BeanManager
    * Creates a new CreationalContext for instantiating a bean.  Normally
    * used for getReference by frameworks.
    */
-  public CreationalContext<?> createCreationalContext();
+  public <T> CreationalContext<T>
+    createCreationalContext(Contextual<T> contextual);
 
   /**
    * Returns an instance for the given bean.  This method will obey
@@ -183,23 +183,18 @@ public interface BeanManager
    * @return an instance of the bean obeying scope
    */
   public Object getReference(Bean<?> bean,
-			     Type beanType,
-			     CreationalContext<?> env);
+                             Type beanType,
+                             CreationalContext<?> env);
 
   /**
    * Internal callback during creation to get a new injection instance.
    */
   public Object getInjectableReference(InjectionPoint ij,
-				       CreationalContext<?> ctx);
+                                       CreationalContext<?> ctx);
 
   //
   // contexts
   //
-
-  /**
-   * Adds a new scope context
-   */
-  public void addContext(Context context);
 
   /**
    * Returns the scope context for the given type
@@ -209,31 +204,17 @@ public interface BeanManager
   //
   // EL integration
   //
-  
+
   /**
    * Returns the BeanManager's EL resolver.
    */
   public ELResolver getELResolver();
 
-  //
-  // Observer registration
-  //
-
   /**
-   * Registers an event observer
-   *
-   * @param observer the observer object
-   * @param bindings the binding set for the event
+   * Returns the BeanManager's EL resolver.
    */
-  public void addObserver(Observer<?> observer,
-			  Annotation... bindings);
-
-  /**
-   * Removes an event observer
-   *
-   * @param observer the observer object
-   */
-  public void removeObserver(Observer<?> observer);
+  public ExpressionFactory
+    wrapExpressionFactory(ExpressionFactory expressionFactory);
 
   //
   // Observer resolution
@@ -243,27 +224,22 @@ public interface BeanManager
    * Returns the observers listening for an event
    *
    * @param eventType event to resolve
-   * @param bindings the binding set for the event
+   * @param qualifiers the qualifier set for the event
    */
-  public <T> Set<Observer<T>> resolveObservers(T event,
-					       Annotation... bindings);
+  public <T> Set<ObserverMethod<? super T>>
+    resolveObserverMethods(T event, Annotation... qualifiers);
 
   /**
    * Fires an event
    *
    * @param event the event to fire
-   * @param bindings the event bindings
+   * @param qualifiers the event qualifiers
    */
-  public void fireEvent(Object event, Annotation... bindings);
+  public void fireEvent(Object event, Annotation... qualifiers);
 
   //
   // interceptor support
   //
-
-  /**
-   * Adds a new interceptor
-   */
-  public void addInterceptor(Interceptor interceptor);
 
   /**
    * Resolves the interceptors for a given interceptor type
@@ -274,40 +250,21 @@ public interface BeanManager
    * @return the matching interceptors
    */
   public List<Interceptor<?>> resolveInterceptors(InterceptionType type,
-						  Annotation... bindings);
-  
+                                                  Annotation... bindings);
+
 
   //
   // decorator
   //
 
   /**
-   * Adds a new decorator
-   */
-  public BeanManager addDecorator(Decorator decorator);
-
-  /**
    * Resolves the decorators for a given set of types
    *
    * @param types the types to match for the decorator
-   * @param bindings qualifying bindings
+   * @param qualifier qualifiers
    *
    * @return the matching interceptors
    */
   public List<Decorator<?>> resolveDecorators(Set<Type> types,
-					      Annotation... bindings);
-
-  //
-  // Actitivities
-  //
-
-  /**
-   * Creates a new activity
-   */
-  public BeanManager createActivity();
-
-  /**
-   * Associate the context with a scope
-   */
-  public BeanManager setCurrent(Class<? extends Annotation> scopeType);
+                                              Annotation... qualifiers);
 }

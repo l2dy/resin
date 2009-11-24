@@ -47,11 +47,9 @@ import java.util.*;
 import java.util.logging.*;
 
 import javax.annotation.*;
-import javax.interceptor.InterceptorBindingType;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.CreationException;
 import javax.enterprise.inject.Produces;
-import javax.enterprise.inject.Initializer;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.AnnotatedConstructor;
 import javax.enterprise.inject.spi.AnnotatedParameter;

@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.expr.ClassConstExpr;
 import com.caucho.quercus.expr.Expr;
@@ -86,16 +87,9 @@ public class QuercusClass {
 
   private final ArrayList<InstanceInitializer> _initializers;
   
-  private final ArrayList<StringValue> _fieldNames;
-  
-  private final IntMap _fieldMap;
-  
-  private final HashMap<StringValue,Expr> _fieldInitMap;
-  
   private final MethodMap<AbstractFunction> _methodMap;
-
   private final HashMap<String,Expr> _constMap;
-
+  private final LinkedHashMap<StringValue,ClassField> _fieldMap;
   private final HashMap<String,ArrayList<StaticField>> _staticFieldExprMap;
 
   private final HashSet<String> _instanceofSet;
@@ -121,14 +115,10 @@ public class QuercusClass {
     _isInterface = _classDef.isInterface();
     
     _initializers = new ArrayList<InstanceInitializer>();
-    _fieldNames = new ArrayList<StringValue>();
-    _fieldMap = new IntMap(16);
   
-    _fieldInitMap = new HashMap<StringValue,Expr>();
+    _fieldMap = new LinkedHashMap<StringValue,ClassField>();
     _methodMap = new MethodMap<AbstractFunction>();
-
     _constMap = new HashMap<String,Expr>();
-
     _staticFieldExprMap = new LinkedHashMap<String,ArrayList<StaticField>>();
 
     JavaClassDef javaClassDef = null;
@@ -172,19 +162,25 @@ public class QuercusClass {
     _instanceofSet = new HashSet<String>();
 
     HashSet<String> ifaces = new HashSet<String>();
-
+    
+    // add interfaces
     for (int i = classDefList.length - 1; i >= 0; i--) {
       classDef = classDefList[i];
-
+      
       if (classDef == null) {
         throw new NullPointerException("classDef:" + _classDef
                                        + " i:" + i + " parent:" + parent);
       }
-
+      
       classDef.init();
-
+      
       addInstances(_instanceofSet, ifaces, classDef);
+    }
 
+    // then add concrete ancestors
+    for (int i = classDefList.length - 1; i >= 0; i--) {
+      classDef = classDefList[i];
+      
       classDef.initClass(this);
     }
     
@@ -203,19 +199,25 @@ public class QuercusClass {
   }
 
   private void addInstances(HashSet<String> instanceofSet,
-			    HashSet<String> ifaces,
-			    ClassDef classDef)
+                            HashSet<String> ifaces,
+                            ClassDef classDef)
   {
     // _instanceofSet.add(classDef.getName());
     classDef.addInterfaces(instanceofSet);
 
     for (String iface : classDef.getInterfaces()) {
+      boolean isJavaClassDef = classDef instanceof JavaClassDef;
+      
+      QuercusClass cl;
+
       // XXX: php/0cn2, but this is wrong:
-      QuercusClass cl = Env.getInstance().findClass(iface, true, true);
-        
+      cl = Env.getInstance().findClass(iface, 
+                                       ! isJavaClassDef,
+                                       true);
+
       if (cl == null)
-	throw new QuercusRuntimeException(L.l("cannot find interface {0}",
-					      iface));
+        throw new QuercusRuntimeException(L.l("cannot find interface {0}",
+                                              iface));
 
       // _instanceofSet.addAll(cl.getInstanceofSet());
         
@@ -223,11 +225,11 @@ public class QuercusClass {
       // ClassDef ifaceDef = moduleContext.findClass(iface);
 
       if (ifaceDef != null) {
-	if (ifaces.add(iface)) {
-	  addInstances(instanceofSet, ifaces, ifaceDef);
+        if (ifaces.add(iface)) {
+          addInstances(instanceofSet, ifaces, ifaceDef);
 
-	  ifaceDef.initClass(this);
-	}
+          ifaceDef.initClass(this);
+        }
       }
     }
   }
@@ -262,9 +264,7 @@ public class QuercusClass {
 
     _initializers = cacheClass._initializers;
   
-    _fieldNames = cacheClass._fieldNames;
     _fieldMap = cacheClass._fieldMap;
-    _fieldInitMap = cacheClass._fieldInitMap;
     _methodMap = cacheClass._methodMap;
     _constMap = cacheClass._constMap;
     _staticFieldExprMap = cacheClass._staticFieldExprMap;
@@ -520,40 +520,36 @@ public class QuercusClass {
    * Adds a field.
    */
   public void addField(StringValue name,
-		       int index,
-		       Expr initExpr,
-		       FieldVisibility visibility)
+                       Expr initExpr,
+                       FieldVisibility visibility)
   {
-    _fieldNames.add(name);
-    _fieldMap.put(name, index);
-    _fieldInitMap.put(name, initExpr);
-  }
-
-  /**
-   * Adds a field.
-   */
-  public int addFieldIndex(StringValue name)
-  {
-    int index = _fieldMap.get(name);
-
-    if (index >= 0)
-      return index;
-    else {
-      index = _fieldNames.size();
+    ClassField field = new ClassField(name, initExpr, visibility);
     
-      _fieldMap.put(name, index);
-      _fieldNames.add(name);
-
-      return index;
-    }
+    _fieldMap.put(name, field);
   }
   
   /**
    * Returns a set of the fields and their initial values
    */
-  public HashMap<StringValue,Expr> getClassVars()
+  public HashMap<StringValue,ClassField> getClassFields()
   {
-    return _fieldInitMap;
+    return _fieldMap;
+  }
+  
+  /**
+   * Returns a set of the fields and their initial values
+   */
+  public ClassField getClassField(StringValue name)
+  {
+    return _fieldMap.get(name);
+  }
+  
+  /**
+   * Returns a set of the fields and their initial values
+   */
+  public int findFieldIndex(StringValue name)
+  {
+    throw new UnsupportedOperationException();
   }
   
   /**
@@ -579,6 +575,9 @@ public class QuercusClass {
     
     if (existingFun == null || ! fun.isAbstract())
       _methodMap.put(name, fun);
+    else if (! existingFun.isAbstract() && fun.isAbstract())
+      Env.getInstance().error(L.l("cannot make non-abstract function {0}:{1}() abstract",
+                                  getName(), name));
   }
   
   /*
@@ -648,23 +647,7 @@ public class QuercusClass {
    */
   public int getFieldSize()
   {
-    return _fieldNames.size();
-  }
-
-  /**
-   * Returns the field index.
-   */
-  public int findFieldIndex(StringValue name)
-  {
-    return _fieldMap.get(name);
-  }
-
-  /**
-   * Returns the key set.
-   */
-  public ArrayList<StringValue> getFieldNames()
-  {
-    return _fieldNames;
+    return _fieldMap.size();
   }
 
   public void validate(Env env)
@@ -863,12 +846,17 @@ public class QuercusClass {
       else if (_javaClassDef != null && _javaClassDef.isDelegate()) {
         objectValue = new ObjectExtValue(this);
       }
+      /*
       else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
         // php/0k3-
         Value javaWrapper = _javaClassDef.callNew(env, args);
         Object object = javaWrapper.toJavaObject();
         
         objectValue = new ObjectExtJavaValue(this, object, _javaClassDef);
+      }
+      */
+      else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
+        objectValue = new ObjectExtJavaValue(this, null, _javaClassDef);
       }
       else {
         objectValue = _classDef.newInstance(env, this);

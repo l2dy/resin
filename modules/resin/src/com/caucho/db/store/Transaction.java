@@ -110,6 +110,11 @@ public class Transaction extends StoreTransaction {
   {
     _timeout = timeout;
   }
+
+  public long getTimeout()
+  {
+    return _timeout;
+  }
   
   /**
    * Acquires a new read lock.
@@ -380,6 +385,29 @@ public class Transaction extends StoreTransaction {
   }
 
   /**
+   * Returns a read block.
+   */
+  public Block loadBlock(Store store, long blockAddress)
+    throws IOException
+  {
+    long blockId = store.addressToBlockId(blockAddress);
+      
+    Block block;
+    
+    if (_writeBlocks != null)
+      block = _writeBlocks.get(blockId);
+    else
+      block = null;
+
+    if (block != null)
+      block.allocate();
+    else
+      block = store.loadBlock(blockId);
+
+    return block;
+  }
+
+  /**
    * Returns a modified block.
    */
   public WriteBlock getWriteBlock(long blockId)
@@ -581,6 +609,12 @@ public class Transaction extends StoreTransaction {
       while (updateBlocks.size() > 0) {
 	Block block = updateBlocks.remove(updateBlocks.size() - 1);
 
+        try {
+          block.getStore().saveAllocation();
+	} catch (IOException e) {
+	  log.log(Level.WARNING, e.toString(), e);
+        }
+        
 	try {
 	  block.commit();
 	} catch (IOException e) {
@@ -594,6 +628,12 @@ public class Transaction extends StoreTransaction {
 
       while (blockIter.hasNext()) {
 	WriteBlock block = blockIter.next();
+
+        try {
+          block.getStore().saveAllocation();
+	} catch (IOException e) {
+	  log.log(Level.WARNING, e.toString(), e);
+        }
 
 	try {
 	  block.commit();

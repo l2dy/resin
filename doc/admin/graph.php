@@ -3,7 +3,7 @@
  * Provides the most important status information about the Resin server.
  */
 
-require_once "WEB-INF/php/inc.php";
+// require_once "WEB-INF/php/inc.php";
 
 //echo "<pre>";
 $mbean_server = new MBeanServer();
@@ -16,7 +16,7 @@ if (! $stat_service) {
   return;
 }
 
-$now = time(0) * 1000;
+$now = time() * 1000;
 $hour = 3600 * 1000;
 
 $full_width = $_GET['width'];
@@ -79,7 +79,7 @@ foreach ($items as $item) {
 
   $stat_data->desc = $stat->description;
   $val = $stat_service->statisticsData($stat_data->name,
-                                       $now - 24 * $hour, $now);
+                                       $now - 24 * $hour, $now, 1);
 
   $stat_data->val = $val;
   calculate_data_bounds($stat_data);

@@ -19,7 +19,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
@@ -28,6 +29,7 @@
 
 package com.caucho.util;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
@@ -35,13 +37,17 @@ import java.util.concurrent.locks.LockSupport;
  * wait queue
  */
 public class WaitQueue {
+  private final AtomicBoolean _isWake = new AtomicBoolean();
+
   private volatile Item _head;
 
   public boolean wake()
   {
+    _isWake.set(true);
+
     for (Item item = _head; item != null; item = item.getNext()) {
       if (item.unpark())
-	return true;
+        return true;
     }
 
     return false;
@@ -49,9 +55,33 @@ public class WaitQueue {
 
   public void wakeAll()
   {
+    _isWake.set(true);
+
     for (Item item = _head; item != null; item = item.getNext()) {
       item.unpark();
     }
+  }
+
+  public void park(Item item, long timeout)
+  {
+    if (_isWake.getAndSet(false))
+      return;
+
+    item.startPark();
+    item.park(timeout);
+
+    _isWake.set(false);
+  }
+
+  public void parkUntil(Item item, long expires)
+  {
+    if (_isWake.getAndSet(false))
+      return;
+
+    item.startPark();
+    item.parkUntil(expires);
+
+    _isWake.set(false);
   }
 
   public Item create()
@@ -72,14 +102,14 @@ public class WaitQueue {
       Item prev = null;
 
       for (Item ptr = _head; ptr != null; ptr = ptr.getNext()) {
-	if (ptr == item) {
-	  if (prev != null) {
-	    prev.setNext(ptr.getNext());
-	  }
-	  else {
-	    _head = ptr.getNext();
-	  }
-	}
+        if (ptr == item) {
+          if (prev != null) {
+            prev.setNext(ptr.getNext());
+          }
+          else {
+            _head = ptr.getNext();
+          }
+        }
       }
     }
   }
@@ -95,7 +125,7 @@ public class WaitQueue {
 
     // private final AtomicReference<Item> _next = new AtomicReference<Item>();
     private Item _next;
-    private boolean _isParked;
+    private final AtomicBoolean _isParked = new AtomicBoolean();
 
     Item()
     {
@@ -121,21 +151,48 @@ public class WaitQueue {
 
     final boolean unpark()
     {
-      boolean isParked = _isParked;
+      if (_isParked.getAndSet(false)) {
+        LockSupport.unpark(_thread);
+        return true;
+      }
+      else
+        return false;
+    }
 
-      LockSupport.unpark(_thread);
-	
-      return isParked;
+    public final void startPark()
+    {
+      _isParked.set(true);
+    }
+
+    public final void endPark()
+    {
+      _isParked.set(false);
     }
 
     public final void park(long millis)
     {
-      _isParked = true;
+      if (! _isParked.get())
+        return;
 
-      Thread.interrupted();
-      LockSupport.parkNanos(millis * 1000L);
-      
-      _isParked = false;
+      try {
+        Thread.interrupted();
+        LockSupport.parkNanos(millis * 1000000L);
+      } finally {
+        _isParked.set(false);
+      }
+    }
+
+    public final void parkUntil(long expires)
+    {
+      if (! _isParked.get())
+        return;
+
+      try {
+        Thread.interrupted();
+        LockSupport.parkUntil(expires);
+      } finally {
+        _isParked.set(false);
+      }
     }
 
     public void remove()

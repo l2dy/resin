@@ -19,7 +19,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
@@ -34,8 +35,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 
-class AndExpr extends Expr {
-  private ArrayList<Expr> _exprs = new ArrayList<Expr>();
+final class AndExpr extends Expr {
+  private ArrayList<Expr> _exprList = new ArrayList<Expr>();
+  private Expr []_exprs;
 
   AndExpr()
   {
@@ -43,15 +45,15 @@ class AndExpr extends Expr {
 
   void add(Expr expr)
   {
-    _exprs.add(expr);
+    _exprList.add(expr);
   }
 
   Expr getSingleExpr()
   {
-    if (_exprs.size() == 0)
+    if (_exprList.size() == 0)
       return null;
-    else if (_exprs.size() == 1)
-      return _exprs.get(0);
+    else if (_exprList.size() == 1)
+      return _exprList.get(0);
     else
       return this;
   }
@@ -59,19 +61,28 @@ class AndExpr extends Expr {
   public Expr bind(Query query)
     throws SQLException
   {
-    for (int i = 0; i < _exprs.size(); i++) {
-      Expr expr = _exprs.get(i);
+    _exprs = new Expr[_exprList.size()];
+
+    for (int i = 0; i < _exprs.length; i++) {
+      Expr expr = _exprList.get(i);
 
       expr = expr.bind(query);
-      
-      if (! expr.getType().equals(boolean.class))
-	throw new SQLException(L.l("AND requires boolean operands at {0}",
-				   expr));
 
-      _exprs.set(i, expr);
+      if (! expr.getType().equals(boolean.class))
+        throw new SQLException(L.l("AND requires boolean operands at {0}",
+                                   expr));
+
+      _exprList.set(i, expr);
+      _exprs[i] = expr;
     }
 
-    return this;
+    Expr tailExpr = _exprs[_exprs.length - 1];
+
+    for (int i = _exprs.length - 2; i >= 0; i--) {
+      tailExpr = new BinaryAndExpr(_exprs[i], tailExpr);
+    }
+
+    return tailExpr;
   }
 
   /**
@@ -89,8 +100,8 @@ class AndExpr extends Expr {
   {
     long cost = 0;
 
-    for (int i = 0; i < _exprs.size(); i++) {
-      cost += _exprs.get(i).subCost(fromList);
+    for (int i = 0; i < _exprList.size(); i++) {
+      cost += _exprList.get(i).subCost(fromList);
     }
 
     return cost;
@@ -101,8 +112,8 @@ class AndExpr extends Expr {
    */
   public void splitAnd(ArrayList<Expr> andProduct)
   {
-    for (int i = 0; i < _exprs.size(); i++) {
-      _exprs.get(i).splitAnd(andProduct);
+    for (int i = 0; i < _exprList.size(); i++) {
+      _exprList.get(i).splitAnd(andProduct);
     }
   }
 
@@ -112,14 +123,17 @@ class AndExpr extends Expr {
   public boolean isNull(QueryContext context)
     throws SQLException
   {
+    Expr []exprs = _exprs;
+    int length = exprs.length;
+
     boolean isNull = false;
-    for (int i = 0; i < _exprs.size(); i++) {
-      int value = _exprs.get(i).evalBoolean(context);
+    for (int i = 0; i < length; i++) {
+      int value = exprs[i].evalBoolean(context);
 
       if (value == FALSE)
-	return false;
+        return false;
       else if (value != TRUE)
-	isNull = true;
+        isNull = true;
     }
 
     return isNull;
@@ -131,18 +145,38 @@ class AndExpr extends Expr {
   public int evalBoolean(QueryContext context)
     throws SQLException
   {
+    Expr []exprs = _exprs;
+    int length = exprs.length;
+
     int value = TRUE;
-    
-    for (int i = 0; i < _exprs.size(); i++) {
-      int subValue = _exprs.get(i).evalBoolean(context);
-      
+    for (int i = 0; i < length; i++) {
+      int subValue = exprs[i].evalBoolean(context);
+
       if (subValue == FALSE)
-	return FALSE;
+        return FALSE;
       else if (subValue == UNKNOWN)
-	value = UNKNOWN;
+        value = UNKNOWN;
     }
 
     return value;
+  }
+
+  /**
+   * Evaluates the expression as a boolean.
+   */
+  @Override
+  public final boolean isSelect(final QueryContext context)
+    throws SQLException
+  {
+    final Expr []exprs = _exprs;
+    final int length = exprs.length;
+
+    for (int i = 0; i < length; i++) {
+      if (! exprs[i].isSelect(context))
+        return false;
+    }
+
+    return true;
   }
 
   public String evalString(QueryContext context)
@@ -163,15 +197,15 @@ class AndExpr extends Expr {
     CharBuffer cb = CharBuffer.allocate();
     cb.append("(");
 
-    for (int i = 0; i < _exprs.size(); i++) {
+    for (int i = 0; i < _exprList.size(); i++) {
       if (i != 0)
-	cb.append(" AND ");
+        cb.append(" AND ");
 
-      cb.append(_exprs.get(i));
+      cb.append(_exprList.get(i));
     }
 
     cb.append(")");
-    
+
     return cb.close();
   }
 }

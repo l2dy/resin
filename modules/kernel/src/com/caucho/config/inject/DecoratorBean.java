@@ -38,12 +38,11 @@ import java.lang.annotation.*;
 import java.util.*;
 
 import javax.enterprise.context.spi.CreationalContext;
-import javax.decorator.Decorates;
-import javax.enterprise.inject.AnnotationLiteral;
-import javax.enterprise.inject.BindingType;
-import javax.enterprise.inject.Current;
+import javax.decorator.Delegate;
+import javax.enterprise.inject.Default;
 import javax.enterprise.inject.spi.Decorator;
 import javax.enterprise.inject.spi.InjectionPoint;
+import javax.inject.Qualifier;
 
 /**
  * DecoratorBean represents a Java decorator
@@ -53,7 +52,7 @@ public class DecoratorBean<T> implements Decorator<T>
   private static final L10N L = new L10N(DecoratorBean.class);
 
   private InjectManager _beanManager;
-  
+
   private Class _type;
 
   private AbstractBean _bean;
@@ -65,9 +64,9 @@ public class DecoratorBean<T> implements Decorator<T>
 
   private HashSet<Annotation> _bindings
     = new HashSet<Annotation>();
-  
+
   public DecoratorBean(InjectManager beanManager,
-		       Class<T> type)
+                       Class<T> type)
   {
     _beanManager = beanManager;
 
@@ -86,7 +85,7 @@ public class DecoratorBean<T> implements Decorator<T>
    * Returns the bean's binding types
    */
   @Override
-  public Set<Annotation> getBindings()
+  public Set<Annotation> getQualifiers()
   {
     return _bindings;
   }
@@ -94,7 +93,7 @@ public class DecoratorBean<T> implements Decorator<T>
   /**
    * Returns the bean's deployment type
    */
-  public Set<Annotation> getStereotypes()
+  public Set<Class<? extends Annotation>> getStereotypes()
   {
     return _bean.getStereotypes();
   }
@@ -115,6 +114,13 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     return false;
   }
+  /**
+   * Returns true if the bean can be null
+   */
+  public boolean isAlternative()
+  {
+    return false;
+  }
 
   /**
    * Returns true if the bean is serializable
@@ -127,9 +133,9 @@ public class DecoratorBean<T> implements Decorator<T>
   /**
    * Returns the bean's scope
    */
-  public Class<? extends Annotation> getScopeType()
+  public Class<? extends Annotation> getScope()
   {
-    return _bean.getScopeType();
+    return _bean.getScope();
   }
 
   /**
@@ -151,7 +157,7 @@ public class DecoratorBean<T> implements Decorator<T>
   //
   // lifecycle
   //
-  
+
   public T create(CreationalContext<T> creationalContext)
   {
     return (T) _bean.create(creationalContext);
@@ -176,7 +182,7 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     return _bean.getBeanClass();
   }
-  
+
   /**
    * Create a new instance of the bean.
    */
@@ -214,7 +220,7 @@ public class DecoratorBean<T> implements Decorator<T>
   /**
    * Returns the bindings for the delegated object
    */
-  public Set<Annotation> getDelegateBindings()
+  public Set<Annotation> getDelegateQualifiers()
   {
     return _bindings;
   }
@@ -223,18 +229,18 @@ public class DecoratorBean<T> implements Decorator<T>
    * Sets the delegate for an object
    */
   public void setDelegate(Object instance,
-			  Object delegate)
+                          Object delegate)
   {
     if (! _type.isAssignableFrom(instance.getClass())) {
       throw new ConfigException(L.l("{0} is an invalid @Decorator instance because it does not extend the implementation class {1}",
-				    instance.getClass().getName(),
-				    _type.getName()));
+                                    instance.getClass().getName(),
+                                    _type.getName()));
     }
 
     if (! getDelegateType().isAssignableFrom(delegate.getClass())) {
       throw new ConfigException(L.l("{0} is an invalid @Decorator delegate because it does not implement the delegate {1}",
-				    delegate.getClass().getName(),
-				    getDelegateType()));
+                                    delegate.getClass().getName(),
+                                    getDelegateType()));
     }
 
     try {
@@ -251,12 +257,12 @@ public class DecoratorBean<T> implements Decorator<T>
   public void init()
   {
     // _bean.init();
-    
+
     introspect();
 
     if (_delegateField == null)
-      throw new ConfigException(L.l("{0} is missing a @Decorates field.  All @Decorators need a @Decorates field for a delegate injection",
-				    _type.getName()));
+      throw new ConfigException(L.l("{0} is missing a @Delegate field.  All @Decorators need a @Delegate field for a delegate injection",
+                                    _type.getName()));
   }
 
   protected void introspect()
@@ -267,44 +273,44 @@ public class DecoratorBean<T> implements Decorator<T>
   protected void introspectDelegateField()
   {
     if (_delegateField == null) {
-      
+
       for (Field field : _type.getDeclaredFields()) {
-	if (Modifier.isStatic(field.getModifiers()))
-	  continue;
+        if (Modifier.isStatic(field.getModifiers()))
+          continue;
 
-	if (! field.isAnnotationPresent(Decorates.class))
-	  continue;
+        if (! field.isAnnotationPresent(Delegate.class))
+          continue;
 
-	Class fieldType = field.getType();
+        Class fieldType = field.getType();
 
-	if (! fieldType.isInterface()) {
-	  throw new ConfigException(L.l("{0}.{1} is an invalid @Decorates field because its type '{2}' is not an interface",
-					_type.getName(),
-					field.getName(),
-					fieldType.getName()));
-	}
+        if (! fieldType.isInterface()) {
+          throw new ConfigException(L.l("{0}.{1} is an invalid @Delegate field because its type '{2}' is not an interface",
+                                        _type.getName(),
+                                        field.getName(),
+                                        fieldType.getName()));
+        }
 
-	for (Class iface : _type.getInterfaces()) {
-	  if (! iface.isAssignableFrom(fieldType)) {
-	    throw new ConfigException(L.l("{0}.{1} is an invalid @Decorates field because {2} does not implement the API {3}",
-					  _type.getName(),
-					  field.getName(),
-					  fieldType.getName(),
-					  iface.getName()));
-	  }
-	}
+        for (Class iface : _type.getInterfaces()) {
+          if (! iface.isAssignableFrom(fieldType)) {
+            throw new ConfigException(L.l("{0}.{1} is an invalid @Delegate field because {2} does not implement the API {3}",
+                                          _type.getName(),
+                                          field.getName(),
+                                          fieldType.getName(),
+                                          iface.getName()));
+          }
+        }
 
-	if (_delegateField != null) {
-	  throw new ConfigException(L.l("{0}: @Decorator field '{1}' conflicts with earlier field '{2}'.  A decorator must have exactly one delegate field.",
-					_type.getName(),
-					_delegateField,
-					field.getName()));
-	}
+        if (_delegateField != null) {
+          throw new ConfigException(L.l("{0}: @Decorator field '{1}' conflicts with earlier field '{2}'.  A decorator must have exactly one delegate field.",
+                                        _type.getName(),
+                                        _delegateField,
+                                        field.getName()));
+        }
 
-	field.setAccessible(true);
-	_delegateField = field;
+        field.setAccessible(true);
+        _delegateField = field;
 
-	introspectBindingTypes(field.getAnnotations());
+        introspectBindingTypes(field.getAnnotations());
       }
     }
   }
@@ -312,15 +318,15 @@ public class DecoratorBean<T> implements Decorator<T>
   protected void introspectBindingTypes(Annotation []annList)
   {
     for (Annotation ann : annList) {
-      if (ann.annotationType().isAnnotationPresent(BindingType.class)) {
-	_bindings.add(ann);
+      if (ann.annotationType().isAnnotationPresent(Qualifier.class)) {
+        _bindings.add(ann);
       }
     }
 
     if (_bindings.size() == 0)
-      _bindings.add(new AnnotationLiteral<Current>() {});
+      _bindings.add(CurrentLiteral.CURRENT);
   }
-  
+
   /**
    * Instantiate the bean.
    */
@@ -328,7 +334,7 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Inject the bean.
    */
@@ -336,7 +342,7 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Call post-construct
    */
@@ -344,7 +350,7 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Call pre-destroy
    */
@@ -352,7 +358,7 @@ public class DecoratorBean<T> implements Decorator<T>
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Call destroy
    */
@@ -378,7 +384,7 @@ public class DecoratorBean<T> implements Decorator<T>
       sb.append(",").append(_delegateField.getType().getSimpleName());
 
     sb.append("]");
-    
+
     return sb.toString();
   }
 }

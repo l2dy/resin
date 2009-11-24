@@ -86,11 +86,11 @@ public class SessionModule extends AbstractQuercusModule
    * and "public". If a value other than these values is supplied, then a warning is produced
    * and no cache related headers will be sent to the client.
    */
-  public Value session_cache_limiter(Env env, @Optional String newValue)
+  public Value session_cache_limiter(Env env, @Optional Value newValue)
   {
     Value value = env.getIni("session.cache_limiter");
 
-    if (newValue == null || "".equals(newValue)) // XXX: php/1k16
+    if (newValue.isDefault())
       return value;
 
     env.setIni("session.cache_limiter", newValue);
@@ -342,7 +342,8 @@ public class SessionModule extends AbstractQuercusModule
                                          long lifetime,
                                          @Optional Value path,
                                          @Optional Value domain,
-                                         @Optional Value secure)
+                                         @Optional Value isSecure,
+                                         @Optional Value isHttpOnly)
   {
     env.setIni("session.cookie_lifetime", String.valueOf(lifetime));
 
@@ -352,8 +353,9 @@ public class SessionModule extends AbstractQuercusModule
     if (domain.isset())
       env.setIni("session.cookie_domain", domain.toString());
 
-    if (secure.isset())
-      env.setIni("session.cookie_secure", secure.toBoolean() ? "1" : "0");
+    if (isSecure.isset())
+      env.setIni("session.cookie_secure", 
+                 isSecure.toBoolean() ? "1" : "0");
 
     return NullValue.NULL;
   }
@@ -392,8 +394,6 @@ public class SessionModule extends AbstractQuercusModule
 
     Value sessionIdValue = (Value) env.getSpecialValue("caucho.session_id");
     String sessionId = null;
-
-    HttpServletResponse response = env.getResponse();
 
     env.removeConstant("SID");
 
@@ -462,8 +462,12 @@ public class SessionModule extends AbstractQuercusModule
       sessionId = env.generateSessionId();
       create = true;
     }
+    
+    HttpServletResponse response = env.getResponse();
 
-    if (response.isCommitted())
+    if (response == null) {
+    }
+    else if (response.isCommitted())
       env.warning(L.l("cannot send session cache limiter headers because response is committed"));
     else {
       Value cacheLimiterValue = env.getIni("session.cache_limiter");
@@ -488,12 +492,13 @@ public class SessionModule extends AbstractQuercusModule
         response.setHeader("Cache-Control", "private, max-age=" + cacheExpire + ", pre-check=" + cacheExpire);
       }
       else if ("public".equals(cacheLimiter)) {
-        response.setHeader("Cache-Control", "max-age=" + cacheExpire + ", pre-check=" + cacheExpire);
+        response.setHeader("Cache-Control", "public, max-age=" + cacheExpire + ", pre-check=" + cacheExpire);
       }
       else if ("none".equals(cacheLimiter)) {
       }
       else {
-        response.setHeader("Cache-Control", cacheLimiter + ", max-age=" + cacheExpire + ", pre-check=" + cacheExpire);
+        // php/1k16
+        //response.setHeader("Cache-Control", cacheLimiter + ", max-age=" + cacheExpire + ", pre-check=" + cacheExpire);
       }
     }
 

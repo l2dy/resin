@@ -193,6 +193,12 @@ std_read(connection_t *conn, char *buf, int len, int timeout)
     return -1;
   }
 
+  if (len == 0) {
+    if (poll_read(fd, 0) > 0)
+      return 0;
+    else
+      return -1;
+  }
   if (timeout > 0 && poll_read(fd, timeout) <= 0) {
     return TIMEOUT_EXN;
   }
@@ -208,7 +214,8 @@ std_read(connection_t *conn, char *buf, int len, int timeout)
   } while (result < 0
 	   && (errno == EINTR || errno == EAGAIN)
 	   && conn->fd == fd
-	   && retry-- >= 0);
+	   && retry-- >= 0
+           && len > 0);
     
   if (result > 0)
     return result;
@@ -249,9 +256,14 @@ std_write(connection_t *conn, char *buf, int len)
     if (result >= 0)
       return result;
 
+    error = errno;
+    
     if (errno == EINTR || errno == EAGAIN) {
-      error = errno;
-      poll_write(fd, conn->socket_timeout);
+      if (poll_write(fd, conn->socket_timeout) == 0)
+        return write_exception_status(conn, errno);
+    }
+    else {
+      return write_exception_status(conn, errno);
     }
   } while (retry-- >= 0);
 

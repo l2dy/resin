@@ -44,13 +44,10 @@ import java.lang.reflect.*;
 import java.lang.annotation.*;
 
 import javax.annotation.*;
-import javax.enterprise.context.ScopeType;
-import javax.enterprise.inject.BindingType;
 import javax.enterprise.inject.spi.AnnotatedConstructor;
 import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeanManager;
-import javax.interceptor.InterceptorBindingType;
 
 import org.w3c.dom.Node;
 

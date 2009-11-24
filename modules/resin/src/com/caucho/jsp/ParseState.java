@@ -32,11 +32,8 @@ package com.caucho.jsp;
 import com.caucho.java.LineMap;
 import com.caucho.jsp.cfg.JspPropertyGroup;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.util.CharBuffer;
 import com.caucho.util.CharScanner;
 import com.caucho.util.L10N;
-import com.caucho.util.StringCharCursor;
-import com.caucho.vfs.Depend;
 import com.caucho.vfs.PersistentDependency;
 import com.caucho.vfs.TempCharBuffer;
 import com.caucho.vfs.Path;
@@ -76,7 +73,7 @@ public class ParseState {
   
   private boolean _isAutoFlush = true;
   private boolean _isAutoFlushSet = false;
-  
+
   private boolean _isThreadSafe = true;
   private boolean _isThreadSafeSet = false;
 
@@ -91,6 +88,9 @@ public class ParseState {
   private String _errorPage;
   private String _contentType;
   private String _charEncoding;
+
+  private int _bom = -1;
+
   private String _pageEncoding;
   private String _xmlPageEncoding;
   private Class _extends;
@@ -110,7 +110,9 @@ public class ParseState {
   private ArrayList<PersistentDependency> _depends
     = new ArrayList<PersistentDependency>();
   private LineMap _lineMap;
-
+  
+  private boolean _isPrototype;
+  
   private Xml _xml;
   private Namespace _namespaces;
 
@@ -455,7 +457,7 @@ public class ParseState {
     _xmlPageEncoding = pageEncoding;
     setPageEncoding(pageEncoding);
   }
-  
+
   /**
    * Sets the JSP's page encoding
    */
@@ -488,12 +490,24 @@ public class ParseState {
     else {
       String oldPageEncoding = _pageEncoding;
       
-      _pageEncoding = pageEncoding;
-      
-      throw new JspParseException(L.l("Cannot change page encoding to '{0}' (old value '{1}').  The page encoding may only be set once.",
-				      pageEncoding, oldPageEncoding));
+      //_pageEncoding = pageEncoding;
+
+      if (_bom == -1)
+        throw new JspParseException(L.l(
+          "Cannot change page encoding to '{0}' (old value '{1}').  The page encoding may only be set once.",
+          pageEncoding,
+          oldPageEncoding));
+      else
+        throw new JspParseException(L.l(
+          "Cannot change page encoding to '{0}' (old value is specified by BOM '{1}' -> '{2}').  The page encoding may only be set once.",
+          pageEncoding,
+          Integer.toHexString(_bom),
+          oldPageEncoding));
     }
-    
+  }
+
+  public void setBom(int bom) {
+    _bom = bom;
   }
 
   /**
@@ -836,6 +850,16 @@ public class ParseState {
   public String findPrefix(String uri)
   {
     return Namespace.findPrefix(_namespaces, uri);
+  }
+
+  public boolean isPrototype()
+  {
+    return _isPrototype;
+  }
+
+  public void setPrototype(boolean isPrototype)
+  {
+    _isPrototype = isPrototype;
   }
 }
 

@@ -67,10 +67,28 @@ public class ServletManager {
     _isLazyValidate = isLazy;
   }
 
+  public boolean isFacesServletConfigured()
+  {
+    for (ServletConfigImpl servletConfig : _servletList) {
+      String className = servletConfig.getServletClass().getName();
+      
+      if ("javax.faces.webapp.FacesServlet".equals(className))
+        return true;
+    }
+
+    return false;
+  }
+
+  public void addServlet(ServletConfigImpl config)
+    throws ServletException
+  {
+    addServlet(config, false);
+  }
+
   /**
    * Adds a servlet to the servlet manager.
    */
-  public void addServlet(ServletConfigImpl config)
+  public void addServlet(ServletConfigImpl config, boolean merge)
     throws ServletException
   {
     if (config.getServletContext() == null)
@@ -79,38 +97,48 @@ public class ServletManager {
     config.setServletManager(this);
 
     synchronized (_servlets) {
-      if (_servlets.get(config.getServletName()) != null) {
-	for (int i = _servletList.size() - 1; i >= 0; i--) {
-	  ServletConfigImpl oldConfig = _servletList.get(i);
+      ServletConfigImpl mergedConfig = null;
 
-	  if (config.getServletName().equals(oldConfig.getServletName())) {
-	    _servletList.remove(i);
-	    break;
-	  }
-	}
+      ServletConfigImpl existingConfig = _servlets.get(config.getServletName());
 
-	/* XXX: need something more sophisticated since the
-	 * resin.conf needs to override the web.xml
-	 * throw new ServletConfigException(L.l("'{0}' is a duplicate servlet-name.  Servlets must have a unique servlet-name.", config.getServletName()));
-	 */
+      if (! merge && existingConfig != null) {
+        for (int i = _servletList.size() - 1; i >= 0; i--) {
+          ServletConfigImpl oldConfig = _servletList.get(i);
+
+          if (config.getServletName().equals(oldConfig.getServletName())) {
+            _servletList.remove(i);
+            break;
+          }
+        }
+
+        /* XXX: need something more sophisticated since the
+          * resin.conf needs to override the web.xml
+          * throw new ServletConfigException(L.l("'{0}' is a duplicate servlet-name.  Servlets must have a unique servlet-name.", config.getServletName()));
+          */
+      } else if (merge && existingConfig != null) {
+        mergedConfig = existingConfig;
+        mergedConfig.merge(config);
       }
 
       try {
-	// ioc/0000, server/12e4
-	config.validateClass(false);
+        // ioc/0000, server/12e4
+        if (mergedConfig == null)
+          config.validateClass(false);
       } catch (ConfigException e) {
-	throw e;
+        throw e;
       } catch (Exception e) {
-	if (log.isLoggable(Level.FINE))
-	  log.log(Level.FINE, e.toString(), e);
-	else if (e instanceof ConfigException)
-	  log.config(e.getMessage());
-	else
-	  log.config(e.toString());
+        if (log.isLoggable(Level.FINE))
+          log.log(Level.FINE, e.toString(), e);
+        else if (e instanceof ConfigException)
+          log.config(e.getMessage());
+        else
+          log.config(e.toString());
       }
-    
-      _servlets.put(config.getServletName(), config);
-      _servletList.add(config);
+
+      if (mergedConfig == null) {
+        _servlets.put(config.getServletName(), config);
+        _servletList.add(config);
+      }
     }
   }
 
@@ -181,7 +209,8 @@ public class ServletManager {
    * Creates the servlet chain for the servlet.
    */
   public FilterChain createServletChain(String servletName,
-					ServletConfigImpl config)
+					ServletConfigImpl config,
+                                        ServletInvocation invocation)
     throws ServletException
   {
     if (config == null)
@@ -189,6 +218,17 @@ public class ServletManager {
 
     if (config == null) {
       throw new ServletConfigException(L.l("'{0}' is not a known servlet.  Servlets must be defined by <servlet> before being used.", servletName));
+    }
+
+    if (invocation != null) { // XXX: namedDispatcher
+      if (! config.isAsyncSupported())
+        invocation.clearAsyncSupported();
+
+      invocation.setMultipartConfig(config.getMultipartConfig());
+
+      // server/12h2
+      if (config.getRoleMap() != null)
+        invocation.setSecurityRoleMap(config.getRoleMap());
     }
 
     return config.createServletChain();

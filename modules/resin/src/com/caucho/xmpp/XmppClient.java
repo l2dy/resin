@@ -118,6 +118,14 @@ public class XmppClient {
     }
   }
 
+  public void connect(String name, String password)
+    throws IOException
+  {
+    connect();
+
+    login(name, password);
+  }
+
   public void connect()
     throws IOException
   {
@@ -146,7 +154,7 @@ public class XmppClient {
       XmppStreamWriterImpl out;
       out = new XmppStreamWriterImpl(_os, marshalFactory);
 
-      XmppWriter writer = new XmppWriter(_xmppContext, out);
+      XmppWriterImpl writer = new XmppWriterImpl(_xmppContext, out);
       
       _toBroker = new XmppClientBrokerStream(this, writer);
     

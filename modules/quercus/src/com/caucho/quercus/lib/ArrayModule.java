@@ -85,6 +85,9 @@ public class ArrayModule
   public static final int EXTR_IF_EXISTS = 6;
   public static final int EXTR_PREFIX_IF_EXISTS = 5;
   public static final int EXTR_REFS = 256;
+  
+  public static final int COUNT_NORMAL = 0;
+  public static final int COUNT_RECURSIVE = 1;
 
   public static final boolean CASE_SENSITIVE = true;
   public static final boolean CASE_INSENSITIVE = false;
@@ -288,9 +291,11 @@ public class ArrayModule
    */
   public static long count(Env env,
 			               @ReadOnly Value value,
-			               @Optional("false") boolean recursive)
+			               @Optional int countMethod)
   {
-    if (! recursive)
+    boolean isRecursive = countMethod == COUNT_RECURSIVE;
+
+    if (! isRecursive)
       return value.getCount(env);
     else
       return value.getCountRecursive(env);
@@ -339,15 +344,13 @@ public class ArrayModule
       if (value.isArray())
         return value.toArrayValue(env).each();
       else {
-        L.l("each() requires argument to be an array");
-        env.warning("each() requires argument to be an array");
+        env.warning(L.l("each() requires argument to be an array"));
 
         return NullValue.NULL;
       }
     }
     else {
-      L.l("each() argument must be a variable");
-      return env.error("each() argument must be a variable");
+      return env.error(L.l("each() argument must be a variable"));
     }
   }
 
@@ -411,12 +414,7 @@ public class ArrayModule
       return false;
     }
 
-    if (searchArray instanceof ArrayValue) {
-      return ((ArrayValue) searchArray).containsKey(key) != null;
-    }
-    else {
-      return ! searchArray.getField(env, key.toStringValue()).isNull();
-    }
+    return searchArray.keyExists(key);
   }
 
   /**
@@ -3465,10 +3463,10 @@ public class ArrayModule
    * Returns the size of the array.
    */
   public static long sizeof(Env env,
-			    @ReadOnly Value value,
-			    @Optional("false") boolean recursive)
+                            @ReadOnly Value value,
+                            @Optional int countMethod)
   {
-    return count(env, value, recursive);
+    return count(env, value, countMethod);
   }
 
   private static class CompareString

@@ -58,18 +58,21 @@ public class InjectionBean extends AbstractSingletonBean
   private InjectionTarget _target;
 
   InjectionBean(ManagedBeanImpl managedBean,
-		Set<Type> types,
-		Annotated annotated,
-		Set<Annotation> bindings,
-		Set<Annotation> stereotypes,
-		Class<? extends Annotation> scopeType,
-		String name,
-		InjectionTarget target)
+                Set<Type> types,
+                Annotated annotated,
+                Set<Annotation> bindings,
+                Set<Class<? extends Annotation>> stereotypes,
+                Class<? extends Annotation> scopeType,
+                String name,
+                InjectionTarget target)
   {
     super(managedBean, types, annotated, bindings, stereotypes,
-	  scopeType, name);
+          scopeType, name);
 
     _target = target;
+
+    if (target instanceof PassivationSetter)
+      ((PassivationSetter) target).setPassivationId(getId());
   }
 
   @Override
@@ -82,12 +85,12 @@ public class InjectionBean extends AbstractSingletonBean
   public Object create(CreationalContext ctx)
   {
     ConfigContext env = (ConfigContext) ctx;
-    
+
     Object value = _target.produce(env);
     env.put(this, value);
     _target.inject(value, env);
     _target.postConstruct(value);
-    
+
     return value;
   }
 }

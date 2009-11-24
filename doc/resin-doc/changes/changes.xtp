@@ -11,7 +11,125 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.1 snapshot">
+<s2 title="4.0.2 - Nov 24, 2009">
+<ul>
+<li>resin.exe: fixed timeout issue when stopping resin(#3762)</li>
+<li>resin: max-uri-length configuration tag introduced to set limit on URIs served by Resin. Default is 1024.</li>
+<li>ubuntu: missing LSB information (#3720, rep by floating world)</li>
+<li>jsp: findAncestorWithClass() fails with tags nested in a tag file(#3436, rep by paru)</li>
+<li>security: add LoginList to allow both form and basic for /resin-admin REST (rep by Martin Thompson)</li>
+<li>admin: add /resin-admin/rest.php?q=mod_status to duplicate Apache's REST interface (#3730, rep by Martin Thompson)</li>
+<li>jsp: Faulty code generated for tag files with scriptlets (#3699, rep by daniel_larsson)</li>
+<li>async: poll socket periodically to test for client exit (#3294, rep by Caleb Richardson)</li>
+<li>(2009-10-28): BeanELResolver IllegalAccessException (#3727, rep on behalf of Kenneth Yeung)</li>
+<li>(2009-10-22) encoding: JSP response character encoding can be specified at jsp group property level</li>
+<li>(2009-10-12) encoding: default encoding is now set by file.encoding and defaults to utf-8 if no file.encoding exists</li>
+<li>watchdog: add watchdog-log configuration (#3566, rep by Pedre Neves)</li>
+<li>comet: wrapped request needs to work with comet (#3665, rep by Fiaz Hossain)</li>
+<li>config: relaxng forbid duplicate rules (#3595, rep by hmh)</li>
+<li>ssi: add basic SSI conditionals (#3534, rep by fly-away)</li>
+<li>jpa: issue with @ManyToOne and MappedSuperclass (#3335, rep by rdhauwe)</li>
+<li>vfs: paths with spaces in them caused trouble with class scanning and enhancement (#3574, rep by N. Shannon)</li>
+<li>servlet: sendRedirect in filter with artifactory (#3416, rep by Jan Kriesten)</li>
+<li>xml: XMLStream parsing for atlassian (#3651)</li>
+<li>session: add cookie-use-context-path and cookie-path</li>
+<li>loader: handle duplicate class definition errors (#3673, rep by Jamison Novak)</li>
+<li>config: add ${server.address} and ${server.port} (#3671, rep by Ken Roach)</li>
+<li>jsp: StaticMethodExpr needs serialization fix (#3677, rep by boris_kovalenko)</li>
+<li>jsp: jsp:attribute in tag file (#3228, rep by jens)</li>
+<li>log: update AbstractRolloverLog to eliminate long archive block (#3650, rep by Patrik Stymne)</li>
+<li>candi: scope adapter left in debugging (#3675, rep by hontvari)</li>
+<li>database: _idlePool and _pool must be synchronized together (#3660, rep by Shinomiya Nobuaki)</li>
+<li>database: cleanup connection idle pooling (#3052)</li>
+<li>admin: add database "Query Time" statistics (#3397, rep by Bryant Harris)</li>
+<li>admin: add "database" tab to admin and improve configuration visibility (rep by Bill Au)</li>
+<li>admin: add DatabaseMXBean and add getUrl() (#3664, rep by Bill Au)</li>
+<li>configure: MacOS-X was not properly detecting JVMTI for profile (#3000, rep by Bryant Harris)</li>
+<li>jsp: add CodeSigner for JSP class loader (#3657, rep by Kai Virkki)</li>
+<li>http-proxy: enable load-balancing (#3068, rep by Zeke)</li>
+<li>deploy: -preview now detaches server from load balancing (#3345)</li>
+<li>ejb: session beans were not initialized in correct context (#3603, rep by Matthew Brew)</li>
+<li>session: add "java" as a session serialization type (#3648, rep by Mattias Jiderhamn)</li>
+<li>servlet: allow-forward-after-flush allows forward after response has been commited (feature) (#3580, rep by andrewm)</li>
+<li>admin: add ping-url for server-independent ping testing (#3605, rep by John Bowen)</li>
+<li>security: ClusterSingleSignon in cluster and host (#3467, rep by Scott Hernandez)</li>
+<li>ejb: TimerService needs to be injectalbe (#3572)</li>
+<li>ejb: ear scanning issues (#3583)</li>
+<li>ejb: .ear manifest with class-path prevented detection of ejbs (#3601, rep by mbrew)</li>
+<li>vfs: ReadStream.skip incorrectly updated index with negative skip (#3542, rep by Jamison Novak)</li>
+<li>embed: add resetLogManager() and call it by default in ResinEmbed (#3530, rep by Daniel Lopez)</li>
+<li>jpa: EntityManager.getDelegate() needs to create delegate if none exists (#3537, rep by voodude)</li>
+<li>embed/maven: ResinEmbed.initializeEnvironment() must start JNDI (#3486, rep by Jan Kriesten)</li>
+<li>admin: -agentlib:resin start cleanup (#3118 rep by bubek)</li>
+<li>vfs: NotFoundPath (error:) needs to be able to lookup absolute paths (#3628, #3475, rep by kvirkki)</li>
+<li>jsp: Jspc ant/maven task needs to disable resource-ref validation (#3577, rep by Boris Goykhman)</li>
+<li>jpa: registration of EntityManagerFactory incorrect (#3429, rep by Scott Hernandez)</li>
+<li>jpa: registration of PersistenceContext incorrect (#3622, rep by Jeff Schnitzer)</li>
+<li>server: QDate isLeapYear using _year field instead of argument (#3512, rep by damaan)</li>
+<li>amber: query maxResults issues (#3424, rep by Riccardo Cohen)</li>
+<li>web-app: check error case where root-directory with .war expansion is same as root (#3535, rep by voodude)</li>
+<li>security: request and SecurityContext isUserInRole share implementation (#3501, rep by skot)</li>
+<li>cron: use getCurrentTime() consistently for Alarm (#3548, rep by mkenney)</li>
+<li>ping: add freeze-timeout to PingThread configuration (#3592, rep by C. Karantzas)</li>
+<li>mod_caucho: use load-balance-connect-timeout for mod_caucho (#3642)</li>
+<li>xa: _transactionList rollback needs to be outside of synchronized (#3571, rep by jacky)</li>
+<li>jni: user-name fix with 64-bit start (#3521, rep by norlab)</li>
+<li>eclipse: server wizard cleanup and enhancement</li>
+<li>eclipse: spaces in path (#3589, rep by Michael Ludwig)</li>
+<li>eclipse: respect http port (#3502, rep by Michael Ludwig)</li>
+<li>eclipse: invalid chars in hot deploy (#3503, rep by Michael Ludwig)</li>
+<li>eclipse: deploy from temp directory (#3515, req by Yujin Kim)</li>
+<li>eclipse: breakpoints (#3484, rep by Doug and sblommers)</li>
+<li>embed: EmbedPort getLocalPort() returns ephemeral port (#3567, rep by zed)</li>
+<li>xml: XMLStreamReaderImpl on bad input (#2989, rep by Bill Au)</li>
+<li>servlet: footer/md5 HTTP handling (#3044, rep by Eric Bowman)</li>
+<li>thread: ThreadPool cleanup (#3645, rep by Daniel Wigenfors)</li>
+<li>jsp: BeanELResolver accessible issues (#3598, rep by rymsha)</li>
+<li>deploy: staging and versioning capacilibies (#3514, rep by Yujin Kim)</li>
+<li>cluster: add com.caucho.cluster.LockManager for distributed locking (#3464, rep by Martin Thompson)</li>
+<li>build: jsf-api.jar needs to be in src distribution (#3633, rep by joey)</li>
+<li>loader: sync/deadlock in EnvironmentClassLoader on startup (rep by Patrik Styme, #3641)</li>
+<li>jms: ClusterQueue single consumer (#2766, rep by Eric Masson)</li>
+<li>servlet: include/forward should not trigger request events (#3111, rep by tempestse)</li>
+<li>http: refactor to eliminate buffer/session reuse for subsequent requests (#3557, rep by Kevin Kilmer-Choi)</li>
+<li>servlet: forward attribute issues with wrappers (#3059, rep by masum)</li>
+<li>server: content-length counting issues (#3619, rep by Matthew Schmidt)</li>
+<li>jmx: IntrospectionMBean _attrGetMap needs to be synchronized (#3620, rep by ebarlas)</li>
+<li>jsse: added jsse cipher-suite support (#3593, rep by vbavin)</li>
+<li>jni: JNI detection of clientdisconnect issues (rep by Fiaz Hossain)</li>
+<li>quercus: image fixes for vbulletin</li>
+<li>quercus: ksort fixes for vbulletin</li>
+<li>quercus: WordPress: Post revisions not shown (#3753)</li>
+<li>quercus: Avoid recursive instropection of methods. (#3748, rep by PeterJ)</li>
+<li>quercus: quercus request for support for $_SERVER["REQUEST_TIME"] (#3712, rep by ashamash)</li>
+<li>quercus: Enable overridding of setting TYPE_SCROLL_INSENSITIVE (#3746, rep by PeterJ)</li>
+<li>quercus: date_timezone_set does not update date correctly (#3737, rep by damien)</li>
+<li>quercus: jetty: ClassNotFoundException for org.eclipse.jetty.server.AsyncContext (#3733, rep by andjarnic)</li>
+<li>quercus: is_object and is_resource return wrong results in many cases (#3701, rep by PeterJ)</li>
+<li>quercus: isset returns wrong answer with multiple variables (#3702, rep by PeterJ)</li>
+<li>quercus: failure in simplexml_load_string() (#3476, rep by jredden)</li>
+<li>quercus: quercus 4.0.1 is missing QuercusServlet (#3674, everflux)</li>
+<li>quercus: phpBB3 - Links not displaying (#3637, rep by GT500)</li>
+<li>quercus: java.lang.NullPointerException running Yii (#3541, rep by johnsavior)</li>
+<li>quercus: Drupal and OpenID (#3609, rep by B. Wu)</li>
+<li>quercus: QuercusParseException - missing semicolon within a scriptlet php tag. (#3668, rep by kenfoo)</li>
+<li>quercus: StringBuilderValue.create() is not performing a "& 0xFF" on the character value (#3654, rep by kenfoo)</li>
+<li>quercus: ErrorException is missing (#3667, rep by kenfoo)</li>
+<li>quercus: substr_compare failed (#3662, rep by jindw)</li>
+<li>quercus: Quercus allows to make non-abstract function abstract again (#3644, rep by tlandmann)</li>
+<li>quercus: count() error with recursive (#3586, rep by Hoang)</li>
+<li>quercus: PHP-style hash algorithm names not supported (#3513, rep by koreth)</li>
+<li>quercus: Quercus $foo->getClass() method (#3555, rep by Herbert)</li>
+<li>quercus: NumberFormatException when calling $result = file_get_contents($url) (#3587, rep by tomi_m)</li>
+<li>quercus: instanceof parsing precedence (#3621, rep by H. Punt)</li>
+<li>quercus: isset() returns FALSE for $_SESSION (#3636, rep by rabbitism)</li>
+<li>quercus: static function variables not "really" static (#3610, rep by tlandmann)</li>
+<li>quercus: wordpress 2.8.1 and resin load-balancing - can't login (#3624, rep by J. Novak)</li>
+<li>quercus: mail() does not handle multi-line headers properly (#3616)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.1">
 <ul>
 <li>session: save-mode='before-header' should not serialize sessions after the request (rep by Gagan Chaudhari)</li>
 <li>server: chunking issues with filled content (rep by Rick Mann)</li>
@@ -45,18 +163,8 @@
 <li>deploy: error messages and documentation for remote deploy not clear for BAM/HMTP (#3477, rep by Scott Hernandez)</li>
 <li>quercus: Curl has issues with urls having @ in it (#3585, rep by anash)</li>
 <li>quercus: Wordpress 2.8.1 parent constructor call (#3597, rep by csw)</li>
-</ul>
-</s2>
-
-<s2 title="4.0.0">
-<ul>
 <li>server: UTF8Reader with byte-order-mark needs to read full next character (#3525, rep by Fiaz Hossain)</li>
 <li>jca: max-active-time default needs to changed to Long.MAX_VALUE instead of Integer.MAX_VALUE (rep by KC Baltz)</li>
-</ul>
-</s2>
-
-<s2 title="4.0.0">
-<ul>
 <li>log: SyslogHandler has improper initialization (rep by Michael Glenney)</li>
 <li>class loader: remove potential classloadering deadlock based on ClassEntry lock (#3423, rep by stbu)</li>
 <li>database: driver support for META-INF/services and url without type</li>

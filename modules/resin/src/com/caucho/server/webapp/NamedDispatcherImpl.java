@@ -28,7 +28,6 @@
 
 package com.caucho.server.webapp;
 
-import com.caucho.server.connection.AbstractHttpResponse;
 import com.caucho.server.connection.CauchoRequest;
 import com.caucho.server.connection.CauchoResponse;
 import com.caucho.server.connection.RequestAdapter;
@@ -68,18 +67,32 @@ class NamedDispatcherImpl implements RequestDispatcher {
     HttpServletResponse res = (HttpServletResponse) response;
 
     RequestAdapter reqAdapt = null;
+    
     if (! (request instanceof CauchoRequest)) {
       reqAdapt = RequestAdapter.create();
       reqAdapt.init((HttpServletRequest) request, res, _webApp);
       request = reqAdapt;
     }
+
     CauchoRequest req = (CauchoRequest) request;
-    
+
+    DispatchResponse dispatchResponse = new DispatchResponse(res);
+    dispatchResponse.init(res);
+
+    try {
+      _includeFilterChain.doFilter(req, dispatchResponse);
+    } finally {
+      dispatchResponse.finish();
+    }
+
+    //_includeFilterChain.doFilter(req, new DispatchResponse(res));
+
     //AbstractResponseStream s = res.getResponseStream();
     // s.setDisableClose(true);
 
+    /* XXX:
     DispatchResponse subResponse = DispatchResponse.createDispatch();
-    subResponse.init(req);
+    // XXX: subResponse.init(req);
     subResponse.setNextResponse(res);
     // subResponse.init(req, s);
     subResponse.startRequest(null);
@@ -95,6 +108,7 @@ class NamedDispatcherImpl implements RequestDispatcher {
       RequestAdapter.free(reqAdapt);
 
     DispatchResponse.free(subResponse);
+    */
   }
 
   /**

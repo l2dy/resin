@@ -38,7 +38,9 @@ import com.caucho.util.CharBuffer;
 import com.caucho.vfs.WriteStream;
 
 import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.logging.Level;
 
 public class HttpResponse extends AbstractHttpResponse
@@ -50,7 +52,7 @@ public class HttpResponse extends AbstractHttpResponse
   static final byte []_textHtmlBytes = "\r\nContent-Type: text/html".getBytes();
   static final byte []_charsetBytes = "; charset=".getBytes();
   static final byte []_textHtmlLatin1Bytes = "\r\nContent-Type: text/html; charset=iso-8859-1".getBytes();
-  
+
   static final byte []_connectionCloseBytes = "\r\nConnection: close".getBytes();
 
   final byte []_resinServerBytes;
@@ -61,9 +63,11 @@ public class HttpResponse extends AbstractHttpResponse
   private final HttpRequest _request;
 
   private final byte []_dateBuffer = new byte[256];
-  private int _dateBufferLength;
   private final CharBuffer _dateCharBuffer = new CharBuffer();
+
+  private int _dateBufferLength;
   private long _lastDate;
+  private boolean _isChunked;
 
   /**
    * Creates a new HTTP-protocol response.
@@ -81,63 +85,40 @@ public class HttpResponse extends AbstractHttpResponse
     _resinServerBytes = ("\r\nServer: " + server.getServerHeader()).getBytes();
   }
 
-  /**
-   * Switch to raw socket mode.
-   */
-  public void switchToRaw()
-    throws IOException
+  @Override
+  protected AbstractResponseStream createResponseStream()
   {
-    clearBuffer();
-
-    setStatus(101);
-
-    finishInvocation(); // don't need to flush since it'll close anyway
-    finishRequest(); // don't need to flush since it'll close anyway
+    return new HttpResponseStream(this, getRawWrite());
   }
 
-  /**
-   * Switch to raw socket mode.
-   */
-  /*
-  public WriteStream getRawOutput()
-    throws IOException
+  boolean isChunkedEncoding()
   {
-    return _rawWrite;
+    return _isChunked;
   }
-  */
 
   /**
    * Upgrade protocol
    */
+  /*
   @Override
   public TcpDuplexController upgradeProtocol(TcpDuplexHandler handler)
   {
     TcpConnection conn
-      = (TcpConnection) ((TcpServerRequest) getOriginalRequest()).getConnection();
-    
+      = (TcpConnection) ((TcpServerRequest) getRequest()).getConnection();
+
     TcpDuplexController controller = conn.toDuplex(handler);
-    
-    setStatus(101);
+
+    HttpServletResponseImpl response = _request.getResponseFacade();
+
+    response.setStatus(101);
     setContentLength(0);
 
     if (log.isLoggable(Level.FINE))
       log.fine(this + " upgrade HTTP to " + handler);
-    
+
     return controller;
   }
-
-  /**
-   * Return true for the top request.
-   */
-  @Override
-  public boolean isTop()
-  {
-    if (! (_request instanceof AbstractHttpRequest))
-      return false;
-    else {
-      return ((AbstractHttpRequest) _request).isTop();
-    }
-  }
+  */
 
   /**
    * Writes the 100 continue response.
@@ -162,7 +143,7 @@ public class HttpResponse extends AbstractHttpResponse
     os.write(_dateBuffer, 0, _dateBufferLength);
     os.flush();
     */
-    
+
     os.print("HTTP/1.1 100 Continue\r\n\r\n");
   }
 
@@ -176,15 +157,18 @@ public class HttpResponse extends AbstractHttpResponse
    *
    * @return true if the data in the request should use chunked encoding.
    */
-  protected boolean writeHeadersInt(WriteStream os,
-				    int length,
-				    boolean isHead)
+  @Override
+  protected boolean writeHeadersInt(int length,
+                                    boolean isHead)
     throws IOException
   {
-    if (! _request.hasRequest())
+    HttpServletRequestImpl request = _request.getRequestFacade();
+    HttpServletResponseImpl response = _request.getResponseFacade();
+
+    if (request == null)
       return false;
-    
-    boolean isChunked = false;
+
+    _isChunked = false;
 
     int version = _request.getVersion();
     boolean debug = log.isLoggable(Level.FINE);
@@ -194,30 +178,59 @@ public class HttpResponse extends AbstractHttpResponse
       return false;
     }
 
-    String contentType = _contentType;
+    TcpConnection tcpConn = null;
 
-    int statusCode = _statusCode;
+    if (_request.getConnection() instanceof TcpConnection)
+      tcpConn = (TcpConnection) _request.getConnection();
+
+    WebApp webApp = request.getWebApp();
+
+    String contentType = response.getContentTypeImpl();
+    String charEncoding = response.getCharacterEncodingImpl();
+
+    WriteStream os = getRawWrite();
+
+    int statusCode = response.getStatus();
     if (statusCode == 200) {
       if (version < HttpRequest.HTTP_1_1)
-	os.write(_http10ok, 0, _http10ok.length);
+        os.write(_http10ok, 0, _http10ok.length);
       else
-	os.write(_http11ok, 0, _http11ok.length);
+        os.write(_http11ok, 0, _http11ok.length);
     } else {
       if (version < HttpRequest.HTTP_1_1)
-	os.print("HTTP/1.0 ");
+        os.printLatin1("HTTP/1.0 ");
       else
-	os.print("HTTP/1.1 ");
+        os.printLatin1("HTTP/1.1 ");
 
       os.write((statusCode / 100) % 10 + '0');
       os.write((statusCode / 10) % 10 + '0');
       os.write(statusCode % 10 + '0');
       os.write(' ');
-      os.print(_statusMessage);
+      os.printLatin1(response.getStatusMessage());
     }
 
     if (debug) {
       log.fine(_request.dbgId() + "HTTP/1.1 " +
-	       _statusCode + " " + _statusMessage);
+               statusCode + " " + response.getStatusMessage());
+    }
+
+    boolean isUpgrade = false;
+
+    if (tcpConn != null && tcpConn.isDuplex()) {
+      isUpgrade = true;
+
+      String upgrade = getHeader("Upgrade");
+
+      if (upgrade != null) {
+        os.printLatin1("\r\nUpgrade: ");
+        os.printLatin1(upgrade);
+      }
+
+      os.printLatin1("\r\nConnection: Upgrade");
+      _request.killKeepalive();
+
+      if (debug)
+        log.fine(_request.dbgId() + "Connection: Upgrade");
     }
 
     if (! containsHeader("Server")) {
@@ -227,12 +240,17 @@ public class HttpResponse extends AbstractHttpResponse
     if (statusCode >= 400) {
       removeHeader("ETag");
       removeHeader("Last-Modified");
-    } else if (statusCode == SC_NOT_MODIFIED
-	       || statusCode == SC_NO_CONTENT) {
+    }
+    else if (statusCode == HttpServletResponse.SC_NOT_MODIFIED
+             || statusCode == HttpServletResponse.SC_NO_CONTENT) {
       // php/1b0k
 
       contentType = null;
-    } else if (_isNoCache) {
+    }
+    else if (response.isCacheControl()) {
+      // application manages cache control
+    }
+    else if (response.isNoCache()) {
       // server/1b15
       removeHeader("ETag");
       removeHeader("Last-Modified");
@@ -241,54 +259,53 @@ public class HttpResponse extends AbstractHttpResponse
       // automatically set cache headers
       setHeaderImpl("Expires", "Thu, 01 Dec 1994 16:00:00 GMT");
 
-      if (_isNoCache)
-	os.print("\r\nCache-Control: no-cache");
+      os.printLatin1("\r\nCache-Control: no-cache");
+
+      if (debug) {
+        log.fine(_request.dbgId() + "" +
+                 "Cache-Control: no-cache");
+      }
+    }
+    else if (response.isNoCacheUnlessVary()
+             && ! containsHeader("Vary")) {
+      os.printLatin1("\r\nCache-Control: private");
+
+      if (debug) {
+        log.fine(_request.dbgId() + "Cache-Control: private");
+      }
+    }
+    else if (response.isPrivateCache()) {
+      if (HttpRequest.HTTP_1_1 <= version) {
+        // technically, this could be private="Set-Cookie,Set-Cookie2"
+        // but caches don't recognize it, so there's no real extra value
+        os.printLatin1("\r\nCache-Control: private");
+
+        if (debug)
+          log.fine(_request.dbgId() + "Cache-Control: private");
+      }
       else {
-	// server/1k68
-	os.print("\r\nCache-Control: private");
-      }
+        setHeaderImpl("Expires", "Thu, 01 Dec 1994 16:00:00 GMT");
+        os.printLatin1("\r\nCache-Control: no-cache");
 
-      if (debug) {
-        log.fine(_request.dbgId() + "" +
-                 "Expires: Thu, 01 Dec 1994 16:00:00 GMT");
-      }
-    }
-    else if (isNoCacheUnlessVary() && ! containsHeader("Vary")) {
-      os.print("\r\nCache-Control: private");
-
-      if (debug) {
-        log.fine(_request.dbgId() + "Cache-Control: private");
-      }
-    }
-    else if (! isPrivateCache()) {
-    }
-    else if (HttpRequest.HTTP_1_1 <= version) {
-      // technically, this could be private="Set-Cookie,Set-Cookie2"
-      // but caches don't recognize it, so there's no real extra value
-      os.print("\r\nCache-Control: private");
-
-      if (debug)
-        log.fine(_request.dbgId() + "Cache-Control: private");
-    }
-    else if (! containsHeader("Cache-Control")) {
-      setHeaderImpl("Expires", "Thu, 01 Dec 1994 16:00:00 GMT");
-      os.print("\r\nCache-Control: no-cache");
-
-      if (debug) {
-        log.fine(_request.dbgId() + "" +
-                 "Expires: Thu, 01 Dec 1994 16:00:00 GMT");
+        if (debug) {
+          log.fine(_request.dbgId() + "CacheControl: no-cache");
+        }
       }
     }
 
     int size = _headerKeys.size();
     for (int i = 0; i < size; i++) {
       String key = (String) _headerKeys.get(i);
+
+      if (isUpgrade && "Upgrade".equalsIgnoreCase(key))
+        continue;
+
       os.write('\r');
       os.write('\n');
-      os.print(key);
+      os.printLatin1(key);
       os.write(':');
       os.write(' ');
-      os.print((String) _headerValues.get(i));
+      os.printLatin1((String) _headerValues.get(i));
 
       if (debug) {
         log.fine(_request.dbgId() + "" +
@@ -297,93 +314,47 @@ public class HttpResponse extends AbstractHttpResponse
     }
 
     long now = Alarm.getCurrentTime();
-    size = _cookiesOut.size();
-    for (int i = 0; i < _cookiesOut.size(); i++) {
-      Cookie cookie = _cookiesOut.get(i);
-      int cookieVersion = cookie.getVersion();
+    ArrayList<Cookie> cookiesOut = response.getCookies();
 
-      CharBuffer cb = _cb;
-      // XXX:
-      fillCookie(cb, cookie, now, cookieVersion, false);
-      os.print("\r\nSet-Cookie: ");
-      os.print(cb.getBuffer(), 0, cb.getLength());
-      if (cookieVersion > 0) {
-        fillCookie(cb, cookie, now, cookieVersion, true);
-        os.print("\r\nSet-Cookie2: ");
-        os.print(cb.getBuffer(), 0, cb.getLength());
+    if (cookiesOut != null) {
+      for (int i = 0; i < cookiesOut.size(); i++) {
+        Cookie cookie = cookiesOut.get(i);
+        int cookieVersion = cookie.getVersion();
+
+        CharBuffer cb = _cb;
+        // XXX:
+        fillCookie(cb, cookie, now, cookieVersion, false);
+        os.printLatin1("\r\nSet-Cookie: ");
+        os.printLatin1(cb.getBuffer(), 0, cb.getLength());
+        if (cookieVersion > 0) {
+          fillCookie(cb, cookie, now, cookieVersion, true);
+          os.printLatin1("\r\nSet-Cookie2: ");
+          os.printLatin1(cb.getBuffer(), 0, cb.getLength());
+        }
+
+        if (debug)
+          log.fine(_request.dbgId() + "Set-Cookie: " + cb);
+      }
+    }
+
+    if (contentType != null) {
+      if (charEncoding == null) {
+        if (webApp != null)
+          charEncoding = webApp.getCharacterEncoding();
+
+        // always use a character encoding to avoid XSS attacks (?)
+        if (charEncoding == null)
+          charEncoding = "utf-8";
       }
 
-      if (debug)
-        log.fine(_request.dbgId() + "Set-Cookie: " + cb);
-    }
-
-    if (contentType == null) {
-    }
-    else if (! contentType.equals("text/html")) {
       os.write(_contentTypeBytes, 0, _contentTypeBytes.length);
-      os.print(contentType);
-
-      if (_charEncoding != null) {
-	os.write(_charsetBytes, 0, _charsetBytes.length);
-	os.print(_charEncoding);
-
-        if (debug) {
-          log.fine(_request.dbgId() + "Content-Type: " + contentType
-                   + "; charset=" + _charEncoding);
-        }
-      }
-      else {
-	WebApp webApp = _request.getWebApp();
-	String charEncoding = (webApp != null
-			       ? webApp.getCharacterEncoding()
-			       : null);
-
-	if (charEncoding != null) {
-	  os.write(_charsetBytes, 0, _charsetBytes.length);
-	  os.print(charEncoding);
-          
-          if (debug) {
-            log.fine(_request.dbgId() + "Content-Type: " + contentType
-                     + "; charset=" + _charEncoding);
-          }
-	}
-        else {
-          if (debug) {
-            log.fine(_request.dbgId() + "Content-Type: " + contentType);
-          }
-        }
-      }
-    }
-    else if (_charEncoding != null) {
-      os.write(_textHtmlBytes, 0, _textHtmlBytes.length);
+      os.printLatin1(contentType);
       os.write(_charsetBytes, 0, _charsetBytes.length);
-      os.print(_charEncoding);
-      
-      if (debug) {
-        log.fine(_request.dbgId() + "Content-Type: text/html; charset="
-                 + _charEncoding);
-      }
-    }
-    else {
-      WebApp webApp = _request.getWebApp();
-      String charEncoding = (webApp != null
-			     ? webApp.getCharacterEncoding()
-			     : null);
+      os.printLatin1(charEncoding);
 
-      os.write(_textHtmlBytes, 0, _textHtmlBytes.length);
-      if (charEncoding != null) {
-	os.write(_charsetBytes, 0, _charsetBytes.length);
-	os.print(charEncoding);
-      
-        if (debug) {
-          log.fine(_request.dbgId() + "Content-Type: text/html; charset="
-                   + charEncoding);
-        }
-      }
-      else {
-        if (debug) {
-          log.fine(_request.dbgId() + "Content-Type: text/html");
-        }
+      if (debug) {
+        log.fine(_request.dbgId() + "Content-Type: " + contentType
+                 + "; charset=" + charEncoding);
       }
     }
 
@@ -410,7 +381,7 @@ public class HttpResponse extends AbstractHttpResponse
       if (debug)
         log.fine(_request.dbgId() + "Content-Length: " + _contentLength);
     }
-    else if (statusCode == SC_NOT_MODIFIED) {
+    else if (statusCode == HttpServletResponse.SC_NOT_MODIFIED) {
       // #3089
       // In the HTTP spec, a 304 has no message body so the content-length
       // is not needed.  The content-length is not explicitly forbidden,
@@ -418,7 +389,7 @@ public class HttpResponse extends AbstractHttpResponse
       hasContentLength = true;
       setHead();
     }
-    else if (statusCode == SC_NO_CONTENT) {
+    else if (statusCode == HttpServletResponse.SC_NO_CONTENT) {
       hasContentLength = true;
       os.write(_contentLengthBytes, 0, _contentLengthBytes.length);
       os.print(0);
@@ -449,7 +420,11 @@ public class HttpResponse extends AbstractHttpResponse
       else
       */
 
-      if (! _request.allowKeepalive()) {
+      if (_request.allowKeepalive()) {
+      }
+      else if (isUpgrade) {
+      }
+      else {
         os.write(_connectionCloseBytes, 0, _connectionCloseBytes.length);
         _request.killKeepalive();
 
@@ -461,8 +436,8 @@ public class HttpResponse extends AbstractHttpResponse
     if (HttpRequest.HTTP_1_1 <= version
         && ! hasContentLength
         && ! isHead) {
-      os.print("\r\nTransfer-Encoding: chunked");
-      isChunked = true;
+      os.printLatin1("\r\nTransfer-Encoding: chunked");
+      _isChunked = true;
 
       if (debug)
         log.fine(_request.dbgId() + "Transfer-Encoding: chunked");
@@ -472,12 +447,12 @@ public class HttpResponse extends AbstractHttpResponse
       fillDate(now);
     }
 
-    if (isChunked)
+    if (_isChunked)
       os.write(_dateBuffer, 0, _dateBufferLength - 2);
     else
       os.write(_dateBuffer, 0, _dateBufferLength);
 
-    return isChunked;
+    return _isChunked;
   }
 
   private void fillDate(long now)

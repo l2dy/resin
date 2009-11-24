@@ -6,12 +6,18 @@
      <init compile="false"/>
   </servlet-mapping>
 
+  <session-config>
+    <use-persistent-store/>
+  </session-config>
+
   <!--
      - Security configuration
     -->
-  <resin:FormLogin
-	   login-page="/login.php"
-	   error-page="/error.php"/>
+  <resin:LoginList>
+    <resin:FormLogin login-page="/login.php"
+                     error-page="/error.php"/>
+    <resin:BasicLogin/>
+  </resin:LoginList>
 
   <resin:Allow url-pattern="*.php">
     <resin:if test="${! resin_admin_external}">

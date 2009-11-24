@@ -53,10 +53,7 @@ import javax.enterprise.context.ConversationScoped;
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.RequestScoped;
 import javax.enterprise.context.SessionScoped;
-import javax.enterprise.context.ScopeType;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.inject.AnnotationLiteral;
-import javax.enterprise.inject.Initializer;
 import javax.enterprise.inject.spi.Bean;
 
 /**

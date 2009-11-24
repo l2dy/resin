@@ -9,7 +9,7 @@
   <property name="shell" value="bash"/>
 
   <target name="compile" 
-          depends="init, hessian, javaee, jaxstream, jcache, portlet, script, resin-kernel, quercus, resin, ecmascript, inject, webutil, conf, ext, j2ee-management">
+          depends="init, hessian, javaee, jaxstream, jcache, portlet, script, resin-kernel, quercus, resin, ecmascript, inject, webutil, conf, ext, j2ee-management, j2ee-deploy">
   </target>
 
   <!--
@@ -119,25 +119,36 @@
   <target name="artifacts" depends="init, compat">
     <mkdir dir="artifacts"/>
     <antcall target="artifact" inheritRefs="true">
+      <param name="artifact.name" value="ant"/>
+    </antcall>
+    <!--
+    <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="cxf"/>
+    </antcall>
+    
+    <antcall target="artifact" inheritRefs="true">
+      <param name="artifact.name" value="maven"/>
     </antcall>
     
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="mule"/>
     </antcall>
-    
+    -->
+
+    <!-- xxx 4.0.2
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
     </antcall>
+    -->
     
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
     </antcall>
-
+<!--
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="xfire"/>
     </antcall>
-    
+    -->
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="xwork2"/>
     </antcall>
@@ -294,6 +305,15 @@
 
     <copy tofile="${module.build}/META-INF/maven/com.caucho/resin-maven-plugin/pom.xml"
           file="${artifacts}/maven/maven2/pom.xml"
+          preservelastmodified="true"
+          overwrite="true">
+      <filterset>
+        <filter token="VERSION" value="${maven.version}"/>
+      </filterset>
+    </copy>
+
+    <copy tofile="${module.build}/META-INF/maven/plugin.xml"
+          file="${module.src}/META-INF/maven/plugin.xml.in"
           preservelastmodified="true"
           overwrite="true">
       <filterset>
@@ -843,7 +863,7 @@
      <exec executable="autoconf"/>
   </target>
 
-  <target name="maven-dist" depends="init, compile, ant, eclipse, netbeans, maven-plugin, artifacts, resin.dist.jar">
+  <target name="maven-dist" depends="init, compile, ant, maven-plugin, artifacts, resin.dist.jar">
     <property name="maven" value="${maven.root}/com/caucho/"/>
     
     <antcall target="maven2-jar" inheritRefs="true">
@@ -865,14 +885,14 @@
       <param name="jar.name" value="resin-ant.jar"/>
       <param name="maven.name" value="resin-ant"/>
     </antcall>
-
+<!--
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="eclipse"/>
       <param name="jar.name"
 	     value="com.caucho.resin.eclipse_${version}.jar"/>
       <param name="maven.name" value="resin-eclipse"/>
     </antcall>
-
+-->
     <!--
     <antcall target="maven2-module" inheritRefs="true">
       <param name="module.name" value="deploy"/>
@@ -899,7 +919,7 @@
       <param name="jar.name" value="resin-netbeans.nbm"/>
       <param name="maven.name" value="resin-netbeans"/>
     </antcall>
-    
+
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="spring"/>
       <param name="jar.name" value="resin-spring.jar"/>

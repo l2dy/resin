@@ -84,7 +84,7 @@ public class Hessian2Output
   protected OutputStream _os;
 
   // map of references
-  private IdentityIntMap _refs = new IdentityIntMap();
+  private final IdentityIntMap _refs = new IdentityIntMap();
 
   private boolean _isCloseStreamOnClose;
 
@@ -106,6 +106,11 @@ public class Hessian2Output
    * @param os the underlying output stream.
    */
   public Hessian2Output(OutputStream os)
+  {
+    init(os);
+  }
+
+  public void init(OutputStream os)
   {
     _os = os;
   }
@@ -1368,7 +1373,7 @@ public class Hessian2Output
     flushBuffer();
 
     _isPacket = true;
-    _offset = 2;
+    _offset = 3;
   }
 
   public void endPacket()
@@ -1376,22 +1381,33 @@ public class Hessian2Output
   {
     int offset = _offset;
 
-    int len = offset - 2;
+    OutputStream os = _os;
 
-    _buffer[0] = (byte) (0x80 + ((len >> 7) & 0x7f));
-    _buffer[1] = (byte) (len & 0x7f);
+    if (os == null) {
+      _offset = 0;
+      return;
+    }
+    
+    int len = offset - 3;
+
+    _buffer[0] = (byte) (0x80);
+    _buffer[1] = (byte) (0x80 + ((len >> 7) & 0x7f));
+    _buffer[2] = (byte) (len & 0x7f);
 
     // end chunk
+    _buffer[offset++] = (byte) 0x80;
     _buffer[offset++] = (byte) 0x00;
 
     _isPacket = false;
     _offset = 0;
 
-    OutputStream os = _os;
-
     if (os != null) {
-      if (len < 0x80)
+      if (len == 0) {
+        os.write(_buffer, 1, 2);
+      }
+      else if (len < 0x80) {
         os.write(_buffer, 1, offset - 1);
+      }
       else
         os.write(_buffer, 0, offset);
     }
@@ -1540,11 +1556,12 @@ public class Hessian2Output
       if (os != null)
         os.write(_buffer, 0, offset);
     }
-    else if (_isPacket && offset > 2) {
-      int len = offset - 2;
-      _buffer[0] = (byte) (0x80 + ((len >> 7) & 0x7f));
-      _buffer[1] = (byte) (len & 0x7f);
-      _offset = 2;
+    else if (_isPacket && offset > 3) {
+      int len = offset - 3;
+      _buffer[0] = (byte) 0x80;
+      _buffer[1] = (byte) (0x80 + ((len >> 7) & 0x7f));
+      _buffer[2] = (byte) (len & 0x7f);
+      _offset = 3;
 
       if (os != null)
         os.write(_buffer, 0, offset);
@@ -1564,6 +1581,17 @@ public class Hessian2Output
       if (_isCloseStreamOnClose)
         os.close();
     }
+  }
+
+  public void free()
+  {
+    _os = null;
+    _refs.clear();
+    _isCloseStreamOnClose = false;
+    _classRefs = null;
+    _typeRefs = null;
+    _offset = 0;
+    _isPacket = false;
   }
 
   class BytesOutputStream extends OutputStream {

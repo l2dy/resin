@@ -69,6 +69,12 @@ public interface Login {
   public Authenticator getAuthenticator();
   
   /**
+   * Returns true if the login can be used for this request. This lets
+   * webapps use multiple login methods.
+   */
+  public boolean isLoginUsedForRequest(HttpServletRequest request);
+  
+  /**
    * Returns the Principal associated with the current request.
    * getUserPrincipal is called in response to the Request.getUserPrincipal
    * call.  Login.getUserPrincipal can't modify the response or return

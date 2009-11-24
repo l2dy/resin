@@ -29,8 +29,7 @@
 
 package com.caucho.server.hmux;
 
-import com.caucho.server.connection.AbstractHttpRequest;
-import com.caucho.server.connection.AbstractHttpResponse;
+import com.caucho.server.connection.*;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
@@ -38,6 +37,7 @@ import com.caucho.vfs.WriteStream;
 
 import javax.servlet.http.Cookie;
 import java.io.IOException;
+import java.util.ArrayList;
 
 /**
  * Handles a response for a srun connection, i.e. a connection to
@@ -45,24 +45,18 @@ import java.io.IOException;
  */
 public class HmuxResponse extends AbstractHttpResponse {
   private HmuxRequest _req;
-  
+
   HmuxResponse(HmuxRequest request, WriteStream rawWrite)
   {
     super(request, rawWrite);
-    
+
     _req = request;
   }
 
-  /**
-   * Return true for the top request.
-   */
-  public boolean isTop()
+  @Override
+  protected AbstractResponseStream createResponseStream()
   {
-    if (! (_request instanceof AbstractHttpRequest))
-      return false;
-    else {
-      return ((AbstractHttpRequest) _request).isTop();
-    }
+    return new HmuxResponseStream(_req, this, getRawWrite());
   }
 
   /**
@@ -73,40 +67,47 @@ public class HmuxResponse extends AbstractHttpResponse {
   {
     // server/265a
   }
-  
-  protected boolean writeHeadersInt(WriteStream os,
-				    int length,
-				    boolean isHead)
+
+  @Override
+  protected boolean writeHeadersInt(int length,
+                                    boolean isHead)
     throws IOException
   {
-    if (! _originalRequest.hasRequest())
+    if (! _request.hasRequest())
       return false;
-    
+
+    HttpServletResponseImpl response = _request.getResponseFacade();
+
+    int statusCode = response.getStatus();
+
     CharBuffer cb = _cb;
     cb.clear();
-    cb.append((char) ((_statusCode / 100) % 10 + '0'));
-    cb.append((char) ((_statusCode / 10) % 10 + '0'));
-    cb.append((char) (_statusCode % 10 + '0'));
+    cb.append((char) ((statusCode / 100) % 10 + '0'));
+    cb.append((char) ((statusCode / 10) % 10 + '0'));
+    cb.append((char) (statusCode % 10 + '0'));
     cb.append(' ');
-    cb.append(_statusMessage);
+    cb.append(response.getStatusMessage());
 
     _req.writeStatus(cb);
 
-    if (_statusCode >= 400) {
+    if (statusCode >= 400) {
       removeHeader("ETag");
       removeHeader("Last-Modified");
     }
-    else if (_isNoCache) {
+    else if (response.isNoCache()) {
       removeHeader("ETag");
       removeHeader("Last-Modified");
 
       setHeader("Expires", "Thu, 01 Dec 1994 16:00:00 GMT");
       _req.writeHeader("Cache-Control", "no-cache");
     }
-    else if (isPrivateCache())
+    else if (response.isPrivateCache())
       _req.writeHeader("Cache-Control", "private");
 
-    int load = (int) (1000 * CauchoSystem.getLoadAvg());
+    int load = (int) (1000 * _req.getServer().getCpuLoad());
+    if (Alarm.isTest())
+      load = 0;
+
     _req.writeString(HmuxRequest.HMUX_META_HEADER, "cpu-load");
     _req.writeString(HmuxRequest.HMUX_STRING, String.valueOf(load));
 
@@ -129,26 +130,35 @@ public class HmuxResponse extends AbstractHttpResponse {
       _req.writeHeader("Content-Length", cb);
     }
 
-    long now = Alarm.getCurrentTime();
-    size = _cookiesOut.size();
-    for (int i = 0; i < size; i++) {
-      Cookie cookie = (Cookie) _cookiesOut.get(i);
-      int cookieVersion = cookie.getVersion();
+    HttpServletResponseImpl responseFacade = _request.getResponseFacade();
 
-      fillCookie(cb, cookie, now, 0, false);
-      _req.writeHeader("Set-Cookie", cb);
-      if (cookieVersion > 0) {
-        fillCookie(cb, cookie, now, cookieVersion, true);
-        _req.writeHeader("Set-Cookie2", cb);
+    long now = Alarm.getCurrentTime();
+    ArrayList<Cookie> cookiesOut = responseFacade.getCookies();
+
+    if (cookiesOut != null) {
+      size = cookiesOut.size();
+      for (int i = 0; i < size; i++) {
+        Cookie cookie = cookiesOut.get(i);
+        int cookieVersion = cookie.getVersion();
+
+        fillCookie(cb, cookie, now, 0, false);
+        _req.writeHeader("Set-Cookie", cb);
+        if (cookieVersion > 0) {
+          fillCookie(cb, cookie, now, cookieVersion, true);
+          _req.writeHeader("Set-Cookie2", cb);
+        }
       }
     }
 
-    if (_contentType != null) {
-      if (_charEncoding != null)
-	_req.writeHeader("Content-Type", _contentType + "; charset=" + _charEncoding);
+    String contentType = responseFacade.getContentTypeImpl();
+    String charEncoding = responseFacade.getCharacterEncodingImpl();
+
+    if (contentType != null) {
+      if (charEncoding != null)
+        _req.writeHeader("Content-Type", contentType + "; charset=" + charEncoding);
       else
-	_req.writeHeader("Content-Type", _contentType);
-      
+        _req.writeHeader("Content-Type", contentType);
+
     }
 
     _req.sendHeader();

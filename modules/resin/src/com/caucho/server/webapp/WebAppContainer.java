@@ -87,6 +87,8 @@ public class WebAppContainer
   // The owning dispatch server
   private DispatchServer _dispatchServer;
 
+  private InvocationDecoder _invocationDecoder;
+
   // The context class loader
   private EnvironmentClassLoader _classLoader;
 
@@ -184,6 +186,16 @@ public class WebAppContainer
   public void setDispatchServer(DispatchServer server)
   {
     _dispatchServer = server;
+    _invocationDecoder = _dispatchServer.getInvocationDecoder();
+  }
+
+  public InvocationDecoder getInvocationDecoder() {
+    if (_invocationDecoder != null)
+      return _invocationDecoder;
+
+    _invocationDecoder = Server.getCurrent().getInvocationDecoder();
+
+    return _invocationDecoder;
   }
 
   /**
@@ -730,7 +742,7 @@ public class WebAppContainer
    * Creates the invocation.
    */
   public Invocation buildInvocation(Invocation invocation)
-    throws Exception
+    throws ConfigException
   {
     if (_configException != null) {
       FilterChain chain = new ExceptionFilterChain(_configException);
@@ -958,7 +970,6 @@ public class WebAppContainer
    */
   private WebApp getWebApp(Invocation invocation,
 				     boolean enableRedeploy)
-    throws ServletException
   {
     try {
       WebAppController controller = getWebAppController(invocation);
@@ -982,8 +993,10 @@ public class WebAppContainer
       else {
         return null;
       }
+    } catch (RuntimeException e) {
+      throw e;
     } catch (Exception e) {
-      throw new ServletException(e);
+      throw ConfigException.create(e);
     }
   }
 
@@ -995,7 +1008,7 @@ public class WebAppContainer
    *
    * @return the controller or null if none match the url.
    */
-  private WebAppController getWebAppController(Invocation invocation)
+  protected WebAppController getWebAppController(Invocation invocation)
   {
     WebAppController controller = findByURI(invocation.getURI());
     if (controller == null)
@@ -1005,7 +1018,8 @@ public class WebAppContainer
 
     String contextPath = controller.getContextPath(invocationURI);
 
-    invocation.setContextPath(invocationURI.substring(0, contextPath.length()));
+    // invocation.setContextPath(invocationURI.substring(0, contextPath.length()));
+    invocation.setContextPath(contextPath);
 
     String uri = invocationURI.substring(contextPath.length());
     invocation.setContextURI(uri);
@@ -1017,7 +1031,6 @@ public class WebAppContainer
    * Creates the invocation.
    */
   public WebApp findWebAppByURI(String uri)
-    throws Exception
   {
     WebAppController controller = findByURI(uri);
 
@@ -1031,7 +1044,6 @@ public class WebAppContainer
    * Creates the invocation.
    */
   public WebApp findSubWebAppByURI(String uri)
-    throws Exception
   {
     WebAppController controller = findByURI(uri);
 
@@ -1059,7 +1071,7 @@ public class WebAppContainer
 
     // server/105w
     try {
-      cleanUri = InvocationDecoder.normalizeUri(cleanUri);
+      cleanUri = getInvocationDecoder().normalizeUri(cleanUri);
     } catch (java.io.IOException e) {
       log.log(Level.FINER, e.toString(), e);
     }

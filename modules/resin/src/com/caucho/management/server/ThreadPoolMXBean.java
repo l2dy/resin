@@ -40,6 +40,10 @@ import com.caucho.jmx.Description;
  */
 @Description("ThreadPool manages all threads used by the Resin server")
 public interface ThreadPoolMXBean extends ManagedObjectMXBean {
+  //
+  // configuration
+  //
+  
   /**
    * Returns the maximum number of threads.
    */
@@ -87,8 +91,44 @@ public interface ThreadPoolMXBean extends ManagedObjectMXBean {
   public int getThreadActiveCount();
   
   /**
+   * Returns the current number of starting threads.
+   */
+  @Description("The current number of starting threads")
+  public int getThreadStartingCount();
+  
+  /**
    * Returns the current number of idle threads.
    */
   @Description("The current number of idle threads")
   public int getThreadIdleCount();
+  
+  /**
+   * Returns the current number of waiting schedule threads.
+   */
+  @Description("The current number of wait threads")
+  public int getThreadWaitCount();
+  
+  /**
+   * Returns the total number of started threads.
+   */
+  @Description("The total number of created threads")
+  public long getThreadCreateCountTotal();
+  
+  /**
+   * Returns the total number of overflow threads.
+   */
+  @Description("The total number of overflow threads")
+  public long getThreadOverflowCountTotal();
+  
+  /**
+   * Returns the thread priority queue size
+   */
+  @Description("The priority queue size")
+  public int getThreadPriorityQueueSize();
+  
+  /**
+   * Returns the thread task queue size
+   */
+  @Description("The task queue size")
+  public int getThreadTaskQueueSize();
 }

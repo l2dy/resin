@@ -32,6 +32,7 @@ package com.caucho.ejb;
 import com.caucho.config.*;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.inject.AbstractBean;
+import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.j2ee.InjectIntrospector;
@@ -62,6 +63,7 @@ import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
 import javax.transaction.UserTransaction;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.logging.Logger;
@@ -138,6 +140,7 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   protected Bean _component;
 
+  private Method _timeoutMethod;
   private TimerService _timerService;
 
   protected ConfigProgram _initProgram;
@@ -157,7 +160,7 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   /**
    * Creates a new server container
-   * 
+   *
    * @param manager
    *          the owning server container
    */
@@ -167,12 +170,6 @@ abstract public class AbstractServer implements EnvironmentBean {
     _ejbContainer = container;
 
     _loader = EnvironmentClassLoader.create(container.getClassLoader());
-
-    InjectManager beanManager = InjectManager.create();
-    ManagedBeanImpl managedBean = beanManager.createManagedBean(annotatedType);
-
-    _bean = managedBean;
-    _injectionTarget = managedBean.getInjectionTarget();
   }
 
   /**
@@ -621,18 +618,33 @@ abstract public class AbstractServer implements EnvironmentBean {
     return _transactionTimeout;
   }
 
+  private Method getTimeoutMethod(Class targetBean)
+  {
+    if (TimedObject.class.isAssignableFrom(targetBean)) {
+      try {
+        return targetBean.getMethod("ejbTimeout", Timer.class);
+      } catch (Exception e) {
+        throw new IllegalStateException(e);
+      }
+    }
+
+    for (Method method : targetBean.getMethods()) {
+      if (method.getAnnotation(Timeout.class) != null) {
+        return method;
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Returns the timer service.
    */
   public TimerService getTimerService()
   {
     // ejb/0fj0
-    if (_timerService == null) {
-      _timerService = EjbTimerService.getLocal(_ejbContainer.getClassLoader(),
-          getContext());
-    }
-
-    return _timerService;
+    throw new UnsupportedOperationException(L.l("'{0}' does not support a timer service because it does not have a @Timeout method",
+                                                this));
   }
 
   /**
@@ -768,7 +780,7 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   /**
    * Returns the remote skeleton for the given API
-   * 
+   *
    * @param api
    *          the bean's api to return a value for
    * @param protocol
@@ -778,7 +790,7 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   /**
    * Returns the a new local stub for the given API
-   * 
+   *
    * @param api
    *          the bean's api to return a value for
    */
@@ -786,7 +798,7 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   /**
    * Returns the local jndi proxy for the given API
-   * 
+   *
    * @param api
    *          the bean's api to return a value for
    */
@@ -878,8 +890,10 @@ abstract public class AbstractServer implements EnvironmentBean {
   /**
    * Initialize an instance
    */
-  public void initInstance(Object instance, InjectionTarget target,
-      Object proxy, CreationalContext cxt)
+  public void initInstance(Object instance,
+                           InjectionTarget target,
+                           Object proxy,
+                           CreationalContext cxt)
   {
     ConfigContext env = (ConfigContext) cxt;
 
@@ -891,41 +905,60 @@ abstract public class AbstractServer implements EnvironmentBean {
       // env.push(proxy);
     }
 
-    if (target != null) {
-      target.inject(instance, env);
-    }
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
 
-    if (getInjectionTarget() != null && target != getInjectionTarget()) {
-      getInjectionTarget().inject(instance, env);
-    }
+    try {
+      thread.setContextClassLoader(_loader);
 
-    if (_initInject != null) {
-      Thread thread = Thread.currentThread();
-      ClassLoader oldLoader = thread.getContextClassLoader();
+      if (target != null) {
+        target.inject(instance, env);
+      }
 
-      try {
-        thread.setContextClassLoader(_loader);
+      if (getInjectionTarget() != null && target != getInjectionTarget()) {
+        getInjectionTarget().inject(instance, env);
+      }
 
+      if (_initInject != null) {
         if (env == null)
           env = new ConfigContext();
 
         for (ConfigProgram inject : _initInject)
           inject.inject(instance, env);
-      } finally {
-        thread.setContextClassLoader(oldLoader);
       }
-    }
 
-    try {
-      if (_cauchoPostConstruct != null)
-        _cauchoPostConstruct.invoke(instance, null);
-    } catch (Throwable e) {
-      log.log(Level.FINER, L.l("Error invoking method {0}",
-          _cauchoPostConstruct), e);
+      if (_initProgram != null) {
+        if (env == null)
+          env = new ConfigContext();
+
+        _initProgram.inject(instance, env);
+      }
+
+      try {
+        if (_cauchoPostConstruct != null)
+          _cauchoPostConstruct.invoke(instance, null);
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (InvocationTargetException e) {
+        throw new RuntimeException(e.getCause());
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    } finally {
+      thread.setContextClassLoader(oldLoader);
     }
 
     if (env != null && bean != null)
       env.remove(bean);
+  }
+
+  public void timeout(Timer timer)
+  {
+    /*
+    throw new UnsupportedOperationException(L.l("EJB '{0}' does not support a timeout, because it does not have a @Timeout method",
+                                                this));
+    */
+    getContext().__caucho_timeout_callback(timer);
   }
 
   /**
@@ -978,6 +1011,8 @@ abstract public class AbstractServer implements EnvironmentBean {
 
       bindInjection();
 
+      postStart();
+
       log.config(this + " active");
     } finally {
       thread.setContextClassLoader(oldLoader);
@@ -991,30 +1026,64 @@ abstract public class AbstractServer implements EnvironmentBean {
 
   }
 
+  protected void postStart()
+  {
+  }
+
   protected void bindInjection()
   {
+    InjectManager beanManager = InjectManager.create();
+    ManagedBeanImpl managedBean
+      = beanManager.createManagedBean(_annotatedType);
+
+    _bean = managedBean;
+    _injectionTarget = managedBean.getInjectionTarget();
+
+    _timeoutMethod = getTimeoutMethod(_bean.getBeanClass());
+
+    if (_timeoutMethod != null)
+      _timerService = new EjbTimerService(this);
+
     // Injection binding occurs in the start phase
 
+    InjectManager inject = InjectManager.create();
+
+    // server/4751
+    if (_injectionTarget == null)
+      _injectionTarget = inject.createInjectionTarget(getEjbClass());
+
+    if (_timerService != null) {
+      BeanFactory factory = inject.createBeanFactory(TimerService.class);
+      inject.addBean(factory.singleton(_timerService));
+    }
+    /*
     ArrayList<ConfigProgram> injectList = new ArrayList<ConfigProgram>();
     InjectIntrospector.introspectInject(injectList, getEjbClass());
     // XXX: add inject from xml here
+    */
 
-    if (_initProgram != null)
+    ArrayList<ConfigProgram> injectList = null;
+    if (_initProgram != null) {
+      injectList = new ArrayList<ConfigProgram>();
       injectList.add(_initProgram);
+    }
 
-    InjectIntrospector.introspectInit(injectList, getEjbClass(), null);
+    // InjectIntrospector.introspectInit(injectList, getEjbClass(), null);
     // XXX: add init from xml here
 
-    ConfigProgram[] injectArray = new ConfigProgram[injectList.size()];
-    injectList.toArray(injectArray);
+    if (injectList != null && injectList.size() > 0) {
+      ConfigProgram[] injectArray = new ConfigProgram[injectList.size()];
+      injectList.toArray(injectArray);
 
-    if (injectArray.length > 0)
-      _initInject = injectArray;
+      if (injectArray.length > 0)
+        _initInject = injectArray;
+    }
 
     injectList = new ArrayList<ConfigProgram>();
 
     introspectDestroy(injectList, getEjbClass());
 
+    ConfigProgram[] injectArray;
     injectArray = new ConfigProgram[injectList.size()];
     injectList.toArray(injectArray);
 

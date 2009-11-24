@@ -31,12 +31,10 @@ package com.caucho.server.connection;
 
 import java.io.IOException;
 
-import com.caucho.vfs.*;
-
 /**
  * Application handler for a bidirectional tcp stream
  *
- * The read stream should only be read by the <code>serviceRead</code> method.
+ * The read stream should only be read by the <code>onRead</code> thread.
  * 
  * The write stream must be synchronized if it's every written by a thread
  * other than the <code>serviceRead</code>
@@ -44,11 +42,20 @@ import com.caucho.vfs.*;
 public interface TcpDuplexHandler
 {
   /**
-   * services a read packet
-   *
-   * @return true to continue the connection, false to kill it
+   * Called when read data is available
    */
-  public boolean serviceRead(ReadStream is,
-			     TcpDuplexController controller)
+  public void onRead(TcpDuplexController controller)
+    throws IOException;
+  
+  /**
+   * Called when the connection closes
+   */
+  public void onComplete(TcpDuplexController controller)
+    throws IOException;
+  
+  /**
+   * Called when the connection times out
+   */
+  public void onTimeout(TcpDuplexController controller)
     throws IOException;
 }

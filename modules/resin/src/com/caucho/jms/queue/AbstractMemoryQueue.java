@@ -74,9 +74,9 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
    */
   @Override
   public final void send(String msgId,
-			 Serializable payload,
-			 int priority,
-			 long expires)
+                         Serializable payload,
+                         int priority,
+                         long expires)
     throws MessageException
   {
     E entry = writeEntry(msgId, payload, priority, expires);
@@ -89,9 +89,9 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
   //
 
   abstract protected E writeEntry(String msg,
-				  Serializable payload,
-				  int priority,
-				  long expires);
+                                  Serializable payload,
+                                  int priority,
+                                  long expires);
 
   protected void addQueueEntry(E entry)
   {
@@ -108,8 +108,14 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
    * Primary message receiving, registers a callback for any new
    * message.
    */
-  public E receiveEntry(long expireTime, boolean isAutoAck)
-    throws MessageException
+  public E receiveEntry(long expireTime, boolean isAutoAck) 
+     throws MessageException
+  {
+    return receiveEntry(expireTime, isAutoAck, null);
+  }
+  
+  public E receiveEntry(long expireTime, boolean isAutoAck, 
+                        QueueEntrySelector selector) throws MessageException
   {
     _receiverCount.incrementAndGet();
     
@@ -118,7 +124,7 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
 
       synchronized (_queueLock) {
         if (_callbackList.size() == 0) {
-  	entry = readEntry();
+        entry = readEntry(selector);
         }
       }
 
@@ -126,7 +132,7 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
         readPayload(entry);
   
         if (isAutoAck)
-  	acknowledge(entry.getMsgId());
+        acknowledge(entry.getMsgId());
           
         return entry;
       }
@@ -144,7 +150,7 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
   }
   
   public EntryCallback addMessageCallback(MessageCallback callback,
-					  boolean isAutoAck)
+                                          boolean isAutoAck)
   {
     _listenerCount.incrementAndGet();
     
@@ -210,8 +216,8 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
 
     synchronized (_queueLock) {
       if (_callbackList.size() > 0 || (entry = readEntry()) == null) {
-	_callbackList.add(callback);
-	return false;
+        _callbackList.add(callback);
+        return false;
       }
     }
 
@@ -231,17 +237,17 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
       EntryCallback callback = null;
       
       synchronized (_queueLock) {
-	if (_callbackList.size() == 0 || (entry = readEntry()) == null) {
-	  return;
-	}
+        if (_callbackList.size() == 0 || (entry = readEntry()) == null) {
+          return;
+        }
 
-	callback = _callbackList.remove(0);
+        callback = _callbackList.remove(0);
       }
 
       readPayload(entry);
 
       if (callback.entryReceived(entry)) {
-	acknowledge(entry.getMsgId());
+        acknowledge(entry.getMsgId());
       }
     }
   }
@@ -317,22 +323,34 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
    */
   protected E readEntry()
   {
+    return readEntry(null);
+  }
+  /**
+   * Returns the next entry from the queue
+   */
+  protected E readEntry(QueueEntrySelector selector)
+  {
     for (int i = _head.length - 1; i >= 0; i--) {
       for (QueueEntry entry = _head[i];
-	   entry != null;
-	   entry = entry._next) {
+           entry != null;
+           entry = entry._next) {
 
-	if (! entry.isLease()) {
-	  continue;
-	}
+        if (! entry.isLease()) {
+          continue;
+        }
 
-	if (entry.isRead()) {
-	  continue;
-	}
+        if (entry.isRead()) {
+          continue;
+        }
+        
+        readPayload((E)entry);
+        if ((selector != null) && (!selector.isMatch(entry))) {
+          continue;
+        }
           
-	entry.setReadSequence(_readSequenceGenerator.incrementAndGet());
+        entry.setReadSequence(_readSequenceGenerator.incrementAndGet());
 
-	return (E) entry;
+        return (E) entry;
       }
     }
 
@@ -340,32 +358,62 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
   }
 
   /**
+   * 
+   * @param selector
+   * @return          Entries present in the Queue.
+   */
+  public ArrayList<QueueEntry> getBrowserList()
+  {
+    ArrayList<QueueEntry> enteries = new ArrayList<QueueEntry>();
+    for (int i = _head.length - 1; i >= 0; i--) {
+      for (QueueEntry entry = _head[i];
+           entry != null;
+           entry = entry._next) {
+
+        if (! entry.isLease()) {
+          continue;
+        }
+
+        if (entry.isRead()) {
+          continue;
+        }
+        
+        readPayload((E)entry);
+
+        enteries.add((E)entry);
+      }
+    }
+    
+    return enteries.size() > 0 ? enteries : null;
+  }
+  
+  /**
    * Removes message.
    */
   protected E removeEntry(String msgId)
   {
     synchronized (_queueLock) {
       for (int i = _head.length - 1; i >= 0; i--) {
-	QueueEntry prev = null;
+        QueueEntry prev = null;
         QueueEntry entry = _head[i];
 
-	while (entry != null) {
-	  QueueEntry next = entry._next;
-	  
+        while (entry != null) {
+          QueueEntry next = entry._next;
+          
           if (msgId.equals(entry.getMsgId())) {
-	    if (prev != null)
-	      prev._next = entry._next;
-	    else
-	      _head[i] = entry._next;
+            if (prev != null)
+              prev._next = entry._next;
+            else
+              _head[i] = entry._next;
 
-	    if (_tail[i] == entry)
-	      _tail[i] = prev;
-	    
-	    return (E) entry;
+            if (_tail[i] == entry)
+              _tail[i] = prev;
+            
+            return (E) entry;
           }
 
-	  prev = entry;
-	  entry = next;
+          prev = entry;
+          entry = next;
         }
       }
     }
@@ -389,12 +437,12 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
             if (entry.isRead()) {
               entry.setReadSequence(0);
 
-	      /*
+              /*
               MessageImpl msg = (MessageImpl) getPayload(entry);
         
               if (msg != null)
                 msg.setJMSRedelivered(true);
-	      */
+              */
             }
             
             return;
@@ -410,11 +458,11 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
 
     synchronized (_queueLock) {
       for (int i = 0; i < _head.length; i++) {
-	for (QueueEntry entry = _head[i];
-	     entry != null;
-	     entry = entry._next) {
-	  browserList.add(entry.getMsgId());
-	}
+        for (QueueEntry entry = _head[i];
+             entry != null;
+             entry = entry._next) {
+          browserList.add(entry.getMsgId());
+        }
       }
     }
 
@@ -452,9 +500,9 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
       long timeout;
       
       while (_entry == null
-	     && (timeout = expireTime - Alarm.getCurrentTime()) > 0) {
+             && (timeout = expireTime - Alarm.getCurrentTime()) > 0) {
         
-	LockSupport.parkNanos(timeout * 1000000L);
+        LockSupport.parkNanos(timeout * 1000000L);
       }
       
       synchronized (_queueLock) {
@@ -501,25 +549,25 @@ public abstract class AbstractMemoryQueue<E extends QueueEntry>
       long readSequence = _entry.getReadSequence();
       
       try {
-	thread.setContextClassLoader(_classLoader);
+        thread.setContextClassLoader(_classLoader);
 
-	_callback.messageReceived(_entry.getMsgId(), _entry.getPayload());
-	isValid = true;
+        _callback.messageReceived(_entry.getMsgId(), _entry.getPayload());
+        isValid = true;
       } catch (Exception e) {
-	log.log(Level.WARNING, e.toString(), e);
-	isValid = true;
+        log.log(Level.WARNING, e.toString(), e);
+        isValid = true;
       } catch (Throwable t) {
         log.log(Level.SEVERE, t.toString(), t);
       } finally {
-	thread.setContextClassLoader(oldLoader);
-	
-	if (readSequence == _entry.getReadSequence()){
-	  acknowledge(_entry.getMsgId());
-	}
+        thread.setContextClassLoader(oldLoader);
+        
+        if (readSequence == _entry.getReadSequence()){
+          acknowledge(_entry.getMsgId());
+        }
       }
 
       if (! _isClosed && isValid)
-	listen(this);
+        listen(this);
     }
 
     public void close()

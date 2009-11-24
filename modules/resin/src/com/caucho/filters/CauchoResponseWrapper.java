@@ -292,14 +292,6 @@ public class CauchoResponseWrapper extends ResponseWrapper
     return false;
   }
 
-  public int getStatusCode()
-  {
-    if (_response instanceof CauchoResponse)
-      return ((CauchoResponse) _response).getStatusCode();
-
-    throw new UnsupportedOperationException();
-  }
-
   public String getStatusMessage()
   {
     if (_response instanceof CauchoResponse)
@@ -364,5 +356,17 @@ public class CauchoResponseWrapper extends ResponseWrapper
   public Iterable<String> getHeaderNames()
   {
     throw new UnsupportedOperationException("unimplemented");
+  }
+
+  public void setForwardEnclosed(boolean isForwardEnclosed) {
+  }
+
+  public boolean isForwardEnclosed() {
+    return false;
+  }
+
+  public boolean isNoCacheUnlessVary()
+  {
+    return false;
   }
 }

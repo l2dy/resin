@@ -30,6 +30,8 @@
 package javax.enterprise.inject;
 
 import java.lang.annotation.Annotation;
+import javax.inject.Provider;
+import javax.enterprise.util.TypeLiteral;
 
 /**
  * Factory to create instances of a bean.
@@ -54,29 +56,24 @@ import java.lang.annotation.Annotation;
  *
  * @see javax.event.Event
  */
-public interface Instance<T> extends Iterable<T>
+public interface Instance<T> extends Provider<T>, Iterable<T>
 {
   /**
-   * Returns an instance of the selected bean
+   * Restricts the instance given a set of qualifiers
    */
-  public T get();
-
-  /**
-   * Restricts the instance given a set of bindings
-   */
-  public Instance<T> select(Annotation ... bindings);
+  public Instance<T> select(Annotation ... qualifiers);
 
   /**
    * Restricts the instance to a subtype and bindings.
    */
   public <U extends T> Instance<U> select(Class<U> subtype,
-					  Annotation... bindings);
+                                          Annotation... qualifiers);
 
   /**
    * Restricts the instance to a subtype and bindings.
    */
   public <U extends T> Instance<U> select(TypeLiteral<U> subtype,
-					  Annotation... bindings);
+                                          Annotation... qualifiers);
 
   /**
    * Test if there are any beans that match the instance.

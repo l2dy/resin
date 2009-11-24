@@ -31,14 +31,20 @@ package com.caucho.db.store;
 
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.BlockManagerMXBean;
+import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.util.LongKeyLruCache;
+import com.caucho.util.TaskWorker;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryMXBean;
+import java.lang.management.MemoryUsage;
 
 /**
  * Manages the block cache
@@ -56,13 +62,19 @@ public final class BlockManager
   private final byte []_storeMask = new byte[8192];
   private LongKeyLruCache<Block> _blockCache;
 
+  private final Object _copyLock = new Object();
   private final ArrayList<Block> _writeQueue = new ArrayList<Block>();
-  private int _writeQueueMax = 32;
+  private int _writeQueueMax = 256;
+
+  private final AtomicLong _blockWriteCount = new AtomicLong();
+  private final AtomicLong _blockReadCount = new AtomicLong();
+
+  private final BlockManagerWriter _writer;
 
   private BlockManager(int capacity)
   {
     super(ClassLoader.getSystemClassLoader());
-    
+
     _blockCache = new LongKeyLruCache<Block>(capacity);
 
     // the first store id is not available to allow for tests for zero.
@@ -70,24 +82,50 @@ public final class BlockManager
 
     registerSelf();
 
-    BlockManagerWriter writer = new BlockManagerWriter();
-    Thread thread = new Thread(writer, "resin-block-manager-writer");
-    thread.setDaemon(true);
-
-    thread.start();
+    _writer = new BlockManagerWriter();
   }
 
   /**
    * Returns the block manager, ensuring a minimum number of entries.
    */
-  public static synchronized BlockManager create(int minEntries)
+  public static synchronized BlockManager create()
   {
-    if (_staticManager == null)
-      _staticManager = new BlockManager(minEntries);
+    if (_staticManager == null) {
+      int minEntries = (int) defaultCapacity();
 
-    _staticManager.ensureCapacity(minEntries);
+      _staticManager = new BlockManager(minEntries);
+    }
 
     return _staticManager;
+  }
+
+  private static long defaultCapacity()
+  {
+    long minSize = 1 * 1024 * 1024;
+
+    long memorySize = getMaxMemory() / 64;
+
+    if (memorySize < minSize)
+      memorySize = minSize;
+
+    return memorySize / Store.BLOCK_SIZE;
+  }
+
+  private static long getMaxMemory()
+  {
+    try {
+      MemoryMXBean memoryBean = ManagementFactory.getMemoryMXBean();
+      MemoryUsage heap = memoryBean.getHeapMemoryUsage();
+
+      if (heap.getCommitted() < heap.getMax())
+        return heap.getMax();
+      else
+        return heap.getCommitted();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+
+    return Runtime.getRuntime().maxMemory();
   }
 
   public static BlockManager getBlockManager()
@@ -106,23 +144,34 @@ public final class BlockManager
   }
 
   /**
+   * Ensures the cache has a minimum number of blocks.
+   *
+   * @param minCapacity the minimum capacity in blocks
+   */
+  public void setCapacity(int minCapacity)
+  {
+    if (minCapacity > 1024 * 1024 / Store.BLOCK_SIZE)
+      _blockCache = _blockCache.setCapacity(minCapacity);
+  }
+
+  /**
    * Allocates a store id.
    */
   public int allocateStoreId()
   {
     synchronized (_storeMask) {
       for (int i = 0; i < _storeMask.length; i++) {
-	int mask = _storeMask[i];
+        int mask = _storeMask[i];
 
-	if (mask != 0xff) {
-	  for (int j = 0; j < 8; j++) {
-	    if ((mask & (1 << j)) == 0) {
-	      _storeMask[i] |= (1 << j);
+        if (mask != 0xff) {
+          for (int j = 0; j < 8; j++) {
+            if ((mask & (1 << j)) == 0) {
+              _storeMask[i] |= (1 << j);
 
-	      return 8 * i + j;
-	    }
-	  }
-	}
+              return 8 * i + j;
+            }
+          }
+        }
       }
 
       throw new IllegalStateException(L.l("All store ids used."));
@@ -140,16 +189,16 @@ public final class BlockManager
       Iterator<Block> values = _blockCache.values();
 
       while (values.hasNext()) {
-	Block block = values.next();
+        Block block = values.next();
 
-	if (block != null && block.getStore() == store) {
-	  if (block.isDirty()) {
-	    if (dirtyBlocks == null)
-	      dirtyBlocks = new ArrayList<Block>();
+        if (block != null && block.getStore() == store) {
+          if (block.isDirty()) {
+            if (dirtyBlocks == null)
+              dirtyBlocks = new ArrayList<Block>();
 
-	    dirtyBlocks.add(block);
-	  }
-	}
+            dirtyBlocks.add(block);
+          }
+        }
       }
     }
 
@@ -157,11 +206,11 @@ public final class BlockManager
       Block block = dirtyBlocks.get(i);
 
       try {
-	synchronized (block) {
-	  block.write();
-	}
+        synchronized (block) {
+          block.write();
+        }
       } catch (IOException e) {
-	log.log(Level.FINER, e.toString(), e);
+        log.log(Level.FINER, e.toString(), e);
       }
     }
   }
@@ -177,10 +226,10 @@ public final class BlockManager
       Iterator<Block> iter = _blockCache.values();
 
       while (iter.hasNext()) {
-	Block block = iter.next();
+        Block block = iter.next();
 
-	if (block != null && block.getStore() == store)
-	  removeBlocks.add(block);
+        if (block != null && block.getStore() == store)
+          removeBlocks.add(block);
       }
     }
 
@@ -188,21 +237,37 @@ public final class BlockManager
       _blockCache.remove(block.getBlockId());
     }
 
-    synchronized (_writeQueue) {
-      while (hasPendingStore(store)) {
-	try {
-	  _writeQueue.wait();
-	} catch (InterruptedException e) {
-	}
+    long expires = Alarm.getCurrentTimeActual() + 60000L;
+
+    while (hasPendingStore(store)) {
+      wakeWriter();
+
+      synchronized (_writeQueue) {
+        try {
+          long delta = expires - Alarm.getCurrentTimeActual();
+
+          if (delta > 0)
+            _writeQueue.wait(delta);
+          else {
+            log.warning(this + " block close for " + store + " timeout");
+            break;
+          }
+        } catch (InterruptedException e) {
+        }
       }
     }
   }
 
   private boolean hasPendingStore(Store store)
   {
-    for (int i = _writeQueue.size() - 1; i >= 0; i--) {
-      if (_writeQueue.get(i).getStore() == store)
-	return true;
+    synchronized (_writeQueue) {
+      for (int i = _writeQueue.size() - 1; i >= 0; i--) {
+        Block block = _writeQueue.get(i);
+
+        if (block.getStore() == store && block.isDirty()) {
+          return true;
+        }
+      }
     }
 
     return false;
@@ -215,7 +280,7 @@ public final class BlockManager
   {
     synchronized (_storeMask) {
       if (storeId <= 0)
-	throw new IllegalArgumentException(String.valueOf(storeId));
+        throw new IllegalArgumentException(String.valueOf(storeId));
 
       _storeMask[storeId / 8] &= ~(1 << storeId % 8);
     }
@@ -228,48 +293,95 @@ public final class BlockManager
   {
     // XXX: proper handling of the synchronized is tricky because
     // the LRU dirty write might have timing issues
-    
+
+    long storeId = blockId & Store.BLOCK_INDEX_MASK;
+    if (storeId != store.getId()) {
+      throw stateError("illegal block: " + Long.toHexString(blockId));
+    }
+
     Block block = _blockCache.get(blockId);
-    
+
     while (block == null || ! block.allocate()) {
       // Find any matching block in the process of being written
-      Block dirtyBlock = null;
-      synchronized (_writeQueue) {
-	int size = _writeQueue.size();
-	
-	for (int i = 0; i < size; i++) {
-	  dirtyBlock = _writeQueue.get(i);
+      Block dirtyBlock = getDirtyBlock(store, blockId);
 
-	  if (dirtyBlock.getBlockId() == blockId && dirtyBlock.allocate()) {
-	    break;
-	  }
-	  else
-	    dirtyBlock = null;
-	}
+      if (dirtyBlock != null && dirtyBlock.allocateDirty()) {
+        block = dirtyBlock;
       }
-    
-      if ((blockId & Store.BLOCK_MASK) == 0)
-	throw stateError(L.l("Block 0 is reserved."));
+      else {
+        block = new ReadBlock(store, blockId);
 
-      block = new ReadBlock(store, blockId);
+        if (dirtyBlock != null) {
+          dirtyBlock.copyToBlock(block);
+        }
+      }
+
+      // needs to be outside the synchronized because the put
+      // can cause an LRU drop which might lead to a dirty write
+      Block oldBlock = _blockCache.putIfAbsent(blockId, block);
+
+      if (oldBlock != null) {
+        block.free();
+
+        if (block == dirtyBlock) {
+          wakeWriter();
+          dirtyBlock = null;
+        }
+
+        block = oldBlock;
+      }
 
       if (dirtyBlock != null) {
-	byte []dirtyBuffer = dirtyBlock.getBuffer();
-
-	if (dirtyBuffer != null) {
-	  System.arraycopy(dirtyBuffer, 0, block.getBuffer(), 0, dirtyBuffer.length);
-	  block.validate();
-	}
-
-	dirtyBlock.free();
+        removeDirtyBlock(dirtyBlock);
       }
+    }
 
-      // needs to be outside the synchronized since the put
-      // can cause an LRU drop which might lead to a dirty write
-      block = _blockCache.putIfNew(blockId, block);
+    if (blockId != block.getBlockId()
+        || (blockId & Store.BLOCK_INDEX_MASK) != store.getId()
+        || block.getStore() != store) {
+      System.out.println("BLOCK: " + Long.toHexString(blockId) + " " + Long.toHexString(block.getBlockId()) + " " + store + " " + block.getStore());
+      Thread.dumpStack();
     }
 
     return block;
+  }
+
+  private Block getDirtyBlock(Store store, long blockId)
+  {
+    synchronized (_writeQueue) {
+      int size = _writeQueue.size();
+
+      for (int i = size - 1; i >= 0; i--) {
+        Block block = _writeQueue.get(i);
+
+        if (block.getBlockId() == blockId
+            && block.getStore() == store) {
+          // System.out.println("FOUND-DIRTY: " + block + " " + _writeQueue.size());
+          return block;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private Block removeDirtyBlock(Block block)
+  {
+    synchronized (_writeQueue) {
+      int size = _writeQueue.size();
+
+      for (int i = size - 1; i >= 0; i--) {
+        Block dirtyBlock = _writeQueue.get(i);
+
+        if (dirtyBlock == block) {
+          _writeQueue.remove(i);
+
+          return dirtyBlock;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -278,17 +390,22 @@ public final class BlockManager
   void addLruDirtyWriteBlock(Block block)
   {
     synchronized (_writeQueue) {
-      while (_writeQueueMax < _writeQueue.size()) {
-	try {
-	  _writeQueue.wait();
-	} catch (InterruptedException e) {
-	}
+      if (_writeQueueMax < _writeQueue.size()) {
+        try {
+          _writeQueue.wait(100);
+        } catch (InterruptedException e) {
+        }
       }
 
       _writeQueue.add(block);
-
-      _writeQueue.notifyAll();
     }
+
+    wakeWriter();
+  }
+
+  void wakeWriter()
+  {
+    _writer.wake();
   }
 
   //
@@ -318,7 +435,7 @@ public final class BlockManager
   {
     return _blockCache.getCapacity();
   }
-  
+
   /**
    * Returns the hit count.
    */
@@ -335,6 +452,32 @@ public final class BlockManager
     return _blockCache.getMissCount();
   }
 
+  final void addBlockRead()
+  {
+    _blockReadCount.incrementAndGet();
+  }
+
+  /**
+   * Returns the read count.
+   */
+  public long getBlockReadCountTotal()
+  {
+    return _blockReadCount.get();
+  }
+
+  final void addBlockWrite()
+  {
+    _blockWriteCount.incrementAndGet();
+  }
+
+  /**
+   * Returns the write count.
+   */
+  public long getBlockWriteCountTotal()
+  {
+    return _blockWriteCount.get();
+  }
+
   private static IllegalStateException stateError(String msg)
   {
     IllegalStateException e = new IllegalStateException(msg);
@@ -343,48 +486,68 @@ public final class BlockManager
     return e;
   }
 
-  class BlockManagerWriter implements Runnable {
-    public void run()
+  class BlockManagerWriter extends TaskWorker {
+    public void runTask()
     {
-      while (true) {
-	try {
-	  Block block = null;
-	  
-	  synchronized (_writeQueue) {
-	    loop:
-	    while (true) {
-	      for (int i = 0; i < _writeQueue.size(); i++) {
-		block = _writeQueue.get(i);
+      try {
+        int retryMax = 10;
+        int retry = retryMax;
 
-		if (block.isFree())
-		  break loop;
-		else
-		  block = null;
-	      }
+        while (true) {
+          Block block = getNextFreeBlock();
 
-	      if (_writeQueue.size() == 0)
-		_writeQueue.wait();
-	      else
-		_writeQueue.wait(100);
-	    }
-	  }
+          if (block != null) {
+            retry = retryMax;
 
-	  block.close();
+            block.closeWrite();
 
-	  synchronized (_writeQueue) {
-	    for (int i = 0; i < _writeQueue.size(); i++) {
-	      if (block == _writeQueue.get(i)) {
-		_writeQueue.remove(i);
-		break;
-	      }
-	    }
+            removeBlock(block);
+          }
+          else if (retry-- <= 0) {
+            return;
+          }
+        }
+      } catch (Throwable e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
+    }
 
-	    _writeQueue.notifyAll();
-	  }
-	} catch (InterruptedException e) {
-	} catch (Throwable e) {
-	  log.log(Level.WARNING, e.toString(), e);
-	}
+    private Block getNextFreeBlock()
+    {
+      int unfree = 0;
+
+      synchronized (_writeQueue) {
+        for (int i = 0; i < _writeQueue.size(); i++) {
+          Block block = _writeQueue.get(i);
+
+          if (block == null) {
+          }
+          else if (block.isFree())
+            return block;
+          else {
+            unfree++;
+          }
+        }
+      }
+
+      return null;
+    }
+
+    private void removeBlock(Block block)
+    {
+      synchronized (_writeQueue) {
+        int size = _writeQueue.size();
+        boolean isMax = _writeQueueMax <= size;
+
+        for (int i = size - 1; i >= 0; i--) {
+          Block writeBlock = _writeQueue.get(i);
+
+          if (block == writeBlock || writeBlock == null) {
+            _writeQueue.remove(i);
+          }
+        }
+
+        _writeQueue.notifyAll();
       }
     }
   }

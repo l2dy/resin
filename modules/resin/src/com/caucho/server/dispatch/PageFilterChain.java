@@ -119,8 +119,8 @@ public class PageFilterChain implements FilterChain
   /**
    * Invokes the final servlet at the end of the chain.
    *
-   * @param req the servlet request
-   * @param res the servlet response
+   * @param request the servlet request
+   * @param response the servlet response
    */
   public void doFilter(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
@@ -163,7 +163,7 @@ public class PageFilterChain implements FilterChain
       
       String errorUri = (String) req.getAttribute("javax.servlet.error.request_uri");
       String uri = (String) req.getAttribute("javax.servlet.include.request_uri");
-      String forward = (String) req.getAttribute("caucho.forward");
+      String forward = (String) req.getAttribute("javax.servlet.forward.request_uri");
 
       // jsp/01ch
       if (uri != null) {

@@ -55,18 +55,12 @@ import java.io.*;
 
 import javax.annotation.*;
 import javax.enterprise.context.Dependent;
-import javax.enterprise.context.ScopeType;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.event.IfExists;
 import javax.enterprise.event.Observes;
-import javax.enterprise.inject.AnnotationLiteral;
-import javax.enterprise.inject.BindingType;
-import javax.enterprise.inject.Current;
+import javax.enterprise.inject.Default;
 import javax.enterprise.inject.Disposes;
-import javax.enterprise.inject.Initializer;
-import javax.enterprise.inject.Named;
-import javax.enterprise.inject.NonBinding;
 import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.Stereotype;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.Annotated;
@@ -76,8 +70,10 @@ import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
-import javax.enterprise.inject.stereotype.Stereotype;
-import javax.interceptor.InterceptorBindingType;
+import javax.enterprise.util.AnnotationLiteral;
+import javax.enterprise.util.Nonbinding;
+import javax.inject.Named;
+import javax.inject.Qualifier;
 
 /**
  * Common bean introspection for Produces and ManagedBean.
@@ -94,9 +90,9 @@ abstract public class AbstractBean<T>
     = new HashSet<InjectionPoint>();
 
   private InjectManager _beanManager;
-  
+
   private String _passivationId;
-  
+
   public AbstractBean(InjectManager beanManager)
   {
     _beanManager = beanManager;
@@ -138,13 +134,13 @@ abstract public class AbstractBean<T>
   public void introspect()
   {
   }
-  
+
   abstract public T create(CreationalContext<T> creationalContext);
 
   public void destroy(T instance, CreationalContext<T> env)
   {
   }
-  
+
   //
   // metadata for the bean
   //
@@ -155,13 +151,13 @@ abstract public class AbstractBean<T>
   {
     return null;
   }
-  
-  public Set<Annotation> getBindings()
+
+  public Set<Annotation> getQualifiers()
   {
     return _currentBindings;
   }
 
-  public Set<Annotation> getStereotypes()
+  public Set<Class<? extends Annotation>> getStereotypes()
   {
     return null;
   }
@@ -176,6 +172,11 @@ abstract public class AbstractBean<T>
     return null;
   }
 
+  public boolean isAlternative()
+  {
+    return false;
+  }
+
   public boolean isNullable()
   {
     return false;
@@ -186,7 +187,7 @@ abstract public class AbstractBean<T>
     return false;
   }
 
-  public Class<? extends Annotation> getScopeType()
+  public Class<? extends Annotation> getScope()
   {
     return Dependent.class;
   }
@@ -205,8 +206,8 @@ abstract public class AbstractBean<T>
     }
 
     ArrayList<String> annList = new ArrayList<String>();
-    
-    for (Annotation ann : getBindings()) {
+
+    for (Annotation ann : getQualifiers()) {
       annList.add(bindingToString(ann));
     }
 
@@ -218,7 +219,7 @@ abstract public class AbstractBean<T>
     }
 
     out.close();
-    
+
     return Base64.encodeFromByteArray(os.getDigest());
   }
 
@@ -227,23 +228,23 @@ abstract public class AbstractBean<T>
     StringBuilder sb = new StringBuilder(ann.annotationType().getName());
 
     ArrayList<String> propList = new ArrayList<String>();
-    
+
     for (Method method : ann.annotationType().getDeclaredMethods()) {
       if (method.getName().equals("annotationType"))
-	continue;
-      
-      if (method.isAnnotationPresent(NonBinding.class))
-	continue;
-      
+        continue;
+
+      if (method.isAnnotationPresent(Nonbinding.class))
+        continue;
+
       if (method.getParameterTypes().length != 0)
-	continue;
+        continue;
 
       try {
-	String prop = method.getName() + "," + method.invoke(ann);
+        String prop = method.getName() + "," + method.invoke(ann);
 
-	propList.add(prop);
+        propList.add(prop);
       } catch (Exception e) {
-	log.log(Level.FINER, e.toString());
+        log.log(Level.FINER, e.toString());
       }
     }
 
@@ -254,7 +255,7 @@ abstract public class AbstractBean<T>
 
     return sb.toString();
   }
-  
+
   /**
    * Creates the object from the proxy.
    *
@@ -262,7 +263,7 @@ abstract public class AbstractBean<T>
    */
   public Object createObject(Hashtable env)
   {
-    return _beanManager.create(this);
+    return _beanManager.getReference(this);
   }
 
   @Override
@@ -273,30 +274,33 @@ abstract public class AbstractBean<T>
     sb.append(getClass().getSimpleName());
     sb.append("[");
 
-    sb.append(getBeanClass().getSimpleName());
+    if (getBeanClass() != null)
+      sb.append(getBeanClass().getSimpleName());
     sb.append(", {");
 
-    ArrayList<Annotation> bindings = new ArrayList<Annotation>(getBindings());
+    ArrayList<Annotation> bindings
+      = new ArrayList<Annotation>(getQualifiers());
+
     for (int i = 0; i < bindings.size(); i++) {
       Annotation ann = bindings.get(i);
 
       if (i != 0)
-	sb.append(", ");
+        sb.append(", ");
 
       sb.append(ann);
     }
 
     sb.append("}");
-    
+
     if (getName() != null) {
       sb.append(", ");
       sb.append("name=");
       sb.append(getName());
     }
-    
-    if (getScopeType() != null && getScopeType() != Dependent.class) {
+
+    if (getScope() != null && getScope() != Dependent.class) {
       sb.append(", @");
-      sb.append(getScopeType().getSimpleName());
+      sb.append(getScope().getSimpleName());
     }
 
     sb.append("]");

@@ -378,6 +378,11 @@ public class JavaJspGenerator extends JspGenerator {
     return _parseState.getJspVersion().compareTo("2.1") < 0;
   }
 
+  public boolean isPrototype()
+  {
+    return _parseState.isPrototype();
+  }
+  
   /**
    * Adds a taglib.
    */
@@ -1028,11 +1033,17 @@ public class JavaJspGenerator extends JspGenerator {
     if (encoding == null && isXml())
       encoding = "UTF-8";
 
+    if (encoding == null && _parseState.getJspPropertyGroup() != null)
+      encoding = _parseState.getJspPropertyGroup().getCharacterEncoding();
+
     if (encoding == null)
       encoding = Encoding.getMimeName(_parseState.getPageEncoding());
 
+    // jsp/1co7
+    /*
     if (encoding == null)
       encoding = Encoding.getMimeName(CharacterEncoding.getLocalEncoding());
+    */
 
     /*
     if ("ISO-8859-1".equals(encoding))
@@ -1601,7 +1612,8 @@ public class JavaJspGenerator extends JspGenerator {
     out.println("                              com.caucho.jsp.PageContextImpl pageContext,");
     out.println("                              javax.servlet.jsp.tagext.JspTag parent,");
     out.println("                              javax.servlet.jsp.tagext.JspFragment jspBody,");
-    out.println("                              TagState _jsp_state)");
+    out.println("                              TagState _jsp_state,");
+    out.println("                              com.caucho.jsp.PageManager _jsp_pageManager)");
     out.println("{");
     out.pushDepth();
     out.println("if (frag == null)");
@@ -1614,6 +1626,7 @@ public class JavaJspGenerator extends JspGenerator {
     out.println("frag._jsp_parent_tag = parent;");
     out.println("frag._jspBody = jspBody;");
     out.println("frag._jsp_state = _jsp_state;");
+    out.println("frag._jsp_pageManager = _jsp_pageManager;");
     out.println();
     out.println("return frag;");
     out.popDepth();
@@ -1876,9 +1889,9 @@ public class JavaJspGenerator extends JspGenerator {
       
     if (! isTag()) {
       out.println("init(config);");
-
-      out.println("_jsp_pageManager = webApp.getJspApplicationContext().getPageManager();");
     }
+
+    out.println("_jsp_pageManager = webApp.getJspApplicationContext().getPageManager();");
       
     out.println("com.caucho.jsp.TaglibManager manager = webApp.getJspApplicationContext().getTaglibManager();");
 

@@ -28,23 +28,23 @@
 
 package com.caucho.server.connection;
 
+import com.caucho.server.cache.AbstractCacheEntry;
+import com.caucho.server.cache.AbstractCacheFilterChain;
+import com.caucho.vfs.FlushBuffer;
 import com.caucho.vfs.WriteStream;
+import com.caucho.vfs.PrintWriterImpl;
 
-import javax.servlet.http.Cookie;
-import java.io.IOException;
+import javax.servlet.*;
+import javax.servlet.http.*;
+import java.io.*;
 import java.util.Locale;
 
 // Is there anything at all useful that could be put here?
-public class StubServletResponse extends AbstractHttpResponse {
+public class StubServletResponse implements CauchoResponse {
   public StubServletResponse()
   {
-    try {
-      startRequest(null);
-    } catch (Throwable e) {
-    }
   }
 
-  @Override
   protected AbstractResponseStream createResponseStream()
   {
     return new StubResponseStream();
@@ -231,16 +231,149 @@ public class StubServletResponse extends AbstractHttpResponse {
 
   public int getStatus()
   {
-    throw new UnsupportedOperationException("unimplemented");
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   public Iterable<String> getHeaders(String name)
   {
-    throw new UnsupportedOperationException("unimplemented");
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   public Iterable<String> getHeaderNames()
   {
-    throw new UnsupportedOperationException("unimplemented");
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public AbstractHttpResponse getAbstractHttpResponse()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public ServletResponse getResponse()
+  {
+    return null;
+  }
+  
+  public void setNoCache(boolean killCache)
+  {
+  }
+
+  public int getStatusCode()
+  {
+    return 200;
+  }
+
+  public String getStatusMessage()
+  {
+    return null;
+  }
+  
+  public void setFooter(String key, String value)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+    
+  public void addFooter(String key, String value)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public void setFlushBuffer(FlushBuffer out)
+  {
+  }
+  
+  public FlushBuffer getFlushBuffer()
+  {
+    return null;
+  }
+
+  public boolean isCauchoResponseStream()
+  {
+    return true;
+  }
+
+  public void setResponseStream(AbstractResponseStream stream)
+  {
+  }
+
+  public AbstractResponseStream getResponseStream()
+  {
+    return new WrapperResponseStream();
+  }
+
+  public boolean isDisabled()
+  {
+    return false;
+  }
+
+  public void enable()
+  {
+  }
+
+  public void disable()
+  {
+  }
+
+  public PrintWriter getWriter()
+    throws IOException
+  {
+    return new PrintWriterImpl(new NullWriter());
+  }
+
+  public ServletOutputStream getOutputStream()
+    throws IOException
+  {
+    ServletOutputStreamImpl out = new ServletOutputStreamImpl();
+
+    out.init(NullOutputStream.NULL);
+
+    return out;
+  }
+
+  public void setCharacterEncoding(String enc)
+  {
+  }
+
+  public String getContentType()
+  {
+    return null;
+  }
+
+  public boolean isNoCacheUnlessVary()
+  {
+    return false;
+  }
+  
+  public void setCacheInvocation(AbstractCacheFilterChain cacheFilterChain)
+  {
+  }
+
+  public void setMatchCacheEntry(AbstractCacheEntry cacheEntry)
+  {
+  }
+
+  public void setForwardEnclosed(boolean isForwardEnclosed) {
+  }
+
+  public boolean isForwardEnclosed() {
+    return false;
+  }
+
+  static class NullWriter extends Writer {
+    private static final NullWriter NULL = new NullWriter();
+
+    public void write(int ch) {}
+    public void write(char []buffer, int offset, int length) {}
+    public void flush() {}
+    public void close() {}
+  }
+
+  static class NullOutputStream extends OutputStream {
+    private static final NullOutputStream NULL = new NullOutputStream();
+
+    public void write(int ch) {}
+    public void write(byte []buffer, int offset, int length) {}
+    public void flush() {}
+    public void close() {}
   }
 }

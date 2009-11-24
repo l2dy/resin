@@ -31,14 +31,15 @@ package javax.enterprise.context;
 
 import static java.lang.annotation.ElementType.*;
 import static java.lang.annotation.RetentionPolicy.*;
-import java.lang.annotation.Retention;
-import java.lang.annotation.Target;
+import java.lang.annotation.*;
 
 /**
  * The @SessionScoped represents the servlet session scope
  */
-@ScopeType(passivating=true)
-@Target({TYPE, METHOD})
+@NormalScope
+@Documented
+@Target({TYPE, METHOD, FIELD})
 @Retention(RUNTIME)
+@Inherited
 public @interface SessionScoped {
 }

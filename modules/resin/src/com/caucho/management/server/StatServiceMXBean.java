@@ -44,14 +44,30 @@ public interface StatServiceMXBean extends ManagedObjectMXBean
   public StatServiceAttribute []getActiveAttributes();
 
   /**
+   * Returns the sample period in milliseconds
+   */
+  public long getSamplePeriod();
+
+  /**
    * Returns statistics data over a time range.
    */
   public StatServiceValue []statisticsData(String name,
 					   long beginTime,
-					   long endTime);
+					   long endTime,
+                                           long stepTime);
+
+  /**
+   * Returns the most recent value.
+   */
+  public double getLastValue(String name);
 
   /**
    * Returns the strings
    */
   public String []statisticsNames();
+
+  /**
+   * Returns the start times for the given server.
+   */
+  public long []getStartTimes(int serverIndex, long startTime, long endTime);
 }

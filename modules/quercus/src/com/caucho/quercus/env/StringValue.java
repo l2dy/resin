@@ -33,6 +33,7 @@ import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.lib.file.BinaryInput;
 import com.caucho.quercus.lib.i18n.Decoder;
+import com.caucho.quercus.marshal.Marshal;
 import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.WriteStream;
 
@@ -48,7 +49,7 @@ abstract public class StringValue
   implements CharSequence
 {
   public static final StringValue EMPTY = new ConstStringValue("");
-  
+
   protected static final int MIN_LENGTH = 32;
 
   protected static final int IS_STRING = 0;
@@ -71,7 +72,7 @@ abstract public class StringValue
   public static Value create(String value)
   {
     // XXX: needs updating for i18n, currently php5 only
-    
+
     if (value == null)
       return NullValue.NULL;
     else
@@ -84,9 +85,9 @@ abstract public class StringValue
   public static StringValue create(char value)
   {
     // XXX: needs updating for i18n, currently php5 only
-    
+
     return ConstStringValue.create(value);
-    
+
     /*
     if (value < CHAR_STRINGS.length)
       return CHAR_STRINGS[value];
@@ -101,16 +102,16 @@ abstract public class StringValue
   public static Value create(Object value)
   {
     // XXX: needs updating for i18n, currently php5 only
-    
+
     if (value == null)
       return NullValue.NULL;
     else
       return new StringBuilderValue(value.toString());
   }
-  
+
   /*
    * Decodes the Unicode str from charset.
-   * 
+   *
    * @param str should be a Unicode string
    * @param charset to decode string from
    */
@@ -118,23 +119,23 @@ abstract public class StringValue
   {
     if (! unicodeStr.isUnicode())
       return unicodeStr;
-    
+
     try {
       StringValue sb = createStringBuilder();
-      
+
       byte []bytes = unicodeStr.toString().getBytes(charset);
-      
+
       sb.append(bytes);
       return sb;
-      
+
     }
     catch (UnsupportedEncodingException e) {
       env.warning(e);
-      
+
       return unicodeStr;
     }
   }
-  
+
   //
   // Predicates and relations
   //
@@ -207,7 +208,7 @@ abstract public class StringValue
   {
     return true;
   }
-  
+
   /*
    * Returns true if this is a PHP5 string.
    */
@@ -223,6 +224,150 @@ abstract public class StringValue
   public boolean isEmpty()
   {
     return length() == 0 || length() == 1 && charAt(0) == '0';
+  }
+
+  //
+  // marshal cost
+  //
+
+  /**
+   * Cost to convert to a double
+   */
+  @Override
+  public int toDoubleMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 20;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 10;
+    else
+      return Marshal.COST_INCOMPATIBLE;
+  }
+
+  /**
+   * Cost to convert to a float
+   */
+  @Override
+  public int toFloatMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 25;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 15;
+    else
+      return Marshal.COST_INCOMPATIBLE;
+  }
+
+  /**
+   * Cost to convert to a long
+   */
+  @Override
+  public int toLongMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 10;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 40;
+    else
+      return Marshal.COST_INCOMPATIBLE;
+  }
+
+  /**
+   * Cost to convert to an integer
+   */
+  @Override
+  public int toIntegerMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 10;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 40;
+    else
+      return Marshal.COST_INCOMPATIBLE;
+  }
+
+  /**
+   * Cost to convert to a short
+   */
+  @Override
+  public int toShortMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 30;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 50;
+    else
+      return Marshal.COST_INCOMPATIBLE;
+  }
+
+  /**
+   * Cost to convert to a byte
+   */
+  @Override
+  public int toByteMarshalCost()
+  {
+    ValueType valueType = getValueType();
+
+    if (valueType.isLongCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 30;
+    else if (valueType.isNumberCmp())
+      return Marshal.COST_TO_CHAR_ARRAY + 50;
+    else
+      return Marshal.COST_STRING_TO_BYTE;
+  }
+
+  /**
+   * Cost to convert to a character
+   */
+  @Override
+  public int toCharMarshalCost()
+  {
+    return Marshal.COST_STRING_TO_CHAR;
+  }
+
+  /**
+   * Cost to convert to a String
+   */
+  @Override
+  public int toStringMarshalCost()
+  {
+    return Marshal.COST_EQUAL;
+  }
+
+  /**
+   * Cost to convert to a char[]
+   */
+  @Override
+  public int toCharArrayMarshalCost()
+  {
+    return Marshal.COST_STRING_TO_CHAR_ARRAY;
+  }
+
+  /**
+   * Cost to convert to a StringValue
+   */
+  public int toStringValueMarshalCost()
+  {
+    return Marshal.COST_IDENTICAL;
+  }
+
+  /**
+   * Cost to convert to a binary value
+   */
+  @Override
+  public int toBinaryValueMarshalCost()
+  {
+    return Marshal.COST_STRING_TO_BINARY;
   }
 
   /**
@@ -243,7 +388,7 @@ abstract public class StringValue
     }
     else {
       int result = toString().compareTo(rValue.toString());
-      
+
       if (result == 0)
         return 0;
       else if (result > 0)
@@ -295,7 +440,17 @@ abstract public class StringValue
   /**
    * Converts to a string value.
    */
+  @Override
   public StringValue toStringValue()
+  {
+    return this;
+  }
+
+  /**
+   * Converts to a string value.
+   */
+  @Override
+  public StringValue toStringValue(Env env)
   {
     return this;
   }
@@ -327,21 +482,21 @@ abstract public class StringValue
     long result = 0;
 
     int end = offset + len;
-    
+
     while (offset < end && Character.isWhitespace(buffer[offset])) {
       offset++;
     }
-    
+
     int ch;
-    
+
     if (offset + 1 < end && buffer[offset] == '0'
       && ((ch = buffer[offset + 1]) == 'x' || ch == 'X')) {
-    
+
     for (offset += 2; offset < end; offset++) {
       ch = buffer[offset] & 0xFF;
 
       long oldValue = value;
-      
+
       if ('0' <= ch && ch <= '9')
         value = value * 16 + ch - '0';
       else if ('a' <= ch && ch <= 'z')
@@ -350,11 +505,11 @@ abstract public class StringValue
         value = value * 16 + ch - 'A' + 10;
       else
         return value;
-      
+
       if (value < oldValue)
         return Integer.MAX_VALUE;
     }
-    
+
     return value;
   }
 
@@ -409,17 +564,17 @@ abstract public class StringValue
     while (offset < end && Character.isWhitespace(buffer[offset])) {
       offset++;
     }
-    
+
     int ch;
-    
+
     if (offset + 1 < end && buffer[offset] == '0'
         && ((ch = buffer[offset + 1]) == 'x' || ch == 'X')) {
-      
+
       for (offset += 2; offset < end; offset++) {
         ch = buffer[offset] & 0xFF;
-        
+
         long oldValue = value;
-        
+
         if ('0' <= ch && ch <= '9')
           value = value * 16 + ch - '0';
         else if ('a' <= ch && ch <= 'z')
@@ -428,14 +583,14 @@ abstract public class StringValue
           value = value * 16 + ch - 'A' + 10;
         else
           return value;
-        
+
         if (value < oldValue)
           return Integer.MAX_VALUE;
       }
-      
+
       return value;
     }
-    
+
     if (offset < end && buffer[offset] == '-') {
       sign = -1;
       offset++;
@@ -489,7 +644,7 @@ abstract public class StringValue
     while (offset < end && Character.isWhitespace(string.charAt(offset))) {
       offset++;
     }
-    
+
     if (offset < end && string.charAt(offset) == '-') {
       sign = -1;
       offset++;
@@ -539,9 +694,9 @@ abstract public class StringValue
   public static double toDouble(String s)
   {
     int len = s.length();
-    
+
     int start = 0;
-    
+
     int i = 0;
     int ch = 0;
 
@@ -549,12 +704,12 @@ abstract public class StringValue
       start++;
       i++;
     }
-    
+
     if (i + 1 < len && s.charAt(i) == '0'
         && ((ch = s.charAt(i)) == 'x' || ch == 'X')) {
-      
+
       double value = 0;
-      
+
       for (i += 2; i < len; i++) {
         ch = s.charAt(i);
 
@@ -567,10 +722,10 @@ abstract public class StringValue
         else
           return value;
       }
-      
+
       return value;
     }
-    
+
     if (i < len && ((ch = s.charAt(i)) == '+' || ch == '-')) {
       i++;
     }
@@ -651,7 +806,7 @@ abstract public class StringValue
 
     return LongValue.create(sign * value);
   }
-  
+
   /**
    * Converts to an object.
    */
@@ -677,19 +832,19 @@ abstract public class StringValue
   public Object valuesToArray(Env env, Class elementType)
   {
     if (char.class.equals(elementType)) {
-      return toUnicodeValue(env).toCharArray();
+      return toUnicode(env).toCharArray();
     }
     else if (Character.class.equals(elementType)) {
-      char[] chars = toUnicodeValue(env).toCharArray();
-      
+      char[] chars = toUnicode(env).toCharArray();
+
       int length = chars.length;
-      
+
       Character[] charObjects = new Character[length];
-      
+
       for (int i = 0; i <length; i++) {
         charObjects[i] = Character.valueOf(chars[i]);
       }
-      
+
       return charObjects;
     }
     else if (byte.class.equals(elementType)) {
@@ -697,15 +852,15 @@ abstract public class StringValue
     }
     else if (Byte.class.equals(elementType)) {
       byte[] bytes = toBinaryValue(env).toBytes();
-      
+
       int length = bytes.length;
-      
+
       Byte[] byteObjects = new Byte[length];
-      
+
       for (int i = 0; i <length; i++) {
         byteObjects[i] = Byte.valueOf(bytes[i]);
       }
-      
+
       return byteObjects;
     }
     else {
@@ -713,7 +868,7 @@ abstract public class StringValue
       return null;
     }
   }
-  
+
   /**
    * Converts to an array if null.
    */
@@ -779,7 +934,7 @@ abstract public class StringValue
   public Value setCharValueAt(long index, Value value)
   {
     //XXX: need to double-check this for non-string values
-    
+
     int len = length();
 
     if (index < 0 || len <= index)
@@ -820,9 +975,9 @@ abstract public class StringValue
         }
         else if ('a' <= ch && ch < 'z') {
           return (createStringBuilder()
-		  .append(this, 0, i)
-		  .append((char) (ch + 1))
-		  .append(tail));
+                  .append(this, 0, i)
+                  .append((char) (ch + 1))
+                  .append(tail));
         }
         else if (ch == 'Z') {
           if (i == 0)
@@ -832,9 +987,9 @@ abstract public class StringValue
         }
         else if ('A' <= ch && ch < 'Z') {
           return (createStringBuilder()
-		  .append(this, 0, i)
-		  .append((char) (ch + 1))
-		  .append(tail));
+                  .append(this, 0, i)
+                  .append((char) (ch + 1))
+                  .append(tail));
         }
         else if ('0' <= ch && ch <= '9' && i == length() - 1) {
           return LongValue.create(toLong() + incr);
@@ -850,7 +1005,7 @@ abstract public class StringValue
       return this;
     }
   }
-  
+
   /**
    * Adds to the following value.
    */
@@ -858,10 +1013,10 @@ abstract public class StringValue
   {
     if (getValueType().isLongAdd())
       return LongValue.create(toLong() + rValue);
-    
+
     return DoubleValue.create(toDouble() + rValue);
   }
-  
+
   /**
    * Adds to the following value.
    */
@@ -869,10 +1024,10 @@ abstract public class StringValue
   {
     if (getValueType().isLongAdd())
       return LongValue.create(toLong() - rValue);
-    
+
     return DoubleValue.create(toDouble() - rValue);
   }
-  
+
   /*
    * Bit and.
    */
@@ -881,14 +1036,14 @@ abstract public class StringValue
   {
     if (rValue.isString()) {
       StringValue rStr = (StringValue) rValue;
-      
+
       int len = Math.min(length(), rValue.length());
       StringValue sb = createStringBuilder();
-      
+
       for (int i = 0; i < len; i++) {
         char l = charAt(i);
         char r = rStr.charAt(i);
-        
+
         sb.appendByte(l & r);
       }
 
@@ -897,7 +1052,7 @@ abstract public class StringValue
     else
       return LongValue.create(toLong() & rValue.toLong());
   }
-  
+
   /*
    * Bit or.
    */
@@ -906,17 +1061,17 @@ abstract public class StringValue
   {
     if (rValue.isString()) {
       StringValue rStr = (StringValue) rValue;
-      
+
       int len = Math.min(length(), rValue.length());
       StringValue sb = createStringBuilder();
-      
+
       for (int i = 0; i < len; i++) {
         char l = charAt(i);
         char r = rStr.charAt(i);
-        
+
         sb.appendByte(l | r);
       }
-     
+
       if (len != length())
         sb.append(substring(len));
       else if (len != rStr.length())
@@ -927,7 +1082,7 @@ abstract public class StringValue
     else
       return LongValue.create(toLong() | rValue.toLong());
   }
-  
+
   /*
    * Bit xor.
    */
@@ -935,15 +1090,15 @@ abstract public class StringValue
   public Value bitXor(Value rValue)
   {
     if (rValue.isString()) {
-      StringValue rStr = (StringValue) rValue;
-      
+      StringValue rStr = rValue.toStringValue();
+
       int len = Math.min(length(), rValue.length());
       StringValue sb = createStringBuilder();
-      
+
       for (int i = 0; i < len; i++) {
         char l = charAt(i);
         char r = rStr.charAt(i);
-        
+
         sb.appendByte(l ^ r);
       }
 
@@ -952,7 +1107,7 @@ abstract public class StringValue
     else
       return LongValue.create(toLong() ^ rValue.toLong());
   }
-  
+
   /**
    * Serializes the value.
    */
@@ -965,7 +1120,119 @@ abstract public class StringValue
     sb.append(toString());
     sb.append("\";");
   }
-  
+
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append('"');
+
+    int len = length();
+    for (int i = 0; i < len; i++) {
+      char c = charAt(i);
+
+      switch (c) {
+      case '\b':
+        sb.append('\\');
+        sb.append('b');
+        break;
+      case '\f':
+        sb.append('\\');
+        sb.append('f');
+        break;
+      case '\n':
+        sb.append('\\');
+        sb.append('n');
+        break;
+      case '\r':
+        sb.append('\\');
+        sb.append('r');
+        break;
+      case '\t':
+        sb.append('\\');
+        sb.append('t');
+        break;
+      case '\\':
+        sb.append('\\');
+        sb.append('\\');
+        break;
+      case '"':
+        sb.append('\\');
+        sb.append('"');
+        break;
+      case '/':
+        sb.append('\\');
+        sb.append('/');
+        break;
+      default:
+        if (c <= 0x1f) {
+          addUnicode(sb, c);
+        }
+        else if (c < 0x80) {
+          sb.append(c);
+        }
+        else if ((c & 0xe0) == 0xc0 && i + 1 < len) {
+          int c1 = charAt(i + 1);
+          i++;
+
+          int ch = ((c & 0x1f) << 6) + (c1 & 0x3f);
+
+          addUnicode(sb, ch);
+        }
+        else if ((c & 0xf0) == 0xe0 && i + 2 < len) {
+          int c1 = charAt(i + 1);
+          int c2 = charAt(i + 2);
+
+          i += 2;
+
+          int ch = ((c & 0x0f) << 12) + ((c1 & 0x3f) << 6) + (c2 & 0x3f);
+
+          addUnicode(sb, ch);
+        }
+        else {
+          // technically illegal
+          addUnicode(sb, c);
+        }
+
+        break;
+      }
+    }
+
+    sb.append('"');
+  }
+
+  private void addUnicode(StringValue sb, int c)
+  {
+    sb.append('\\');
+    sb.append('u');
+
+    int d = (c >> 12) & 0xf;
+    if (d < 10)
+      sb.append((char) ('0' + d));
+    else
+      sb.append((char) ('a' + d - 10));
+
+    d = (c >> 8) & 0xf;
+    if (d < 10)
+      sb.append((char) ('0' + d));
+    else
+      sb.append((char) ('a' + d - 10));
+
+    d = (c >> 4) & 0xf;
+    if (d < 10)
+      sb.append((char) ('0' + d));
+    else
+      sb.append((char) ('a' + d - 10));
+
+    d = (c) & 0xf;
+    if (d < 10)
+      sb.append((char) ('0' + d));
+    else
+      sb.append((char) ('a' + d - 10));
+  }
+
   /*
    * Returns a value to be used as a key for the deserialize cache.
    */
@@ -1026,7 +1293,7 @@ abstract public class StringValue
   {
     return append(buf, 0, buf.length);
   }
-  
+
   /**
    * Append a Java buffer to the value.
    */
@@ -1034,7 +1301,7 @@ abstract public class StringValue
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Append a Java buffer to the value.
    */
@@ -1050,10 +1317,10 @@ abstract public class StringValue
   {
     return append((CharSequence) sb, head, tail);
   }
-  
+
   /*
    * Appends a Unicode string to the value.
-   * 
+   *
    * @param str should be a Unicode string
    * @param charset to decode string from
    */
@@ -1064,14 +1331,14 @@ abstract public class StringValue
 
     try {
       byte []bytes = unicodeStr.toString().getBytes(charset);
-      
+
       append(bytes);
       return this;
-      
+
     }
     catch (UnsupportedEncodingException e) {
       env.warning(e);
-      
+
       return append(unicodeStr);
     }
   }
@@ -1139,7 +1406,7 @@ abstract public class StringValue
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Append a byte buffer to the value.
    */
@@ -1155,7 +1422,7 @@ abstract public class StringValue
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Append a byte buffer to the value.
    */
@@ -1163,7 +1430,7 @@ abstract public class StringValue
   {
     return appendUtf8(buf, 0, buf.length);
   }
-  
+
   /**
    * Append to a string builder.
    */
@@ -1273,35 +1540,35 @@ abstract public class StringValue
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   /**
    * Append a Java String to the value without conversions.
    */
   public StringValue appendBytes(String s)
   {
     StringValue sb = this;
-    
+
     for (int i = 0; i < s.length(); i++) {
       sb = sb.appendByte(s.charAt(i));
     }
-    
+
     return sb;
   }
-  
+
   /**
    * Append a Java String to the value without conversions.
    */
   public StringValue appendBytes(StringValue s)
   {
     StringValue sb = this;
-    
+
     for (int i = 0; i < s.length(); i++) {
       sb = sb.appendByte(s.charAt(i));
     }
-    
+
     return sb;
   }
-  
+
   /**
    * Append a Java char[] to the value without conversions.
    */
@@ -1309,26 +1576,38 @@ abstract public class StringValue
   {
     StringValue sb = this;
     int end = Math.min(buf.length, offset + length);
-    
+
     while (offset < end) {
       sb = sb.appendByte(buf[offset++]);
     }
-    
+
     return sb;
   }
-  
+
   /**
    * Append Java bytes to the value without conversions.
    */
   public StringValue appendBytes(byte []bytes, int offset, int end)
   {
     StringValue sb = this;
-    
+
     while (offset < end) {
       sb = sb.appendByte(bytes[offset++]);
     }
-    
+
     return sb;
+  }
+
+  /**
+   * Append from a temp buffer list
+   */
+  public StringValue append(TempBuffer ptr)
+  {
+    for (; ptr != null; ptr = ptr.getNext()) {
+      append(ptr.getBuffer(), 0, ptr.getLength());
+    }
+
+    return this;
   }
 
   /**
@@ -1338,7 +1617,7 @@ abstract public class StringValue
     throws IOException
   {
     int ch;
-    
+
     while ((ch = reader.read()) >= 0) {
       append((char) ch);
     }
@@ -1353,7 +1632,7 @@ abstract public class StringValue
     throws IOException
   {
     int ch;
-    
+
     while (length-- > 0 && (ch = reader.read()) >= 0) {
       append((char) ch);
     }
@@ -1399,21 +1678,21 @@ abstract public class StringValue
     try {
       byte []buffer = tBuf.getBuffer();
       int readLength = 0;
-      
+
       while (length > 0) {
-	int sublen = buffer.length;
-	if (length < sublen)
-	  sublen = (int) length;
+        int sublen = buffer.length;
+        if (length < sublen)
+          sublen = (int) length;
 
-	sublen = is.read(buffer, 0, sublen);
+        sublen = is.read(buffer, 0, sublen);
 
-	if (sublen > 0) {
-	  append(buffer, 0, sublen);
-	  length -= sublen;
-	  readLength += sublen;
-	}
-	else
-	  return readLength > 0 ? readLength : -1;
+        if (sublen > 0) {
+          append(buffer, 0, sublen);
+          length -= sublen;
+          readLength += sublen;
+        }
+        else
+          return readLength > 0 ? readLength : -1;
       }
 
       return readLength;
@@ -1466,21 +1745,21 @@ abstract public class StringValue
     try {
       byte []buffer = tBuf.getBuffer();
       int readLength = 0;
-      
+
       while (length > 0) {
-	int sublen = buffer.length;
-	if (length < sublen)
-	  sublen = (int) length;
+        int sublen = buffer.length;
+        if (length < sublen)
+          sublen = (int) length;
 
-	sublen = is.read(buffer, 0, sublen);
+        sublen = is.read(buffer, 0, sublen);
 
-	if (sublen > 0) {
-	  append(buffer, 0, sublen);
-	  length -= sublen;
-	  readLength += sublen;
-	}
-	else
-	  return readLength > 0 ? readLength : -1;
+        if (sublen > 0) {
+          append(buffer, 0, sublen);
+          length -= sublen;
+          readLength += sublen;
+        }
+        else
+          return readLength > 0 ? readLength : -1;
       }
 
       return readLength;
@@ -1539,7 +1818,7 @@ abstract public class StringValue
   {
     return toString().length();
   }
-  
+
   /**
    * Returns the character at a particular location
    */
@@ -1567,7 +1846,7 @@ abstract public class StringValue
   {
     return indexOf(match, 0);
   }
-    
+
   /**
    * Returns the first index of the match string, starting from the head.
    */
@@ -1580,18 +1859,18 @@ abstract public class StringValue
       return -1;
     else if (head < 0)
       return -1;
-    
+
     int end = length - matchLength;
     char first = match.charAt(0);
 
     loop:
     for (; head <= end; head++) {
       if (charAt(head) != first)
-	continue;
+        continue;
 
       for (int i = 1; i < matchLength; i++) {
-	if (charAt(head + i) != match.charAt(i))
-	  continue loop;
+        if (charAt(head + i) != match.charAt(i))
+          continue loop;
       }
 
       return head;
@@ -1599,7 +1878,7 @@ abstract public class StringValue
 
     return -1;
   }
-    
+
   /**
    * Returns the last index of the match string, starting from the head.
    */
@@ -1607,22 +1886,22 @@ abstract public class StringValue
   {
     return indexOf(match, 0);
   }
-    
+
   /**
    * Returns the last index of the match string, starting from the head.
    */
   public int indexOf(char match, int head)
   {
     int length = length();
-    
+
     for (; head < length; head++) {
       if (charAt(head) == match)
-	return head;
+        return head;
     }
 
     return -1;
   }
-    
+
   /**
    * Returns the last index of the match string, starting from the head.
    */
@@ -1630,7 +1909,7 @@ abstract public class StringValue
   {
     return lastIndexOf(match, Integer.MAX_VALUE);
   }
-    
+
   /**
    * Returns the last index of the match string, starting from the head.
    */
@@ -1640,10 +1919,10 @@ abstract public class StringValue
 
     if (tail >= length)
       tail = length - 1;
-    
+
     for (; tail >= 0; tail--) {
       if (charAt(tail) == match)
-	return tail;
+        return tail;
     }
 
     return -1;
@@ -1682,7 +1961,7 @@ abstract public class StringValue
 
       for (int i = 1; i < matchLength; i++) {
         if (charAt(tail + i) != match.charAt(i))
-	      continue loop;
+              continue loop;
       }
 
       return tail;
@@ -1690,31 +1969,33 @@ abstract public class StringValue
 
     return -1;
   }
-    
+
   /**
    * Returns true if the region matches
    */
   public boolean regionMatches(int offset,
-			       char []mBuffer, int mOffset, int mLength)
+                               char []mBuffer, int mOffset, int mLength)
   {
     int length = length();
 
-    if (length < offset + mLength)
+    if (length < offset + mLength) {
       return false;
+    }
 
     for (int i = 0; i < mLength; i++) {
-      if (charAt(offset + i) != mBuffer[mOffset + i])
-	return false;
+      if (charAt(offset + i) != mBuffer[mOffset + i]) {
+        return false;
+      }
     }
 
     return true;
   }
-    
+
   /**
    * Returns true if the region matches
    */
   public boolean regionMatches(int offset,
-			       StringValue match, int mOffset, int mLength)
+                               StringValue match, int mOffset, int mLength)
   {
     int length = length();
 
@@ -1723,18 +2004,18 @@ abstract public class StringValue
 
     for (int i = 0; i < mLength; i++) {
       if (charAt(offset + i) != match.charAt(mOffset + i))
-	return false;
+        return false;
     }
 
     return true;
   }
-    
+
   /**
    * Returns true if the region matches
    */
   public boolean
     regionMatchesIgnoreCase(int offset,
-			    char []match, int mOffset, int mLength)
+                            char []match, int mOffset, int mLength)
   {
     int length = length();
 
@@ -1744,9 +2025,9 @@ abstract public class StringValue
     for (int i = 0; i < mLength; i++) {
       char a = Character.toLowerCase(charAt(offset + i));
       char b = Character.toLowerCase(match[mOffset + i]);
-      
+
       if (a != b)
-	return false;
+        return false;
     }
 
     return true;
@@ -1761,13 +2042,13 @@ abstract public class StringValue
     int tailLen = tail.length();
 
     int offset = len - tailLen;
-    
+
     if (offset < 0)
       return false;
 
     for (int i = 0; i < tailLen; i++) {
       if (charAt(offset + i) != tail.charAt(i))
-	return false;
+        return false;
     }
 
     return true;
@@ -1803,7 +2084,7 @@ abstract public class StringValue
   public char []toCharArray()
   {
     int length = length();
-    
+
     char []array = new char[length()];
 
     getChars(0, array, 0, length);
@@ -1831,35 +2112,35 @@ abstract public class StringValue
   public StringValue toLowerCase()
   {
     int length = length();
-    
+
     UnicodeBuilderValue string = new UnicodeBuilderValue(length);
-    
+
     char []buffer = string.getBuffer();
     getChars(0, buffer, 0, length);
 
     for (int i = 0; i < length; i++) {
       char ch = buffer[i];
-      
+
       if ('A' <= ch && ch <= 'Z')
-	buffer[i] = (char) (ch + 'a' - 'A');
+        buffer[i] = (char) (ch + 'a' - 'A');
       else if (ch < 0x80) {
       }
       else if (Character.isUpperCase(ch))
-	buffer[i] = Character.toLowerCase(ch);
+        buffer[i] = Character.toLowerCase(ch);
     }
 
     string.setOffset(length);
 
     return string;
   }
-  
+
   /**
    * Convert to lower case.
    */
   public StringValue toUpperCase()
   {
     int length = length();
-    
+
     UnicodeBuilderValue string = new UnicodeBuilderValue(length);
 
     char []buffer = string.getBuffer();
@@ -1867,7 +2148,7 @@ abstract public class StringValue
 
     for (int i = 0; i < length; i++) {
       char ch = buffer[i];
-      
+
       if ('a' <= ch && ch <= 'z')
         buffer[i] = (char) (ch + 'A' - 'a');
       else if (ch < 0x80) {
@@ -1914,7 +2195,7 @@ abstract public class StringValue
   {
     return new SimpleStringValueReader(this);
   }
-  
+
   /**
    * Returns a char stream.
    * XXX: when decoding fails
@@ -1925,13 +2206,22 @@ abstract public class StringValue
     throws UnsupportedEncodingException
   {
     byte []bytes = toBytes();
-    
+
     return new InputStreamReader(new ByteArrayInputStream(bytes), charset);
   }
 
   public byte []toBytes()
   {
     throw new UnsupportedOperationException();
+  }
+
+  /**
+   * Converts to a unicode value.
+   */
+  @Override
+  public StringValue toUnicode(Env env)
+  {
+    return this;
   }
 
   /**
@@ -1942,10 +2232,10 @@ abstract public class StringValue
    */
   public StringValue toUnicodeValue(Env env, String charset)
   {
-    StringValue sb = env.createUnicodeBuilder();
+    StringValue sb = new UnicodeBuilderValue();
 
     Decoder decoder = Decoder.create(charset);
-    
+
     sb.append(decoder.decode(env, this));
 
     return sb;
@@ -1963,9 +2253,9 @@ abstract public class StringValue
 
     Decoder decoder = Decoder.create(charset);
     decoder.setAllowMalformedOut(true);
-    
+
     sb.append(decoder.decode(env, this));
-    
+
     return sb;
   }
 
@@ -1977,7 +2267,7 @@ abstract public class StringValue
   {
     return createStringBuilder().append(this);
   }
-  
+
   /**
    * Return true if the array value is set
    */
@@ -1985,7 +2275,7 @@ abstract public class StringValue
   {
     int index = indexV.toInt();
     int len = length();
-    
+
     return 0 <= index && index < len;
   }
 
@@ -2003,7 +2293,7 @@ abstract public class StringValue
       throw new QuercusModuleException(e);
     }
   }
-  
+
   /**
    * Calculates CRC32 value.
    */
@@ -2012,11 +2302,11 @@ abstract public class StringValue
     CRC32 crc = new CRC32();
 
     int length = length();
-    
+
     for (int i = 0; i < length; i++) {
       crc.update((byte) charAt(i));
     }
-    
+
     return crc.getValue() & 0xffffffff;
   }
 
@@ -2054,7 +2344,7 @@ abstract public class StringValue
 
     if (s.isUnicode() != isUnicode())
       return false;
-    
+
     int aLength = length();
     int bLength = s.length();
 
@@ -2063,12 +2353,12 @@ abstract public class StringValue
 
     for (int i = aLength - 1; i >= 0; i--) {
       if (charAt(i) != s.charAt(i))
-	return false;
+        return false;
     }
 
     return true;
   }
-  
+
   //
   // Java generator code
   //
@@ -2084,11 +2374,11 @@ abstract public class StringValue
   {
     // max JVM constant string length
     int maxSublen = 0xFFFE;
-    
+
     int len = length();
-    
+
     String className = getClass().getSimpleName();
-    
+
     if (len == 1) {
       out.print(className + ".create('");
       printJavaChar(out, charAt(0));
@@ -2101,15 +2391,15 @@ abstract public class StringValue
     }
     else {
       out.print("((" + className + ") (new " + className + "(\"");
-      
+
       // php/313u
       for (int i = 0; i < len; i += maxSublen) {
         if (i != 0)
           out.print("\").append(\"");
-        
+
         printJavaString(out, substring(i, Math.min(i + maxSublen, len)));
       }
-      
+
       out.print("\")))");
     }
   }
@@ -2132,7 +2422,7 @@ abstract public class StringValue
     {
       _length = length();
     }
-    
+
     /**
      * Reads the next byte.
      */
@@ -2167,19 +2457,19 @@ abstract public class StringValue
       return sublen;
     }
   }
-  
+
   static class SimpleStringValueReader extends Reader
   {
     StringValue _str;
     int _index;
     int _length;
-    
+
     SimpleStringValueReader(StringValue s)
     {
       _str = s;
       _length = s.length();
     }
-    
+
     public int read()
     {
       if (_index >= _length)
@@ -2187,22 +2477,22 @@ abstract public class StringValue
       else
         return _str.charAt(_index++);
     }
-    
+
     public int read(char []buf, int off, int len)
     {
       if (_index >= _length)
         return -1;
-      
+
       int i = 0;
       len = Math.min(_length - _index, len);
-      
+
       for (; i < len; i++) {
         buf[off + i] = _str.charAt(i + _index++);
       }
-      
+
       return i;
     }
-    
+
     public void close()
       throws IOException
     {

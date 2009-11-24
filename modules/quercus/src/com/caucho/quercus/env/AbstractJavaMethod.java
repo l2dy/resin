@@ -87,12 +87,11 @@ abstract public class AbstractJavaMethod extends AbstractFunction
   {
     // same method can occur for interfaces and overrides
     if (isSameMethod(this, fun)) {
+      // php/5220
       if (getJavaDeclaringClass().isAssignableFrom(fun.getJavaDeclaringClass()))
-	return this;
-      else if (fun.getJavaDeclaringClass().isAssignableFrom(getJavaDeclaringClass()))
-	return fun;
+        return fun;
       else
-	return this;
+        return this;
     }
       
     AbstractJavaMethod method = new JavaOverloadMethod(this);
@@ -107,7 +106,7 @@ abstract public class AbstractJavaMethod extends AbstractFunction
    * the same method.
    */
   private boolean isSameMethod(AbstractJavaMethod funA,
-			       AbstractJavaMethod funB)
+                               AbstractJavaMethod funB)
   {
     Class []paramTypesA = funA.getJavaParameterTypes();
     Class []paramTypesB = funB.getJavaParameterTypes();
@@ -120,7 +119,7 @@ abstract public class AbstractJavaMethod extends AbstractFunction
 
     for (int i = 0; i < paramTypesA.length; i++) {
       if (! paramTypesA[i].equals(paramTypesB[i]))
-	return false;
+        return false;
     }
 
     return true;

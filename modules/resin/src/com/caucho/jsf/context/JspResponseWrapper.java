@@ -40,9 +40,9 @@ import com.caucho.util.*;
 import com.caucho.vfs.*;
 import com.caucho.jsp.*;
 import com.caucho.server.connection.*;
+import com.caucho.server.connection.CauchoResponseWrapper;
 
-public class JspResponseWrapper extends ResponseWrapper
-  implements CauchoResponse
+public class JspResponseWrapper extends CauchoResponseWrapper
 {
   private static final Logger log
     = Logger.getLogger(JspResponseWrapper.class.getName());
@@ -236,14 +236,6 @@ public class JspResponseWrapper extends ResponseWrapper
   public void setHasError(boolean hasError)
   {
     _hasError = hasError;
-  }
-
-  public int getStatusCode()
-  {
-    if (_response instanceof CauchoResponse)
-      return ((CauchoResponse) _response).getStatusCode();
-
-    throw new UnsupportedOperationException();
   }
 
   public String getStatusMessage()

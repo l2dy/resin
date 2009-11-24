@@ -910,20 +910,37 @@ public class MysqlModule extends AbstractQuercusModule {
    * A Result on success, FALSE on failure.
    */
   public static Value mysql_list_fields(Env env,
-                                 String database,
-                                 StringValue tableName,
-                                 @Optional Mysqli conn)
+                                        String database,
+                                        StringValue tableName,
+                                        @Optional Mysqli conn)
   {
+    // php/141c
+    // php gives warnings when the table doesn't exist or is an 
+    // empty string/null, but not when the database doesn't exist
+
     if (database == null || database.length() == 0)
       return BooleanValue.FALSE;
 
-    if (tableName.length() == 0)
+    if (tableName.length() == 0) {
+      env.warning(L.l("Tablename cannot be empty"));
+
+      return BooleanValue.FALSE;
+    }
+
+    if (conn == null)
+      conn = getConnection(env);
+
+    if (! conn.select_db(database))
       return BooleanValue.FALSE;
 
-    return mysql_db_query(env,
-                          database,
-                          env.createString("SELECT * FROM " + tableName + " WHERE NULL"),
-                          conn);
+    Value result = conn.query(env, 
+                              env.createString("SELECT * FROM " + tableName + " WHERE NULL"),
+                              1);
+
+    if (result == BooleanValue.FALSE)
+      env.warning(L.l("Table '{0}' does not exist", tableName));
+
+    return result;
   }
 
   /**
@@ -1118,10 +1135,10 @@ public class MysqlModule extends AbstractQuercusModule {
       catalog = "";
     */
 
-    Mysqli mysqli = new Mysqli(env, hostStr, userName.toString(),
-                               password.toString(), "",
-                               port, socketStr, flags,
-                               null, null, isNewLink);
+    Mysqli mysqli = new MysqliResource(env, hostStr, userName.toString(),
+                                       password.toString(), "",
+                                       port, socketStr, flags,
+                                       null, null, isNewLink);
 
     if (! mysqli.isConnected())
       return BooleanValue.FALSE;
@@ -1218,11 +1235,11 @@ public class MysqlModule extends AbstractQuercusModule {
     if (conn != null)
       return conn;
 
-    conn = new Mysqli(env,
-                      env.getEmptyString(),
-                      env.getEmptyString(), env.getEmptyString(),
-                      db, 3306,
-                      env.getEmptyString());
+    conn = new MysqliResource(env,
+                              env.getEmptyString(),
+                              env.getEmptyString(), env.getEmptyString(),
+                              db, 3306,
+                              env.getEmptyString());
 
     env.setSpecialValue("caucho.mysql", conn);
 

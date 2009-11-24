@@ -100,8 +100,8 @@ class UpdateQuery extends Query {
     
       do {
 	TableIterator iter = rows[0];
-	iter.setDirty();
-	
+	// iter.setDirty();
+
 	for (int i = 0; i < setItems.length; i++) {
 	  Column column = setItems[i].getColumn();
 	  Expr expr = setItems[i].getExpr();
@@ -114,7 +114,7 @@ class UpdateQuery extends Query {
     } finally {
       // autoCommitWrite must be before freeRows in case freeRows
       // throws an exception
-      context.unlock();
+      context.close();
       
       freeRows(rows, rows.length);
     }

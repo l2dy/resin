@@ -29,22 +29,29 @@
 
 package com.caucho.jms.connection;
 
-import com.caucho.jms.message.*;
-import com.caucho.jms.queue.*;
-import com.caucho.jms.selector.Selector;
-import com.caucho.jms.selector.SelectorParser;
-import com.caucho.util.Alarm;
-import com.caucho.util.L10N;
-import com.caucho.util.ThreadPool;
-
 import java.io.Serializable;
-import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.jms.JMSException;
 import javax.jms.Message;
 import javax.jms.MessageConsumer;
 import javax.jms.MessageListener;
 import javax.jms.Session;
+
+import com.caucho.jms.message.MessageImpl;
+import com.caucho.jms.message.ObjectMessageImpl;
+import com.caucho.jms.message.TextMessageImpl;
+import com.caucho.jms.queue.AbstractDestination;
+import com.caucho.jms.queue.AbstractQueue;
+import com.caucho.jms.queue.EntryCallback;
+import com.caucho.jms.queue.MessageCallback;
+import com.caucho.jms.queue.MessageException;
+import com.caucho.jms.queue.QueueEntry;
+import com.caucho.jms.selector.Selector;
+import com.caucho.jms.selector.SelectorParser;
+import com.caucho.util.Alarm;
+import com.caucho.util.L10N;
 
 /**
  * A basic message consumer.
@@ -163,9 +170,11 @@ public class MessageConsumerImpl implements MessageConsumer
 
     _listenerClassLoader = Thread.currentThread().getContextClassLoader();
 
-    // XXX: if start?
-    
-    // _session.setAsynchronous();
+    // if Consumer has already been started then register the message Call back.
+    if (isActive()) {
+      addMessageCallback();
+    }
+
   }
 
   /**
@@ -243,7 +252,7 @@ public class MessageConsumerImpl implements MessageConsumer
   /**
    * Receives a message from the queue.
    */
-  private Message receiveImpl(long timeout)
+  protected Message receiveImpl(long timeout)
     throws JMSException
   {
     if (_isClosed || _session.isClosed())
@@ -256,7 +265,7 @@ public class MessageConsumerImpl implements MessageConsumer
     long expireTime = timeout > 0 ? now + timeout : 0;
 
     while (_session.isActive()) {
-      QueueEntry entry = _queue.receiveEntry(expireTime, _isAutoAcknowledge);
+      QueueEntry entry = _queue.receiveEntry(expireTime, _isAutoAcknowledge, _selector);
 
       if (entry == null)
 	return null;
@@ -282,20 +291,20 @@ public class MessageConsumerImpl implements MessageConsumer
 
       msg.setReceive();
       
-      if (_selector != null && ! _selector.isMatch(msg)) {
+      /*if (_selector != null && ! _selector.isMatch(msg)) {
         _queue.acknowledge(msg.getJMSMessageID());
         continue;
-      }
+      }*/
 
-      else {
-	if (log.isLoggable(Level.FINE))
-	  log.fine(_queue + " receiving message " + msg);
+      //else {
+      if (log.isLoggable(Level.FINE))
+	log.fine(_queue + " receiving message " + msg);
 	
-        if (! _isAutoAcknowledge)
-          _session.addTransactedReceive(_queue, msg);
+      if (! _isAutoAcknowledge)
+        _session.addTransactedReceive(_queue, msg);
 
-        return msg;
-      }
+      return msg;
+      //}
     }
 
     return null;
@@ -376,21 +385,26 @@ public class MessageConsumerImpl implements MessageConsumer
 
     return false;
   }
-
-  /**
-   * Starts the consumer
-   */
-  public void start()
+  
+  public void addMessageCallback() 
   {
     MessageConsumerCallback callback = _messageCallback;
 
     if (callback != null) {
       boolean isAutoAcknowledge = _isAutoAcknowledge;
       
-      EntryCallback _entryCallback
-	= _queue.addMessageCallback(callback, isAutoAcknowledge);
-    }
+      _entryCallback = _queue.addMessageCallback(callback, isAutoAcknowledge);
+    }    
   }
+
+  /**
+   * Starts the consumer
+   */
+  public void start()
+  {
+    addMessageCallback();
+  }  
+  
 
   /**
    * Stops the consumer.
@@ -424,8 +438,12 @@ public class MessageConsumerImpl implements MessageConsumer
       _isClosed = true;
     }
 
+    if (_queue instanceof TemporaryQueueImpl) {    
+      ((TemporaryQueueImpl)_queue).removeMessageConsumer();
+    }
+    
     // _queue.removeMessageAvailableListener(this);
-    _session.removeConsumer(this);
+    _session.removeConsumer(this);    
   }
 
   @Override
@@ -464,7 +482,9 @@ public class MessageConsumerImpl implements MessageConsumer
 
 	if (_selector == null || _selector.isMatch(message)) {
 	  // XXX: only if XA
+	  //if (! _isAutoAcknowledge) {
 	  _session.addTransactedReceive(_queue, message);
+	  //}
 
 	  Thread thread = Thread.currentThread();
 	  ClassLoader oldLoader = thread.getContextClassLoader();
@@ -476,6 +496,10 @@ public class MessageConsumerImpl implements MessageConsumer
 	    thread.setContextClassLoader(oldLoader);
 
 	    // XXX: commit/rollback?
+	    if (_session.getTransacted())
+	      _session.commit();
+	    else  
+	      _session.acknowledge();	    
 	  }
 	}
       } catch (JMSException e) {

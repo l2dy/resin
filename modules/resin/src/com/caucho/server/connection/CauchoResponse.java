@@ -29,6 +29,8 @@
 
 package com.caucho.server.connection;
 
+import com.caucho.server.cache.AbstractCacheFilterChain;
+import com.caucho.server.cache.AbstractCacheEntry;
 import com.caucho.vfs.FlushBuffer;
 
 import javax.servlet.http.HttpServletResponse;
@@ -41,10 +43,6 @@ public interface CauchoResponse extends HttpServletResponse {
   public void setResponseStream(AbstractResponseStream os);
 
   public boolean isCauchoResponseStream();
-  
-  public void setFlushBuffer(FlushBuffer out);
-  public FlushBuffer getFlushBuffer();
-  
   public String getHeader(String key);
   
   public void setFooter(String key, String value);
@@ -55,12 +53,9 @@ public interface CauchoResponse extends HttpServletResponse {
   // to support the JSP getRemaining
   //  public int getRemaining();
 
-  public boolean disableHeaders(boolean disable);
-
   public boolean getForbidForward();
   public void setForbidForward(boolean forbid);
 
-  public int getStatusCode();
   public String getStatusMessage();
 
   public boolean hasError();
@@ -71,8 +66,17 @@ public interface CauchoResponse extends HttpServletResponse {
   public void killCache();
   public void setNoCache(boolean killCache);
   public void setPrivateCache(boolean isPrivate);
+  public void setCacheInvocation(AbstractCacheFilterChain cacheFilterChain);
+  public void setMatchCacheEntry(AbstractCacheEntry matchCacheEntry);
+  public boolean isNoCacheUnlessVary();
 
-  public ServletResponse getResponse();
   public AbstractHttpResponse getAbstractHttpResponse();
-  public TcpDuplexController upgradeProtocol(TcpDuplexHandler handler);
+  /**
+   * Return wrapped response
+   */
+  public ServletResponse getResponse();
+
+  public void setForwardEnclosed(boolean isForwardEnclosed);
+
+  public boolean isForwardEnclosed();
 }

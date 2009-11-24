@@ -29,28 +29,29 @@
 
 package com.caucho.jms.connection;
 
-import com.caucho.jms.message.MessageImpl;
-import com.caucho.jms.queue.*;
-import com.caucho.util.Alarm;
-import com.caucho.util.L10N;
-
 import javax.jms.DeliveryMode;
 import javax.jms.Destination;
 import javax.jms.JMSException;
 import javax.jms.Message;
 import javax.jms.MessageProducer;
 
+import com.caucho.jms.queue.AbstractDestination;
+import com.caucho.util.Alarm;
+import com.caucho.util.L10N;
+
 /**
  * A basic message producer.
  */
 public class MessageProducerImpl implements MessageProducer {
   static final L10N L = new L10N(MessageProducer.class);
+  
+  public static final long DEFAULT_TIME_TO_LIVE = 30 * 24 * 3600 * 1000L;
 
   private int _deliveryMode = DeliveryMode.PERSISTENT;
   private boolean _disableMessageId = true;
   private boolean _disableMessageTimestamp = true;
   private int _priority = 4;
-  private long _timeToLive = 30 * 24 * 3600 * 1000L;
+  private long _timeToLive = DEFAULT_TIME_TO_LIVE;
 
   protected JmsSession _session;
   protected AbstractDestination _queue;
@@ -258,14 +259,23 @@ public class MessageProducerImpl implements MessageProducer {
     if (destination == null)
       destination = _queue;
     else if (_queue != null && destination != _queue)
-      throw new IllegalArgumentException(L.l("MessageProducer: '{0}' does not match the queue '{1}'",
+      throw new UnsupportedOperationException(L.l("MessageProducer: '{0}' does not match the queue '{1}'",
                                                   destination, _queue));
 
     if (destination == null)
-      throw new NullPointerException(L.l("MessageProducer: null destination is not supported."));
+      throw new UnsupportedOperationException(L.l("MessageProducer: null destination is not supported."));
 
     if (_session == null || _session.isClosed())
       throw new javax.jms.IllegalStateException(L.l("getDeliveryMode(): message producer is closed."));
+    
+    if (destination instanceof TemporaryTopicImpl) {
+      
+      // Message can not be sent on Temporary Queue if Session is not active.      
+      if (((TemporaryTopicImpl)destination).isClosed()) {
+        throw new javax.jms.IllegalStateException(L.l("temporary queue '{0}' session is not active",
+            destination));
+      }     
+    } 
 
     _session.send((AbstractDestination) destination,
 		  message,

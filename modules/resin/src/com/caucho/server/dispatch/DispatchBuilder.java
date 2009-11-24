@@ -28,7 +28,7 @@
 
 package com.caucho.server.dispatch;
 
-
+import com.caucho.config.ConfigException;
 
 /**
  * Builds the dispatch for an invocation.
@@ -38,5 +38,5 @@ public interface DispatchBuilder {
    * Builds the invocation values.
    */
   public Invocation buildInvocation(Invocation invocation)
-    throws Throwable;
+    throws ConfigException;
 }

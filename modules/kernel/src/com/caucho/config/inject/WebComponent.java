@@ -44,9 +44,8 @@ import java.util.Set;
 import java.util.logging.*;
 
 import javax.enterprise.inject.Any;
-import javax.enterprise.inject.BindingType;
-import javax.enterprise.inject.NonBinding;
 import javax.enterprise.inject.spi.Bean;
+import javax.inject.Qualifier;
 
 /**
  * Configuration for the xml web bean component.
@@ -76,11 +75,11 @@ public class WebComponent {
   {
     for (BeanEntry beanEntry : _beanList) {
       if (beanEntry.getType().equals(type) && beanEntry.isMatch(bean))
-	return;
+        return;
     }
 
     if (bean instanceof ProducesBean
-	&& ((ProducesBean) bean).isInjectionPoint()) {
+        && ((ProducesBean) bean).isInjectionPoint()) {
       _injectionPointEntry = new BeanEntry(type, bean);
     }
 
@@ -93,21 +92,21 @@ public class WebComponent {
       if (! comp.getClassName().equals(oldComponent.getClassName())) {
       }
       else if (comp.isFromClass() && ! oldComponent.isFromClass())
-	return;
+        return;
       else if (! comp.isFromClass() && oldComponent.isFromClass())
-	_componentList.remove(i);
+        _componentList.remove(i);
       else if (comp.equals(oldComponent)) {
-	return;
+        return;
       }
     }
 
     _componentList.add(comp);
     */
   }
-  
+
   public void createProgram(ArrayList<ConfigProgram> initList,
-			    Field field,
-			    ArrayList<Annotation> bindList)
+                            Field field,
+                            ArrayList<Annotation> bindList)
     throws ConfigException
   {
     /*
@@ -116,14 +115,14 @@ public class WebComponent {
     comp.createProgram(initList, field);
     */
   }
-  
+
   public Set<Bean<?>> resolve(Type type, Annotation []bindings)
   {
     BaseType baseType = _beanManager.createBaseType(type);
 
     return resolve(baseType, bindings);
   }
-  
+
   public Set<Bean<?>> resolve(BaseType type, Annotation []bindings)
   {
     LinkedHashSet<Bean<?>> beans = null;
@@ -136,12 +135,12 @@ public class WebComponent {
 
     for (BeanEntry beanEntry : _beanList) {
       if (beanEntry.isMatch(type, bindings)) {
-	Bean<?> bean = beanEntry.getBean();
+        Bean<?> bean = beanEntry.getBean();
 
-	if (beans == null)
-	  beans = new LinkedHashSet<Bean<?>>();
-	
-	beans.add(beanEntry.getBean());
+        if (beans == null)
+          beans = new LinkedHashSet<Bean<?>>();
+
+        beans.add(beanEntry.getBean());
       }
     }
 
@@ -151,12 +150,12 @@ public class WebComponent {
   public ArrayList<Bean<?>> getBeanList()
   {
     ArrayList<Bean<?>> list = new ArrayList<Bean<?>>();
-    
+
     for (BeanEntry beanEntry : _beanList) {
       Bean<?> bean = beanEntry.getBean();
 
       if (! list.contains(bean)) {
-	list.add(bean);
+        list.add(bean);
       }
     }
 
@@ -166,16 +165,16 @@ public class WebComponent {
   public ArrayList<Bean<?>> getEnabledBeanList()
   {
     ArrayList<Bean<?>> list = new ArrayList<Bean<?>>();
-    
+
     int priority = 0;
-    
+
     for (BeanEntry beanEntry : _beanList) {
       Bean<?> bean = beanEntry.getBean();
 
       int beanPriority = _beanManager.getDeploymentPriority(bean);
 
       if (priority <= beanPriority)
-	list.add(bean);
+        list.add(bean);
     }
 
     return list;
@@ -202,16 +201,16 @@ public class WebComponent {
     BeanEntry(BaseType type, Bean<?> bean)
     {
       _type = type;
-      
+
       _bean = bean;
 
-      Set<Annotation> bindings = bean.getBindings();
-      
+      Set<Annotation> bindings = bean.getQualifiers();
+
       _bindings = new Binding[bindings.size()];
 
       int i = 0;
       for (Annotation binding : bindings) {
-	_bindings[i++] = new Binding(binding);
+        _bindings[i++] = new Binding(binding);
       }
     }
 
@@ -244,14 +243,14 @@ public class WebComponent {
     boolean isMatch(Annotation []bindingArgs)
     {
       for (Annotation arg : bindingArgs) {
-	if (! isMatch(arg)) {
-	  if (! arg.annotationType().isAnnotationPresent(BindingType.class)) {
-	    throw new ConfigException(L.l("'{0}' is an invalid binding annotation because it does not have a @BindingType meta-annotation.",
-					  arg));
-	  }
-	  
-	  return false;
-	}
+        if (! isMatch(arg)) {
+          if (! arg.annotationType().isAnnotationPresent(Qualifier.class)) {
+            throw new ConfigException(L.l("'{0}' is an invalid binding annotation because it does not have a @Qualifier meta-annotation.",
+                                          arg));
+          }
+
+          return false;
+        }
       }
 
       return true;
@@ -260,11 +259,11 @@ public class WebComponent {
     private boolean isMatch(Annotation arg)
     {
       if (arg.annotationType() == Any.class)
-	return true;
-      
+        return true;
+
       for (Binding binding : _bindings) {
-	if (binding.isMatch(arg))
-	  return true;
+        if (binding.isMatch(arg))
+          return true;
       }
 
       return false;

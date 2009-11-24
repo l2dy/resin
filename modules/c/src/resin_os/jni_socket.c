@@ -347,6 +347,24 @@ Java_com_caucho_vfs_JniSocketImpl_nativeClose(JNIEnv *env,
   }
 }
 
+JNIEXPORT jint JNICALL
+Java_com_caucho_vfs_JniSocketImpl_writeCloseNative(JNIEnv *env,
+                                                   jobject obj,
+                                                   jlong conn_fd,
+                                                   jbyteArray buf,
+                                                   jint offset,
+                                                   jint length)
+{
+  int value;
+
+  value = Java_com_caucho_vfs_JniSocketImpl_writeNative(env, obj, conn_fd,
+                                                        buf, offset, length);
+
+  Java_com_caucho_vfs_JniSocketImpl_nativeClose(env, obj, conn_fd);
+
+  return value;
+}
+
 JNIEXPORT void JNICALL
 Java_com_caucho_vfs_JniSocketImpl_nativeFree(JNIEnv *env,
 					     jobject obj,
@@ -669,6 +687,9 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
     }
   }
 
+  sin_length = sizeof(sin_data);
+  getsockname(sock, sin, &sin_length);
+
   /* must be 0 if the poll is missing for accept */
 #if 0 && defined(O_NONBLOCK)
   /*
@@ -687,8 +708,8 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
   memset(ss, 0, sizeof(server_socket_t));
 
   ss->fd = sock;
-  ss->port = port;
-  
+  ss->port = ntohs(sin->sin_port);
+
   ss->conn_socket_timeout = 65000;
 
   ss->accept = &std_accept;
@@ -812,10 +833,11 @@ Java_com_caucho_vfs_JniServerSocketImpl_getLocalPort(JNIEnv *env,
 {
   server_socket_t *socket = (server_socket_t *) (PTR) ss;
 
-  if (! socket)
-    return 0;
-  else
+  if (socket) {
     return socket->port;
+  }
+  else
+    return 0;
 }
 
 JNIEXPORT jint JNICALL

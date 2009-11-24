@@ -50,7 +50,7 @@ public interface ServerMXBean extends ManagedObjectMXBean {
   //
   // ID attributes
   //
-  
+
   /**
    * Returns the -server id.
    */
@@ -58,10 +58,22 @@ public interface ServerMXBean extends ManagedObjectMXBean {
                + " of Resin, the value of `-server'")
   public String getId();
 
+  /**
+   * Returns the server index in the cluster triad.
+   */
+  @Description("The server index in the cluster triad")
+  public int getServerIndex();
+
   //
   // Hierarchy
   //
-  
+
+  /**
+   * Returns the cluster server for this server
+   */
+  @Description("The ClusterServer for this server")
+  public ClusterServerMXBean getSelfServer();
+
   /**
    * Returns the cluster owning this server
    */
@@ -97,12 +109,36 @@ public interface ServerMXBean extends ManagedObjectMXBean {
   //
 
   /**
+   * Returns true if ports are bound after startup.
+   */
+  @Description("Ports may be bound after startup completes")
+  public boolean isBindPortsAfterStart();
+
+  /**
    * Returns true if detailed statistics are being kept.
    */
   @Description("Detailed statistics causes various parts of Resin to keep"
                + " more detailed statistics at the possible expense of"
                +" some performance")
   public boolean isDetailedStatistics();
+
+  /**
+   * True if detailed error pages are being generated.
+   */
+  @Description("Detailed error pages for development")
+  public boolean isDevelopmentModeErrorPage();
+
+  /**
+   * Returns the memory-free-min limit for forcing GC and restarting.
+   */
+  @Description("The minimum free heap memory for GC and restart")
+  public long getMemoryFreeMin();
+
+  /**
+   * Returns the perm-gen-free-min limit for forcing GC and restarting.
+   */
+  @Description("The perm-gen free heap memory for GC and restart")
+  public long getPermGenFreeMin();
 
   /**
    * The maximum time to spend waiting for the server to stop gracefully
@@ -115,6 +151,24 @@ public interface ServerMXBean extends ManagedObjectMXBean {
    */
   @Description("A SelectManager handles keepalive without requiring a thread")
   public boolean isSelectManagerEnabled();
+
+  /**
+   * Returns the HTTP server header.
+   */
+  @Description("The HTTP Server: header")
+  public String getServerHeader();
+
+  /**
+   * Returns the deployment repository stage.
+   */
+  @Description("The deployment repository stage")
+  public String getStage();
+
+  /**
+   * Returns the HTTP URL maximum length
+   */
+  @Description("The HTTP maximum URL length")
+  public int getUrlLengthMax();
 
   //
   // state
@@ -137,6 +191,12 @@ public interface ServerMXBean extends ManagedObjectMXBean {
    */
   @Description("The time that this instance was last started or restarted")
   public Date getStartTime();
+
+  /**
+   * Returns the time in milliseconds since the last start.
+   */
+  @Description("The time in milliseconds since the last start")
+  public long getUptime();
 
   //
   // statistics

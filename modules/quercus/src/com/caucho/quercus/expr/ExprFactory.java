@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -104,14 +104,6 @@ public class ExprFactory {
   public Expr createBinary(byte []bytes)
   {
     return new BinaryLiteralExpr(bytes);
-  }
-
-  /**
-   * Creates a binary literal expression.
-   */
-  public Expr createBinary(String bytes, String encoding)
-  {
-    return new BinaryLiteralExpr(bytes, encoding);
   }
 
   /**
@@ -890,6 +882,17 @@ public class ExprFactory {
   }
   
   /**
+   * Creates a new function call.
+   */
+  public Expr createParentMethod(Location loc,
+                                 String parentName,
+                                 String name,
+                                 ArrayList<Expr> args)
+  {
+    return new ParentMethodExpr(loc, parentName, name, args);
+  }
+  
+  /**
    * Creates a new function call based on the class context.
    */
   public Expr createLateStaticBindingClassMethod(Location loc,
@@ -1222,6 +1225,17 @@ public class ExprFactory {
                                    VarVarExpr var)
   {
     return new VarGlobalStatement(loc, var);
+  }
+  
+  /**
+   * Creates a static statement inside a class
+   */
+  public Statement createClassStatic(Location loc,
+                                     String className,
+                                     VarExpr var,
+                                     Expr value)
+  {
+    return new ClassStaticStatement(loc, className, var, value);
   }
 
   /**

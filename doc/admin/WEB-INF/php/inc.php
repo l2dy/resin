@@ -5,6 +5,8 @@
  * @author Sam
  */
 
+require_once "WEB-INF/php/graph.php";
+
 global $g_server_id;
 global $g_mbean_server;
 global $g_resin;
@@ -15,47 +17,28 @@ header("Expires: 01 Dec 1994 16:00:00 GMT");
 header("Cache-Control: max-age=0,private"); 
 header("Pragma: No-Cache");
 
-function admin_init()
+function admin_init($query="", $is_refresh=false)
 {
   global $g_server_id;
+  global $g_server_index;
   global $g_mbean_server;
   global $g_resin;
   global $g_server;
   global $g_page;
+
+  mbean_init();
   
-  $g_server_id = $_GET["server-id"];
-
-  if (! $g_server_id) {
-    $g_mbean_server = new MBeanServer();
-    $server = $g_mbean_server->lookup("resin:type=Server");
-    $g_server_id = $server->Id;
-
-    if (! $g_server_id)
-      $g_server_id = "default";
-  }
-  else {
-    if ($g_server_id == "default")
-      $g_mbean_server = new MBeanServer("");
+  if (! $g_mbean_server) {
+    if ($g_server_id)
+      $title = "Resin: $g_page for server $g_server_id";
     else
-      $g_mbean_server = new MBeanServer($g_server_id);
+      $title = "Resin: $g_page for server default";
 
-    if (! $g_mbean_server) {
-      if ($g_server_id)
-        $title = "Resin: $g_page for server $g_server_id";
-      else
-        $title = "Resin: $g_page for server default";
+    display_header("thread.php", $title, $g_server, $query, $is_refresh);
 
-      display_header("thread.php", $title, $g_server);
-
-      echo "<h3 class='fail'>Can't contact $g_server_id</h3>";
+    echo "<h3 class='fail'>Can't contact $g_server_id</h3>";
     
-      return false;
-    }
-  }
-
-  if ($g_mbean_server) {
-    $g_resin = $g_mbean_server->lookup("resin:type=Resin");
-    $g_server = $g_mbean_server->lookup("resin:type=Server");
+    return false;
   }
 
   if ($g_server_id)
@@ -63,24 +46,74 @@ function admin_init()
   else
     $title = "Resin: $g_page";
 
-  display_header("thread.php", $title, $g_server, true);
-
-  return true;
+  return display_header("thread.php", $title, $g_server, $query,
+                        $is_refresh, true);
 }  
 
-function load_pages()
+function mbean_init()
 {
-  $dir = opendir("WEB-INF/php");
+  global $g_server_id;
+  global $g_server_index;
+  global $g_mbean_server;
+  global $g_resin;
+  global $g_server;
 
-  $pages = null;
+  $g_server_index = $_GET["s"];
+
+  if (! empty($_REQUEST["new_s"])) {
+    $g_server_index = $_REQUEST["new_s"];
+  }
+
+  if (empty($g_server_index)) {
+    $g_mbean_server = new MBeanServer();
+    $g_server = $g_mbean_server->lookup("resin:type=Server");
+    $g_server_index = $g_server->SelfServer->ClusterIndex;
+    $g_server_id = $g_server->Id;
+
+    if (! $g_server_id)
+      $g_server_id = "default";
+  }
+  else {
+    $g_mbean_server = new MBeanServer("");
+    $server = server_find_by_index($g_mbean_server, g_server_index);
+
+    $g_server_id = $server->Id;
+    $g_mbean_server = new MBeanServer($g_server_id);
+
+    $g_server = $g_mbean_server->lookup("resin:type=Server");
+  }
+
+  if ($g_mbean_server) {
+    $g_resin = $g_mbean_server->lookup("resin:type=Resin");
+    $g_server = $g_mbean_server->lookup("resin:type=Server");
+  }
+}
+
+function load_pages($suffix)
+{
+  $pages = load_dir_pages("WEB-INF/php", $suffix);
+
+  $config = java("com.caucho.config.Config");
+  $user_path = $config->getProperty("resin_admin_ext_path");
+
+  if ($user_path)
+    $pages = array_merge($pages, load_dir_pages($user_path, $suffix));
+    
+  return $pages;
+}
+
+function load_dir_pages($dir_name, $suffix)
+{
+  $dir = opendir($dir_name);
+
+  $pages = array();
 
   while (($file = readdir($dir))) {
     $values = null;
-    if (preg_match("/(.*)\.page$/", $file, $values)) {
-      // include_once("WEB-INF/php/" . $file);
 
+    if (preg_match("/(.*)\." . $suffix . "$/", $file, $values)) {
       $name = $values[1];
-      $pages[$name] = "WEB-INF/php/" . $file;
+      $pages[$name] = $dir_name . "/" . $file;
     }
   }
 
@@ -146,7 +179,7 @@ function format_ago_class($date, $fail=3600, $warn=14400)
   if ($event_time < 365 * 24 * 3600)
     return "";
 
-  $now = time(0);
+  $now = time();
   $ago = $now - $event_time;
 
   if ($ago < $fail)
@@ -167,7 +200,7 @@ function format_ago($date)
   if ($event_time < 365 * 24 * 3600)
     return "";
 
-  $now = time(0);
+  $now = time();
   $ago = $now - $event_time;
 
   return sprintf("%dh%02d", $ago / 3600, $ago / 60 % 60);
@@ -315,8 +348,8 @@ function redirect_nocache($relative_url)
 if (is_null($target_uri))
   $target_uri = $_SERVER['PHP_SELF'];
 
-$is_read_role = $request->isUserInRole("read");
-$is_write_role = $request->isUserInRole("write");
+$is_read_role = quercus_servlet_request()->isUserInRole("read");
+$is_write_role = quercus_servlet_request()->isUserInRole("write");
 
 $display_header_script = NULL;
 $display_header_title = NULL;
@@ -502,19 +535,31 @@ function jmx_short_name($name, $exclude_array)
  *
  * @return true if the header was output, false if a header has already been output
  */
-function display_header($script, $title, $server, $allow_remote = false)
+function display_header($script, $title, $server,
+                        $query = "",
+                        $is_refresh = false,
+                        $allow_remote = false)
 {
   global $g_server_id;
+  global $g_server_index;
   global $g_page;
-  
+  global $g_next_url;
+
   $title = $title . " for server " . $g_server_id;
-  
+
   $server_id = $server->Id;
 
   global $display_header_script, $display_header_title;
 
   if (! empty($display_header_script))
     return;
+
+  $g_next_url = "?q=" . $g_page . "&s=" . $g_server_index . $query;
+
+  if (! empty($_REQUEST["new_s"]) && $_REQUEST["new_s"] != $_GET["s"]) {
+    header("Location: " . $g_next_url);
+    return false;
+  }
 
   $display_header_script = $script;
   $display_header_title = $title;
@@ -527,10 +572,19 @@ function display_header($script, $title, $server, $allow_remote = false)
 <head>
   <title><?= $title ?></title>
   <link rel='stylesheet' href='<?= uri("default.css") ?>' type='text/css' />
+<?php
+if ($is_refresh) {
+  echo "<meta http-equiv=\"refresh\" content=\"60\" />\n";
+}
+?>
 
   <script language='javascript' type='text/javascript'>
     function hide(id) { document.getElementById(id).style.display = 'none'; }
     function show(id) { document.getElementById(id).style.display = 'block'; }
+    function show_n(id) { document.getElementById(id).style.display = ''; }
+    function show_i(id) { document.getElementById(id).style.display = 'inline'; }
+    function sel(id) { document.getElementById(id).className = 'selected'; }
+    function unsel(id) { document.getElementById(id).className = ''; }
     function showInline(id) { document.getElementById(id).style.display = 'inline'; }
     function setValue(id, v) { document.getElementById(id).value = v; }
     function selectChoice(root, name)
@@ -556,7 +610,7 @@ function display_header($script, $title, $server, $allow_remote = false)
 
 <table width="100%" cellpadding="0" cellspacing="0" border="0">
 <tr>
-  <td width="160" align="center"><img src='<?= uri("images/caucho-white.jpg") ?>' width='150' height='63'>
+  <td width="160" align="center">
   </td>
 
   <td width="10">
@@ -567,19 +621,25 @@ function display_header($script, $title, $server, $allow_remote = false)
 <?
 if (! empty($server)) {
   $server_name = $server->Id ? $server->Id : "default";
-  
+
 ?>
-   <li class="server">Server: <?= $g_server_id ?></li>
+   <li class="server"><?php display_servers($server) ?></li>
 <? }  ?>
+<!--
    <li>Last Refreshed: <?= strftime("%Y-%m-%d %H:%M:%S", time()) ?></li>
-   <li><a href="?q=<?= $g_page ?>&server-id=<?= $g_server_id ?>">refresh</a></li>
+   -->
+   <li><a href="<?= $g_next_url ?>">refresh</a></li>
    <li><a href="?q=index.php&logout=true">logout</a></li>
    </ul>
+
   </td>
-</tr>
+
+  <td align='right'
+   <img src='<?= uri("images/caucho-logo.png") ?>' width='300'</tr>
+  </td>
 
 <tr>
-  <td width="150" background='<?= uri("images/left_background.gif") ?>'>
+  <td width="150">
    <img src='<?= uri("images/pixel.gif") ?>' height="14">
   </td>
 
@@ -588,42 +648,33 @@ if (! empty($server)) {
 
   <td>
   </td>
+
+  <td>
+  </td>
 </tr>
 
+<tr>
+<td width="150">
+<hr>
+</td>
+</tr>
 
 <tr>
   <td class="leftnav" valign="top">
+    <ul class="leftnav">
     <?php
+      display_pages();
+/*
          if ($allow_remote)
            display_left_navigation($server);
+*/
     ?>
+    </ul>
   </td>
 
   <td width="10">
   </td>
-  <td>
-
-<ul class="tabs">
-<?
-global $g_pages;
-global $g_page;
-
-$names = array_keys($g_pages);
-sort($names);
-
-$names = array_diff($names, array('summary'));
-array_unshift($names, 'summary');
-
-foreach ($names as $name) {
-  if ($g_page == $name) {
-    ?><li class="selected"><?= $name ?></li><?
-  } else {
-    echo "<li><a href='?q=$name&server-id=$g_server_id'>$name</a></li>\n";
-  }
-}
-
-?>
-</ul>
+  <td valign='top' colspan='2'>
 
 <?php
   if (! $server && $g_server_id) {
@@ -632,6 +683,55 @@ foreach ($names as $name) {
   }
   
   return true;
+}
+
+function display_pages()
+{
+  global $g_pages;
+  global $g_page;
+  global $g_server_index;
+
+  $names = array_keys($g_pages);
+  sort($names);
+
+  $names = array_diff($names, array('index', 'summary'));
+  array_unshift($names, 'summary');
+  array_unshift($names, 'index');
+
+  foreach ($names as $name) {
+    if ($g_page == $name) {
+      echo "<li class='selected'>$name</li>";
+    } else {
+      echo "<li><a href='?q=$name&s=$g_server_index'>$name</a></li>";
+    }
+  }
+}
+
+function display_servers($server)
+{
+  global $g_next_url;
+  global $g_server_index;
+
+  echo "<form name='servers' method='POST' action='" . $g_next_url . "'>";
+  echo "Server: "; 
+  echo "<select name='new_s' onchange='document.forms.servers.submit();'>\n";
+
+  $self_server = $server->SelfServer;
+
+  foreach ($self_server->Cluster->Servers as $cluster_server) {
+    $id = $cluster_server->Name;
+    if (! $id)
+      $id = "default";
+
+    echo "  <option";
+    if ($cluster_server->ClusterIndex == $g_server_index)
+      echo " selected";
+
+    echo " value=\"" . $cluster_server->ClusterIndex ."\">";
+    printf("%02d - %s\n", $cluster_server->ClusterIndex, $id);
+  }
+  echo "</select>";
+  echo "</form>";
 }
 
 /**
@@ -760,6 +860,40 @@ function sort_host($a, $b)
 function sort_webapp($a, $b)
 {
   return strcmp($a->ContextPath, $b->ContextPath);
+}
+
+function display_timeout($timeout)
+{
+  if ($timeout == 0)
+    return "0s";
+  else if ($timeout % (24 * 3600 * 1000) == 0) {
+    return ($timeout / (24 * 3600 * 1000)) . "d";
+  }
+  else if ($timeout % (3600 * 1000) == 0) {
+    return ($timeout / (3600 * 1000)) . "h";
+  }
+  else if ($timeout % (60 * 1000) == 0) {
+    return ($timeout / (60 * 1000)) . "m";
+  }
+  else if ($timeout % (1000) == 0) {
+    return ($timeout / (1000)) . "s";
+  }
+  else {
+    return $timeout . "ms";
+  }
+}
+
+
+function server_find_by_index($g_mbean_server, $index)
+{
+  $server = $g_mbean_server->lookup("resin:type=Server");
+
+  foreach ($server->Servers as $cluster_server) {
+    if ($cluster_server->ServerIndex == $index)
+      return $cluster_server;
+  }
+
+  return null;
 }
 
 ?>

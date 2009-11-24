@@ -74,12 +74,14 @@ public class QueryContext {
 
   private Block []_blockLocks;
   private int _blockLockLength;
-  
+
   private boolean _isLocked;
 
   private HashMap<GroupItem,GroupItem> _groupMap;
 
   private byte []_buffer = new byte[256];
+
+  private Thread _thread;
 
   private QueryContext()
   {
@@ -92,12 +94,11 @@ public class QueryContext {
   public static QueryContext allocate()
   {
     QueryContext queryContext = _freeList.allocate();
-    
+
     if (queryContext == null)
       queryContext = new QueryContext();
 
     queryContext.clearParameters();
-
     queryContext._limit = -1;
 
     return queryContext;
@@ -107,8 +108,8 @@ public class QueryContext {
   {
     for (int i = _parameters.length - 1; i >= 0; i--) {
       if (_parameters[i] == null)
-	_parameters[i] = new Data();
-      
+        _parameters[i] = new Data();
+
       _parameters[i].clear();
     }
   }
@@ -117,9 +118,19 @@ public class QueryContext {
    * Initializes the query state.
    */
   public void init(Transaction xa,
-		   TableIterator []tableIterators,
-		   boolean isReadOnly)
+                   TableIterator []tableIterators,
+                   boolean isReadOnly)
   {
+    if (_isLocked)
+      throw new IllegalStateException();
+
+    Thread thread = Thread.currentThread();
+
+    if (_thread != null && _thread != thread)
+      throw new IllegalStateException(toString());
+
+    _thread = thread;
+
     _xa = xa;
     _isWrite = ! isReadOnly;
     _tableIterators = tableIterators;
@@ -130,10 +141,8 @@ public class QueryContext {
       _blockLocks = new Block[_blockLockLength];
     else {
       for (int i = _blockLockLength - 1; i >= 0; i--)
-	_blockLocks[i] = null;
+        _blockLocks[i] = null;
     }
-    
-    _isLocked = false;
 
     _rowUpdateCount = 0;
     _groupItem = _tempGroupItem;
@@ -146,7 +155,7 @@ public class QueryContext {
   public void initGroup(int size, boolean []isGroupByFields)
   {
     _groupItem = _tempGroupItem;
-    
+
     _groupItem.init(size, isGroupByFields);
 
     if (_groupMap == null)
@@ -176,13 +185,13 @@ public class QueryContext {
   {
     if (_groupMap == null)
       return com.caucho.util.NullIterator.create();
-    
+
     Iterator<GroupItem> results = _groupMap.values().iterator();
     _groupMap = null;
 
     return results;
   }
-  
+
   /**
    * Sets the current result.
    */
@@ -254,7 +263,7 @@ public class QueryContext {
   public void setReturnGeneratedKeys(boolean isReturnGeneratedKeys)
   {
     _isReturnGeneratedKeys = isReturnGeneratedKeys;
-    
+
     if (_isReturnGeneratedKeys && _generatedKeys != null)
       _generatedKeys.init();
   }
@@ -453,7 +462,7 @@ public class QueryContext {
 
     if (_generatedKeys == null)
       _generatedKeys = new GeneratedKeysResultSet();
-    
+
     return _generatedKeys;
   }
 
@@ -466,10 +475,14 @@ public class QueryContext {
   public void lock()
     throws SQLException
   {
-    if (_isLocked)
+    if (_isLocked) {
       throw new IllegalStateException(L.l("blocks are already locked"));
+    }
     _isLocked = true;
-    
+
+    if (_thread != Thread.currentThread())
+      throw new IllegalStateException();
+
     int len = _tableIterators.length;
 
     for (int i = 0; i < len; i++) {
@@ -478,39 +491,40 @@ public class QueryContext {
 
       loop:
       for (int j = 0; j < len; j++) {
-	TableIterator iter = _tableIterators[j];
+        TableIterator iter = _tableIterators[j];
 
-	if (iter == null)
-	  continue;
-	
-	Block block = iter.getBlock();
+        if (iter == null)
+          continue;
 
-	if (block == null)
-	  continue;
+        Block block = iter.getBlock();
 
-	long id = block.getBlockId();
-	if (bestId <= id)
-	  continue;
-	
-	for (int k = 0; k < i; k++) {
-	  if (_blockLocks[k] == block)
-	    continue loop;
-	}
+        if (block == null)
+          continue;
 
-	bestId = id;
-	bestBlock = block;
+        long id = block.getBlockId();
+        if (bestId <= id)
+          continue;
+
+        for (int k = 0; k < i; k++) {
+          if (_blockLocks[k] == block)
+            continue loop;
+        }
+
+        bestId = id;
+        bestBlock = block;
       }
-
-      _blockLocks[i] = bestBlock;
 
       if (bestBlock == null) {
       }
       else if (_isWrite) {
-	_xa.lockReadAndWrite(bestBlock.getLock());
+        bestBlock.getLock().lockReadAndWrite(_xa.getTimeout());
       }
       else {
-	_xa.lockRead(bestBlock.getLock());
+        bestBlock.getLock().lockRead(_xa.getTimeout());
       }
+      // assignment must be after obtaining lock because the unlock
+      // requires a lock
+      _blockLocks[i] = bestBlock;
     }
   }
 
@@ -522,11 +536,15 @@ public class QueryContext {
   public void unlock()
     throws SQLException
   {
-    if (! _isLocked)
+    if (! _isLocked) {
       return;
-    
+    }
+
     _isLocked = false;
-    
+
+    if (_thread != Thread.currentThread())
+      throw new IllegalStateException();
+
     int len = _blockLocks.length;
 
     // need to unlock first since the writeData/commit will wait for
@@ -537,10 +555,10 @@ public class QueryContext {
       if (block == null) {
       }
       else if (_isWrite) {
-	_xa.unlockReadAndWrite(block.getLock());
+        block.getLock().unlockReadAndWrite();
       }
       else {
-	_xa.unlockRead(block.getLock());
+        block.getLock().unlockRead();
       }
     }
 
@@ -548,19 +566,32 @@ public class QueryContext {
       _xa.writeData();
     } finally {
       for (int i = len - 1; i >= 0; i--) {
-	Block block = _blockLocks[i];
-	_blockLocks[i] = null;
+        Block block = _blockLocks[i];
+        _blockLocks[i] = null;
 
-	if (block == null) {
-	}
-	else if (_isWrite) {
-	  try {
-	    block.commit();
-	  } catch (IOException e) {
-	    log.log(Level.FINE, e.toString(), e);
-	  }
-	}
+        if (block == null) {
+        }
+        else if (_isWrite) {
+          try {
+            block.commit();
+          } catch (Exception e) {
+            log.log(Level.FINE, e.toString(), e);
+          }
+        }
       }
+    }
+  }
+
+  public void close()
+    throws SQLException
+  {
+    Thread thread = _thread;
+    _thread = null;
+
+    unlock();
+
+    if (thread != null && thread != Thread.currentThread()) {
+      throw new IllegalStateException();
     }
   }
 
@@ -569,8 +600,14 @@ public class QueryContext {
    */
   public static void free(QueryContext queryContext)
   {
+    if (queryContext._isLocked)
+      throw new IllegalStateException();
+
     queryContext._groupMap = null;
 
-    _freeList.free(queryContext);
+    if (queryContext._thread != null)
+      throw new IllegalStateException();
+
+    _freeList.freeCareful(queryContext);
   }
 }

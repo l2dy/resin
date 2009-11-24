@@ -29,22 +29,47 @@
 
 package com.caucho.server.connection;
 
-import com.caucho.server.connection.ConnectionCometController;
-import com.caucho.server.port.TcpConnection;
+import com.caucho.config.scope.ScopeRemoveListener;
+import com.caucho.i18n.CharacterEncoding;
+import com.caucho.security.Authenticator;
+import com.caucho.security.AbstractLogin;
+import com.caucho.security.RoleMapManager;
+import com.caucho.security.Login;
+import com.caucho.server.cluster.Server;
+import com.caucho.server.port.ConnectionCometController;
+import com.caucho.server.port.AsyncListenerNode;
+import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.session.SessionImpl;
+import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.util.L10N;
-import com.caucho.vfs.ReadStream;
+import com.caucho.servlet.DuplexContext;
+import com.caucho.servlet.DuplexListener;
+import com.caucho.servlet.WebSocketServletRequest;
+import com.caucho.servlet.WebSocketContext;
+import com.caucho.servlet.WebSocketListener;
+import com.caucho.util.*;
+import com.caucho.vfs.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.security.Principal;
+import java.security.cert.X509Certificate;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
+import java.util.logging.Level;
 
 import javax.servlet.*;
+import javax.servlet.annotation.MultipartConfig;
 import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.Part;
@@ -52,20 +77,58 @@ import javax.servlet.http.Part;
 /**
  * User facade for http requests.
  */
-public class HttpServletRequestImpl implements CauchoRequest
+public class HttpServletRequestImpl extends AbstractCauchoRequest
+  implements CauchoRequest, WebSocketServletRequest
 {
   private static final Logger log
     = Logger.getLogger(HttpServletRequestImpl.class.getName());
 
   private static final L10N L = new L10N(HttpServletRequestImpl.class);
 
+  private static final String CHAR_ENCODING = "resin.form.character.encoding";
+  private static final String FORM_LOCALE = "resin.form.local";
+  private static final String CAUCHO_CHAR_ENCODING = "caucho.form.character.encoding";
+
   private AbstractHttpRequest _request;
 
-  private HttpServletResponseImpl _response;
+  private final HttpServletResponseImpl _response;
 
+  private boolean _isSecure;
+
+  private Invocation _invocation;
+
+  // form
+  private HashMapImpl<String,String[]> _filledForm;
+  private List<Part> _parts;
+
+  // session/cookies
+  private Cookie []_cookiesIn;
+
+  private boolean _varyCookies;   // True if the page depends on cookies
+  private boolean _hasCookie;
+
+  private boolean _isSessionIdFromCookie;
+
+  // security
+  private String _runAs;
+  private boolean _isLoginRequested;
+
+  // input stream management
+  private boolean _hasReader;
+  private boolean _hasInputStream;
+
+  // servlet attributes
+  private HashMapImpl<String,Object> _attributes;
+
+  // proxy caching
+  private boolean _isSyntheticCacheHeader;
+
+  // comet
   private AsyncListenerNode _asyncListenerNode;
   private long _asyncTimeout = 10000;
   private ConnectionCometController _comet;
+
+  private ArrayList<Path> _closeOnExit;
 
   private boolean _isSuspend;
 
@@ -78,11 +141,16 @@ public class HttpServletRequestImpl implements CauchoRequest
   public HttpServletRequestImpl(AbstractHttpRequest request)
   {
     _request = request;
+
+    _response = new HttpServletResponseImpl(this,
+                                            request.getAbstractHttpResponse());
+
+    _isSecure = request.isSecure();
   }
 
-  public void setResponse(HttpServletResponseImpl response)
+  public HttpServletResponseImpl getResponse()
   {
-    _response = response;
+    return _response;
   }
 
   //
@@ -102,7 +170,13 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public String getScheme()
   {
-    return _request.getScheme();
+    String scheme = _request.getScheme();
+
+    // server/12j2
+    if (isSecure() && "http".equals(scheme))
+      return "https";
+    else
+      return scheme;
   }
 
   /**
@@ -220,63 +294,6 @@ public class HttpServletRequestImpl implements CauchoRequest
   }
 
   /**
-   * Returns a form parameter.  When the form contains several parameters
-   * of the same name, <code>getParameter</code> returns the first.
-   *
-   * <p>For example, calling <code>getParameter("a")</code> with the
-   * the query string <code>a=1&a=2</code> will return "1".
-   *
-   * @param name the form parameter to return
-   * @return the form value or null if none matches.
-   */
-  public String getParameter(String name)
-  {
-    return _request.getParameter(name);
-  }
-
-  /**
-   * Returns all values of a form parameter.
-   *
-   * <p>For example, calling <code>getParameterValues("a")</code>
-   * with the the query string <code>a=1&a=2</code> will
-   * return ["1", "2"].
-   *
-   * @param name the form parameter to return
-   * @return an array of matching form values or null if none matches.
-   */
-  public String []getParameterValues(String name)
-  {
-    return _request.getParameterValues(name);
-  }
-
-  /**
-   * Returns an enumeration of all form parameter names.
-   *
-   * <code><pre>
-   * Enumeration e = request.getParameterNames();
-   * while (e.hasMoreElements()) {
-   *   String name = (String) e.nextElement();
-   *   out.println(name + ": " + request.getParameter(name));
-   * }
-   * </pre></code>
-   */
-  public Enumeration getParameterNames()
-  {
-    return _request.getParameterNames();
-  }
-
-  /**
-   * Returns a Map of the form parameters.  The map is immutable.
-   * The keys are the form keys as returned by <code>getParameterNames</code>
-   * and the values are String arrays as returned by
-   * <code>getParameterValues</code>.
-   */
-  public Map getParameterMap()
-  {
-    return _request.getParameterMap();
-  }
-
-  /**
    * Returns an InputStream to retrieve POST data from the request.
    * The stream will automatically end when the end of the POST data
    * is complete.
@@ -284,6 +301,11 @@ public class HttpServletRequestImpl implements CauchoRequest
   public ServletInputStream getInputStream()
     throws IOException
   {
+    if (_hasReader)
+      throw new IllegalStateException(L.l("getInputStream() can't be called after getReader()"));
+
+    _hasInputStream = true;
+
     return _request.getInputStream();
   }
 
@@ -295,6 +317,11 @@ public class HttpServletRequestImpl implements CauchoRequest
   public BufferedReader getReader()
     throws IOException, IllegalStateException
   {
+    if (_hasInputStream)
+      throw new IllegalStateException(L.l("getReader() can't be called after getInputStream()"));
+
+    _hasReader = true;
+
     return _request.getReader();
   }
 
@@ -350,48 +377,137 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public boolean isSecure()
   {
-    return _request.isSecure();
+    return _isSecure;
   }
 
+  //
+  // request attributes
+  //
+
   /**
-   * Returns an attribute value.
+   * Returns the value of the named request attribute.
    *
-   * @param name the attribute name
-   * @return the attribute value
+   * @param name the attribute name.
+   *
+   * @return the attribute value.
    */
   public Object getAttribute(String name)
   {
-    return _request.getAttribute(name);
+    HashMapImpl<String,Object> attributes = _attributes;
+
+    if (attributes != null)
+      return attributes.get(name);
+    else if (isSecure()) {
+      _attributes = new HashMapImpl<String,Object>();
+      attributes = _attributes;
+      _request.initAttributes(this);
+
+      return attributes.get(name);
+    }
+    else
+      return null;
   }
 
   /**
-   * Sets an attribute value.
-   *
-   * @param name the attribute name
-   * @param o the attribute value
+   * Returns an enumeration of the request attribute names.
    */
-  public void setAttribute(String name, Object o)
+  public Enumeration<String> getAttributeNames()
   {
-    _request.setAttribute(this, name, o);
+    HashMapImpl<String,Object> attributes = _attributes;
+
+    if (attributes != null) {
+      return Collections.enumeration(attributes.keySet());
+    }
+    else if (isSecure()) {
+      _attributes = new HashMapImpl<String,Object>();
+      _attributes = attributes;
+      _request.initAttributes(this);
+
+      return Collections.enumeration(attributes.keySet());
+    }
+    else
+      return (Enumeration<String>) NullEnumeration.create();
   }
 
   /**
-   * Enumerates all attribute names in the request.
-   */
-  public Enumeration getAttributeNames()
-  {
-    return _request.getAttributeNames();
-  }
-
-  /**
-   * Removes the given attribute.
+   * Sets the value of the named request attribute.
    *
-   * @param name the attribute name
+   * @param name the attribute name.
+   * @param value the new attribute value.
+   */
+  public void setAttribute(String name, Object value)
+  {
+    HashMapImpl<String,Object> attributes = _attributes;
+
+    if (value != null) {
+      if (attributes == null) {
+        attributes = new HashMapImpl<String,Object>();
+        _attributes = attributes;
+        _request.initAttributes(this);
+      }
+
+      Object oldValue = attributes.put(name, value);
+
+      WebApp webApp = getWebApp();
+
+      if (webApp != null) {
+        for (ServletRequestAttributeListener listener
+               : webApp.getRequestAttributeListeners()) {
+          ServletRequestAttributeEvent event;
+
+          if (oldValue != null) {
+            event = new ServletRequestAttributeEvent(webApp, this,
+                                                     name, oldValue);
+
+            listener.attributeReplaced(event);
+          }
+          else {
+            event = new ServletRequestAttributeEvent(webApp, this,
+                                                     name, value);
+
+            listener.attributeAdded(event);
+          }
+        }
+      }
+    }
+    else
+      removeAttribute(name);
+  }
+
+  /**
+   * Removes the value of the named request attribute.
+   *
+   * @param name the attribute name.
    */
   public void removeAttribute(String name)
   {
-    _request.removeAttribute(this, name);
+    HashMapImpl<String,Object> attributes = _attributes;
+
+    if (attributes == null)
+      return;
+
+    Object oldValue = attributes.remove(name);
+
+    WebApp webApp = getWebApp();
+
+    for (ServletRequestAttributeListener listener
+           : webApp.getRequestAttributeListeners()) {
+      ServletRequestAttributeEvent event;
+
+      event = new ServletRequestAttributeEvent(webApp, this,
+                                               name, oldValue);
+
+      listener.attributeRemoved(event);
+    }
+
+    if (oldValue instanceof ScopeRemoveListener) {
+      ((ScopeRemoveListener) oldValue).removeEvent(this, name);
+    }
   }
+
+  //
+  // request dispatching
+  //
 
   /**
    * Returns a request dispatcher for later inclusion or forwarding.  This
@@ -413,17 +529,35 @@ public class HttpServletRequestImpl implements CauchoRequest
    * (including query string) for the included file.
    * @return RequestDispatcher for later inclusion or forwarding.
    */
-  public RequestDispatcher getRequestDispatcher(String uri)
+  public RequestDispatcher getRequestDispatcher(String path)
   {
-    return _request.getRequestDispatcher(uri);
-  }
+    if (path == null || path.length() == 0)
+      return null;
+    else if (path.charAt(0) == '/')
+      return getWebApp().getRequestDispatcher(path);
+    else {
+      CharBuffer cb = new CharBuffer();
 
-  /**
-   * Returns the path of the URI.
-   */
-  public String getRealPath(String uri)
-  {
-    return _request.getRealPath(uri);
+      WebApp webApp = getWebApp();
+
+      String servletPath = getPageServletPath();
+      if (servletPath != null)
+        cb.append(servletPath);
+      String pathInfo = getPagePathInfo();
+      if (pathInfo != null)
+        cb.append(pathInfo);
+
+      int p = cb.lastIndexOf('/');
+      if (p >= 0)
+        cb.setLength(p);
+      cb.append('/');
+      cb.append(path);
+
+      if (webApp != null)
+        return webApp.getRequestDispatcher(cb.toString());
+
+      return null;
+    }
   }
 
   /**
@@ -433,7 +567,12 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public ServletContext getServletContext()
   {
-    return _request.getServletContext();
+    Invocation invocation = _invocation;
+
+    if (invocation != null)
+      return invocation.getWebApp();
+    else
+      return null;
   }
 
   /**
@@ -501,6 +640,7 @@ public class HttpServletRequestImpl implements CauchoRequest
    *
    * @since Servlet 3.0
    */
+  /*
   public boolean isSuspended()
   {
     if (_comet != null)
@@ -508,16 +648,20 @@ public class HttpServletRequestImpl implements CauchoRequest
     else
       return false;
   }
+  */
 
   /**
    * Returns true if the servlet is resumed
    *
    * @since Servlet 3.0
    */
+  /*
   public boolean isResumed()
   {
-    return _comet != null && ! _comet.isInitial() && ! _comet.isComplete();
+    // return _comet != null && ! _comet.isInitial() && ! _comet.isComplete();
+    return _comet != null && ! _comet.isComplete();
   }
+  */
 
   /**
    * Returns true if the servlet timed out
@@ -534,6 +678,7 @@ public class HttpServletRequestImpl implements CauchoRequest
    *
    * @since Servlet 3.0
    */
+  /*
   public boolean isInitial()
   {
     if (_comet != null)
@@ -541,6 +686,7 @@ public class HttpServletRequestImpl implements CauchoRequest
     else
       return true;
   }
+  */
 
   //
   // HttpServletRequest APIs
@@ -557,92 +703,183 @@ public class HttpServletRequestImpl implements CauchoRequest
   }
 
   /**
-   * Returns the entire request URI
+   * Returns the URI for the request
    */
   public String getRequestURI()
   {
-    return _request.getRequestURI();
+    if (_invocation != null)
+      return _invocation.getRawURI();
+    else
+      return "";
   }
 
   /**
-   * Reconstructs the URL the client used for the request.
-   *
-   * @since Servlet 2.3
+   * Returns the URI for the page.  getPageURI and getRequestURI differ
+   * for included files.  getPageURI gets the URI for the included page.
+   * getRequestURI returns the original URI.
    */
-  public StringBuffer getRequestURL()
+  public String getPageURI()
   {
-    return _request.getRequestURL();
+    return _invocation.getRawURI();
   }
 
+  /*
+  public abstract byte []getUriBuffer();
+
+  public abstract int getUriLength();
+  */
+
   /**
-   * Returns the part of the URI corresponding to the application's
-   * prefix.  The first part of the URI selects applications
-   * (ServletContexts).
-   *
-   * <p><code>getContextPath()</code> is /myapp for the uri
-   * /myapp/servlet/Hello,
+   * Returns the context part of the uri.  The context part is the part
+   * that maps to an webApp.
    */
   public String getContextPath()
   {
-    return _request.getContextPath();
+    if (_invocation != null)
+      return _invocation.getContextPath();
+    else
+      return "";
   }
 
   /**
-   * Returns the URI part corresponding to the selected servlet.
-   * The URI is relative to the application.
-   *
-   * <p/>Corresponds to CGI's <code>SCRIPT_NAME</code>
-   *
-   * <code>getServletPath()</code> is /servlet/Hello for the uri
-   * /myapp/servlet/Hello/foo.
-   *
-   * <code>getServletPath()</code> is /dir/hello.jsp
-   * for the uri /myapp/dir/hello.jsp/foo,
+   * Returns the context part of the uri.  For included files, this will
+   * return the included context-path.
+   */
+  public String getPageContextPath()
+  {
+    return getContextPath();
+  }
+
+  /**
+   * Returns the portion of the uri mapped to the servlet for the original
+   * request.
    */
   public String getServletPath()
   {
-    return _request.getServletPath();
+    if (_invocation != null)
+      return _invocation.getServletPath();
+    else
+      return "";
   }
 
   /**
-   * Returns the URI part after the selected servlet and null if there
-   * is no suffix.
-   *
-   * <p/>Corresponds to CGI's <code>PATH_INFO</code>
-   *
-   * <p><code>getPathInfo()</code> is /foo for
-   * the uri /myapp/servlet/Hello/foo.
-   *
-   * <code>getPathInfo()</code> is /hello.jsp for for the uri
-   * /myapp/dir/hello.jsp/foo.
+   * Returns the portion of the uri mapped to the servlet for the current
+   * page.
+   */
+  public String getPageServletPath()
+  {
+    if (_invocation != null)
+      return _invocation.getServletPath();
+    else
+      return "";
+  }
+
+  /**
+   * Returns the portion of the uri after the servlet path for the original
+   * request.
    */
   public String getPathInfo()
   {
-    return _request.getPathInfo();
+    if (_invocation != null)
+      return _invocation.getPathInfo();
+    else
+      return null;
   }
 
   /**
-   * Returns the physical path name for the path info.
-   *
-   * <p/>Corresponds to CGI's <code>PATH_TRANSLATED</code>
-   *
-   * @return null if there is no path info.
+   * Returns the portion of the uri after the servlet path for the current
+   * page.
+   */
+  public String getPagePathInfo()
+  {
+    if (_invocation != null)
+      return _invocation.getPathInfo();
+    else
+      return null;
+  }
+
+  /**
+   * Returns the URL for the request
+   */
+  public StringBuffer getRequestURL()
+  {
+    StringBuffer sb = new StringBuffer();
+
+    sb.append(getScheme());
+    sb.append("://");
+
+    sb.append(getServerName());
+    int port = getServerPort();
+
+    if (port > 0 &&
+        port != 80 &&
+        port != 443) {
+      sb.append(":");
+      sb.append(port);
+    }
+
+    sb.append(getRequestURI());
+
+    return sb;
+  }
+
+  /**
+   * @deprecated As of JSDK 2.1
+   */
+  public String getRealPath(String path)
+  {
+    if (path == null)
+      return null;
+    if (path.length() > 0 && path.charAt(0) == '/')
+      return _invocation.getWebApp().getRealPath(path);
+
+    String uri = getPageURI();
+    String context = getPageContextPath();
+    if (context != null)
+      uri = uri.substring(context.length());
+
+    int p = uri.lastIndexOf('/');
+    if (p >= 0)
+      path = uri.substring(0, p + 1) + path;
+
+    return _invocation.getWebApp().getRealPath(path);
+  }
+
+  /**
+   * Returns the real path of pathInfo.
    */
   public String getPathTranslated()
   {
-    return _request.getPathTranslated();
+    String pathInfo = getPathInfo();
+
+    if (pathInfo == null)
+      return null;
+    else
+      return getRealPath(pathInfo);
   }
 
   /**
-   * Returns the request's query string.  Form based servlets will use
-   * <code>ServletRequest.getParameter()</code> to decode the form values.
-   *
-   * <p/>Corresponds to CGI's <code>PATH_TRANSLATED</code>
+   * Returns the current page's query string.
    */
   public String getQueryString()
   {
-    return _request.getQueryString();
+    if (_invocation != null)
+      return _invocation.getQueryString();
+    else
+      return null;
   }
+
+  /**
+   * Returns the current page's query string.
+   */
+  public String getPageQueryString()
+  {
+    return getQueryString();
+  }
+
+  //
+  // header management
+  //
 
   /**
    * Returns the first value for a request header.
@@ -707,221 +944,57 @@ public class HttpServletRequestImpl implements CauchoRequest
     return _request.getDateHeader(name);
   }
 
-  /**
-   * Returns an array of all cookies sent by the client.
-   */
-  public Cookie []getCookies()
-  {
-    return _request.getCookies();
-  }
-
-  /**
-   * Returns a session.  If no session exists and create is true, then
-   * create a new session, otherwise return null.
-   *
-   * @param create If true, then create a new session if none exists.
-   */
-  public HttpSession getSession(boolean create)
-  {
-    return _request.getSession(create);
-  }
-
-  /**
-   * Returns the current session, creating one if necessary.
-   * Sessions are a convenience for keeping user state
-   * across requests.
-   */
-  public HttpSession getSession()
-  {
-    return _request.getSession();
-  }
-
-  /**
-   * Returns the session id.  Sessions are a convenience for keeping
-   * user state across requests.
-   *
-   * <p/>The session id is the value of the JSESSION cookie.
-   */
-  public String getRequestedSessionId()
-  {
-    return _request.getRequestedSessionId();
-  }
-
-  /**
-   * Returns true if the session is valid.
-   */
-  public boolean isRequestedSessionIdValid()
-  {
-    return _request.isRequestedSessionIdValid();
-  }
-
-  /**
-   * Returns true if the session came from a cookie.
-   */
-  public boolean isRequestedSessionIdFromCookie()
-  {
-    return _request.isRequestedSessionIdFromCookie();
-  }
-
-  /**
-   * Returns true if the session came URL-encoding.
-   */
-  public boolean isRequestedSessionIdFromURL()
-  {
-    return _request.isRequestedSessionIdFromURL();
-  }
-
-  /**
-   * Returns the auth type, i.e. BASIC, CLIENT-CERT, DIGEST, or FORM.
-   */
-  public String getAuthType()
-  {
-    return _request.getAuthType();
-  }
-
-  /**
-   * Returns the remote user if authenticated.
-   */
-  public String getRemoteUser()
-  {
-    return _request.getRemoteUser();
-  }
-
-  /**
-   * Returns true if the user is in the given role.
-   */
-  public boolean isUserInRole(String role)
-  {
-    return _request.isUserInRole(role);
-  }
-
-  /**
-   * Returns the equivalent principal object for the authenticated user.
-   */
-  public Principal getUserPrincipal()
-  {
-    return _request.getUserPrincipal();
-  }
-
-  /**
-   * @deprecated
-   */
-  public boolean isRequestedSessionIdFromUrl()
-  {
-    return _request.isRequestedSessionIdFromUrl();
-  }
-
   //
-  // CauchoRequest methods
+  // parameter/form
   //
 
-  public String getPageURI()
+  /**
+   * Returns an enumeration of the form names.
+   */
+  public Enumeration<String> getParameterNames()
   {
-    return _request.getPageURI();
-  }
+    if (_filledForm == null)
+      _filledForm = parseQuery();
 
-  public String getPageContextPath()
-  {
-    return _request.getPageContextPath();
-  }
-
-  public String getPageServletPath()
-  {
-    return _request.getPageServletPath();
-  }
-
-  public String getPagePathInfo()
-  {
-    return _request.getPagePathInfo();
-  }
-
-  public String getPageQueryString()
-  {
-    return _request.getPageQueryString();
-  }
-
-  public WebApp getWebApp()
-  {
-    return _request.getWebApp();
-  }
-
-  public ReadStream getStream()
-    throws IOException
-  {
-    return _request.getStream();
-  }
-
-  public int getRequestDepth(int depth)
-  {
-    return _request.getRequestDepth(depth);
-  }
-
-  public void setHeader(String key, String value)
-  {
-    _request.setHeader(key, value);
-  }
-
-  public boolean getVaryCookies()
-  {
-    return _request.getVaryCookies();
-  }
-
-  public String getVaryCookie()
-  {
-    return _request.getVaryCookie();
-  }
-
-  public void setVaryCookie(String cookie)
-  {
-    _request.setVaryCookie(cookie);
-  }
-
-  public boolean getHasCookie()
-  {
-    return _request.getHasCookie();
-  }
-
-  public boolean isTop()
-  {
-    return _request.isTop();
-  }
-
-  public HttpSession getMemorySession()
-  {
-    return _request.getMemorySession();
-  }
-
-  public Cookie getCookie(String name)
-  {
-    return _request.getCookie(name);
-  }
-
-  public void setHasCookie()
-  {
-    _request.setHasCookie();
-  }
-
-  public boolean isComet()
-  {
-    return _request.isComet();
+    return Collections.enumeration(_filledForm.keySet());
   }
 
   /**
-   * @since Servlet 3.0
+   * Returns a map of the form.
    */
-  public boolean authenticate(HttpServletResponse response)
-    throws IOException, ServletException
+  public Map<String,String[]> getParameterMap()
   {
-    return _request.authenticate(response);
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+
+    return Collections.unmodifiableMap(_filledForm);
   }
 
   /**
-   * @since Servlet 3.0
+   * Returns the form's values for the given name.
+   *
+   * @param name key in the form
+   * @return value matching the key
    */
-  public Part getPart(String name)
-    throws IOException, ServletException
+  public String []getParameterValues(String name)
   {
-    return _request.getPart(name);
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+
+    return (String []) _filledForm.get(name);
+  }
+
+  /**
+   * Returns the form primary value for the given name.
+   */
+  public String getParameter(String name)
+  {
+    String []values = getParameterValues(name);
+
+    if (values != null && values.length > 0)
+      return values[0];
+    else
+      return null;
   }
 
   /**
@@ -930,7 +1003,480 @@ public class HttpServletRequestImpl implements CauchoRequest
   public Iterable<Part> getParts()
     throws IOException, ServletException
   {
-    return _request.getParts();
+    if (! getContentType().startsWith("multipart/form-data"))
+      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
+
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+
+    return _parts;
+  }
+
+  public Part createPart(String name, Map<String, List<String>> headers)
+  {
+    return new PartImpl(name, headers);
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public Part getPart(String name)
+    throws IOException, ServletException
+  {
+    if (! getContentType().startsWith("multipart/form-data"))
+      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
+
+    if (_filledForm == null)
+      _filledForm = parseQuery();
+
+    for (Part part : _parts) {
+      if (name.equals(part.getName()))
+        return part;
+    }
+
+    return null;
+  }
+
+  /**
+   * Parses the query, either from the GET or the post.
+   *
+   * <p/>The character encoding is somewhat tricky.  If it's a post, then
+   * assume the encoded form uses the same encoding as
+   * getCharacterEncoding().
+   *
+   * <p/>If the request doesn't provide the encoding, use the
+   * character-encoding parameter from the webApp.
+   *
+   * <p/>Otherwise use the default system encoding.
+   */
+  private HashMapImpl<String,String[]> parseQuery()
+  {
+    HashMapImpl<String,String[]> form = _request.getForm();
+
+    try {
+      String query = getQueryString();
+      CharSegment contentType = _request.getContentTypeBuffer();
+
+      if (query == null && contentType == null)
+        return form;
+
+      Form formParser = _request.getFormParser();
+      long contentLength = _request.getLongContentLength();
+
+      String charEncoding = getCharacterEncoding();
+      if (charEncoding == null) {
+        charEncoding = (String) getAttribute(CAUCHO_CHAR_ENCODING);
+        if (charEncoding == null)
+          charEncoding = (String) getAttribute(CHAR_ENCODING);
+        if (charEncoding == null) {
+          Locale locale = (Locale) getAttribute(FORM_LOCALE);
+          if (locale != null)
+            charEncoding = Encoding.getMimeName(locale);
+        }
+      }
+
+      if (query != null) {
+        String queryEncoding = charEncoding;
+
+        if (queryEncoding == null && getServer() != null)
+          queryEncoding = getServer().getURLCharacterEncoding();
+
+        if (queryEncoding == null)
+          queryEncoding = CharacterEncoding.getLocalEncoding();
+
+        String javaEncoding = Encoding.getJavaName(queryEncoding);
+
+        formParser.parseQueryString(form, query, javaEncoding, true);
+      }
+
+      if (charEncoding == null)
+        charEncoding = CharacterEncoding.getLocalEncoding();
+
+      String javaEncoding = Encoding.getJavaName(charEncoding);
+
+      if (contentType == null || ! "POST".equalsIgnoreCase(getMethod())) {
+      }
+
+      else if (contentType.startsWith("application/x-www-form-urlencoded")) {
+        formParser.parsePostData(form, getInputStream(), javaEncoding);
+      }
+
+      else if (getWebApp().doMultipartForm()
+               && contentType.startsWith("multipart/form-data")) {
+        int length = contentType.length();
+        int i = contentType.indexOf("boundary=");
+
+        if (i < 0)
+          return form;
+
+        long formUploadMax = getWebApp().getFormUploadMax();
+
+        Object uploadMax = getAttribute("caucho.multipart.form.upload-max");
+        if (uploadMax instanceof Number)
+          formUploadMax = ((Number) uploadMax).longValue();
+
+        // XXX: should this be an error?
+        if (formUploadMax >= 0 && formUploadMax < contentLength) {
+          setAttribute("caucho.multipart.form.error",
+                       L.l("Multipart form upload of '{0}' bytes was too large.",
+                           String.valueOf(contentLength)));
+          setAttribute("caucho.multipart.form.error.size",
+                       new Long(contentLength));
+
+          return form;
+        }
+
+        MultipartConfig multipartConfig
+          = _invocation.getMultipartConfig();
+
+        long fileUploadMax = -1;
+
+        if (multipartConfig != null) {
+          formUploadMax = multipartConfig.maxRequestSize();
+          fileUploadMax = multipartConfig.maxFileSize();
+        }
+
+        if (multipartConfig != null
+            && formUploadMax > 0
+            && formUploadMax < contentLength)
+          throw new IllegalStateException(L.l(
+            "multipart form data request's Content-Length '{0}' is greater then configured in @MultipartConfig.maxRequestSize value: '{1}'",
+            contentLength,
+            formUploadMax));
+
+        i += "boundary=".length();
+        char ch = contentType.charAt(i);
+        CharBuffer boundary = new CharBuffer();
+        if (ch == '\'') {
+          for (i++; i < length && contentType.charAt(i) != '\''; i++)
+            boundary.append(contentType.charAt(i));
+        }
+        else if (ch == '\"') {
+          for (i++; i < length && contentType.charAt(i) != '\"'; i++)
+            boundary.append(contentType.charAt(i));
+        }
+        else {
+          for (;
+               i < length && (ch = contentType.charAt(i)) != ' ' &&
+                 ch != ';';
+               i++) {
+            boundary.append(ch);
+          }
+        }
+
+        _parts = new ArrayList<Part>();
+
+        try {
+          MultipartForm.parsePostData(form,
+                                      _parts,
+                                      getStream(false), boundary.toString(),
+                                      this,
+                                      javaEncoding,
+                                      formUploadMax,
+                                      fileUploadMax);
+        } catch (IOException e) {
+          log.log(Level.FINE, e.toString(), e);
+          setAttribute("caucho.multipart.form.error", e.getMessage());
+        }
+      }
+    } catch (IOException e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
+
+    return form;
+  }
+
+  //
+  // session/cookie management
+  //
+
+  /**
+   * Returns an array of all cookies sent by the client.
+   */
+  public Cookie []getCookies()
+  {
+    if (_cookiesIn == null) {
+      _cookiesIn = _request.getCookies();
+
+      SessionManager sessionManager = getSessionManager();
+      String sessionCookieName = getSessionCookie(sessionManager);
+
+      for (int i = 0; i < _cookiesIn.length; i++) {
+        Cookie cookie = _cookiesIn[i];
+
+        if (cookie.getName().equals(sessionCookieName)
+          && sessionManager.isSecure()) {
+          cookie.setSecure(true);
+          break;
+        }
+      }
+
+      /*
+      // The page varies depending on the presense of any cookies
+      setVaryCookie(null);
+
+      // If any cookies actually exist, the page is not anonymous
+      if (_cookiesIn != null && _cookiesIn.length > 0)
+        setHasCookie();
+      */
+    }
+
+    if (_cookiesIn == null || _cookiesIn.length == 0)
+      return null;
+    else
+      return _cookiesIn;
+  }
+
+  /**
+   * Returns the named cookie from the browser
+   */
+  public Cookie getCookie(String name)
+  {
+    /*
+    // The page varies depending on the presense of any cookies
+    setVaryCookie(name);
+    */
+
+    return findCookie(name);
+  }
+
+  private Cookie findCookie(String name)
+  {
+    Cookie []cookies = getCookies();
+
+    if (cookies == null)
+      return null;
+
+    int length = cookies.length;
+    for (int i = 0; i < length; i++) {
+      Cookie cookie = cookies[i];
+
+      if (cookie.getName().equals(name)) {
+        setHasCookie();
+        return cookie;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns the session id in the HTTP request.  The cookie has
+   * priority over the URL.  Because the webApp might be using
+   * the cookie to change the page contents, the caching sets
+   * vary: JSESSIONID.
+   */
+  public String getRequestedSessionId()
+  {
+    SessionManager manager = getSessionManager();
+
+    String cookieName = null;
+
+    if (manager != null && manager.enableSessionCookies()) {
+      setVaryCookie(getSessionCookie(manager));
+
+      String id = findSessionIdFromCookie();
+
+      if (id != null) {
+        _isSessionIdFromCookie = true;
+        setHasCookie();
+        return id;
+      }
+    }
+
+    String id = findSessionIdFromUrl();
+    if (id != null) {
+      return id;
+    }
+
+    if (manager != null && manager.enableSessionCookies())
+      return null;
+    else
+      return _request.findSessionIdFromConnection();
+  }
+
+  /**
+   * Returns the session id in the HTTP request cookies.
+   * Because the webApp might use the cookie to change
+   * the page contents, the caching sets vary: JSESSIONID.
+   */
+  protected String findSessionIdFromCookie()
+  {
+    SessionManager manager = getSessionManager();
+
+    if (manager == null || ! manager.enableSessionCookies())
+      return null;
+
+    Cookie cookie = getCookie(getSessionCookie(manager));
+
+    if (cookie != null) {
+      _isSessionIdFromCookie = true;
+      return cookie.getValue();
+    }
+    else
+      return null;
+  }
+
+  @Override
+  public boolean isSessionIdFromCookie()
+  {
+    return _isSessionIdFromCookie;
+  }
+
+  @Override
+  public String getSessionId()
+  {
+    String sessionId = getResponse().getSessionId();
+
+    if (sessionId != null)
+      return sessionId;
+    else
+      return getRequestedSessionId();
+  }
+
+  @Override
+  public void setSessionId(String sessionId)
+  {
+    getResponse().setSessionId(sessionId);
+  }
+
+  /**
+   * Returns the session id in the HTTP request from the url.
+   */
+  private String findSessionIdFromUrl()
+  {
+    // server/1319
+    // setVaryCookie(getSessionCookie(manager));
+
+    String id = _invocation != null ? _invocation.getSessionId() : null;
+    if (id != null)
+      setHasCookie();
+
+    return id;
+  }
+
+  /**
+   * Returns true if the current sessionId came from a cookie.
+   */
+  public boolean isRequestedSessionIdFromCookie()
+  {
+    return findSessionIdFromCookie() != null;
+  }
+
+  /**
+   * Returns true if the current sessionId came from the url.
+   */
+  public boolean isRequestedSessionIdFromURL()
+  {
+    return findSessionIdFromUrl() != null;
+  }
+
+  /**
+   * @deprecated
+   */
+  public boolean isRequestedSessionIdFromUrl()
+  {
+    return isRequestedSessionIdFromURL();
+  }
+
+  /**
+   * Returns the session id in the HTTP request.  The cookie has
+   * priority over the URL.  Because the webApp might be using
+   * the cookie to change the page contents, the caching sets
+   * vary: JSESSIONID.
+   */
+  public String getRequestedSessionIdNoVary()
+  {
+    boolean varyCookies = _varyCookies;
+    boolean hasCookie = _hasCookie;
+    boolean privateCache = _response.getPrivateCache();
+
+    String id = getRequestedSessionId();
+
+    _varyCookies = varyCookies;
+    _hasCookie = hasCookie;
+    _response.setPrivateOrResinCache(privateCache);
+
+    return id;
+  }
+
+  //
+  // security
+  //
+
+  @Override
+  protected String getRunAs()
+  {
+    return _runAs;
+  }
+
+  /**
+   * Gets the authorization type
+   */
+  public String getAuthType()
+  {
+    Object login = getAttribute(AbstractLogin.LOGIN_NAME);
+
+    if (login instanceof X509Certificate)
+      return HttpServletRequest.CLIENT_CERT_AUTH;
+
+    WebApp app = getWebApp();
+
+    if (app != null && app.getLogin() != null && getUserPrincipal() != null)
+      return app.getLogin().getAuthType();
+    else
+      return null;
+  }
+
+  /**
+   * Returns the login for the request.
+   */
+  protected Login getLogin()
+  {
+    WebApp webApp = getWebApp();
+
+    if (webApp != null)
+      return webApp.getLogin();
+    else
+      return null;
+  }
+
+  /**
+   * Returns true if any authentication is requested
+   */
+  public boolean isLoginRequested()
+  {
+    return _isLoginRequested;
+  }
+
+  /**
+   * @since Servlet 3.0
+   */
+  public boolean authenticate(HttpServletResponse response)
+    throws IOException, ServletException
+  {
+    WebApp webApp = getWebApp();
+
+    if (webApp == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    // server/1aj{0,1}
+    Authenticator auth = webApp.getConfiguredAuthenticator();
+
+    if (auth == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    Login login = webApp.getLogin();
+
+    if (login == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    Principal principal = login.login(this, response, true);
+
+    if (principal != null)
+      return true;
+
+    return false;
   }
 
   /**
@@ -939,16 +1485,306 @@ public class HttpServletRequestImpl implements CauchoRequest
   public void login(String username, String password)
     throws ServletException
   {
-    _request.login(username, password);
+    WebApp webApp = getWebApp();
+
+    Authenticator auth = webApp.getConfiguredAuthenticator();
+
+    if (auth == null)
+      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
+
+    // server/1aj0
+    Login login = webApp.getLogin();
+
+    if (login == null)
+      throw new ServletException(L.l("No login mechanism is configured for '{0}'", getWebApp()));
+
+    if (! login.isPasswordBased())
+      throw new ServletException(L.l("Authentication mechanism '{0}' does not support password authentication", login));
+
+    removeAttribute(Login.LOGIN_USER);
+    removeAttribute(Login.LOGIN_PASSWORD);
+
+    Principal principal = login.getUserPrincipal(this);
+
+    if (principal != null)
+      throw new ServletException(L.l("UserPrincipal object has already been established"));
+
+    setAttribute(Login.LOGIN_USER, username);
+    setAttribute(Login.LOGIN_PASSWORD, password);
+
+    try {
+      login.login(this, getResponse(), true);
+    }
+    finally {
+      removeAttribute(Login.LOGIN_USER);
+      removeAttribute(Login.LOGIN_PASSWORD);
+    }
   }
 
   /**
-   * @since Servlet 3.0
+   * Authenticate the user.
+   */
+  public boolean login(boolean isFail)
+  {
+    try {
+      /*
+      Principal user = null;
+      user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
+
+      if (user != null)
+        return true;
+      */
+
+      WebApp webApp = getWebApp();
+      if (webApp == null) {
+        if (log.isLoggable(Level.FINE))
+          log.finer("authentication failed, no web-app found");
+
+        _response.sendError(HttpServletResponse.SC_FORBIDDEN);
+
+        return false;
+      }
+
+      // If the authenticator can find the user, return it.
+      Login login = webApp.getLogin();
+
+      if (login != null) {
+        Principal user = login.login(this, getResponse(), isFail);
+
+        return user != null;
+        /*
+        if (user == null)
+          return false;
+
+        setAttribute(AbstractLogin.LOGIN_NAME, user);
+
+        return true;
+        */
+      }
+      else if (isFail) {
+        if (log.isLoggable(Level.FINE))
+          log.finer("authentication failed, no login module found for "
+                    + webApp);
+
+        _response.sendError(HttpServletResponse.SC_FORBIDDEN);
+
+        return false;
+      }
+      else {
+        // if a non-failure, then missing login is fine
+
+        return false;
+      }
+    } catch (IOException e) {
+      log.log(Level.FINE, e.toString(), e);
+
+      return false;
+    }
+  }
+
+  /**
+   * Gets the remote user from the authorization type
+   */
+  public String getRemoteUser()
+  {
+    Principal principal = getUserPrincipal();
+
+    if (principal != null)
+      return principal.getName();
+    else
+      return null;
+  }
+
+  /**
+   * Internal logging return to get the remote user.  If the request already
+   * knows the user, get it, otherwise just return null.
+   */
+  public String getRemoteUser(boolean create)
+  {
+    /*
+    if (getSession(false) == null)
+      return null;
+    */
+
+    Principal user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
+
+    if (user == null && create)
+      user = getUserPrincipal();
+
+    if (user != null)
+      return user.getName();
+    else
+      return null;
+  }
+
+  /**
+   * Returns the Principal representing the logged in user.
+   */
+  public Principal getUserPrincipal()
+  {
+    _isLoginRequested = true;
+
+    Principal user;
+    user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
+
+    if (user != null)
+      return user;
+
+    WebApp app = getWebApp();
+    if (app == null)
+      return null;
+
+    // If the authenticator can find the user, return it.
+    Login login = app.getLogin();
+
+    if (login != null) {
+      user = login.getUserPrincipal(this);
+
+      if (user != null) {
+        _response.setPrivateCache(true);
+      }
+      else {
+        // server/123h, server/1920
+        // distinguishes between setPrivateCache and setPrivateOrResinCache
+        // _response.setPrivateOrResinCache(true);
+      }
+    }
+
+    return user;
+  }
+
+  /**
+   * Logs out the principal.
    */
   public void logout()
-    throws ServletException
   {
-    _request.logout();
+    Login login = getLogin();
+
+    if (login != null) {
+      login.logout(getUserPrincipal(), this, getResponse());
+    }
+  }
+
+  /**
+   * Clear the principal from the request object.
+   */
+  public void logoutUserPrincipal()
+  {
+    // XXX:
+    /*
+    if (_session != null)
+      _session.logout();
+    */
+  }
+
+  /**
+   * Sets the overriding role.
+   */
+  public String runAs(String role)
+  {
+    String oldRunAs = _runAs;
+
+    _runAs = role;
+
+    return oldRunAs;
+  }
+
+  public void setSecure(boolean isSecure)
+  {
+    // server/12ds
+    _isSecure = isSecure;
+  }
+
+  //
+  // deprecated
+  //
+
+  public ReadStream getStream()
+    throws IOException
+  {
+    return _request.getStream();
+  }
+
+  public ReadStream getStream(boolean isFlush)
+    throws IOException
+  {
+    return _request.getStream(isFlush);
+  }
+
+  public int getRequestDepth(int depth)
+  {
+    return depth;
+  }
+
+  public void setHeader(String key, String value)
+  {
+    _request.setHeader(key, value);
+  }
+
+  public void setSyntheticCacheHeader(boolean isTop)
+  {
+    _isSyntheticCacheHeader = isTop;
+  }
+
+  public boolean isSyntheticCacheHeader()
+  {
+    return _isSyntheticCacheHeader;
+  }
+
+  /**
+   * Called if the page depends on a cookie.  If the cookie is null, then
+   * the page depends on all cookies.
+   *
+   * @param cookie the cookie the page depends on.
+   */
+  public void setVaryCookie(String cookie)
+  {
+    _varyCookies = true;
+
+    // XXX: server/1315 vs 2671
+    // _response.setPrivateOrResinCache(true);
+  }
+
+  /**
+   * Returns true if the page depends on cookies.
+   */
+  public boolean getVaryCookies()
+  {
+    return _varyCookies;
+  }
+
+  /**
+   * Set when the page actually has a cookie.
+   */
+  public void setHasCookie()
+  {
+    _hasCookie = true;
+
+    // XXX: 1171 vs 1240
+    // _response.setPrivateOrResinCache(true);
+  }
+
+  /**
+   * True if this page uses cookies.
+   */
+  public boolean getHasCookie()
+  {
+    if (_hasCookie)
+      return true;
+    else if (_invocation != null)
+      return _invocation.getSessionId() != null;
+    else
+      return false;
+  }
+
+  public boolean isTop()
+  {
+    return true;
+  }
+
+  public boolean isComet()
+  {
+    return _request.isComet();
   }
 
   public ConnectionCometController toComet()
@@ -964,6 +1800,17 @@ public class HttpServletRequestImpl implements CauchoRequest
   public ConnectionCometController getCometController()
   {
     return _comet;
+  }
+
+  /**
+   * Adds a file to be removed at the end.
+   */
+  public void addCloseOnExit(Path path)
+  {
+    if (_closeOnExit == null)
+      _closeOnExit = new ArrayList<Path>();
+
+    _closeOnExit.add(path);
   }
 
   public boolean isDuplex()
@@ -991,16 +1838,6 @@ public class HttpServletRequestImpl implements CauchoRequest
     _request.clientDisconnect();
   }
 
-  public boolean isLoginRequested()
-  {
-    return _request.isLoginRequested();
-  }
-
-  public boolean login(boolean isFail)
-  {
-    return _request.login(isFail);
-  }
-
   public Connection getConnection()
   {
     return _request.getConnection();
@@ -1023,6 +1860,21 @@ public class HttpServletRequestImpl implements CauchoRequest
   public boolean hasRequest()
   {
     return _request.hasRequest();
+  }
+
+  public void setInvocation(Invocation invocation)
+  {
+    _invocation = invocation;
+  }
+
+  public Invocation getInvocation()
+  {
+    return _invocation;
+  }
+
+  public long getStartTime()
+  {
+    return _request.getStartTime();
   }
 
   public void finishInvocation()
@@ -1097,7 +1949,12 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public boolean isAsyncSupported()
   {
-    return true;
+    Invocation invocation = _invocation;
+
+    if (invocation != null)
+      return invocation.isAsyncSupported();
+    else
+      return false;
   }
 
   /**
@@ -1122,6 +1979,10 @@ public class HttpServletRequestImpl implements CauchoRequest
    */
   public AsyncContext startAsync()
   {
+    if (! isAsyncSupported())
+      throw new IllegalStateException(L.l("The servlet '{0}' at '{1}' does not support async because the servlet or one of the filters does not support asynchronous mode.  The servlet should be annotated with a @WebServlet(asyncSupported=true) annotation or have a <async-supported> tag in the web.xml.",
+                                          getServletName(), getServletPath()));
+
     if (_comet == null) {
       _comet = _request.getConnection().toComet(true, this, _response);
       if (_asyncTimeout > 0)
@@ -1152,14 +2013,521 @@ public class HttpServletRequestImpl implements CauchoRequest
     return (AsyncContext) _comet;
   }
 
+  //
+  // WebSocket
+  //
+
+  public WebSocketContext startWebSocket(WebSocketListener listener)
+  {
+    if (log.isLoggable(Level.FINE))
+      log.fine(this + " upgrade HTTP to WebSocket " + listener);
+
+    String connection = getHeader("Connection");
+    String upgrade = getHeader("Upgrade");
+
+    if (! "WebSocket".equals(upgrade)) {
+      throw new IllegalStateException(L.l("HTTP Upgrade header '{0}' must be 'WebSocket', because the WebSocket protocol requires an Upgrade: WebSocket header.",
+                                          upgrade));
+    }
+
+    if (! "Upgrade".equalsIgnoreCase(connection)) {
+      throw new IllegalStateException(L.l("HTTP Connection header '{0}' must be 'Upgrade', because the WebSocket protocol requires a Connection: Upgrade header.",
+                                          connection));
+    }
+
+    String origin = getHeader("Origin");
+
+    if (origin == null) {
+      throw new IllegalStateException(L.l("HTTP Origin header is required, because the WebSocket protocol requires an Origin header."));
+    }
+
+    _response.setStatus(101, "Web Socket Protocol Handshake");
+    _response.setHeader("Upgrade", "WebSocket");
+
+    _response.setContentLength(0);
+
+    StringBuilder sb = new StringBuilder();
+    if (isSecure())
+      sb.append("wss://");
+    else
+      sb.append("ws://");
+    sb.append(getServerName());
+
+    if (! isSecure() && getServerPort() != 80
+        || isSecure() && getServerPort() != 443) {
+      sb.append(":");
+      sb.append(getServerPort());
+    }
+
+    sb.append(getContextPath());
+    if (getServletPath() != null)
+      sb.append(getServletPath());
+
+    String url = sb.toString();
+
+    _response.setHeader("WebSocket-Location", url);
+    _response.setHeader("WebSocket-Origin", origin.toLowerCase());
+
+    String protocol = getHeader("WebSocket-Protocol");
+
+    if (protocol != null)
+      _response.setHeader("WebSocket-Protocol", protocol);
+
+    WebSocketContextImpl duplex
+      = new WebSocketContextImpl(this, _response, listener);
+
+    TcpDuplexController controller = _request.startDuplex(duplex);
+    duplex.setController(controller);
+
+    try {
+      duplex.onStart();
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+
+    return duplex;
+  }
+
+  public DuplexContext startDuplex(DuplexListener listener)
+  {
+    if (log.isLoggable(Level.FINE))
+      log.fine(this + " upgrade HTTP to " + listener);
+
+    if (_response.getStatus() != 101)
+      _response.setStatus(101);
+
+    _response.setContentLength(0);
+
+    DuplexContextImpl duplex
+      = new DuplexContextImpl(this, _response, listener);
+
+    TcpDuplexController controller = _request.startDuplex(duplex);
+    duplex.setController(controller);
+
+    return duplex;
+  }
+
+  int getAvailable()
+    throws IOException
+  {
+    return _request.getAvailable();
+  }
+
   public DispatcherType getDispatcherType()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
   @Override
+  protected void finishRequest()
+    throws IOException
+  {
+    super.finishRequest();
+
+    // ioc/0a10
+    cleanup();
+
+    if (_closeOnExit != null) {
+      for (int i = _closeOnExit.size() - 1; i >= 0; i--) {
+        Path path = _closeOnExit.get(i);
+
+        try {
+          path.remove();
+        } catch (Throwable e) {
+          log.log(Level.FINE, e.toString(), e);
+        }
+      }
+    }
+  }
+
+  public void cleanup()
+  {
+    HashMapImpl<String,Object> attributes = _attributes;
+
+    if (attributes != null) {
+      for (Map.Entry<String,Object> entry : attributes.entrySet()) {
+        Object value = entry.getValue();
+
+        if (value instanceof ScopeRemoveListener) {
+          ((ScopeRemoveListener) value).removeEvent(this, entry.getKey());
+        }
+      }
+    }
+  }
+
+  //
+  // XXX: unsorted
+  //
+
+  /**
+   * Returns the servlet name.
+   */
+  public String getServletName()
+  {
+    if (_invocation != null) {
+      return _invocation.getServletName();
+    }
+    else
+      return null;
+  }
+
+  public final Server getServer()
+  {
+    return _request.getServer();
+  }
+
+  /**
+   * Returns the invocation's webApp.
+   */
+  public final WebApp getWebApp()
+  {
+    if (_invocation != null)
+      return _invocation.getWebApp();
+    else
+      return null;
+  }
+
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _request + "]";
+  }
+
+  private class PartImpl implements Part {
+    private String _name;
+    private Map<String, List<String>> _headers;
+    private Object _value;
+    private Path _newPath;
+
+    private PartImpl(String name, Map<String, List<String>> headers)
+    {
+      _name = name;
+      _headers = headers;
+    }
+
+    public void delete()
+      throws IOException
+    {
+      if (_newPath != null)
+        _newPath.remove();
+
+      Object value = getValue();
+
+      if (! (value instanceof FilePath))
+        throw new IOException(L.l("Part.delete() is not applicable to part '{0}':'{1}'", _name, value));
+
+      ((FilePath)value).remove();
+    }
+
+    public String getContentType()
+    {
+      String[] value = _filledForm.get(_name + ".content-type");
+
+      if (value != null && value.length > 0)
+        return value[0];
+
+      return null;
+    }
+
+    public String getHeader(String name)
+    {
+      List<String> values = _headers.get(name);
+
+      if (values != null && values.size() > 0)
+        return values.get(0);
+
+      return null;
+    }
+
+    public Iterable<String> getHeaderNames()
+    {
+      return _headers.keySet();
+    }
+
+    public Iterable<String> getHeaders(String name)
+    {
+      return _headers.get(name);
+    }
+
+    public InputStream getInputStream()
+      throws IOException
+    {
+      Object value = getValue();
+
+      if (value instanceof FilePath)
+        return ((FilePath)value).openRead();
+
+      throw new IOException(L.l("Part.getInputStream() is not applicable to part '{0}':'{1}'", _name, value));
+    }
+
+    public String getName()
+    {
+      return _name;
+    }
+
+    public long getSize()
+    {
+      Object value = getValue();
+
+      if (value instanceof FilePath) {
+        return ((Path) value).getLength();
+      }
+      else if (value instanceof String) {
+        return -1;
+      }
+      else if (value == null) {
+        return -1;
+      }
+      else {
+        log.finest(L.l("Part.getSize() is not applicable to part'{0}':'{1}'",
+                       _name, value));
+
+        return -1;
+      }
+    }
+
+    public void write(String fileName)
+      throws IOException
+    {
+      if (_newPath != null)
+        throw new IOException(L.l(
+          "Contents of part '{0}' has already been written to '{1}'",
+          _name,
+          _newPath));
+
+      Path path;
+
+      Object value = getValue();
+
+      if (!(value instanceof FilePath))
+        throw new IOException(L.l(
+          "Part.write() is not applicable to part '{0}':'{1}'",
+          _name,
+          value));
+      else
+        path = (Path) value;
+
+      MultipartConfig mc = _invocation.getMultipartConfig();
+      String location = mc.location().replace('\\', '/');
+      fileName = fileName.replace('\\', '/');
+
+      String file;
+
+      if (location.charAt(location.length() -1) != '/' && fileName.charAt(fileName.length() -1) != '/')
+        file = location + '/' + fileName;
+      else
+        file = location + fileName;
+
+      _newPath = Vfs.lookup(file);
+
+      if (_newPath.exists())
+        throw new IOException(L.l("File '{0}' already exists.", _newPath));
+
+      Path parent = _newPath.getParent();
+
+      if (! parent.exists())
+        if (! parent.mkdirs())
+          throw new IOException(L.l("Unable to create path '{0}'. Check permissions.", parent));
+
+      if (! path.renameTo(_newPath)) {
+        WriteStream out = null;
+
+        try {
+          out = _newPath.openWrite();
+
+          path.writeToStream(out);
+
+          out.flush();
+
+          out.close();
+        } catch (IOException e) {
+          log.log(Level.SEVERE, L.l("Cannot write contents of '{0}' to '{1}'", path, _newPath), e);
+
+          throw e;
+        } finally {
+          if (out != null)
+            out.close();
+        }
+      }
+    }
+
+    private Object getValue()
+    {
+      if (_value != null)
+        return _value;
+
+      String []values = _filledForm.get(_name + ".file");
+
+      if (values != null && values.length > 0) {
+        _value = Vfs.lookup(values[0]);
+      } else {
+        values = _filledForm.get(_name);
+
+        if (values != null && values.length > 0)
+          _value = values[0];
+      }
+
+      return _value;
+    }
+  }
+
+  static class DuplexContextImpl implements DuplexContext, TcpDuplexHandler {
+    private final HttpServletRequestImpl _request;
+    private final HttpServletResponseImpl _response;
+
+    private final DuplexListener _listener;
+
+    private TcpDuplexController _controller;
+    private boolean _isComplete;
+
+    DuplexContextImpl(HttpServletRequestImpl request,
+                      HttpServletResponseImpl response,
+                      DuplexListener listener)
+    {
+      _request = request;
+      _response = response;
+      _listener = listener;
+    }
+
+    public void setController(TcpDuplexController controller)
+    {
+      _controller = controller;
+    }
+
+    public void setTimeout(long timeout)
+    {
+      _controller.setIdleTimeMax(timeout);
+    }
+
+    public long getTimeout()
+    {
+      return _controller.getIdleTimeMax();
+    }
+
+    public ServletRequest getRequest()
+    {
+      return _request;
+    }
+
+    public ServletResponse getResponse()
+    {
+      return _response;
+    }
+
+    public void complete()
+    {
+      _controller.complete();
+    }
+
+    public void onRead(TcpDuplexController duplex)
+      throws IOException
+    {
+      do {
+        _listener.onRead(this);
+      } while (_request.getAvailable() > 0);
+    }
+
+    public void onComplete(TcpDuplexController duplex)
+      throws IOException
+    {
+      _listener.onComplete(this);
+    }
+
+    public void onTimeout(TcpDuplexController duplex)
+      throws IOException
+    {
+      _listener.onTimeout(this);
+    }
+
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _listener + "]";
+    }
+  }
+
+  static class WebSocketContextImpl
+    implements WebSocketContext, TcpDuplexHandler
+  {
+    private final HttpServletRequestImpl _request;
+    private final HttpServletResponseImpl _response;
+
+    private final WebSocketListener _listener;
+
+    private TcpDuplexController _controller;
+    private boolean _isComplete;
+
+    WebSocketContextImpl(HttpServletRequestImpl request,
+                         HttpServletResponseImpl response,
+                         WebSocketListener listener)
+    {
+      _request = request;
+      _response = response;
+      _listener = listener;
+    }
+
+    public void setController(TcpDuplexController controller)
+    {
+      _controller = controller;
+    }
+
+    public void setTimeout(long timeout)
+    {
+      _controller.setIdleTimeMax(timeout);
+    }
+
+    public long getTimeout()
+    {
+      return _controller.getIdleTimeMax();
+    }
+
+    public InputStream getInputStream()
+      throws IOException
+    {
+      return _request.getInputStream();
+    }
+
+    public OutputStream getOutputStream()
+      throws IOException
+    {
+      return _response.getOutputStream();
+    }
+
+    public void complete()
+    {
+      _controller.complete();
+    }
+
+    void onStart()
+      throws IOException
+    {
+      _listener.onStart(this);
+    }
+
+    public void onRead(TcpDuplexController duplex)
+      throws IOException
+    {
+      do {
+        _listener.onRead(this);
+      } while (_request.getAvailable() > 0);
+    }
+
+    public void onComplete(TcpDuplexController duplex)
+      throws IOException
+    {
+      _listener.onComplete(this);
+    }
+
+    public void onTimeout(TcpDuplexController duplex)
+      throws IOException
+    {
+      _listener.onTimeout(this);
+    }
+
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _listener + "]";
+    }
   }
 }

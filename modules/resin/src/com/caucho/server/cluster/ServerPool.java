@@ -34,12 +34,14 @@ import com.caucho.util.L10N;
 import com.caucho.util.Alarm;
 import com.caucho.util.QDate;
 import com.caucho.vfs.*;
+import com.caucho.admin.*;
 import com.caucho.server.resin.*;
 
 import javax.management.ObjectName;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -77,6 +79,8 @@ public class ServerPool
   private final boolean _isSecure;
 
   private String _debugId;
+  private String _statCategory;
+  private String _statId;
 
   private Path _tcpPath;
 
@@ -108,7 +112,7 @@ public class ServerPool
   private volatile int _activeCount;
   private volatile int _startingCount;
 
-  private volatile int _loadBalanceAllocateCount;
+  private final AtomicInteger _loadBalanceAllocateCount = new AtomicInteger();
 
   // numeric value representing the throttle state
   private volatile int _warmupState;
@@ -127,6 +131,13 @@ public class ServerPool
   private volatile double _latencyFactor;
 
   // statistics
+  private ActiveTimeProbe _requestTimeProbe;
+  private ActiveProbe _connProbe;
+  private ActiveProbe _idleProbe;
+  private CountProbe _connFailProbe;
+  private CountProbe _requestFailProbe;
+  private CountProbe _requestBusyProbe;
+
   private volatile long _keepaliveCountTotal;
   private volatile long _connectCountTotal;
   private volatile long _failCountTotal;
@@ -137,16 +148,29 @@ public class ServerPool
 
   public ServerPool(String serverId,
                     String targetId,
+                    String statCategory,
+                    String statId,
                     String address,
                     int port,
                     boolean isSecure)
   {
     _serverId = serverId;
+
+    if ("".equals(targetId))
+      targetId = "default";
+
     _targetId = targetId;
     _debugId = _serverId + "->" + _targetId;
     _address = address;
     _port = port;
     _isSecure = isSecure;
+
+    _statCategory = statCategory;
+
+    if (! "".equals(statId) && ! statId.startsWith("|"))
+      statId = "|" + statId;
+
+    _statId = statId;
   }
 
   public ServerPool(String serverId,
@@ -154,6 +178,8 @@ public class ServerPool
   {
     this(serverId,
          server.getId(),
+         "Resin|Cluster",
+         getStatId(server),
          server.getClusterPort().getAddress(),
          server.getClusterPort().getPort(),
          server.getClusterPort().isSSL());
@@ -165,6 +191,18 @@ public class ServerPool
     _loadBalanceRecoverTime = server.getLoadBalanceRecoverTime();
     _loadBalanceWarmupTime = server.getLoadBalanceWarmupTime();
     _loadBalanceWeight = server.getLoadBalanceWeight();
+  }
+
+  private static String getStatId(ClusterServer server)
+  {
+    String targetCluster = server.getCluster().getId();
+
+    if ("".equals(targetCluster))
+      targetCluster = "default";
+
+    int index = server.getIndex();
+
+    return String.format("%02x:%s", index, targetCluster);
   }
 
   /**
@@ -345,7 +383,7 @@ public class ServerPool
    */
   public int getLoadBalanceAllocateCount()
   {
-    return _loadBalanceAllocateCount;
+    return _loadBalanceAllocateCount.get();
   }
 
   /**
@@ -353,9 +391,7 @@ public class ServerPool
    */
   public void allocateLoadBalance()
   {
-    synchronized (this) {
-      _loadBalanceAllocateCount++;
-    }
+    _loadBalanceAllocateCount.incrementAndGet();
   }
 
   /**
@@ -363,9 +399,7 @@ public class ServerPool
    */
   public void freeLoadBalance()
   {
-    synchronized (this) {
-      _loadBalanceAllocateCount--;
-    }
+    _loadBalanceAllocateCount.decrementAndGet();
   }
 
   /**
@@ -614,6 +648,8 @@ public class ServerPool
     _lastBusyTime = Alarm.getCurrentTime();
     _firstSuccessTime = 0;
 
+    _requestBusyProbe.start();
+
     synchronized (this) {
       _busyCountTotal++;
 
@@ -627,6 +663,8 @@ public class ServerPool
     _failTime = Alarm.getCurrentTime();
     _lastFailTime = _failTime;
     _firstSuccessTime = 0;
+
+    getRequestFailProbe().start();
 
     synchronized (this) {
       _failCountTotal++;
@@ -643,6 +681,8 @@ public class ServerPool
    */
   public void failSocket()
   {
+    getRequestFailProbe().start();
+
     synchronized (this) {
       _failCountTotal++;
 
@@ -669,6 +709,8 @@ public class ServerPool
    */
   public void failConnect()
   {
+    getConnectionFailProbe().start();
+
     synchronized (this) {
       _failCountTotal++;
 
@@ -697,6 +739,8 @@ public class ServerPool
    */
   public void busy()
   {
+    getRequestBusyProbe().start();
+
     synchronized (this) {
       _lastBusyTime = Alarm.getCurrentTime();
       _firstSuccessTime = 0;
@@ -876,6 +920,7 @@ public class ServerPool
           _keepaliveCountTotal++;
 
           stream.clearFreeTime();
+          stream.toActive();
 
           return stream;
         }
@@ -1042,8 +1087,9 @@ public class ServerPool
         oldStream.closeImpl();
     } while (oldStream != null);
 
-    if (stream != null)
+    if (stream != null) {
       stream.closeImpl();
+    }
   }
 
   private void updateWarmup()
@@ -1322,6 +1368,73 @@ public class ServerPool
       else
         stream.close();
     }
+  }
+
+  //
+  // statistics
+  //
+
+  public ActiveProbe getConnectionProbe()
+  {
+    if (_connProbe == null) {
+      _connProbe
+        = ProbeManager.createActiveProbe(_statCategory + "|Connection",
+                                         _statId);
+    }
+
+    return _connProbe;
+  }
+
+  public CountProbe getConnectionFailProbe()
+  {
+    if (_connFailProbe == null) {
+      String name = _statCategory + "|Connection Fail|" + _statId;
+      _connFailProbe = ProbeManager.createCountProbe(name);
+    }
+
+    return _connFailProbe;
+  }
+
+  public ActiveTimeProbe getRequestTimeProbe()
+  {
+    if (_requestTimeProbe == null) {
+      _requestTimeProbe
+        = ProbeManager.createActiveTimeProbe(_statCategory + "|Request",
+                                             "Time", _statId);
+    }
+
+    return _requestTimeProbe;
+  }
+
+  public CountProbe getRequestFailProbe()
+  {
+    if (_requestFailProbe == null) {
+      String name = _statCategory + "|Request Fail" + _statId;
+      _requestFailProbe = ProbeManager.createCountProbe(name);
+    }
+
+    return _requestFailProbe;
+  }
+
+  public CountProbe getRequestBusyProbe()
+  {
+    if (_requestBusyProbe == null) {
+      String name = _statCategory + "|Request Busy" + _statId;
+      _requestBusyProbe = ProbeManager.createCountProbe(name);
+    }
+
+    return _requestBusyProbe;
+  }
+
+  public ActiveProbe getIdleProbe()
+  {
+    if (_idleProbe == null) {
+      _idleProbe
+        = ProbeManager.createActiveProbe(_statCategory + "|Idle",
+                                         _statId);
+    }
+
+    return _idleProbe;
   }
 
   @Override

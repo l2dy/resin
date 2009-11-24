@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -62,7 +62,6 @@ import java.util.logging.Logger;
 /**
  * mysqli object oriented API facade
  */
-@ResourceType("mysql link")
 public class Mysqli extends JdbcConnectionResource {
   private static final Logger log = Logger.getLogger(Mysqli.class.getName());
   private static final L10N L = new L10N(Mysqli.class);
@@ -70,6 +69,13 @@ public class Mysqli extends JdbcConnectionResource {
   protected static final String DRIVER
     = "com.mysql.jdbc.Driver";
 
+  // Because _checkedDriverVersion is static, it affects spy output
+  // for various qa's.  If running them individually, there is an
+  // extra call to getMetaData in the log, but if a Mysqli object
+  // is created in a non-spy qa before the spy qa in question, there
+  // is no getMetaData call logged.  The spy qa's are written with
+  // the assumption that _checkedDriverVersion has already been set,
+  // i.e. without the getMetaData call.
   private static volatile String _checkedDriverVersion = null;
   private static Object _checkDriverLock = new Object();
 
@@ -160,11 +166,6 @@ public class Mysqli extends JdbcConnectionResource {
   protected Mysqli(Env env)
   {
     super(env);
-  }
-
-  public String getResourceType()
-  {
-    return "mysql link";
   }
 
   public boolean isLastSqlDescribe()
@@ -974,7 +975,8 @@ public class Mysqli extends JdbcConnectionResource {
         return false;
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
-      getEnv().warning(e.getMessage());
+      // php/142d - php doesn't issue a warning if the database is
+      // unselectable.  modx depends on this behavior.
       return false;
     }
   }

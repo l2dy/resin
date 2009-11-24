@@ -198,6 +198,70 @@ public final class OwnerServerTriad
     if (pool != null && pool.isActive() && server != oldServer)
       return server;
 
+    // force the send.  Server must be active, but pool may have a failure
+
+    server = _primary;
+    if (server != null && server.isActive()) {
+      pool = server.getServerPool();
+    
+      if (pool != null && server != oldServer)
+        return server;
+    }
+
+    server = _secondary;
+    if (server != null && server.isActive()) {
+      pool = server.getServerPool();
+    
+      if (pool != null && server != oldServer)
+        return server;
+    }
+
+    server = _tertiary;
+    if (server != null && server.isActive()) {
+      pool = server.getServerPool();
+    
+      if (pool != null && server != oldServer)
+        return server;
+    }
+
+    return null;
+  }
+
+  /**
+   * Returns the best primary or secondary triad server.
+   */
+  public ClusterServer getActiveOrSelfServer(ClusterServer oldServer)
+  {
+    ClusterServer server;
+    ServerPool pool;
+
+    server = _primary;
+
+    if (server != null) {
+      pool = server.getServerPool();
+    
+    if (pool == null || pool.isActive() && server != oldServer)
+      return server;
+    }
+
+    server = _secondary;
+    
+    if (server != null) {
+      pool = server.getServerPool();
+    
+      if (pool == null || pool.isActive() && server != oldServer)
+        return server;
+    }
+
+    server = _tertiary;
+
+    if (server != null) {
+      pool = server.getServerPool();
+    
+      if (pool == null || pool.isActive() && server != oldServer)
+      return server;
+    }
+
     // force the send
 
     server = _primary;

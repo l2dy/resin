@@ -33,10 +33,8 @@ import com.caucho.server.connection.AbstractHttpResponse;
 import com.caucho.server.connection.AbstractResponseStream;
 import com.caucho.server.connection.CauchoRequest;
 import com.caucho.server.connection.CauchoResponse;
-import com.caucho.server.connection.HttpBufferStore;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.util.L10N;
-import com.caucho.jsf.context.JspResponseWrapper;
 
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
@@ -53,6 +51,8 @@ import java.io.PrintWriter;
 
 public class RequestDispatcherImpl implements RequestDispatcher {
   private static final L10N L = new L10N(RequestDispatcherImpl.class);
+
+  static final int MAX_DEPTH = 64;
 
   private static final String REQUEST_URI
     = "javax.servlet.include.request_uri";
@@ -112,28 +112,28 @@ public class RequestDispatcherImpl implements RequestDispatcher {
     throws ServletException, IOException
   {
     forward((HttpServletRequest) request, (HttpServletResponse) response,
-	    null, _forwardInvocation);
+            null, _forwardInvocation);
   }
 
-  public void forwardResume(ServletRequest request, ServletResponse response)
+  public void dispatchResume(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
-    forwardResume((HttpServletRequest) request, (HttpServletResponse) response,
-		  _forwardInvocation);
+    dispatchResume((HttpServletRequest) request, (HttpServletResponse) response,
+                  _forwardInvocation);
   }
 
   public void error(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
     forward((HttpServletRequest) request, (HttpServletResponse) response,
-	    "error", _errorInvocation);
+            "error", _errorInvocation);
   }
 
   public void dispatch(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
     forward((HttpServletRequest) request, (HttpServletResponse) response,
-	    "error", _dispatchInvocation);
+            "error", _dispatchInvocation);
   }
 
   /**
@@ -144,263 +144,247 @@ public class RequestDispatcherImpl implements RequestDispatcher {
    * @param method special to tell if from error.
    */
   public void forward(HttpServletRequest req, HttpServletResponse res,
-		      String method, Invocation invocation)
+                      String method, Invocation invocation)
     throws ServletException, IOException
   {
-    AbstractHttpResponse response = null;
-    DispatchRequest subRequest;
-    HttpSession session = null;
-
     CauchoResponse cauchoRes = null;
 
-    if (res instanceof CauchoResponse)
+    boolean allowForward = _webApp.isAllowForwardAfterFlush();
+
+    if (res instanceof CauchoResponse) {
       cauchoRes = (CauchoResponse) res;
 
+      cauchoRes.setForwardEnclosed(! allowForward);
+    }
+
     // jsp/15m8
-    if (res.isCommitted() && method == null) {
+    if (res.isCommitted() && method == null && ! allowForward) {
       IllegalStateException exn;
       exn = new IllegalStateException("forward() not allowed after buffer has committed.");
 
       if (cauchoRes == null || ! cauchoRes.hasError()) {
-	if (cauchoRes != null)
-	  cauchoRes.setHasError(true);
+        if (cauchoRes != null)
+          cauchoRes.setHasError(true);
         throw exn;
       }
 
       _webApp.log(exn.getMessage(), exn);
 
       return;
+    } else if ("error".equals(method) || (method == null)) {
+      // server/10yg
+      
+      // } else if ("error".equals(method) || (method == null && ! allowForward)) {
+      res.resetBuffer();
+
+      if (cauchoRes != null) {
+        ServletResponse resp = cauchoRes.getResponse();
+
+        while (resp != null) {
+          if (allowForward && resp instanceof IncludeResponse) {
+            // server/10yh
+            break;
+          }
+          else if (resp instanceof CauchoResponse) {
+            CauchoResponse cr = (CauchoResponse) resp;
+            cr.resetBuffer();
+            resp = cr.getResponse();
+          } else {
+            resp.resetBuffer();
+
+            resp = null;
+          }
+        }
+      }
     }
 
-    if (res instanceof CauchoResponse)
-      response = ((CauchoResponse) res).getAbstractHttpResponse();
-
-    ServletResponse resPtr = res;
-    boolean isError = "error".equals(method);
-
-    if (method == null || isError)
-      method = req.getMethod();
-
-    subRequest = DispatchRequest.createDispatch();
-
-    HttpServletRequest parentRequest = req;
+    HttpServletRequest parentReq = req;
     HttpServletRequestWrapper reqWrapper = null;
-    HttpServletRequest topRequest = subRequest;
 
-    if (! (req instanceof CauchoRequest))
-      topRequest = req;
-
-    while (parentRequest instanceof HttpServletRequestWrapper
-	   && ! (parentRequest instanceof CauchoRequest)) {
-      reqWrapper = (HttpServletRequestWrapper) parentRequest;
-      parentRequest = (HttpServletRequest) reqWrapper.getRequest();
+    if (req instanceof HttpServletRequestWrapper) {
+      reqWrapper = (HttpServletRequestWrapper) req;
+      parentReq = (HttpServletRequest) reqWrapper.getRequest();
     }
 
-    String newQueryString = invocation.getQueryString();
-    String reqQueryString = req.getQueryString();
+    HttpServletResponse parentRes = res;
+    HttpServletResponseWrapper resWrapper = null;
 
-    String queryString;
+    if (res instanceof HttpServletResponseWrapper) {
+      resWrapper = (HttpServletResponseWrapper) res;
+      parentRes = (HttpServletResponse) resWrapper.getResponse();
+    }
 
-    /* Changed to match tomcat */
-    // server/10y3
+    ForwardRequest subRequest;
+
     if (_isLogin)
-      queryString = newQueryString;
-    else if (reqQueryString == null)
-      queryString = newQueryString;
-    else if (newQueryString == null)
-      queryString = reqQueryString;
-    else if (reqQueryString.equals(newQueryString)) {
-      // server/1kn2
-      queryString = newQueryString;
-      newQueryString = null;
-    }
-    /*
+      subRequest = new LoginRequest(parentReq, parentRes, invocation);
     else
-      queryString = newQueryString + '&' + reqQueryString;
-    */
-    else
-      queryString = newQueryString;
+      subRequest = new ForwardRequest(parentReq, parentRes, invocation);
 
-    WebApp oldWebApp;
+    // server/10ye
+    if (subRequest.getRequestDepth(0) > MAX_DEPTH)
+      throw new ServletException(L.l("too many servlet forwards `{0}'", req.getServletPath()));
 
-    if (req instanceof CauchoRequest)
-      oldWebApp = ((CauchoRequest) req).getWebApp();
-    else
-      oldWebApp = (WebApp) _webApp.getContext(req.getContextPath());
+    ForwardResponse subResponse = subRequest.getResponse();
 
-    subRequest.init(invocation,
-		    invocation.getWebApp(), oldWebApp,
-                    parentRequest, res, method,
-		    invocation.getURI(),
-		    invocation.getServletPath(),
-		    invocation.getPathInfo(),
-		    queryString, newQueryString);
+    HttpServletRequest topRequest = subRequest;
+    HttpServletResponse topResponse = subResponse;
 
     if (reqWrapper != null) {
       reqWrapper.setRequest(subRequest);
-
-      if (topRequest == parentRequest) // server/172o
-	topRequest = reqWrapper;
+      topRequest = reqWrapper;
     }
 
-    Object oldUri = null;
-    Object oldContextPath = null;
-    Object oldServletPath = null;
-    Object oldPathInfo = null;
-    Object oldQueryString = null;
-    Object oldJSPFile = null;
-    Object oldForward = null;
-
-    oldUri = req.getAttribute(REQUEST_URI);
-
-    if (oldUri != null) {
-      oldContextPath = req.getAttribute(CONTEXT_PATH);
-      oldServletPath = req.getAttribute(SERVLET_PATH);
-      oldPathInfo = req.getAttribute(PATH_INFO);
-      oldQueryString = req.getAttribute(QUERY_STRING);
-
-      req.removeAttribute(REQUEST_URI);
-      req.removeAttribute(CONTEXT_PATH);
-      req.removeAttribute(SERVLET_PATH);
-      req.removeAttribute(PATH_INFO);
-      req.removeAttribute(QUERY_STRING);
-      req.removeAttribute("caucho.jsp.jsp-file");
+    if (resWrapper != null) {
+      resWrapper.setResponse(subResponse);
+      topResponse = resWrapper;
     }
+    
+    boolean isValid = false;
 
-    // server/1ksc
-    if (! isError && req.getAttribute(FWD_REQUEST_URI) == null) {
-      subRequest.setAttribute(FWD_REQUEST_URI, req.getRequestURI());
-      subRequest.setAttribute(FWD_CONTEXT_PATH, req.getContextPath());
-      subRequest.setAttribute(FWD_SERVLET_PATH, req.getServletPath());
-      subRequest.setAttribute(FWD_PATH_INFO, req.getPathInfo());
-      subRequest.setAttribute(FWD_QUERY_STRING, req.getQueryString());
-    }
-
-    oldForward = req.getAttribute("caucho.forward");
-    req.setAttribute("caucho.forward", "true");
-
-    subRequest.setPageURI(subRequest.getRequestURI());
-    subRequest.setPageContextPath(subRequest.getContextPath());
-    subRequest.setPageServletPath(subRequest.getServletPath());
-    subRequest.setPagePathInfo(subRequest.getPathInfo());
-    subRequest.setPageQueryString(subRequest.getQueryString());
-
-    CauchoRequest oldRequest = null;
-    AbstractResponseStream oldStream = null;
-    if (response != null) {
-      oldRequest = response.getRequest();
-      oldStream = response.getResponseStream();
-    }
-
-    Thread thread = Thread.currentThread();
-    ClassLoader oldLoader = thread.getContextClassLoader();
+    subRequest.startRequest();
 
     try {
-      if (response != null) {
-	response.setRequest(subRequest);
-	response.setResponseStream(response.getOriginalStream());
-      }
+      invocation.service(topRequest, topResponse);
 
-      // server/1732 wants this commented out
-      // jsp/15m9 (tck)
-      ServletResponse ptr = res;
-      while (ptr instanceof AbstractHttpResponse) {
-	ptr = ((AbstractHttpResponse) ptr).getResponse();
-
-	if (ptr != null)
-	  ptr.resetBuffer();
-      }
-
-      res.resetBuffer();
-      res.setContentLength(-1);
-
-      invocation.service(topRequest, res);
-
-      if (cauchoRes != null) {
-	// server/1732 wants this commented out
-	// jsp/15m9 (tck)
-        ServletResponse closePtr = cauchoRes;
-        while (closePtr instanceof CauchoResponse
-	       && ! (closePtr instanceof JspResponseWrapper)) {
-          ((CauchoResponse) closePtr).close();
-
-          closePtr = ((CauchoResponse) closePtr).getResponse();
-        }
-      }
-      else {
-	// server/10ab
-	try {
-	  PrintWriter out = res.getWriter();
-	  if (out != null)
-	    out.close();
-	} catch (IllegalStateException e1) {
-	}
-
-        try {
-          OutputStream os = res.getOutputStream();
-	  if (os != null)
-	    os.close();
-        } catch (IllegalStateException e) {
-        }
-      }
+      isValid = true;
     } finally {
-      subRequest.finishRequest();
-
-      thread.setContextClassLoader(oldLoader);
-
-      if (response != null) {
-        response.setRequest(oldRequest);
-        response.setResponseStream(oldStream);
-        //response.setWriter(oldWriter);
-      }
-
-      DispatchRequest.free(subRequest);
-
       if (reqWrapper != null)
-	reqWrapper.setRequest(parentRequest);
+        reqWrapper.setRequest(parentReq);
+      
+      if (resWrapper != null)
+        resWrapper.setResponse(parentRes);
 
-      // XXX: are these necessary?
-      if (oldUri != null)
-	req.setAttribute(REQUEST_URI, oldUri);
-
-      if (oldContextPath != null)
-	req.setAttribute(CONTEXT_PATH, oldContextPath);
-
-      if (oldServletPath != null)
-	req.setAttribute(SERVLET_PATH, oldServletPath);
-
-      if (oldPathInfo != null)
-	req.setAttribute(PATH_INFO, oldPathInfo);
-
-      if (oldQueryString != null)
-	req.setAttribute(QUERY_STRING, oldQueryString);
-
-      if (oldForward == null)
-	req.removeAttribute("caucho.forward");
-
-      // server/1732 wants this commented out
-      // jsp/15m9 (tck)
-      /*
-      ServletResponse ptr = res;
-      while (ptr instanceof CauchoResponse) {
-	ptr.close();
-	
-	ptr = ((CauchoResponse) ptr).getResponse();
+      subRequest.finishRequest(isValid);
+      
+      // server/106r, ioc/0310
+      if (isValid) {
+        finishResponse(res);
       }
-      */
     }
   }
 
+  private void finishResponse(HttpServletResponse res)
+    throws ServletException, IOException
+  {
+    if (_webApp.isAllowForwardAfterFlush()) {
+      //
+    } else {
+      if (res instanceof CauchoResponse) {
+        CauchoResponse cauchoResponse = (CauchoResponse) res;
+        cauchoResponse.close();
+
+        ServletResponse resp = cauchoResponse.getResponse();
+
+        while(resp != null) {
+          if (resp instanceof CauchoResponse) {
+            CauchoResponse cr = (CauchoResponse)resp;
+            cr.close();
+            resp = cr.getResponse();
+          } else {
+            resp = null;
+          }
+        }
+      } else {
+        try {
+          OutputStream os = res.getOutputStream();
+          os.close();
+        } catch (Exception e) {
+        }
+
+        try {
+          PrintWriter out = res.getWriter();
+          out.close();
+        } catch (Exception e) {
+        }
+      }
+    }
+  }
+  
+  public void include(ServletRequest request, ServletResponse response)
+    throws ServletException, IOException
+  {
+    include(request, response, null);
+  }
 
   /**
-   * Forwards the request to the servlet named by the request dispatcher.
+   * Include a request into the current page.
+   */
+  public void include(ServletRequest request, ServletResponse response,
+                      String method)
+    throws ServletException, IOException
+  {
+    HttpServletRequest req = (HttpServletRequest) request;
+    HttpServletResponse res = (HttpServletResponse) response;
+
+    Invocation invocation = _includeInvocation;
+
+    HttpServletRequest parentReq = req;
+    HttpServletRequestWrapper reqWrapper = null;
+
+    if (req instanceof HttpServletRequestWrapper) {
+      reqWrapper = (HttpServletRequestWrapper)  req;
+      parentReq = (HttpServletRequest) reqWrapper.getRequest();
+    }
+
+    HttpServletResponse parentRes = res;
+    HttpServletResponseWrapper resWrapper = null;
+
+    if (res instanceof HttpServletResponseWrapper) {
+      resWrapper = (HttpServletResponseWrapper)  res;
+      parentRes = (HttpServletResponse) resWrapper.getResponse();
+    }
+    
+    IncludeRequest subRequest
+      = new IncludeRequest(parentReq, parentRes, invocation);
+    
+    // server/10yf, jsp/15di
+    if (subRequest.getRequestDepth(0) > MAX_DEPTH)
+      throw new ServletException(L.l("too many servlet includes `{0}'", req.getServletPath()));
+
+    IncludeResponse subResponse = subRequest.getResponse();
+
+    HttpServletRequest topRequest = subRequest;
+    HttpServletResponse topResponse = subResponse;
+
+    if (reqWrapper != null) {
+      reqWrapper.setRequest(subRequest);
+      topRequest = reqWrapper;
+    }
+
+    if (resWrapper != null) {
+      resWrapper.setResponse(subResponse);
+      topResponse = resWrapper;
+    }
+    
+    // jsp/15lf, jsp/17eg - XXX: integrated with ResponseStream?
+    // res.flushBuffer();
+
+    subRequest.startRequest();
+
+    try {
+      invocation.service(topRequest, topResponse);
+    } finally {
+      if (reqWrapper != null)
+        reqWrapper.setRequest(parentReq);
+      
+      if (resWrapper != null)
+        resWrapper.setResponse(parentRes);
+      
+      subRequest.finishRequest();
+    }
+  }
+
+  /**
+   * Dispatch the async resume request to the servlet
+   * named by the request dispatcher.
    *
    * @param req the servlet request.
    * @param res the servlet response.
-   * @param method special to tell if from error.
+   * @param invocation current invocation
    */
-  public void forwardResume(HttpServletRequest req, HttpServletResponse res,
-			    Invocation invocation)
+  public void dispatchResume(HttpServletRequest req, HttpServletResponse res,
+                            Invocation invocation)
     throws ServletException, IOException
   {
     AbstractHttpResponse response = null;
@@ -460,12 +444,12 @@ public class RequestDispatcherImpl implements RequestDispatcher {
       oldWebApp = (WebApp) _webApp.getContext(req.getContextPath());
 
     subRequest.init(invocation,
-		    invocation.getWebApp(), oldWebApp,
+                    invocation.getWebApp(), oldWebApp,
                     parentRequest, res, method,
-		    invocation.getURI(),
-		    invocation.getServletPath(),
-		    invocation.getPathInfo(),
-		    queryString, newQueryString);
+                    invocation.getURI(),
+                    invocation.getServletPath(),
+                    invocation.getPathInfo(),
+                    queryString, newQueryString);
 
     Object oldUri = null;
     Object oldContextPath = null;
@@ -510,19 +494,23 @@ public class RequestDispatcherImpl implements RequestDispatcher {
 
     CauchoRequest oldRequest = null;
     AbstractResponseStream oldStream = null;
+    /* XXX:
     if (response != null) {
       oldRequest = response.getRequest();
       oldStream = response.getResponseStream();
     }
+    */
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
+      /* XXX:
       if (response != null) {
-	response.setRequest(subRequest);
-	response.setResponseStream(response.getOriginalStream());
+        response.setRequest(subRequest);
+        response.setResponseStream(response.getOriginalStream());
       }
+      */
 
       invocation.service(topRequest, res);
     } finally {
@@ -530,239 +518,32 @@ public class RequestDispatcherImpl implements RequestDispatcher {
 
       thread.setContextClassLoader(oldLoader);
 
+      /* XXX:
       if (response != null) {
         response.setRequest(oldRequest);
         response.setResponseStream(oldStream);
         //response.setWriter(oldWriter);
       }
+      */
 
       // XXX: are these necessary?
       if (oldUri != null)
-	req.setAttribute(REQUEST_URI, oldUri);
-
-      if (oldContextPath != null)
-	req.setAttribute(CONTEXT_PATH, oldContextPath);
-
-      if (oldServletPath != null)
-	req.setAttribute(SERVLET_PATH, oldServletPath);
-
-      if (oldPathInfo != null)
-	req.setAttribute(PATH_INFO, oldPathInfo);
-
-      if (oldQueryString != null)
-	req.setAttribute(QUERY_STRING, oldQueryString);
-
-      if (oldForward == null)
-	req.removeAttribute("caucho.forward");
-    }
-  }
-
-
-  public void include(ServletRequest request, ServletResponse response)
-    throws ServletException, IOException
-  {
-    include(request, response, null);
-  }
-
-  /**
-   * Include a request into the current page.
-   */
-  public void include(ServletRequest request, ServletResponse response,
-		      String method)
-    throws ServletException, IOException
-  {
-    HttpServletRequest req = (HttpServletRequest) request;
-    HttpServletResponse res = (HttpServletResponse) response;
-
-    IncludeDispatchRequest subRequest;
-    DispatchResponse subResponse;
-
-    Invocation invocation = _includeInvocation;
-    WebApp webApp = invocation.getWebApp();
-    String queryString = invocation.getQueryString();
-
-    if (method == null)
-      method = req.getMethod();
-
-    if (! "POST".equals(method))
-      method = "GET";
-
-    HttpServletRequest parentRequest = req;
-    HttpServletRequestWrapper reqWrapper = null;
-
-    HttpServletResponse parentResponse = res;
-    HttpServletResponseWrapper resWrapper = null;
-
-    if (! _webApp.getDispatchWrapsFilters()) {
-      if (req instanceof HttpServletRequestWrapper
-	  && ! (req instanceof CauchoRequest)) {
-	reqWrapper = (HttpServletRequestWrapper) req;
-	parentRequest = (HttpServletRequest) reqWrapper.getRequest();
-      }
-
-      if (res instanceof HttpServletResponseWrapper &&
-	  ! (res instanceof CauchoResponse)) {
-	resWrapper = (HttpServletResponseWrapper) res;
-	parentResponse = (HttpServletResponse) resWrapper.getResponse();
-      }
-    }
-
-    subRequest = IncludeDispatchRequest.createDispatch();
-
-    WebApp oldWebApp;
-
-    if (req instanceof CauchoRequest)
-      oldWebApp = ((CauchoRequest) req).getWebApp();
-    else
-      oldWebApp = (WebApp) webApp.getContext(req.getContextPath());
-
-    subRequest.init(invocation,
-		    webApp, oldWebApp,
-		    parentRequest, parentResponse,
-		    method,
-                    req.getRequestURI(), req.getServletPath(),
-                    req.getPathInfo(), req.getQueryString(),
-                    queryString);
-
-    HttpServletRequest topRequest = subRequest;
-
-    if (reqWrapper != null) {
-      reqWrapper.setRequest(subRequest);
-      topRequest = reqWrapper;
-    }
-
-    subResponse = DispatchResponse.createDispatch();
-    subResponse.setNextResponse(res);
-
-    AbstractResponseStream s = null;
-    boolean oldDisableClose = false;
-    HttpBufferStore httpBuffer = HttpBufferStore.allocate(webApp.getServer());
-
-    subResponse.init(subRequest);
-    subResponse.setNextResponse(parentResponse);
-    subResponse.startRequest(httpBuffer);
-    subResponse.setCharacterEncoding(res.getCharacterEncoding());
-
-    if (_webApp.getDispatchWrapsFilters())
-      subResponse.setCauchoResponseStream(true);
-
-    CauchoResponse cauchoRes = null;
-    if (res instanceof CauchoResponse) {
-      cauchoRes = (CauchoResponse) res;
-    }
-    else if (! _webApp.getDispatchWrapsFilters()) {
-      subResponse.killCache();
-    }
-
-    HttpServletResponse topResponse = subResponse;
-
-    if (resWrapper != null) {
-      resWrapper.setResponse(subResponse);
-      topResponse = res;
-    }
-
-    Object oldUri = null;
-    Object oldContextPath = null;
-    Object oldServletPath = null;
-    Object oldPathInfo = null;
-    Object oldQueryString = null;
-
-    oldUri = req.getAttribute(REQUEST_URI);
-    if (oldUri != null) {
-      oldContextPath = request.getAttribute(CONTEXT_PATH);
-      oldServletPath = req.getAttribute(SERVLET_PATH);
-      oldPathInfo = req.getAttribute(PATH_INFO);
-      oldQueryString = req.getAttribute(QUERY_STRING);
-    }
-
-    subRequest.setPageURI(invocation.getURI());
-    subRequest.setAttribute(REQUEST_URI, invocation.getURI());
-    String contextPath;
-    if (webApp != null)
-      contextPath = webApp.getContextPath();
-    else
-      contextPath = null;
-
-    subRequest.setPageContextPath(contextPath);
-    subRequest.setAttribute(CONTEXT_PATH, contextPath);
-    subRequest.setPageServletPath(invocation.getServletPath());
-    subRequest.setAttribute(SERVLET_PATH, invocation.getServletPath());
-    subRequest.setPagePathInfo(invocation.getPathInfo());
-    subRequest.setAttribute(PATH_INFO, invocation.getPathInfo());
-    subRequest.setPageQueryString(queryString);
-    subRequest.setAttribute(QUERY_STRING, queryString);
-
-    subRequest.removeAttribute("caucho.jsp.jsp-file");
-
-    Thread thread = Thread.currentThread();
-    ClassLoader oldLoader = thread.getContextClassLoader();
-    boolean isOkay = false;
-    try {
-      invocation.service(topRequest, topResponse);
-
-      int status = subResponse.getStatusCode();
-
-      request.setAttribute("com.caucho.dispatch.response.statusCode",
-                           new Integer(status));
-
-      isOkay = true;
-    } finally {
-      thread.setContextClassLoader(oldLoader);
-      // XXX: In many cases, able to use clear()?
-
-      subRequest.finishRequest();
-
-      /* XXX:
-      if (s != null)
-	s.setDisableClose(oldDisableClose);
-      */
-      if (oldUri != null)
         req.setAttribute(REQUEST_URI, oldUri);
-      else
-        req.removeAttribute(REQUEST_URI);
 
       if (oldContextPath != null)
         req.setAttribute(CONTEXT_PATH, oldContextPath);
-      else
-        req.removeAttribute(CONTEXT_PATH);
 
       if (oldServletPath != null)
         req.setAttribute(SERVLET_PATH, oldServletPath);
-      else
-        req.removeAttribute(SERVLET_PATH);
 
       if (oldPathInfo != null)
         req.setAttribute(PATH_INFO, oldPathInfo);
-      else
-        req.removeAttribute(PATH_INFO);
 
       if (oldQueryString != null)
         req.setAttribute(QUERY_STRING, oldQueryString);
-      else
-        req.removeAttribute(QUERY_STRING);
 
-      if (! isOkay)
-	subResponse.killCache();
-
-      subResponse.close();
-
-      /*
-      if (! (res instanceof CauchoResponse)) {
-	if (s != null)
-	  s.close();
-      }
-      */
-
-      IncludeDispatchRequest.free(subRequest);
-      DispatchResponse.free(subResponse);
-
-      if (reqWrapper != null)
-	reqWrapper.setRequest(parentRequest);
-
-      if (resWrapper != null)
-	resWrapper.setResponse(parentResponse);
-
-      HttpBufferStore.free(httpBuffer);
+      if (oldForward == null)
+        req.removeAttribute("caucho.forward");
     }
   }
 
@@ -770,6 +551,6 @@ public class RequestDispatcherImpl implements RequestDispatcher {
   public String toString()
   {
     return (getClass().getSimpleName()
-	    + "[" + _dispatchInvocation.getRawURI() + "]");
+            + "[" + _dispatchInvocation.getRawURI() + "]");
   }
 }

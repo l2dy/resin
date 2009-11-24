@@ -133,7 +133,23 @@ public class SSIParser {
 	  bb.clear();
 	}
 
-	statements.add(parseCommand(is));
+        Statement stmt = parseCommand(is);
+
+        statements.add(stmt);
+        
+        if (stmt instanceof IfStatement) {
+          parseIf(is, (IfStatement) stmt);
+        }
+        
+        if (stmt instanceof ElifStatement) {
+          return;
+        }
+        else if (stmt instanceof ElseStatement) {
+          return;
+        }
+        else if (stmt instanceof EndifStatement) {
+          return;
+        }
       }
     }
 
@@ -141,6 +157,31 @@ public class SSIParser {
       statements.add(new TextStatement(bb.getBuffer(), 0, bb.getLength()));
       bb.clear();
     }
+  }
+
+  private void parseIf(ReadStream is, IfStatement ifStmt)
+    throws IOException
+  {
+    ArrayList<Statement> trueBlock = new ArrayList<Statement>();
+
+    parse(is, trueBlock);
+    int size = trueBlock.size();
+
+    if (size > 0 && trueBlock.get(size - 1) instanceof ElifStatement) {
+      ElifStatement elifBlock = (ElifStatement) trueBlock.get(size - 1);
+      trueBlock.remove(size - 1);
+
+      ifStmt.setFalseBlock(elifBlock);
+    }
+    else if (size > 0 && trueBlock.get(size - 1) instanceof ElseStatement) {
+      ArrayList<Statement> falseBlock = new ArrayList<Statement>();
+      
+      parse(is, falseBlock);
+
+      ifStmt.setFalseBlock(new BlockStatement(falseBlock));
+    }
+    
+    ifStmt.setTrueBlock(new BlockStatement(trueBlock));
   }
 
   private Statement parseCommand(ReadStream is)

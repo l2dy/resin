@@ -47,19 +47,44 @@ public class ReadBlock extends Block {
   {
     super(store, blockId);
 
-    _buffer = _freeBuffers.allocate();
-    
-    if (_buffer == null) {
-      _buffer = new byte[Store.BLOCK_SIZE];
-    }
+    _buffer = allocateBuffer();
   }
 
   /**
    * Returns the block's buffer.
    */
-  public byte []getBuffer()
+  public final byte []getBuffer()
   {
     return _buffer;
+  }
+
+  /**
+   * Copies the contents to a target block. Used by the BlockManager
+   * for LRU'd blocks
+   */
+  @Override
+  protected boolean copyToBlock(Block block)
+  {
+    synchronized (this) {
+      byte []buffer = _buffer;
+
+      if (buffer == null || ! isValid()) {
+        // System.out.println(block + " COPY FROM FAIL " + this);
+        return false;
+      }
+
+      System.arraycopy(buffer, 0, block.getBuffer(), 0, buffer.length);
+      block.validate();
+
+      // The new block takes over responsibility for the writing, because
+      // it may modify the block before the write completes
+      block.setDirty(getDirtyMin(), getDirtyMax());
+
+      clearDirty();
+      // System.out.println(block + " COPY FROM " + this);
+
+      return true;
+    }
   }
 
   /**
@@ -69,16 +94,14 @@ public class ReadBlock extends Block {
   {
     //System.out.println(this + " FREE-IMPL");
     synchronized (this) {
-      byte []buffer = _buffer;
-      _buffer = null;
+      // timing for block reuse. The useCount can be reactivated from
+      // the BlockManager writeQueue
+      if (isFree()) {
+        byte []buffer = _buffer;
+        _buffer = null;
 
-      if (buffer != null)
-	_freeBuffers.free(buffer);
+        freeBuffer(buffer);
+      }
     }
-  }
-
-  public String toString()
-  {
-    return "ReadBlock[" + getStore() + "," + getBlockId() / Store.BLOCK_SIZE + "]";
   }
 }

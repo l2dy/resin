@@ -1,3 +1,32 @@
+/*
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ *
+ * This file is part of Resin(R) Open Source
+ *
+ * Each copy or derived work must preserve the copyright notice and this
+ * notice unmodified.
+ *
+ * Resin Open Source is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * Resin Open Source is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE, or any warranty
+ * of NON-INFRINGEMENT.  See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Resin Open Source; if not, write to the
+ *
+ *   Free Software Foundation, Inc.
+ *   59 Temple Place, Suite 330
+ *   Boston, MA 02111-1307  USA
+ *
+ * @author Scott Ferguson
+ */
+
 package com.caucho.boot;
 
 import com.caucho.Version;
@@ -45,10 +74,10 @@ class WatchdogArgs
     String logLevel = System.getProperty("caucho.logger.level");
 
     setLogLevel(logLevel);
-    
+
     _resinHome = calculateResinHome();
     _rootDirectory = calculateResinRoot(_resinHome);
-    
+
     _javaHome = Vfs.lookup(System.getProperty("java.home"));
 
     _argv = fillArgv(argv);
@@ -124,7 +153,7 @@ class WatchdogArgs
   {
     _watchdogPort = port;
   }
-  
+
   int getWatchdogPort()
   {
     return _watchdogPort;
@@ -204,7 +233,7 @@ class WatchdogArgs
   private void parseCommandLine(String[] argv)
   {
     String resinConf = null;
-    
+
     for (int i = 0; i < argv.length; i++) {
       String arg = argv[i];
 
@@ -213,18 +242,18 @@ class WatchdogArgs
         i++;
       }
       else if ("-dynamic-server".equals(arg)
-	       || "--dynamic-server".equals(arg)) {
-	String []str = argv[i + 1].split(":");
+               || "--dynamic-server".equals(arg)) {
+        String []str = argv[i + 1].split(":");
 
-	if (str.length != 3) {
-	  System.out.println(L().l("-dynamic server requires 'cluster:address:port' at '{0}'", argv[i + 1]));
-	  System.exit(1);
-	}
+        if (str.length != 3) {
+          System.out.println(L().l("-dynamic server requires 'cluster:address:port' at '{0}'", argv[i + 1]));
+          System.exit(1);
+        }
 
-	_isDynamicServer = true;
-	_dynamicCluster = str[0];
-	_dynamicAddress = str[1];
-	_dynamicPort = Integer.parseInt(str[2]);
+        _isDynamicServer = true;
+        _dynamicCluster = str[0];
+        _dynamicAddress = str[1];
+        _dynamicPort = Integer.parseInt(str[2]);
 
         i++;
       }
@@ -256,56 +285,73 @@ class WatchdogArgs
         _rootDirectory = Vfs.lookup(argv[i + 1]);
         i++;
       }
+      else if ("-stage".equals(arg) || "--stage".equals(arg)) {
+        // skip stage
+        i++;
+      }
+      else if ("-preview".equals(arg) || "--preview".equals(arg)) {
+        // pass to server
+      }
       else if ("-watchdog-port".equals(arg) || "--watchdog-port".equals(arg)) {
         _watchdogPort = Integer.parseInt(argv[i + 1]);
         i++;
       }
       else if (arg.startsWith("-J")
-	       || arg.startsWith("-D")
-	       || arg.startsWith("-X")) {
+               || arg.startsWith("-D")
+               || arg.startsWith("-X")) {
+      }
+      else if ("-debug-port".equals(arg) || "--debug-port".equals(arg)) {
+        i++;
+      }
+      else if ("-jmx-port".equals(arg) || "--jmx-port".equals(arg)) {
+        i++;
       }
       else if ("-verbose".equals(arg) || "--verbose".equals(arg)) {
         _isVerbose = true;
         Logger.getLogger("").setLevel(Level.CONFIG);
       }
       else if ("console".equals(arg)) {
-	_startMode = StartMode.CONSOLE;
+        _startMode = StartMode.CONSOLE;
       }
       else if ("status".equals(arg)) {
-	_startMode = StartMode.STATUS;
+        _startMode = StartMode.STATUS;
       }
       else if ("start".equals(arg)) {
-	_startMode = StartMode.START;
+        _startMode = StartMode.START;
       }
       else if ("stop".equals(arg)) {
-	_startMode = StartMode.STOP;
+        _startMode = StartMode.STOP;
       }
       else if ("kill".equals(arg)) {
-	_startMode = StartMode.KILL;
+        _startMode = StartMode.KILL;
       }
       else if ("restart".equals(arg)) {
-	_startMode = StartMode.RESTART;
+        _startMode = StartMode.RESTART;
       }
       else if ("shutdown".equals(arg)) {
-	_startMode = StartMode.SHUTDOWN;
+        _startMode = StartMode.SHUTDOWN;
+      }
+      else if ("version".equals(arg)) {
+        System.out.println(Version.FULL_VERSION);
+        System.exit(0);
       }
       else {
         System.out.println(L().l("unknown argument '{0}'", argv[i]));
         System.out.println();
-	usage();
-	System.exit(1);
+        usage();
+        System.exit(1);
       }
     }
 
     if (_startMode == null) {
       System.out.println(L().l("Resin requires a command:"
-			       + "\n  console - start Resin in console mode"
-			       + "\n  status - watchdog status"
-			       + "\n  start - start a Resin server"
-			       + "\n  stop - stop a Resin server"
-			       + "\n  restart - restart a Resin server"
-			       + "\n  kill - force a kill of a Resin server"
-			       + "\n  shutdown - shutdown the watchdog"));
+                               + "\n  console - start Resin in console mode"
+                               + "\n  status - watchdog status"
+                               + "\n  start - start a Resin server"
+                               + "\n  stop - stop a Resin server"
+                               + "\n  restart - restart a Resin server"
+                               + "\n  kill - force a kill of a Resin server"
+                               + "\n  shutdown - shutdown the watchdog"));
       System.exit(1);
     }
 
@@ -336,6 +382,10 @@ class WatchdogArgs
     System.err.println(L().l("   -server <id>          : select a <server> to run"));
     System.err.println(L().l("   -watchdog-port <port> : override the watchdog-port"));
     System.err.println(L().l("   -verbose              : print verbose starting information"));
+    System.err.println(L().l("   -preview              : run as a preview server"));
+    System.err.println(L().l("   -debug-port <port>    : configure a debug port"));
+    System.err.println(L().l("   -jmx-port <port>      : configure an unauthenticated jmx port"));
+
   }
 
   private String []fillArgv(String []argv)
@@ -345,20 +395,20 @@ class WatchdogArgs
     try {
       MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
       ObjectName name = new ObjectName("java.lang:type=Runtime");
-      
+
       String []jvmArgs
-	= (String []) mbeanServer.getAttribute(name, "InputArguments");
+        = (String []) mbeanServer.getAttribute(name, "InputArguments");
 
       if (jvmArgs != null) {
         for (int i = 0; i < jvmArgs.length; i++) {
           String arg = jvmArgs[i];
 
-	  if (args.contains(arg))
-	    continue;
+          if (args.contains(arg))
+            continue;
 
-	  if (arg.startsWith("-Djava.class.path=")) {
-	    // IBM JDK
-	  }
+          if (arg.startsWith("-Djava.class.path=")) {
+            // IBM JDK
+          }
           else if (arg.startsWith("-D"))
             args.add("-J" + arg);
         }
@@ -376,12 +426,12 @@ class WatchdogArgs
 
     return argv;
   }
-  
+
   private static L10N L()
   {
     if (_L == null)
       _L = new L10N(WatchdogArgs.class);
-    
+
     return _L;
   }
 
@@ -409,9 +459,9 @@ class WatchdogArgs
       String resinJar;
 
       if (p >= 0)
-	resinJar = classPath.substring(p + 1, q);
+        resinJar = classPath.substring(p + 1, q);
       else
-	resinJar = classPath.substring(0, q);
+        resinJar = classPath.substring(0, q);
 
       return Vfs.lookup(resinJar).lookup("../..");
     }
@@ -424,7 +474,7 @@ class WatchdogArgs
 
     if (! path.startsWith("jar:"))
       throw new RuntimeException(L().l("Resin/{0}: can't find jar for ResinBoot in {1}",
-				       Version.VERSION, path));
+                                 Version.VERSION, path));
 
     int p = path.indexOf(':');
     int q = path.indexOf('!');
@@ -439,10 +489,10 @@ class WatchdogArgs
   static Path calculateResinRoot(Path resinHome)
   {
     String resinRoot = System.getProperty("resin.root");
-    
+
     if (resinRoot != null)
       return Vfs.lookup(resinRoot);
-    
+
     resinRoot = System.getProperty("server.root");
 
     if (resinRoot != null)
@@ -460,20 +510,20 @@ class WatchdogArgs
   }
 
   static String calculateClassPath(ArrayList<String> classPath,
-				   Path resinHome)
+                                   Path resinHome)
     throws IOException
   {
     String oldClassPath = System.getProperty("java.class.path");
     if (oldClassPath != null) {
       for (String item : oldClassPath.split("[" + File.pathSeparatorChar + "]")) {
-	addClassPath(classPath, item);
+        addClassPath(classPath, item);
       }
     }
 
     oldClassPath = System.getenv("CLASSPATH");
     if (oldClassPath != null) {
       for (String item : oldClassPath.split("[" + File.pathSeparatorChar + "]")) {
-	addClassPath(classPath, item);
+        addClassPath(classPath, item);
       }
     }
 
@@ -487,9 +537,9 @@ class WatchdogArgs
       Path jdkHome = javaHome.getParent().lookup(tail);
 
       if (jdkHome.lookup("lib/tools.jar").canRead())
-	addClassPath(classPath, jdkHome.lookup("lib/tools.jar").getNativePath());
+        addClassPath(classPath, jdkHome.lookup("lib/tools.jar").getNativePath());
     }
-    
+
     if (javaHome.lookup("../lib/tools.jar").canRead())
       addClassPath(classPath, javaHome.lookup("../lib/tools.jar").getNativePath());
 
@@ -499,26 +549,26 @@ class WatchdogArgs
       addClassPath(classPath, resinLib.lookup("pro.jar").getNativePath());
     addClassPath(classPath, resinLib.lookup("resin.jar").getNativePath());
     //    addClassPath(classPath, resinLib.lookup("jaxrpc-15.jar").getNativePath());
-		  
+
     String []list = resinLib.list();
 
     for (int i = 0; i < list.length; i++) {
       if (! list[i].endsWith(".jar"))
-	continue;
-      
+        continue;
+
       Path item = resinLib.lookup(list[i]);
 
       String pathName = item.getNativePath();
 
       if (! classPath.contains(pathName))
-	addClassPath(classPath, pathName);
+        addClassPath(classPath, pathName);
     }
 
     String cp = "";
 
     for (int i = 0; i < classPath.size(); i++) {
       if (! "".equals(cp))
-	cp += File.pathSeparatorChar;
+        cp += File.pathSeparatorChar;
 
       cp += classPath.get(i);
     }
@@ -537,7 +587,7 @@ class WatchdogArgs
   {
     private boolean _isLicenseCheck;
     private boolean _isResinProfessional;
-    
+
     public Path getResinHome()
     {
       return WatchdogArgs.this.getResinHome();
@@ -573,29 +623,29 @@ class WatchdogArgs
     private void loadLicenses()
     {
       if (_isLicenseCheck)
-	return;
-      
+        return;
+
       _isLicenseCheck = true;
-      
+
       LicenseCheck license;
 
       try {
-	ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
-	Class cl = Class.forName("com.caucho.license.LicenseCheckImpl",
-				 false, loader);
-				 
-	license = (LicenseCheck) cl.newInstance();
-	
-	license.requireProfessional(1);
+        Class cl = Class.forName("com.caucho.license.LicenseCheckImpl",
+            false, loader);
 
-	Vfs.initJNI();
+        license = (LicenseCheck) cl.newInstance();
 
-	_isResinProfessional = true;
+        license.requireProfessional(1);
 
-	// license.doLogging(1);
+        Vfs.initJNI();
+
+        _isResinProfessional = true;
+
+        // license.doLogging(1);
       } catch (Exception e) {
-	log.log(Level.FINER, e.toString(), e);
+        log.log(Level.FINER, e.toString(), e);
       }
     }
   }

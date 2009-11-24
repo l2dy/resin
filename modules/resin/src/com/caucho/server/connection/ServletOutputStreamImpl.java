@@ -29,6 +29,8 @@
 
 package com.caucho.server.connection;
 
+import com.caucho.vfs.WriteStream;
+
 import javax.servlet.ServletOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -38,6 +40,7 @@ import java.io.OutputStream;
  */
 public class ServletOutputStreamImpl extends ServletOutputStream {
   private OutputStream _out;
+  private byte []_buffer;
 
   public ServletOutputStreamImpl()
   {
@@ -66,6 +69,54 @@ public class ServletOutputStreamImpl extends ServletOutputStream {
   {
     _out.write(buf, offset, len);
   }
+
+  /**
+   * Prints a string to the stream.  Note, this method does not properly
+   * handle character encoding.
+   *
+   * @param s the string to write.
+   */
+  @Override
+  public void print(String s) throws IOException
+  {
+    if (s == null)
+      s = "null";
+
+    OutputStream out = _out;
+    
+    if (out instanceof WriteStream) {
+      WriteStream wOut = (WriteStream) out;
+
+      wOut.print(s);
+    }
+    else {
+      int length = s.length();
+
+      if (_buffer == null)
+        _buffer = new byte[128];
+
+      byte []buffer = _buffer;
+
+      // server/0810
+      int offset = 0;
+      
+      while (length > 0) {
+        int sublen = buffer.length;
+        if (length < sublen)
+          sublen = length;
+        
+        for (int i = 0; i < sublen; i++) {
+          buffer[i] = (byte) s.charAt(i + offset);
+        }
+
+        out.write(buffer, 0, sublen);
+
+        length -= sublen;
+        offset += sublen;
+      }
+    }
+  }
+
 
   public final void flush() throws IOException
   {

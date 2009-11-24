@@ -37,6 +37,7 @@ using System.ServiceProcess;
 using System.Threading;
 using System.Configuration.Install;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Security.Principal;
 
 namespace Caucho
 {
@@ -45,39 +46,45 @@ namespace Caucho
     private static String HKEY_JRE = "Software\\JavaSoft\\Java Runtime Environment";
     private static String HKEY_JDK = "Software\\JavaSoft\\Java Development Kit";
     private static String CAUCHO_APP_DATA = "Caucho Technology\\Resin";
-    
-    private static String USAGE = @"usage: {0} [flags] gui |console | status | start | stop | restart | kill | shutdown
-  -h                                     : this help
-  -verbose                               : information on launching java
-  -java_home <dir>                       : sets the JAVA_HOME
-  -java_exe <path>                       : path to java executable
-  -classpath <dir>                       : java classpath
-  -Jxxx                                  : JVM arg xxx
-  -J-Dfoo=bar                            : Set JVM variable
-  -Xxxx                                  : JVM -X parameter
-  -install                               : install as NT service
-  -install-as <name>                     : install as a named NT service
-  -remove                                : remove as NT service
-  -remove-as <name>                      : remove as a named NT service
-  -user <name>                           : specify username for NT service
-  -password <pwd>                        : specify password for NT
-  -resin_home <dir>                      : home of Resin
-  -root-directory <dir>                  : select a root directory
-  -log-directory  <dir>                  : select a logging directory
-  -dynamic-server <cluster:address:port> : initialize a dynamic server
-  -watchdog-port  <port>                 : override the watchdog-port
-  -server <id>                           : select a <server> to run
-  -conf <resin.conf>                     : alternate configuration file";
-    
-    private static String REQUIRE_COMMAND_MSG = @"Resin requires a command:
-  gui - start Resin with a Graphic UI
-  console - start Resin in console mode
-  status - watchdog status
-  start - start a Resin server
-  stop - stop a Resin server
-  restart - restart a Resin server
-  kill - force a kill of a Resin server
-  shutdown - shutdown the watchdog";
+
+    private static String USAGE = @"usage: {0} [flags] gui | console | status | start | stop | restart | kill | shutdown
+
+    COMMANDS:
+      gui - start Resin with a Graphic UI
+      console - start Resin in console mode
+      status - watchdog status
+      start - start a Resin server
+      stop - stop a Resin server
+      restart - restart a Resin server
+      kill - force a kill of a Resin server
+      shutdown - shutdown the watchdog
+
+    OPTIONS:
+      -h                                     : this help
+      -verbose                               : information on launching java
+      -conf <resin.conf>                     : alternate configuration file
+      -server <id>                           : select a <server> to run
+      -dynamic-server <cluster:address:port> : initialize a dynamic server
+      -java_home <dir>                       : sets the JAVA_HOME
+      -java_exe <path>                       : path to java executable
+      -classpath <dir>                       : java classpath
+      -Jxxx                                  : JVM arg xxx
+      -J-Dfoo=bar                            : Set JVM variable
+      -Xxxx                                  : JVM -X parameter
+      -install                               : install as NT service
+      -install-as <name>                     : install as a named NT service
+      -remove                                : remove as NT service
+      -remove-as <name>                      : remove as a named NT service
+      -user <name>                           : specify username for NT service
+      -password <pwd>                        : specify password for NT
+      -resin_home <dir>                      : home of Resin
+      -root-directory <dir>                  : select a root directory
+      -log-directory  <dir>                  : select a logging directory
+      -watchdog-port  <port>                 : override the watchdog-port
+      -preview                               : run as a preview server
+      -debug-port <port>                     : configure a debug port
+      -jmx-port <port>                       : configure an unauthenticated jmx port
+";
 
     private bool _verbose;
     private bool _nojit;
@@ -86,6 +93,11 @@ namespace Caucho
     private bool _uninstall = false;
     private bool _standalone = false;
     private bool _help = false;
+    
+    //used with -install / -remove.
+    //value of true indicates that the process is started
+    //from resin.exe with elevated privileges
+    private bool _isChild = false;
     
     private String _user;
     private String _password;
@@ -100,11 +112,15 @@ namespace Caucho
     private String _displayName;
     private String _passToServiceArgs;
     private String _command;
+    private String _resinDataDir;
+    
+    private StringBuilder _args;
     
     private Process _process;
     
     private Resin(String[] args)
     {
+      _args = new StringBuilder();
       _displayName = "Resin Web Server";
       StringBuilder jvmArgs = new StringBuilder();
       StringBuilder resinArgs = new StringBuilder();
@@ -112,10 +128,12 @@ namespace Caucho
       
       int argsIdx = 1;
       while (argsIdx < args.Length) {
+        _args.Append(args[argsIdx]).Append(' ');
+        
         if ("-verbose".Equals(args[argsIdx])) {
           _verbose = true;
           
-          argsIdx++;
+          resinArgs.Append(' ').Append(args[argsIdx++]);
         } else if (args[argsIdx].StartsWith("-J")){
           argsIdx++;
         } else if (args[argsIdx].StartsWith("-D")) {
@@ -169,6 +187,7 @@ namespace Caucho
           _service = false;
           
           ServiceName = args[argsIdx + 1];
+          _displayName = args[argsIdx + 1];
           
           argsIdx += 2;
         } else if ("-remove".Equals(args[argsIdx])) {
@@ -285,6 +304,10 @@ namespace Caucho
           _standalone = true;
           
           argsIdx++;
+        } else if("--child".Equals(args[argsIdx])) {
+          _isChild = true;
+          
+          argsIdx++;
         } else {
           resinArgs.Append(' ').Append(args[argsIdx++]);
         }
@@ -293,8 +316,9 @@ namespace Caucho
       if (_command == null &&
           (! _install) &&
           (! _uninstall)&&
-          (! _service)) {
-        Info(REQUIRE_COMMAND_MSG);
+          (! _service) &&
+          (! _help)) {
+        Usage(ServiceName);
         
         Environment.Exit(-1);
       }
@@ -305,177 +329,6 @@ namespace Caucho
       _jvmArgs = jvmArgs.ToString();
       _resinArgs = resinArgs.ToString();
       _passToServiceArgs = passToServiceArgs.ToString();
-    }
-    
-    private int Execute() {
-      if (_help) {
-        Usage(ServiceName);
-        
-        return 0;
-      }
-      
-      _resinHome = Util.GetResinHome(_resinHome, System.Reflection.Assembly.GetExecutingAssembly().Location);
-
-      if (_resinHome == null) {
-        Error("Can't find RESIN_HOME", null);
-        
-        return 1;
-      }
-      
-      if (_rootDirectory == null)
-        _rootDirectory = _resinHome;
-
-      _javaHome = GetJavaHome(_resinHome, _javaHome);
-      
-      _cp = GetClasspath(_cp, _resinHome, _javaHome, _envCp);
-      
-      if (_javaExe == null && _javaHome != null)
-        _javaExe = GetJavaExe(_javaHome);
-      
-      if (_javaExe == null)
-        _javaExe = "java.exe";
-
-      try {
-        Directory.SetCurrentDirectory(_rootDirectory);
-      } catch (Exception e) {
-        Error(String.Format("Can't change dir to {0} due to: {1}", _rootDirectory, e), e);
-        
-        return 1;
-      }
-      
-      Environment.SetEnvironmentVariable("CLASSPATH", _cp);
-      Environment.SetEnvironmentVariable("PATH",
-                                         String.Format("{0};{1}\\win32;{1}\\win64;\\openssl\\bin",
-                                                       Environment.GetEnvironmentVariable("PATH"),
-                                                       _resinHome));
-
-      if (_install) {
-        try {
-          InstallService();
-        } catch (Exception e) {
-          Error(e.Message, e);
-          
-          return 1;
-        }
-      } else if (_uninstall) {
-        try {
-          UninstallService();
-        } catch (Exception e) {
-          Error(e.Message, e);
-          
-          return 1;
-        }
-      } else if (_service) {
-        ServiceBase.Run(new ServiceBase[]{this});
-      } else if (_standalone) {
-        if (StartResin()) {
-          Join();
-          
-          if (_process != null)
-            return _process.ExitCode;
-        }
-        
-        return 1;
-      } else {
-        if (StartResin()) {
-          ResinWindow window = new ResinWindow(this, _displayName);
-          window.Show();
-          Application.Run();
-        }
-        
-        return 1;
-      }
-      
-      return 0;
-    }
-    
-    private void InstallService() {
-      Installer installer = InitInstaller();
-      Hashtable installState = new Hashtable();
-      installer.Install(installState);
-      
-      RegistryKey system = Registry.LocalMachine.OpenSubKey("System");
-      RegistryKey currentControlSet = system.OpenSubKey("CurrentControlSet");
-      RegistryKey servicesKey = currentControlSet.OpenSubKey("Services");
-      RegistryKey serviceKey = servicesKey.OpenSubKey(ServiceName, true);
-      
-      StringBuilder builder = new StringBuilder((String)serviceKey.GetValue("ImagePath"));
-      builder.Append(" -service -name ").Append(ServiceName).Append(' ');
-      
-      if (_passToServiceArgs.Length > 0)
-        builder.Append(_passToServiceArgs).Append(' ');
-      
-      if (_jvmArgs.Length > 0)
-        builder.Append(_jvmArgs).Append(' ');
-      
-      if (_resinArgs.Length > 0)
-        builder.Append(_resinArgs).Append(' ');
-      
-      serviceKey.SetValue("ImagePath", builder.ToString());
-
-      StoreState(installState, ServiceName);
-      
-      Info(String.Format("\nInstalled {0} as Windows Service", ServiceName));
-    }
-    
-    private void UninstallService() {
-      Hashtable state = LoadState(ServiceName);
-      
-      Installer installer = InitInstaller();
-      
-      installer.Uninstall(state);
-      
-      Info(String.Format("\nRemoved {0} as Windows Service", ServiceName));
-    }
-    
-    private Installer InitInstaller() {
-      TransactedInstaller txInst = new TransactedInstaller();
-      txInst.Context = new InstallContext(null, new String[]{});
-      txInst.Context.Parameters["assemblypath"] = System.Reflection.Assembly.GetExecutingAssembly().Location;
-      
-      ServiceProcessInstaller spInst = new ServiceProcessInstaller();
-      if (_user != null) {
-        spInst.Username = _user;
-        spInst.Password = _password;
-        spInst.Account = ServiceAccount.User;
-      } else {
-        spInst.Account = ServiceAccount.LocalSystem;
-      }
-
-      txInst.Installers.Add(spInst);
-
-      ServiceInstaller srvInst = new ServiceInstaller();
-      srvInst.ServiceName = ServiceName;
-      srvInst.DisplayName = _displayName;
-      srvInst.StartType = ServiceStartMode.Manual;
-
-      txInst.Installers.Add(srvInst);
-
-      return txInst;
-    }
-    private static String GetResinAppDataDir() {
-      return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + '\\' + CAUCHO_APP_DATA;
-    }
-    private static void StoreState(Hashtable state, String serviceName) {
-      String dir = GetResinAppDataDir();
-      if (! Directory.Exists(dir))
-        Directory.CreateDirectory(dir);
-      
-      FileStream fs = new FileStream(dir + '\\' + serviceName + ".srv", FileMode.Create, FileAccess.Write);
-      BinaryFormatter serializer = new BinaryFormatter();
-      serializer.Serialize(fs, state);
-      fs.Flush();
-      fs.Close();
-    }
-    
-    private static Hashtable LoadState(String serviceName) {
-      String dir = GetResinAppDataDir();
-      FileStream fs = new FileStream(dir + '\\' + serviceName + ".srv", FileMode.Open, FileAccess.Read);
-      BinaryFormatter serializer = new BinaryFormatter();
-      Hashtable state = (Hashtable)serializer.Deserialize(fs);
-      fs.Close();
-      
-      return state;
     }
     
     public bool StartResin() {
@@ -525,6 +378,327 @@ namespace Caucho
       }
     }
 
+    private int Execute() {
+      if (_help) {
+        Usage(ServiceName);
+        
+        return 0;
+      }
+      
+      _resinHome = Util.GetResinHome(_resinHome, System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+      if (_resinHome == null) {
+        Error("Can't find RESIN_HOME", null);
+        
+        return 1;
+      }
+      
+      if (_rootDirectory == null)
+        _rootDirectory = _resinHome;
+
+      _javaHome = GetJavaHome(_resinHome, _javaHome);
+      
+      _cp = GetClasspath(_cp, _resinHome, _javaHome, _envCp);
+      
+      if (_javaExe == null && _javaHome != null)
+        _javaExe = GetJavaExe(_javaHome);
+      
+      if (_javaExe == null)
+        _javaExe = "java.exe";
+      
+      System.Environment.SetEnvironmentVariable("JAVA_HOME", _javaHome);
+
+      try {
+        Directory.SetCurrentDirectory(_rootDirectory);
+      } catch (Exception e) {
+        Error(String.Format("Can't change dir to {0} due to: {1}", _rootDirectory, e), e);
+        
+        return 1;
+      }
+      
+      Environment.SetEnvironmentVariable("CLASSPATH", _cp);
+      Environment.SetEnvironmentVariable("PATH",
+                                         String.Format("{0};{1};{2}\\win32;{2}\\win64;\\openssl\\bin",
+                                                       _javaHome + "\\bin",
+                                                       Environment.GetEnvironmentVariable("PATH"),
+                                                       _resinHome));
+
+      _resinDataDir = System.Reflection.Assembly.GetExecutingAssembly().Location;
+      _resinDataDir = _resinDataDir.Substring(0, _resinDataDir.LastIndexOf('\\')) + "\\resin-data";
+      
+      if (! Directory.Exists(_resinDataDir))
+        Directory.CreateDirectory(_resinDataDir);
+      
+      if (_install || _uninstall) {
+        return InstallOrRemoveService();
+      } else if (_service) {
+        ServiceBase.Run(new ServiceBase[]{this});
+        
+        return 0;
+      } else if (_standalone) {
+        if (StartResin()) {
+          Join();
+
+          if (_process != null) {
+            int exitCode = _process.ExitCode;
+            _process.Dispose();
+            return exitCode;
+          }
+        }
+        
+        return 0;
+      } else {
+        if (StartResin()) {
+          ResinWindow window = new ResinWindow(this, _displayName);
+          window.Show();
+          Application.Run();
+        }
+        
+        return 0;
+      }
+    }
+    
+    private int InstallOrRemoveService() {
+      Exception exception = null;
+      int exitCode = 1;
+      bool hasChild = false;
+      
+      TextWriter stdOut = Console.Out;
+      TextWriter stdErr = Console.Error;
+      
+      String childOutputFile
+        = _resinDataDir + "\\service." + ServiceName + ".tmp";
+
+      TextWriter childWriter = null;
+      if (_isChild)
+        childWriter = new StreamWriter(childOutputFile);
+      
+      //buffer all the output of the Installer for use in case of error only.
+      StringWriter output = new StringWriter();
+      
+      Console.SetOut(output);
+      Console.SetError(output);
+      
+      bool success = false;
+      
+      try {
+        if (_install)
+          InstallService(_isChild? childWriter: stdOut);
+        else
+          UninstallService(_isChild? childWriter: stdOut);
+        
+        success = true;
+      } catch (StateNofFoundException) {
+        //
+      } catch (Exception e) {
+        exception = e;
+        
+        Exception cause = e.GetBaseException();
+        
+        if (cause is System.Security.SecurityException && ! _isChild) {
+          try {
+            //occurs on Vista and supposedly Server 2008 when user is an administrator
+            //but program is started using the 'user' (secondary) security token with
+            //all the administrative privileges stripped away
+            //this should not occur when the UAC is disabled.
+            hasChild = true;
+            
+            Info("Starting service installation with elevated security privileges...", stdOut, true);
+            
+            ProcessStartInfo psi = new ProcessStartInfo();
+            psi.FileName = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            
+            _args.Append("--child");
+            psi.Arguments = _args.ToString();
+            
+            psi.Verb = "runas";
+            psi.UseShellExecute = true;
+            psi.WindowStyle = ProcessWindowStyle.Hidden;
+            psi.LoadUserProfile = false;
+            
+            Process process = Process.Start(psi);
+            
+            while (! process.HasExited)
+              process.WaitForExit(500);
+            
+            exitCode = process.ExitCode;
+            
+            if (exitCode == 0)
+              success = true;
+          } catch (Exception pe) {
+            Error("Failed to install using elevated security privileges due to:", pe);
+          }
+        } else {
+          Info("Service installation requires administrative privileges.");
+        }
+      } finally {
+        Console.SetOut(stdOut);
+        Console.SetError(stdErr);
+      }
+      
+      if (_isChild) {
+        if (! success) {
+          Info(output.ToString(), childWriter, true);
+          Error("Exception occured during installation: ", exception, childWriter);
+        }
+        
+        childWriter.Flush();
+        childWriter.Close();
+      }
+      
+      String childData = null;
+      if (hasChild) {
+        StreamReader reader = new StreamReader(childOutputFile);
+        
+        childData = reader.ReadToEnd();
+        
+        reader.Close();
+        
+        File.Delete(childOutputFile);
+      }
+
+      if (success && hasChild) {
+        Info(childData, false);
+        
+        return 0;
+      }
+      else if (success && ! hasChild) {
+        return 0;
+      } else {
+        if (exception != null)
+          Error("ServiceInstaller failed with due to:", exception);
+        
+        Info(output.ToString());
+        
+        if (hasChild) {
+          Info("Atempted installation with elevated privileges failed: \n");
+          Info(childData);
+        }
+      }
+      
+      
+      return exitCode;
+    }
+    
+    private bool ServiceExists(String serviceName) {
+      ServiceController[] services = ServiceController.GetServices();
+      
+      foreach (ServiceController service in services) {
+        if (ServiceName.Equals(service.ServiceName)) {
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    private void InstallService(TextWriter writer) {
+      if (ServiceExists(ServiceName)) {
+        Info(String.Format("\nService {0} appears to be already installed", ServiceName), writer, true);
+      } else {
+        Installer installer = InitInstaller();
+        Hashtable installState = new Hashtable();
+        installer.Install(installState);
+        
+        RegistryKey system = Registry.LocalMachine.OpenSubKey("System");
+        RegistryKey currentControlSet = system.OpenSubKey("CurrentControlSet");
+        RegistryKey servicesKey = currentControlSet.OpenSubKey("Services");
+        RegistryKey serviceKey = servicesKey.OpenSubKey(ServiceName, true);
+        
+        StringBuilder builder = new StringBuilder((String)serviceKey.GetValue("ImagePath"));
+        builder.Append(" -service -name ").Append(ServiceName).Append(' ');
+        
+        if (_passToServiceArgs.Length > 0)
+          builder.Append(_passToServiceArgs).Append(' ');
+        
+        if (_jvmArgs.Length > 0)
+          builder.Append(_jvmArgs).Append(' ');
+        
+        if (_resinArgs.Length > 0)
+          builder.Append(_resinArgs).Append(' ');
+        
+        serviceKey.SetValue("ImagePath", builder.ToString());
+
+        StoreState(installState, ServiceName);
+        
+        Info(String.Format("\nInstalled {0} as Windows Service", ServiceName), writer, true);
+      }
+    }
+    
+    private void UninstallService(TextWriter writer) {
+      if (! ServiceExists(ServiceName)) {
+        Info(String.Format("\nService {0} does not appear to be installed", ServiceName), writer, true);
+      } else {
+        Hashtable state = LoadState(ServiceName);
+
+        Installer installer = InitInstaller();
+        
+        installer.Uninstall(state);
+        
+        Info(String.Format("\nRemoved {0} as Windows Service", ServiceName), writer, true);
+      }
+    }
+    
+    private Installer InitInstaller() {
+      TransactedInstaller txInst = new TransactedInstaller();
+      txInst.Context = new InstallContext(null, new String[]{});
+      txInst.Context.Parameters["assemblypath"] = System.Reflection.Assembly.GetExecutingAssembly().Location;
+      
+      ServiceProcessInstaller spInst = new ServiceProcessInstaller();
+      if (_user != null) {
+        spInst.Username = _user;
+        spInst.Password = _password;
+        spInst.Account = ServiceAccount.User;
+      } else {
+        spInst.Account = ServiceAccount.LocalSystem;
+      }
+
+      txInst.Installers.Add(spInst);
+
+      ServiceInstaller srvInst = new ServiceInstaller();
+      srvInst.ServiceName = ServiceName;
+      srvInst.DisplayName = _displayName;
+      srvInst.StartType = ServiceStartMode.Manual;
+
+      txInst.Installers.Add(srvInst);
+
+      return txInst;
+    }
+
+    private void StoreState(Hashtable state, String serviceName) {
+      FileStream fs = new FileStream(_resinDataDir + '\\' + serviceName + ".srv", FileMode.Create, FileAccess.Write);
+      BinaryFormatter serializer = new BinaryFormatter();
+      serializer.Serialize(fs, state);
+      fs.Flush();
+      fs.Close();
+    }
+    
+    private Hashtable LoadState(String serviceName) {
+      String stateFile = _resinDataDir + '\\' + serviceName + ".srv";
+      
+      if (! File.Exists(stateFile))
+        stateFile = GetResinAppDataDir() + '\\' + serviceName + ".srv";
+      
+      Hashtable state = null;
+      try {
+        FileStream fs = new FileStream(stateFile, FileMode.Open, FileAccess.Read);
+        BinaryFormatter serializer = new BinaryFormatter();
+        state = (Hashtable)serializer.Deserialize(fs);
+        fs.Close();
+      } catch (Exception e) {
+        Error(String.Format("Cannot load service installation state file '{0}' due to:", stateFile), e);
+        
+        throw new StateNofFoundException();
+      }
+      
+      return state;
+    }
+    
+    private static String GetResinAppDataDir() {
+      return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + '\\' + CAUCHO_APP_DATA;
+    }
+
+    
     private void ExecuteJava(String command) {
       if (_verbose) {
         StringBuilder info = new StringBuilder();
@@ -541,15 +715,16 @@ namespace Caucho
       
       ProcessStartInfo startInfo = new ProcessStartInfo();
       startInfo.FileName = _javaExe;
+      
       StringBuilder arguments = new StringBuilder(_jvmArgs).Append(' ');
       
       if (_nojit)
         arguments.Append("-Djava.compiler=NONE ");
       
       arguments.Append("-Xrs -jar ");
-      arguments.Append(_resinHome + "\\lib\\resin.jar ");
-      arguments.Append("-resin-home ").Append(_resinHome).Append(' ');
-      arguments.Append("-root-directory ").Append(_rootDirectory).Append(' ');
+      arguments.Append("\"" + _resinHome + "\\lib\\resin.jar\" ");
+      arguments.Append("-resin-home \"").Append(_resinHome).Append("\" ");
+      arguments.Append("-root-directory \"").Append(_rootDirectory).Append("\" ");
       arguments.Append(_resinArgs).Append(' ');
       
       if (command != null)
@@ -631,28 +806,52 @@ namespace Caucho
     }
     
     public void Error(String message, Exception e) {
-      if (_service && EventLog != null)
-        EventLog.WriteEntry(this.ServiceName, message, EventLogEntryType.Error);
-      else
-        Console.WriteLine(message);
+      Error(message, e, null);
     }
+    
+    public void Error(String message, Exception e, TextWriter writer) {
+      StringBuilder data = new StringBuilder(message);
+      
+      if (e != null)
+        data.Append('\n').Append(e.ToString());
+
+      if (writer != null)
+        writer.WriteLine(data.ToString());
+      else if (_service && EventLog != null)
+        EventLog.WriteEntry(this.ServiceName, data.ToString(), EventLogEntryType.Error);
+      else
+        Console.WriteLine(data.ToString());
+    }
+    
     
     private void Info(String message) {
-      Info(message, true);
+      Info(message, null, true);
+    }
+
+    private void Info(String message, bool newLine) {
+      Info(message, null, newLine);
     }
     
-    private void Info(String message, bool newLine) {
-      if (_service && EventLog != null)
+    private void Info(String message, TextWriter writer, bool newLine) {
+      if (writer != null && newLine)
+        writer.WriteLine(message);
+      else if(writer != null && ! newLine)
+        writer.Write(message);
+      else if (_service && EventLog != null)
         EventLog.WriteEntry(this.ServiceName, message, EventLogEntryType.Information);
       else if (newLine)
         Console.WriteLine(message);
-      else 
+      else
         Console.Write(message);
     }
     
     public static int Main(String []args) {
       Resin resin = new Resin(Environment.GetCommandLineArgs());
-      return resin.Execute();
+      
+      //return resin.Execute();
+      int exitCode = resin.Execute();
+      
+      return exitCode;
     }
 
     private static String GetJavaExe(String javaHome) {
@@ -670,8 +869,8 @@ namespace Caucho
       if(cp != null && ! "".Equals(cp))
         buffer.Append(cp).Append(';');
 
-//      buffer.Append(resinHome + "\\classes;");
-//      buffer.Append(resinHome + "\\lib\\resin.jar;");
+      //      buffer.Append(resinHome + "\\classes;");
+      //      buffer.Append(resinHome + "\\lib\\resin.jar;");
       
       if (javaHome != null) {
         
@@ -787,5 +986,8 @@ namespace Caucho
     private void Usage(String name) {
       Info(String.Format(USAGE, name));
     }
+  }
+  
+  class StateNofFoundException : Exception {
   }
 }

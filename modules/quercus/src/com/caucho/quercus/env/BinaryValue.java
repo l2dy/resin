@@ -29,44 +29,27 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.marshal.Marshal;
+
 /**
  * Represents an 8-bit binary php-6 value.
  */
 abstract public class BinaryValue extends StringValue
 {
-  public static final StringValue EMPTY = BinaryBuilderValue.EMPTY;
-  
+  /*
   @Override
   public boolean isBinary()
   {
     return true;
   }
+  */
 
   /**
-   * Returns the buffer offset
+   * Cost to convert to a binary value
    */
-  public byte []getBuffer()
+  public int toBinaryValueMarshalCost()
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return Marshal.COST_IDENTICAL + 1;
   }
-
-  /**
-   * Returns the buffer offset
-   */
-  public int getOffset()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Returns the buffer offset
-   */
-  public void setOffset(int offset)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  abstract public byte[] toBytes();
 }
 

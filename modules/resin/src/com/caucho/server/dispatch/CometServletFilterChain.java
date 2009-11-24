@@ -29,27 +29,23 @@
 
 package com.caucho.server.dispatch;
 
-import javax.servlet.FilterChain;
-import javax.servlet.Servlet;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.UnavailableException;
+import javax.servlet.*;
 import java.io.IOException;
 import java.util.HashMap;
 
 import com.caucho.servlet.comet.CometServlet;
 import com.caucho.servlet.comet.CometController;
 
+import com.caucho.server.port.ConnectionCometController;
 import com.caucho.server.connection.HttpServletRequestImpl;
 import com.caucho.server.connection.HttpConnectionController;
 
 /**
  * Represents the final servlet in a filter chain.
  */
-public class CometServletFilterChain extends AbstractFilterChain {
+public class CometServletFilterChain implements FilterChain {
   public static String SERVLET_NAME = "javax.servlet.error.servlet_name";
-  
+
   // servlet config
   private ServletConfigImpl _config;
   // servlet
@@ -64,7 +60,7 @@ public class CometServletFilterChain extends AbstractFilterChain {
   {
     if (config == null)
       throw new NullPointerException();
-    
+
     _config = config;
   }
 
@@ -82,8 +78,8 @@ public class CometServletFilterChain extends AbstractFilterChain {
   public HashMap<String,String> getRoleMap()
   {
     return _config.getRoleMap();
-  }  
-  
+  }
+
   /**
    * Invokes the final servlet at the end of the chain.
    *
@@ -106,15 +102,36 @@ public class CometServletFilterChain extends AbstractFilterChain {
       }
     }
 
-    CometController controller = null;
-    
-    try {
-      HttpServletRequestImpl requestImpl = (HttpServletRequestImpl) request;
-      controller = requestImpl.toComet();
+    ConnectionCometController controller = null;
 
-      if (_servlet.service(request, response, controller)) {
-	requestImpl.suspend();
-	controller = null;
+    try {
+      ServletRequest reqPtr = request;
+
+      while (reqPtr instanceof ServletRequestWrapper) {
+        reqPtr = ((ServletRequestWrapper) request).getRequest();
+      }
+
+      HttpServletRequestImpl requestImpl = (HttpServletRequestImpl) reqPtr;
+
+      controller = requestImpl.getCometController();
+
+      if (controller != null) {
+        if (_servlet.resume(request, response, controller)) {
+          requestImpl.suspend();
+          controller = null;
+        }
+        else {
+          controller.complete();
+          controller = null;
+        }
+      }
+      else {
+        controller = requestImpl.toComet();
+
+        if (_servlet.service(request, response, controller)) {
+          requestImpl.suspend();
+          controller = null;
+        }
       }
     } catch (UnavailableException e) {
       _servlet = null;
@@ -133,67 +150,7 @@ public class CometServletFilterChain extends AbstractFilterChain {
       throw e;
     } finally {
       if (controller != null)
-	controller.close();
-    }
-  }
-  
-  /**
-   * Resumes the final servlet for a comet request.
-   *
-   * @param request the servlet request
-   * @param response the servlet response
-   *
-   * @since Resin 3.1.3
-   */
-  @Override
-  public boolean doResume(ServletRequest request,
-			  ServletResponse response)
-    throws ServletException, IOException
-  {
-    if (_servlet == null) {
-      try {
-        _servlet = (CometServlet) _config.createServlet(false);
-      } catch (ServletException e) {
-        throw e;
-      } catch (Exception e) {
-        throw new ServletException(e);
-      }
-    }
-    
-    CometController controller = null;
-    try {
-      HttpServletRequestImpl req = (HttpServletRequestImpl) request;
-
-      controller = req.getCometController();
-
-      if (controller == null)
-	return false;
-      else if (_servlet.resume(request, response, controller)) {
-	req.suspend();
-	
-	controller = null;
-	return true;
-      }
-      else
-	return false;
-    } catch (UnavailableException e) {
-      _servlet = null;
-      _config.setInitException(e);
-      _config.killServlet();
-      request.setAttribute(SERVLET_NAME, _config.getServletName());
-      throw e;
-    } catch (ServletException e) {
-      request.setAttribute(SERVLET_NAME, _config.getServletName());
-      throw e;
-    } catch (IOException e) {
-      request.setAttribute(SERVLET_NAME, _config.getServletName());
-      throw e;
-    } catch (RuntimeException e) {
-      request.setAttribute(SERVLET_NAME, _config.getServletName());
-      throw e;
-    } finally {
-      if (controller != null)
-	controller.close();
+        controller.close();
     }
   }
 }

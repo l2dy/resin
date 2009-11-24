@@ -42,13 +42,13 @@ import javax.servlet.http.HttpServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-public class SetRequestSecureFilterChain extends AbstractFilterChain
+public class SetRequestSecureFilterChain implements FilterChain
 {
   private final FilterChain _next;
   private Boolean _isSecure;
 
   public SetRequestSecureFilterChain(FilterChain next,
-				     Boolean isSecure)
+                                     Boolean isSecure)
   {
     _next = next;
     _isSecure = isSecure;
@@ -62,43 +62,56 @@ public class SetRequestSecureFilterChain extends AbstractFilterChain
   }
 
   public static void doFilter(ServletRequest request,
-			      ServletResponse response,
-			      FilterChain next,
-			      boolean isSecure)
+                              ServletResponse response,
+                              FilterChain next,
+                              boolean isSecure)
     throws ServletException, IOException
   {
     HttpServletRequest req = (HttpServletRequest) request;
     HttpServletResponse res = (HttpServletResponse) response;
 
-    req = new SecureServletRequestWrapper(req, isSecure);
-
+    /*
     if (res instanceof CauchoResponse) {
       // server/125i - XXX: needs refactor
       CauchoResponse cRes = (CauchoResponse) res;
       CauchoRequest oldReq = cRes.getAbstractHttpResponse().getRequest();
-      
+
       cRes.getAbstractHttpResponse().setRequest((CauchoRequest) req);
       try {
-	next.doFilter(req, res);
+        next.doFilter(req, res);
       } finally {
-	cRes.getAbstractHttpResponse().setRequest(oldReq);
+        cRes.getAbstractHttpResponse().setRequest(oldReq);
       }
     }
-    else
+    */
+    
+    if (req instanceof HttpServletRequestImpl) {
+      HttpServletRequestImpl requestFacade = (HttpServletRequestImpl) req;
+
+      requestFacade.setSecure(true);
+
+      // XXX: finally
+
       next.doFilter(req, res);
+    }
+    else {
+      req = new SecureServletRequestWrapper(req, isSecure);
+
+      next.doFilter(req, res);
+    }
   }
 
   public static class SecureServletRequestWrapper extends RequestAdapter
   {
     private Boolean _isSecure;
-    
+
     public SecureServletRequestWrapper(HttpServletRequest request,
-				       Boolean isSecure)
+                                       Boolean isSecure)
     {
       setRequest(request);
 
       if (request instanceof CauchoRequest)
-	setWebApp(((CauchoRequest) request).getWebApp());
+        setWebApp(((CauchoRequest) request).getWebApp());
 
       _isSecure = isSecure;
     }

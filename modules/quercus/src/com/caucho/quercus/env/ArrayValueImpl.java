@@ -714,26 +714,26 @@ public class ArrayValueImpl extends ArrayValue
       for (Entry entry = entries[hash];
 	   entry != null;
 	   entry = entry._nextHash) {
-	if (key.equals(entry._key)) {
-	  Var var = entry._var;
-	
-	  return var != null ? var.toValue() : entry._value;
-	
-	  // return entry._value.toValue(); // php/39a1
-	}
+        if (key.equals(entry._key)) {
+          Var var = entry._var;
+        
+          return var != null ? var.toValue() : entry._value;
+        
+          // return entry._value.toValue(); // php/39a1
+        }
       }
     }
     else {
       for (Entry entry = _head;
 	   entry != null;
 	   entry = entry._next) {
-	if (key.equals(entry._key)) {
-	  Var var = entry._var;
-	
-	  return var != null ? var.toValue() : entry._value;
-	
-	  // return entry._value.toValue(); // php/39a1
-	}
+        if (key.equals(entry._key)) {
+          Var var = entry._var;
+        
+          return var != null ? var.toValue() : entry._value;
+        
+          // return entry._value.toValue(); // php/39a1
+        }
       }
     }
 
@@ -861,41 +861,6 @@ public class ArrayValueImpl extends ArrayValue
     }
 
     return null;
-  }
-
-  /**
-   * Returns true if the value is set.
-   */
-  @Override
-  public boolean isset(Value key)
-  {
-    return get(key).isset();
-    
-    /*
-    key = key.toKey();
-
-    Entry []entries = _entries;
-    if (entries != null) {
-      int hash = key.hashCode() & _hashMask;
-
-      for (Entry entry = entries[hash];
-	   entry != null;
-	   entry = entry._nextHash) {
-        if (key.equals(entry._key))
-          return entry._value.isset();
-      }
-    }
-    else {
-      for (Entry entry = _head;
-	   entry != null;
-	   entry = entry._next) {
-        if (key.equals(entry._key))
-          return entry._value.isset();
-      }
-    }
-
-    return false;
-    */
   }
 
   /**
@@ -1179,7 +1144,7 @@ public class ArrayValueImpl extends ArrayValue
       return NullValue.NULL;
   }
 
-  protected final Entry getHead()
+  public final Entry getHead()
   {
     return _head;
   }

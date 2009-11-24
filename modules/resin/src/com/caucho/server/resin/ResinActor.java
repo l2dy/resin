@@ -63,13 +63,14 @@ public class ResinActor extends SimpleActor
   {
     log.info(_resin + " stop request from watchdog '" + from + "'");
 
-    _resin.destroy();
+    _resin.startShutdown(L.l("Resin shutdown from watchdog stop '"
+                             + from + "'"));
 
     getBrokerStream().queryResult(id, from, to, query);
   }
 
   public void destroy()
   {
-    _resin.destroy();
+    _resin.startShutdown(L.l("Resin shutdown from ResinActor"));
   }
 }

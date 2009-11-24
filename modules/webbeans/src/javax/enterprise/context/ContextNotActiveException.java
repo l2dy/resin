@@ -19,7 +19,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
@@ -28,13 +29,11 @@
 
 package javax.enterprise.context;
 
-import javax.enterprise.inject.InjectionException;
-
 /**
  * Exception thrown when a webbean definition is inconsistent or invalid
  */
 
-public class ContextNotActiveException extends InjectionException
+public class ContextNotActiveException extends ContextException
 {
   public ContextNotActiveException()
   {
@@ -49,7 +48,7 @@ public class ContextNotActiveException extends InjectionException
   {
     super(cause);
   }
-  
+
   public ContextNotActiveException(String message, Throwable cause)
   {
     super(message, cause);

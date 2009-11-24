@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,6 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.Location;
 import com.caucho.quercus.lib.ArrayModule;
 import com.caucho.vfs.WriteStream;
 
@@ -45,15 +44,15 @@ import java.util.TreeSet;
  */
 abstract public class ObjectValue extends Value {
   transient protected QuercusClass _quercusClass;
-  
+
   protected String _className;
-  
+
   protected String _incompleteObjectName;
-  
+
   protected ObjectValue()
   {
   }
-  
+
   protected ObjectValue(QuercusClass quercusClass)
   {
     _quercusClass = quercusClass;
@@ -71,12 +70,12 @@ abstract public class ObjectValue extends Value {
   {
     return _quercusClass;
   }
-  
+
   public boolean isIncompleteObject()
   {
     return _incompleteObjectName != null;
   }
-  
+
   /*
    * Returns the name of the uninitialized object.
    */
@@ -84,7 +83,7 @@ abstract public class ObjectValue extends Value {
   {
     return _incompleteObjectName;
   }
-  
+
   /*
    * Sets the name of uninitialized object.
    */
@@ -92,14 +91,13 @@ abstract public class ObjectValue extends Value {
   {
     _incompleteObjectName = name;
   }
-  
+
   /*
    * Initializes the incomplete class.
    */
   public void initObject(Env env, QuercusClass cls)
   {
     setQuercusClass(cls);
-    
     _incompleteObjectName = null;
   }
 
@@ -198,16 +196,16 @@ abstract public class ObjectValue extends Value {
   public Value get(Value key)
   {
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-      
-    // php/066q vs. php/0906
-    //return getField(null, key.toString());
 
     if (delegate != null)
       return delegate.get(this, key);
-    else
-      return super.get(key);
-      //return Env.getInstance().error(L.l("Can't use object '{0}' as array",
-      //                                   getName()));
+    else {
+      // php/3d94
+
+      // return getField(Env.getInstance(), key.toStringValue());
+      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
+                                         getName()));
+    }
   }
 
   /**
@@ -217,13 +215,18 @@ abstract public class ObjectValue extends Value {
   public Value put(Value key, Value value)
   {
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-    
+
     // php/0d94
 
     if (delegate != null)
       return delegate.put(this, key, value);
-    else
-      return super.put(key, value);
+    else {
+      // php/0d94
+
+      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
+                                         getName()));
+      // return super.put(key, value);
+    }
   }
 
   /**
@@ -233,15 +236,20 @@ abstract public class ObjectValue extends Value {
   public Value put(Value value)
   {
     ArrayDelegate delegate = _quercusClass.getArrayDelegate();
-    
+
     // php/0d94
 
     if (delegate != null)
       return delegate.put(this, value);
-    else
-      return super.put(value);
+    else {
+      // php/0d97
+
+      return Env.getInstance().error(L.l("Can't use object '{0}' as array",
+                                         getName()));
+      // return super.put(key, value);
+    }
   }
-  
+
   /**
    * Sets the array value, returning the new array, e.g. to handle
    * string update ($a[0] = 'A').  Creates an array automatically if
@@ -250,7 +258,7 @@ abstract public class ObjectValue extends Value {
   public Value append(Value index, Value value)
   {
     put(index, value);
-    
+
     return this;
   }
 
@@ -265,7 +273,7 @@ abstract public class ObjectValue extends Value {
     if (delegate != null)
       return delegate.isset(this, key);
     else
-      return get(key).isset();
+      return getField(Env.getInstance(), key.toStringValue()).isset();
   }
 
   /**
@@ -339,7 +347,7 @@ abstract public class ObjectValue extends Value {
   public int getCount(Env env)
   {
     CountDelegate delegate = _quercusClass.getCountDelegate();
-      
+
     // php/066q vs. php/0906
     //return getField(null, key.toString());
 
@@ -360,7 +368,7 @@ abstract public class ObjectValue extends Value {
   public Value putField(String key, String value)
   {
     Env env = Env.getInstance();
-    
+
     return putThisField(env, env.createString(key), env.createString(value));
   }
 
@@ -379,7 +387,7 @@ abstract public class ObjectValue extends Value {
   public Value putField(String key, long value)
   {
     Env env = Env.getInstance();
-    
+
     return putThisField(env, env.createString(key), LongValue.create(value));
   }
 
@@ -417,7 +425,7 @@ abstract public class ObjectValue extends Value {
   public Value putField(String key, double value)
   {
     Env env = Env.getInstance();
-    
+
     return putThisField(env, env.createString(key), DoubleValue.create(value));
   }
 
@@ -428,13 +436,13 @@ abstract public class ObjectValue extends Value {
   public boolean eq(Value rValue)
   {
     rValue = rValue.toValue();
-    
+
     if (rValue instanceof ObjectValue)
       return cmpObject((ObjectValue) rValue) == 0;
     else
       return super.eq(rValue);
   }
-  
+
   /**
    * Compare two objects
    */
@@ -446,13 +454,13 @@ abstract public class ObjectValue extends Value {
     // if objects are not equal, then which object is greater is undefined
 
     int result = getName().compareTo(rValue.getName());
-    
+
     if (result != 0)
       return result;
-    
+
     Set<? extends Map.Entry<Value,Value>> aSet = entrySet();
     Set<? extends Map.Entry<Value,Value>> bSet = rValue.entrySet();
-    
+
     if (aSet.equals(bSet))
       return 0;
     else if (aSet.size() > bSet.size())
@@ -461,10 +469,10 @@ abstract public class ObjectValue extends Value {
       return -1;
     else {
       TreeSet<Map.Entry<Value,Value>> aTree
-	= new TreeSet<Map.Entry<Value,Value>>(aSet);
+        = new TreeSet<Map.Entry<Value,Value>>(aSet);
 
       TreeSet<Map.Entry<Value,Value>> bTree
-	= new TreeSet<Map.Entry<Value,Value>>(bSet);
+        = new TreeSet<Map.Entry<Value,Value>>(bSet);
 
       Iterator<Map.Entry<Value,Value>> iterA = aTree.iterator();
       Iterator<Map.Entry<Value,Value>> iterB = bTree.iterator();
@@ -477,7 +485,7 @@ abstract public class ObjectValue extends Value {
 
         if (result != 0)
           return result;
-        
+
         result = a.getValue().cmp(b.getValue());
 
         if (result != 0)
@@ -496,10 +504,10 @@ abstract public class ObjectValue extends Value {
     throws IOException
   {
     int size = getSize();
-    
+
     if (isIncompleteObject())
       size++;
-    
+
     out.println("object(" + getName() + ") (" + size + ") {");
 
     if (isIncompleteObject()) {
@@ -507,14 +515,14 @@ abstract public class ObjectValue extends Value {
       out.println("[\"__Quercus_Incomplete_Class_name\"]=>");
 
       printDepth(out, 2 * (depth + 1));
-      
+
       Value value = env.createString(getIncompleteObjectName());
-      
+
       value.varDump(env, out, depth + 1, valueSet);
 
       out.println();
     }
-    
+
     ArrayValue sortedEntries = new ArrayValueImpl();
 
     Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
@@ -544,13 +552,40 @@ abstract public class ObjectValue extends Value {
       value.varDump(env, out, depth, valueSet);
 
       out.println();
-      
+
       depth--;
     }
 
     printDepth(out, 2 * depth);
 
     out.print("}");
+  }
+
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append('{');
+
+    int length = 0;
+
+    Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
+
+    while (iter.hasNext()) {
+      Map.Entry<Value,Value> entry = iter.next();
+
+      if (length > 0)
+        sb.append(',');
+
+      entry.getKey().toStringValue().jsonEncode(env, sb);
+      sb.append(':');
+      entry.getValue().jsonEncode(env, sb);
+      length++;
+    }
+
+    sb.append('}');
   }
 }
 

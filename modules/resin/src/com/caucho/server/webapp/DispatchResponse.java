@@ -24,230 +24,43 @@
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Scott Ferguson
+ * @author Alex Rojkov
  */
 
 package com.caucho.server.webapp;
 
-import com.caucho.server.connection.AbstractHttpResponse;
-import com.caucho.server.connection.AbstractResponseStream;
-import com.caucho.server.connection.CauchoResponse;
-import com.caucho.server.connection.IncludeResponseStream;
-import com.caucho.util.FreeList;
-import com.caucho.vfs.WriteStream;
+import com.caucho.server.connection.ResponseAdapter;
 
-import javax.servlet.ServletResponse;
-import javax.servlet.ServletResponseWrapper;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 
-/**
- * Internal response for an include() or forward()
- */
-class DispatchResponse extends AbstractHttpResponse
-{
-  private static final FreeList<DispatchResponse> _freeList
-    = new FreeList<DispatchResponse>(32);
+public class DispatchResponse extends ResponseAdapter {
 
-  private IncludeResponseStream _stream;
-  
-  private HttpServletResponse _next;
-  
-  protected DispatchResponse()
-  {
-  }
-
-  /**
-   * Creates a dispatch request.
-   */
-  public static DispatchResponse createDispatch()
-  {
-    DispatchResponse res = _freeList.allocate();
-    if (res == null)
-      res = new DispatchResponse();
-
-    return res;
-  }
-
-  /**
-   * Sets the next response.
-   */
-  public void setNextResponse(HttpServletResponse next)
-  {
-    _next = next;
-
-    _stream.init(next);
-  }
-
-  /**
-   * Gets the next response.
-   */
-  public ServletResponse getResponse()
-  {
-    return _next;
-  }
-
-  /**
-   * Starts the response.
-   */
-  /*
-  @Override
-  public void startRequest(HttpBufferStore httpBuffer)
-    throws IOException
-  {
-    super.startRequest(httpBuffer);
-
-    setResponseStream(_stream);
-
-    _stream.start();
-  }
-  */
-
-  @Override
-  protected AbstractResponseStream createResponseStream()
-  {
-    _stream = new IncludeResponseStream(this);
-    
-    return _stream;
-  }
-
-  /**
-   * included response can't set the content type.
-   */
-  public void setContentType(String type)
-  {
-  }
-
-  /**
-   * Wrapped calls.
-   */
-  public String encodeURL(String url)
-  {
-    return _next.encodeURL(url);
-  }
-
-  /**
-   * Wrapped calls.
-   */
-  public String encodeRedirectURL(String url)
-  {
-    return _next.encodeRedirectURL(url);
-  }
-
-  /**
-   * included() responses don't print the headers.
-   */
-  protected boolean writeHeadersInt(WriteStream os, int length, boolean isHead)
-    throws IOException
-  {
-    return false;
-  }
-
-  /**
-   * This is not a top response.
-   */
-  public boolean isTop()
-  {
-    return false;
+  public DispatchResponse(HttpServletResponse response) {
+    super(response);
   }
 
   @Override
-  public String getCharacterEncoding()
-  {
-    // jsp/17e1
-    return _next.getCharacterEncoding();
+  public void setDateHeader(String name, long date) {
   }
-  
+
   @Override
-  public boolean isCommitted()
-  {
-    /**
-     * JSP TCK requires this to return true if the request is committed,
-     * making bug #2481 not possible to resolve (unless we add a config
-     * option)
-     */
-    
-    // jsp/15m2
-    // #2481, server/10y5
-    // jsp/15lg (tck)
-    
-    return _next.isCommitted();
+  public void setHeader(String name, String value) {
   }
 
-  /**
-   * Returns true for a caucho response.
-   */
-  public boolean isCauchoResponse()
-  {
-    return _next instanceof CauchoResponse;
+  @Override
+  public void addHeader(String name, String value) {
   }
 
-  /**
-   * Set true for a caucho response stream.
-   */
-  public void setCauchoResponseStream(boolean isCaucho)
-  {
-    _stream.setCauchoResponseStream(isCaucho);
+  @Override
+  public void addDateHeader(String name, long date) {
   }
 
-  /**
-   * Kills the cache.
-   */
-  public void killCache()
-  {
-    super.killCache();
-
-    ServletResponse next = _next;
-    while (next != null && next != this) {
-      if (next instanceof CauchoResponse) {
-	((CauchoResponse) next).killCache();
-	break;
-      }
-
-      if (next instanceof ServletResponseWrapper)
-	next = ((ServletResponseWrapper) next).getResponse();
-      else if (next instanceof DispatchResponse)
-	next = ((DispatchResponse) next).getResponse();
-      else
-	break;
-    }
+  @Override
+  public void addIntHeader(String name, int value) {
   }
 
-  public int getStatus()
-  {
-    throw new UnsupportedOperationException("unimplemented");
-  }
-
-  public Iterable<String> getHeaders(String name)
-  {
-    throw new UnsupportedOperationException("unimplemented");
-  }
-
-  public Iterable<String> getHeaderNames()
-  {
-    throw new UnsupportedOperationException("unimplemented");
-  }
-
-  /**
-   * Frees the response.
-   */
-  public void free()
-  {
-    super.free();
-
-    if (_stream != null)
-      _stream.init(null);
-    
-    _next = null;
-  }
-
-  /**
-   * Frees the request.
-   */
-  public static void free(DispatchResponse res)
-  {
-    res.free();
-
-    _freeList.free(res);
+  @Override
+  public void setIntHeader(String name, int value) {
   }
 }

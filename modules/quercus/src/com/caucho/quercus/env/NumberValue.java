@@ -38,7 +38,7 @@ public abstract class NumberValue extends Value {
    */
   public int cmp(Value rValue)
   {
-    if (rValue.isBoolean()) {
+    if (rValue.isBoolean() || rValue.isNull()) {
       boolean lBool = toBoolean();
       boolean rBool = rValue.toBoolean();
       
@@ -82,5 +82,13 @@ public abstract class NumberValue extends Value {
     if (lLong > rLong) return 1;
     return 0;
   }
-
+  
+  /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    sb.append(toStringValue());
+  }
 }

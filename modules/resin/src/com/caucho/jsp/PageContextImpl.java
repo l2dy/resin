@@ -146,6 +146,8 @@ public class PageContextImpl extends PageContext
 
   private ExpressionEvaluatorImpl _expressionEvaluator;
 
+  private ELContextListener[] _elContextListeners;
+
   PageContextImpl()
   {
     _attributes = new HashMapImpl<String,Object>();
@@ -202,7 +204,7 @@ public class PageContextImpl extends PageContext
       session = ((HttpServletRequest) request).getSession(true);
 
     ServletConfig config = servlet.getServletConfig();
-    WebApp app = (WebApp) config.getServletContext();
+    WebApp app = (WebApp) request.getServletContext();
 
     initialize(servlet, app, request, response,
 	       errorPage, session, bufferSize, autoFlush,
@@ -265,16 +267,22 @@ public class PageContextImpl extends PageContext
     _errorPage = errorPage;
     _webApp = app;
     _locale = null;
+    
+    if (app == null)
+      throw new NullPointerException();
 
+    // jsp/1059, jsp/3147
     _elContext = null;
-    _elResolver = null;
-
+    // XXX: recycling is important for performance reasons
+    /* 
+     _elResolver = null;
+     _bundleManager = null;
+     _varResolver = null;
+    */
     _hasException = false;
     //if (_attributes.size() > 0)
     //  _attributes.clear();
     _isFilled = false;
-    _bundleManager = null;
-    _varResolver = null;
     _nodeEnv = null;
 
     if (servlet instanceof Page) {
@@ -288,7 +296,9 @@ public class PageContextImpl extends PageContext
 
   protected void init()
   {
-    _elContext = null;
+    // XXX: important for performance reasons
+    // jsp/1059, jsp/3147
+     _elContext = null;
   }
 
   protected void setOut(JspWriter out)
@@ -335,7 +345,7 @@ public class PageContextImpl extends PageContext
    * Sets the page attribute with the given name.
    *
    * @param name the attribute name.
-   * @param value the new value
+   * @param attribute the new value
    */
   public void setAttribute(String name, Object attribute)
   {
@@ -352,7 +362,7 @@ public class PageContextImpl extends PageContext
    * Sets the page attribute with the given name.
    *
    * @param name the attribute name.
-   * @param value the new value
+   * @param attribute the new value
    */
   public Object putAttribute(String name, Object attribute)
   {
@@ -1002,10 +1012,12 @@ public class PageContextImpl extends PageContext
 
       String pathInfo = RequestAdapter.getPagePathInfo(req);
 
+      String servletPath = req.getServletPath();
+
       if (path != null) {
-	// jsp/15du vs jsp/15lk (tck)
-	if (pathInfo != null)
-	  path += pathInfo;
+        // jsp/15du vs jsp/15lk (tck)
+        if (pathInfo != null && ! path.equals(servletPath))
+          path += pathInfo;
       }
       else if (pathInfo != null)
 	path = pathInfo;
@@ -1076,10 +1088,14 @@ public class PageContextImpl extends PageContext
     HttpServletRequest req = (HttpServletRequest) getCauchoRequest();
     HttpServletResponse res = (HttpServletResponse) getResponse();
 
-    if (res.isCommitted())
+    if (res.isCommitted() && ! _webApp.isAllowForwardAfterFlush())
       throw new IllegalStateException(L.l("can't forward after writing HTTP headers"));
-    
-    _out.clear();
+    else if (! _webApp.isAllowForwardAfterFlush())
+      _out.clear();
+
+    //jsp/183n jsp/18kl jsp/1625
+    while (_out instanceof BodyContentImpl)
+      popBody();
 
     if (relativeUrl != null && ! relativeUrl.startsWith("/")) {
       String servletPath = RequestAdapter.getPageServletPath(req);
@@ -1285,25 +1301,30 @@ public class PageContextImpl extends PageContext
       return _elContext;
 
     WebApp webApp = getApplication();
-      
-    JspApplicationContextImpl jspContext
-      = (JspApplicationContextImpl) webApp.getJspApplicationContext();
 
-    ELResolver []resolverArray = jspContext.getELResolverArray();
+    JspApplicationContextImpl jspContext = webApp.getJspApplicationContext();
+
+    if (_elResolver == null) {
+      ELResolver[] resolverArray = jspContext.getELResolverArray();
+      _elResolver = new PageContextELResolver(this, resolverArray);
+    }
+
+    if (_functionMapper == null)
+      _functionMapper = new PageFunctionMapper();
+
+    if (_variableMapper == null)
+      _variableMapper = new PageVariableMapper();
 
     _elContext = new PageELContext();
-    _elResolver = new PageContextELResolver(this, resolverArray);
-      
-    _functionMapper = new PageFunctionMapper();
-    _variableMapper = new PageVariableMapper();
 
-    ELContextListener []listenerArray = jspContext.getELListenerArray();
+    if (_elContextListeners == null)
+      _elContextListeners = jspContext.getELListenerArray();
 
-    if (listenerArray.length > 0) {
+    if (_elContextListeners.length > 0) {
       ELContextEvent event = new ELContextEvent(_elContext);
 
-      for (int i = 0; i < listenerArray.length; i++) {
-	listenerArray[i].contextCreated(event);
+      for (int i = 0; i < _elContextListeners.length; i++) {
+        _elContextListeners[i].contextCreated(event);
       }
     }
     
@@ -1350,7 +1371,7 @@ public class PageContextImpl extends PageContext
       */
 
       getCauchoResponse().setResponseStream(_responseStream);
-      getCauchoResponse().setFlushBuffer(null);
+      // getCauchoResponse().setFlushBuffer(null);
 
       _request = null;
       _webApp = null;

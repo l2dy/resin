@@ -188,17 +188,10 @@ public class ArrayObject
 
   public Value __getField(StringValue key)
   {
-    //php/4a4r
-    return _value.get(key);
-    
-    /*
-    if ((_flags & ARRAY_AS_PROPS) != 0) {
+    if ((_flags & ARRAY_AS_PROPS) != 0)
       return _value.get(key);
-    }
-    else {
-      return NullValue.NULL;
-    }
-    */
+    else
+      return UnsetValue.UNSET;
   }
 
   static private void printDepth(WriteStream out, int depth)
@@ -260,19 +253,22 @@ public class ArrayObject
   }
 
   public void varDumpImpl(Env env,
+                          Value object,
                           WriteStream out,
                           int depth,
                           IdentityHashMap<Value, String> valueSet)
     throws IOException
   {
+    String name = object.getClassName();
+    
     if ((_flags & STD_PROP_LIST) != 0) {
       // XXX:
-      out.println("object(ArrayObject) (0) {");
+      out.println("object(" + name + ") (0) {");
       out.print("}");
 
     }
     else {
-      out.println("object(ArrayObject) (" + _value.getSize() + ") {");
+      out.println("object(" + name + ") (" + _value.getSize() + ") {");
 
       depth++;
 

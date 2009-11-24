@@ -87,7 +87,7 @@ public class OptionsModule extends AbstractQuercusModule {
   public static final int INFO_ALL = -1;
 
   private static final IniDefinitions _iniDefinitions = new IniDefinitions();
-  
+
   /**
    * Returns the default php.ini values.
    */
@@ -105,11 +105,11 @@ public class OptionsModule extends AbstractQuercusModule {
   {
     try {
       Quercus quercus = env.getQuercus();
-      
+
       QuercusProgram program = quercus.parseCode(code);
 
       program = program.createExprReturn();
-      
+
       Value value = program.execute(env);
 
       if (value == null || ! value.toBoolean()) {
@@ -118,7 +118,7 @@ public class OptionsModule extends AbstractQuercusModule {
       }
 
       return BooleanValue.TRUE;
-      
+
     } catch (IOException e) {
       throw new QuercusModuleException(e);
     }
@@ -128,8 +128,8 @@ public class OptionsModule extends AbstractQuercusModule {
    * Checks the assertion
    */
   public static Value assert_options(Env env,
-				     int code,
-				     @Optional("null") Value value)
+                                     int code,
+                                     @Optional("null") Value value)
   {
     Value result;
 
@@ -199,7 +199,7 @@ public class OptionsModule extends AbstractQuercusModule {
   public static String get_current_user(Env env)
   {
     env.stub("get_current_user");
-    
+
     return String.valueOf(env.getSelfPath().getOwner());
   }
 
@@ -255,8 +255,8 @@ public class OptionsModule extends AbstractQuercusModule {
   public static LongValue get_magic_quotes_gpc(Env env)
   {
     return (env.getIniBoolean("magic_quotes_gpc")
-	    ? LongValue.ONE
-	    : LongValue.ZERO);
+            ? LongValue.ONE
+            : LongValue.ZERO);
   }
 
   /**
@@ -280,12 +280,8 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   public static Value getenv(Env env, StringValue key)
   {
-    Value val = env.getQuercus().getServerEnv(key);
-
-    if (val == null) {
-      ArrayValue serverVars = env.getGlobalVar("_SERVER").toArrayValue(env);
-      val = serverVars.get(key);
-    }
+    Value serverVars = env.getGlobalVar("_SERVER");;
+    Value val = serverVars.get(key);
 
     if (val == null || ! val.isset())
       return BooleanValue.FALSE;
@@ -343,29 +339,29 @@ public class OptionsModule extends AbstractQuercusModule {
     ArrayValue value = new ArrayValueImpl();
 
     value.put(env.createString("ru_inblock"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_outblock"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_msgsnd"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_msgrcv"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_maxrss"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_ixrss"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_idrss"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_minflt"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_majflt"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_nsignals"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_nvcsw"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_nswap"),
-	      LongValue.create(0));
+              LongValue.create(0));
     value.put(env.createString("ru_utime.tv_sec"), LongValue.create(0));
     value.put(env.createString("ru_utime.tv_usec"), LongValue.create(0));
     value.put(env.createString("ru_stime.tv_sec"), LongValue.create(0));
@@ -402,7 +398,7 @@ public class OptionsModule extends AbstractQuercusModule {
    * @param extension assumes ini values are prefixed by extension names.
    */
   public static Value ini_get_all(Env env,
-				  @Optional() String extension)
+                                  @Optional() String extension)
   {
     if (extension.length() > 0) {
       if (! env.isExtensionLoaded(extension)) {
@@ -411,7 +407,7 @@ public class OptionsModule extends AbstractQuercusModule {
       }
       extension += ".";
     }
-  
+
     return getAllDirectives(env, extension);
   }
 
@@ -449,7 +445,7 @@ public class OptionsModule extends AbstractQuercusModule {
 
     return directives;
   }
-  
+
   /**
    * Restore the initial configuration value
    */
@@ -514,9 +510,9 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Returns the sapi type.
    */
-  public static String php_sapi_name()
+  public static String php_sapi_name(Env env)
   {
-    return "apache";
+    return env.getQuercus().getSapiName();
   }
 
   /**
@@ -531,35 +527,35 @@ public class OptionsModule extends AbstractQuercusModule {
 
     switch (mode.charAt(0)) {
     case 's':
-      return PHP_OS;
+      return System.getProperty("os.name");
 
     case 'n':
       try {
-	InetAddress addr = InetAddress.getLocalHost();
-	
-	return addr.getHostName();
-      } catch (Exception e) {
-	log.log(Level.FINER, e.toString(), e);
+        InetAddress addr = InetAddress.getLocalHost();
 
-	return "localhost";
+        return addr.getHostName();
+      } catch (Exception e) {
+        log.log(Level.FINER, e.toString(), e);
+
+        return "localhost";
       }
 
     case 'r':
       return "2.4.0";
 
     case 'v':
-      return "Version 2.4.0";
+      return "Version 2.6.24";
 
     case 'm':
-      return "i386";
+      return "i686";
 
     case 'a':
     default:
       return (php_uname("s") + " "
-	      + php_uname("n") + " "
-	      + php_uname("r") + " "
-	      + php_uname("v") + " "
-	      + php_uname("m"));
+              + php_uname("n") + " "
+              + php_uname("r") + " "
+              + php_uname("v") + " "
+              + php_uname("m"));
     }
   }
 
@@ -567,12 +563,12 @@ public class OptionsModule extends AbstractQuercusModule {
   {
     if (hasRequest(env))
       env.println("<html><body>");
-    
+
     if ((what & INFO_GENERAL) != 0)
       phpinfoGeneral(env);
     if ((what & INFO_VARIABLES) != 0)
       phpinfoVariables(env);
-    
+
     if (hasRequest(env))
       env.println("</body></html>");
   }
@@ -590,8 +586,8 @@ public class OptionsModule extends AbstractQuercusModule {
 
     env.println("PHP Version => " + phpversion(env, env.createString("std")));
     env.println("System => " + System.getProperty("os.name") + " "
-	      + System.getProperty("os.version") + " "
-	      + System.getProperty("os.arch"));
+              + System.getProperty("os.version") + " "
+              + System.getProperty("os.arch"));
     env.println("Build Date => " + env.getQuercus().getVersionDate());
     env.println("Configure Command => n/a");
     env.println("Server API => CGI");
@@ -599,18 +595,18 @@ public class OptionsModule extends AbstractQuercusModule {
 
     env.println("Configuration File (php.ini) Path => "
                 + env.getQuercus().getIniFile());
-    
+
     env.println("PHP API => 20031224");
     env.println("PHP Extension => 20041030");
     env.println("Debug Build => no");
     env.println("Thread Safety => enabled");
     env.println("Registered PHP Streams => php, file, http, https");
-    
+
     if (hasRequest(env)) {
       env.print("</pre>");
     }
   }
-  
+
   private static void phpinfoVariables(Env env)
   {
     if (hasRequest(env)) {
@@ -621,7 +617,7 @@ public class OptionsModule extends AbstractQuercusModule {
     else {
       env.println("Variable => Value");
     }
-    
+
     if (hasRequest(env)) {
       phpinfoVariable(env, "_REQUEST", env.getGlobalVar("_REQUEST"));
       phpinfoVariable(env, "_GET", env.getGlobalVar("_GET"));
@@ -629,33 +625,33 @@ public class OptionsModule extends AbstractQuercusModule {
     }
 
     phpinfoVariable(env, "_SERVER", env.getGlobalVar("_SERVER"));
-    
+
     if (hasRequest(env))
       env.print("</table>");
-    
+
     env.println();
   }
-  
+
   private static void phpinfoVariable(Env env, String name, Value value)
   {
     if (value.isArray()) {
       ArrayValue array = value.toArrayValue(env);
-      
+
       for (Map.Entry<Value,Value> entry : array.entrySet()) {
         Value key = escape(env, entry.getKey());
-        
+
         if (hasRequest(env))
           env.print("<tr><td>");
-        
+
         env.print(name + "[\"" + key + "\"]");
-        
+
         if (hasRequest(env))
           env.println("</td><td>");
         else
           env.print(" => ");
-        
+
         phpinfoVariable(env, entry.getValue());
-        
+
         if (hasRequest(env))
           env.println("</td></tr>");
       }
@@ -663,14 +659,14 @@ public class OptionsModule extends AbstractQuercusModule {
     else {
       if (hasRequest(env))
         env.println("<tr><td>" + name + "</td><td>");
-      
+
       phpinfoVariable(env, value);
-      
+
       if (hasRequest(env))
         env.println("</td></tr>");
     }
   }
-  
+
   private static void phpinfoVariable(Env env, Value value)
   {
     if (value.isString()) {
@@ -679,9 +675,9 @@ public class OptionsModule extends AbstractQuercusModule {
     else {
       if (hasRequest(env))
         env.print("<pre>");
-      
+
       VariableModule.var_dump(env, escape(env, value), null);
-      
+
       if (hasRequest(env))
         env.print("</pre>");
     }
@@ -708,7 +704,7 @@ public class OptionsModule extends AbstractQuercusModule {
     StringValue key = settings.substring(0, eqIndex);
     StringValue val = settings.substring(eqIndex + 1);
 
-    env.getQuercus().setServerEnv(key, val);
+    env.getGlobalVar("_SERVER").put(key, val);
 
     return true;
   }
@@ -730,7 +726,7 @@ public class OptionsModule extends AbstractQuercusModule {
   {
     return env.setIncludePath(includePath);
   }
-  
+
   /**
    * Sets the magic quotes value.
    */
@@ -745,19 +741,19 @@ public class OptionsModule extends AbstractQuercusModule {
   public static Value set_time_limit(Env env, long seconds)
   {
     env.setTimeLimit(seconds * 1000L);
-    
+
     env.resetTimeout();
 
     return NullValue.NULL;
   }
-  
+
   /*
    * Returns the directory used for temp files like uploads.
    */
   public static String sys_get_temp_dir(Env env)
   {
     Path tmp = env.getTempDirectory();
-    
+
     return tmp.getNativePath() + Path.getFileSeparatorChar();
   }
 
@@ -853,40 +849,40 @@ public class OptionsModule extends AbstractQuercusModule {
 
     return expand;
   }
-  
+
   private static boolean hasRequest(Env env)
   {
     return env.getRequest() != null;
   }
-  
+
   private static Value escape(Env env, Value value)
   {
     if (value.isArray()) {
       ArrayValue array = value.toArrayValue(env);
-      
+
       ArrayValue result = new ArrayValueImpl();
-      
+
       for (Map.Entry<Value,Value> entry : array.entrySet()) {
         Value key = escape(env, entry.getKey());
         Value val = escape(env, entry.getValue());
-        
+
         result.put(key, val);
       }
-      
+
       return result;
     }
     else if (value.isObject()) {
       ObjectValue obj = (ObjectValue)value.toObject(env);
-      
+
       ObjectValue result = new ObjectExtValue(obj.getQuercusClass());
-      
+
       for (Map.Entry<Value,Value> entry : obj.entrySet()) {
         Value key = escape(env, entry.getKey());
         Value val = escape(env, entry.getValue());
-        
+
         result.putField(env, key.toString(), val);
       }
-      
+
       return result;
     }
     else {
@@ -962,7 +958,7 @@ public class OptionsModule extends AbstractQuercusModule {
   static final IniDefinition INI_AUTO_GLOBALS_JIT
     = _iniDefinitions.add("auto_globals_jit", "1", PHP_INI_ALL);
   static final IniDefinition INI_REGISTER_ARGC_ARGV
-    = _iniDefinitions.add("register_argc_argv", true, PHP_INI_ALL);
+    = _iniDefinitions.add("register_argc_argv", false, PHP_INI_ALL);
   static final IniDefinition INI_POST_MAX_SIZE
     = _iniDefinitions.add("post_max_size", "8M", PHP_INI_ALL);
   static final IniDefinition INI_GPC_ORDER

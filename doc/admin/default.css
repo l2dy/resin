@@ -2,6 +2,10 @@
 /* blue body #12037a: HSV: 248, 90, 48 */
 /* blue wing #887fc0: HSV: 248, 34, 75 */
 /* red body #98012e: HSV: 342, 99, 60 */
+/* link brown #4c2004 */
+/* yellow (hover) #ffcc33 */
+/* hr #fab41d */
+/* red #98012e;  */
 
 body {
   border : solid;
@@ -27,7 +31,7 @@ body {
 
 a {
   text-decoration : none;
-  color : #003366;
+  color : #4c2004;
 }
 
 /* color : #e5a122 */
@@ -49,7 +53,7 @@ a.topnav:hover,visited {
 
 a.topnav {
   text-decoration : none;
-  color : #002b80;
+  color : #4c2004;
   font-family: Verdana, Arial, Helvetica, sans-serif;
 }
 
@@ -80,7 +84,7 @@ code {
 hr {
   border : 0;
   height : 1px;
-  background : #999;
+  background : #fab41d;
   margin : 0.2em 0em;
 }
 
@@ -98,7 +102,7 @@ h1.title {
 
 h1 {
   margin-right : 1em;
-  border-bottom : 1px solid black;
+  border-bottom : 1px solid #fab41d;
 
   font-family : Helvetica, Arial, sans-serif;
   font-size : 170%;
@@ -472,13 +476,7 @@ li.server {
   background : #ccddee;
 }
 
-ul.tabs {
-  border-bottom: 1px solid gray;
-  list-style-type:none;
-  position:relative;
-  padding : 0em;
-  padding-bottom : 0.15em;
-}
+/*
 
 .tabs li {
   background: #F4F4F4 none repeat scroll 0 0;
@@ -490,10 +488,44 @@ ul.tabs {
   border-left: 1px solid gray;
   border-right: 1px solid gray;
 }
+*/
+
+ul.tabs {
+  font-family : Verdana, Helvetica, Arial, sans-serif;
+  list-style-type: none;
+/*  float:left; */
+  margin: 0;
+  margin-bottom: 0.5em;
+  padding : 0;
+  padding-bottom : 0.2em;
+  border-bottom: 1px solid gray;
+}
+
+.tabs li {
+/*  float:left; */
+  margin : 0em;
+  margin-top: 0.5em;
+  margin-right: 0.5em;
+  padding: 0.15em 0.4em 0.2em 0.4em;
+  background: #F4F4F4 none repeat scroll 0 0;
+  display : inline;
+  margin-bottom: -1px;
+  margin-left: -1px;
+
+  border-top: 1px solid gray;
+  border-left: 1px solid gray;
+  border-right: 1px solid gray;
+  border-bottom: 1px solid gray;
+}
 
 .tabs li.selected {
   background: #ccddff;
   border-bottom: 1px solid white;
+}
+
+li.open {
+  list-style-image: none;
+  list-style: none;
 }
 
 dl.atoc-top {
@@ -596,9 +628,9 @@ th.fail {
 }
 
 td.leftnav {
-  background : #E0E6F8;
+/*  background : #E0E6F8; */
   color : black;
-  vertical-align : top;
+/*  vertical-align : top; */
   padding : 3px;
 }
 .nav-cluster {
@@ -620,7 +652,7 @@ table.form {
 
 table.form td {
   text-align: left;
-  vertical-align: top;
+/*  vertical-align: top; */
   padding: 0.5em;
 }
 
@@ -630,7 +662,7 @@ table.form td input {
 
 table.form th {
   text-align: left;
-  vertical-align: center;
+/*  vertical-align: center; */
 }
 
 .missing-value {

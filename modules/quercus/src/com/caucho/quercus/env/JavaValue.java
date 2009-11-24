@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -57,14 +57,14 @@ public class JavaValue extends ObjectValue
   public JavaValue(Env env, Object object, JavaClassDef def)
   {
     super();
-    
+
     setQuercusClass(env.createJavaQuercusClass(def));
-    
+
     _env = env;
     _classDef = def;
     _object = object;
   }
-  
+
   /*
    * Returns the underlying Java class definition.
    */
@@ -135,18 +135,18 @@ public class JavaValue extends ObjectValue
     else
       return Double.parseDouble(s);
   }
-  
+
   @Override
   public StringValue toString(Env env)
   {
     StringValue value = _classDef.toString(env, this);
-    
+
     if (value == null)
       value = env.createString(toString());
-    
+
     return value;
   }
-  
+
   @Override
   protected void printRImpl(Env env,
                             WriteStream out,
@@ -173,7 +173,7 @@ public class JavaValue extends ObjectValue
       out.println();
       printRDepth(out, depth);
       out.print("    [" + entry.getKey() + "] => ");
-      
+
       entry.getValue().printRImpl(env, out, depth + 1, valueSet);
     }
 
@@ -192,7 +192,7 @@ public class JavaValue extends ObjectValue
     Value oldThis = env.setThis(this);
 
     try {
-      if (! _classDef.varDumpImpl(env, _object, out, depth, valueSet))
+      if (! _classDef.varDumpImpl(env, this, _object, out, depth, valueSet))
         out.print("resource(" + toString(env) + ")"); // XXX:
     }
     finally {
@@ -215,7 +215,7 @@ public class JavaValue extends ObjectValue
     if (value != null)
       return value;
     else
-      return NullValue.NULL;
+      return UnsetValue.NULL;
   }
 
   /**
@@ -250,7 +250,7 @@ public class JavaValue extends ObjectValue
   public int cmpObject(ObjectValue rValue)
   {
     // php/172z
-    
+
     if (rValue == this)
       return 0;
 
@@ -263,7 +263,7 @@ public class JavaValue extends ObjectValue
                                rObject,
                                ((JavaValue) rValue)._classDef);
   }
-  
+
   /**
    * Returns true for an object.
    */
@@ -272,7 +272,7 @@ public class JavaValue extends ObjectValue
   {
     return true;
   }
-  
+
   /*
    * Returns true for a resource.
    */
@@ -410,7 +410,9 @@ public class JavaValue extends ObjectValue
   @Override
   public Value callMethodRef(Env env, int hash, char []name, int nameLen)
   {
-    return _classDef.callMethod(env, this, hash, name, nameLen);
+    Value value = _classDef.callMethod(env, this, hash, name, nameLen);
+
+    return value;
   }
 
   /**
@@ -472,7 +474,7 @@ public class JavaValue extends ObjectValue
   public void serialize(Env env, StringBuilder sb, SerializeMap map)
   {
     String name = _classDef.getSimpleName();
-    
+
     Set<? extends Map.Entry<Value,Value>> entrySet = entrySet();
 
     if (entrySet != null) {
@@ -495,7 +497,17 @@ public class JavaValue extends ObjectValue
       // php/121f
       sb.append("i:0;");
     }
+  }
 
+  /**
+   * Encodes the value in JSON.
+   */
+  public void jsonEncode(Env env, StringValue sb)
+  {
+    if (_classDef.jsonEncode(env, _object, sb))
+      return;
+    else
+      super.jsonEncode(env, sb);
   }
 
   /**
@@ -528,8 +540,8 @@ public class JavaValue extends ObjectValue
       return _object;
     } else {
       env.warning(L.l("Can't assign {0} to {1}",
-		      _object.getClass().getName(), type.getName()));
-    
+                      _object.getClass().getName(), type.getName()));
+
       return null;
     }
   }
@@ -541,13 +553,13 @@ public class JavaValue extends ObjectValue
   public Object toJavaObjectNotNull(Env env, Class type)
   {
     Class objClass = _object.getClass();
-    
+
     if (objClass == type || type.isAssignableFrom(objClass)) {
       return _object;
     } else {
       env.warning(L.l("Can't assign {0} to {1}",
-		      objClass.getName(), type.getName()));
-    
+                      objClass.getName(), type.getName()));
+
       return null;
     }
   }
@@ -562,8 +574,8 @@ public class JavaValue extends ObjectValue
       return (Map) _object;
     } else {
       env.warning(L.l("Can't assign {0} to {1}",
-		      _object.getClass().getName(), type.getName()));
-    
+                      _object.getClass().getName(), type.getName()));
+
       return null;
     }
   }
@@ -578,13 +590,13 @@ public class JavaValue extends ObjectValue
       return (InputStream) _object;
     else if (_object instanceof File) {
       try {
-	InputStream is = new FileInputStream((File) _object);
+        InputStream is = new FileInputStream((File) _object);
 
-	Env.getCurrent().addCleanup(new EnvCloseable(is));
+        Env.getCurrent().addCleanup(new EnvCloseable(is));
 
-	return is;
+        return is;
       } catch (IOException e) {
-	throw new QuercusException(e);
+        throw new QuercusException(e);
       }
     }
     else
@@ -606,7 +618,7 @@ public class JavaValue extends ObjectValue
     throws IOException
   {
     out.writeObject(_classDef.getType().getCanonicalName());
-    
+
     out.writeObject(_object);
   }
 
@@ -614,7 +626,7 @@ public class JavaValue extends ObjectValue
     throws ClassNotFoundException, IOException
   {
     _env = Env.getInstance();
-    
+
     _classDef = _env.getJavaClassDefinition((String) in.readObject());
 
     int id = _env.getQuercus().getClassId(_classDef.getName());
@@ -653,16 +665,16 @@ public class JavaValue extends ObjectValue
     void addValue(Value value)
     {
       ArrayValue array = null;
-      
+
       if (! _isArray) {
-	_isArray = true;
-	Value oldValue = _value;
-	_value = new ArrayValueImpl();
-	array = (ArrayValue) _value;
-	array.append(oldValue);
+        _isArray = true;
+        Value oldValue = _value;
+        _value = new ArrayValueImpl();
+        array = (ArrayValue) _value;
+        array.append(oldValue);
       }
       else {
-	array = (ArrayValue) _value;
+        array = (ArrayValue) _value;
       }
 
       array.append(value);

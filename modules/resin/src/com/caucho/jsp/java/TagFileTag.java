@@ -35,6 +35,7 @@ import javax.servlet.jsp.tagext.TagAttributeInfo;
 import javax.servlet.jsp.tagext.VariableInfo;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.lang.reflect.Field;
 
 /**
  * Represents a custom tag.
@@ -44,6 +45,7 @@ public class TagFileTag extends GenericTag {
   private JspBody _body;
   private int _maxFragmentIndex;
   private String _contextVarName;
+  private Boolean _hasCustomTag;
 
   /**
    * Called when the attributes end.
@@ -100,6 +102,23 @@ public class TagFileTag extends GenericTag {
   @Override
   public boolean hasCustomTag()
   {
+    if (Boolean.TRUE.equals(_hasCustomTag))
+      return true;
+
+    if (_hasCustomTag == null && _tagClass != null) {
+      try {
+        Field hasCustomTagField = _tagClass.getDeclaredField("_caucho_hasCustomTag");
+        _hasCustomTag = (Boolean) hasCustomTagField.get(null);
+
+        if (Boolean.TRUE.equals(_hasCustomTag))
+          return true;
+      } catch (NoSuchFieldException e) {
+        //
+      } catch (IllegalAccessException e) {
+        //
+      }
+    }
+
     return super.hasCustomTag() || (_body != null && _body.hasCustomTag());
   }
 
@@ -166,12 +185,34 @@ public class TagFileTag extends GenericTag {
 
     String childContext = fillTagFileAttributes(out, name);
 
+
+    String parentTagName;
+    
+    JspNode parentTagNode = getParent().getParentTagNode();
+
+    if (parentTagNode == null) {
+      parentTagName = null;
+    }
+    else if (parentTagNode.isSimpleTag()) {
+      parentTagName = null;
+
+      String parentName = parentTagNode.getCustomTagName();
+      
+      out.println("if (" + parentName + "_adapter == null)");
+      out.println("  " + parentName + "_adapter = new javax.servlet.jsp.tagext.TagAdapter(" + parentName + ");");
+    }
+    else {
+      parentTagName = parentTagNode.getCustomTagName();
+    }
+
     out.print(name + ".doTag(pageContext, " + childContext + ", out, ");
     if (_body != null)
       generateFragment(out, _body, "pageContext");
     else
       out.print("null");
-    
+
+    out.print(", " + parentTagName);
+
     out.println(");");
 
     printVarDeclaration(out, VariableInfo.AT_END);
@@ -185,7 +226,7 @@ public class TagFileTag extends GenericTag {
     String name = _contextVarName;
 
     out.println("com.caucho.jsp.PageContextWrapper " + name);
-    out.println("  = com.caucho.jsp.PageContextWrapper.create(pageContext);");
+    out.println(" = _jsp_pageManager.createPageContextWrapper(pageContext);");
 
     TagAttributeInfo attrs[] = _tagInfo.getAttributes();
 
@@ -194,7 +235,7 @@ public class TagFileTag extends GenericTag {
       int p = indexOf(_attributeNames, attrs[i].getName());
       
       if (p < 0 && attrs[i].isRequired()) {
-	throw error(L.l("required attribute `{0}' missing from <{1}>",
+	throw error(L.l("required attribute '{0}' missing from <{1}>",
                         attrs[i].getName(),
                         getTagName()));
       }

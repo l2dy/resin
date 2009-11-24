@@ -30,6 +30,8 @@
 package com.caucho.server.connection;
 
 import com.caucho.server.webapp.WebApp;
+import com.caucho.servlet.DuplexContext;
+import com.caucho.servlet.DuplexListener;
 import com.caucho.vfs.ReadStream;
 
 import javax.servlet.ServletResponse;
@@ -50,14 +52,19 @@ public interface CauchoRequest extends HttpServletRequest {
   public int getRequestDepth(int depth);
   public void setHeader(String key, String value);
   public boolean getVaryCookies();
-  public String getVaryCookie();
   public void setVaryCookie(String cookie);
   public boolean getHasCookie();
 
+  public void setSyntheticCacheHeader(boolean isTop);
+  public boolean isSyntheticCacheHeader();
+  
   public boolean isTop();
 
   public boolean hasRequest();
   
+  public String getSessionId();
+  public void setSessionId(String sessionId);
+  public boolean isSessionIdFromCookie();
   public HttpSession getMemorySession();
   public Cookie getCookie(String name);
   public void setHasCookie();
@@ -76,4 +83,6 @@ public interface CauchoRequest extends HttpServletRequest {
 
   public ServletResponse getServletResponse();
   public AbstractHttpRequest getAbstractHttpRequest();
+  
+  public DuplexContext startDuplex(DuplexListener listener);
 }

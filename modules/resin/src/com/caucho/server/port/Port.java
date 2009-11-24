@@ -47,9 +47,11 @@ import com.caucho.vfs.JsseSSLFactory;
 import com.caucho.vfs.QJniServerSocket;
 import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.QSocket;
+import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.SSLFactory;
 
 import javax.annotation.PostConstruct;
+import java.io.IOException;
 import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -71,7 +73,7 @@ import java.util.Set;
 /**
  * Represents a protocol connection.
  */
-public class Port
+public class Port extends TaskWorker
   implements EnvironmentListener, Runnable
 {
   private static final L10N L = new L10N(Port.class);
@@ -80,6 +82,8 @@ public class Port
     = Logger.getLogger(Port.class.getName());
 
   private static final int DEFAULT = -0xcafe;
+
+  private final AtomicInteger _connectionCount = new AtomicInteger();
 
   // started at 128, but that seems wasteful since the active threads
   // themselves are buffering the free connections
@@ -97,7 +101,7 @@ public class Port
   // The address
   private String _address;
   // The port
-  private int _port;
+  private int _port = -1;
 
   // URL for debugging
   private String _url;
@@ -132,6 +136,8 @@ public class Port
 
   private long _suspendReaperTimeout = 60000L;
   private long _suspendTimeMax = DEFAULT;
+  // after for 120s start checking for EOF on comet requests
+  private long _suspendCloseTimeMax = 120 * 1000L;
 
   private boolean _tcpNoDelay = true;
 
@@ -165,10 +171,6 @@ public class Port
   // timeout to limit the thread close rate
   private long _idleCloseTimeout = 15000L;
   private volatile long _idleCloseExpire;
-
-  // semaphore to request a new start thread
-  private Thread _portThread;
-  private final AtomicBoolean _isPortStart = new AtomicBoolean();
 
   // reaper alarm for timed out comet requests
   private Alarm _suspendAlarm;
@@ -385,6 +387,17 @@ public class Port
   public int getPort()
   {
     return _port;
+  }
+
+  /**
+   * Gets the local port (for ephemeral ports)
+   */
+  public int getLocalPort()
+  {
+    if (_serverSocket != null)
+      return _serverSocket.getLocalPort();
+    else
+      return _port;
   }
 
   /**
@@ -883,6 +896,14 @@ public class Port
   }
 
   /**
+   * Returns the count of start threads.
+   */
+  public int getStartThreadCount()
+  {
+    return _startThreadCount.get();
+  }
+
+  /**
    * Returns the number of keepalive connections
    */
   public int getKeepaliveCount()
@@ -981,9 +1002,6 @@ public class Port
     if (! _lifecycle.toInit())
       return;
 
-    if (_server instanceof EnvironmentBean)
-      Environment.addEnvironmentListener(this, ((EnvironmentBean) _server).getClassLoader());
-
     StringBuilder url = new StringBuilder();
 
     if (_protocol != null)
@@ -1020,19 +1038,18 @@ public class Port
     if (_protocol == null)
       throw new IllegalStateException(L.l("'{0}' must have a configured protocol before starting.", this));
 
-    if (_port == 0)
+    // server 1e07
+    if (_port < 0)
       return;
 
     if (_throttle == null)
       _throttle = new Throttle();
 
     if (_serverSocket != null) {
-      if (_port == 0) {
-      }
-      else if (_address != null)
-        log.info("listening to " + _address + ":" + _port);
+      if (_address != null)
+        log.info("listening to " + _address + ":" + _serverSocket.getLocalPort());
       else
-        log.info("listening to " + _port);
+        log.info("listening to " + _serverSocket.getLocalPort());
     }
     else if (_sslFactory != null && _socketAddress != null) {
       _serverSocket = _sslFactory.create(_socketAddress, _port);
@@ -1056,12 +1073,13 @@ public class Port
       _serverSocket = QJniServerSocket.create(_socketAddress, _port,
                                               _acceptListenBacklog);
 
-      log.info(_protocol.getProtocolName() + " listening to " + _socketAddress.getHostName() + ":" + _port);
+      log.info(_protocol.getProtocolName() + " listening to " + _socketAddress.getHostName() + ":" + _serverSocket.getLocalPort());
     }
     else {
       _serverSocket = QJniServerSocket.create(_port, _acceptListenBacklog);
 
-      log.info(_protocol.getProtocolName() + " listening to *:" + _port);
+      log.info(_protocol.getProtocolName() + " listening to *:"
+               + _serverSocket.getLocalPort());
     }
 
     assert(_serverSocket != null);
@@ -1102,6 +1120,9 @@ public class Port
   public void postBind()
   {
     if (_isPostBind.getAndSet(true))
+      return;
+
+    if (_serverSocket == null)
       return;
 
     if (_tcpNoDelay)
@@ -1181,7 +1202,7 @@ public class Port
   public void start()
     throws Exception
   {
-    if (_port == 0)
+    if (_port < 0)
       return;
 
     if (! _lifecycle.toStarting())
@@ -1189,15 +1210,18 @@ public class Port
 
     boolean isValid = false;
     try {
+
+      assert(_server != null);
+
+      if (_server instanceof EnvironmentBean)
+        Environment.addEnvironmentListener(this, ((EnvironmentBean) _server).getClassLoader());
+
       bind();
       postBind();
 
       enable();
 
-      String name = "resin-port-" + _serverSocket.getLocalPort();
-      _portThread = new Thread(this, name);
-      _portThread.setDaemon(true);
-      _portThread.start();
+      wake();
 
       _suspendAlarm = new Alarm(new SuspendReaper());
       _suspendAlarm.queue(_suspendReaperTimeout);
@@ -1215,7 +1239,8 @@ public class Port
   void enable()
   {
     if (_lifecycle.toActive()) {
-      _serverSocket.listen(_acceptListenBacklog);
+      if (_serverSocket != null)
+        _serverSocket.listen(_acceptListenBacklog);
     }
   }
 
@@ -1225,15 +1250,16 @@ public class Port
   void disable()
   {
     if (_lifecycle.toStop()) {
-      _serverSocket.listen(0);
+      if (_serverSocket != null)
+        _serverSocket.listen(0);
 
-      if (_port == 0) {
+      if (_port < 0) {
       }
       else if (_address != null)
         log.info(_protocol.getProtocolName() + " disabled "
-                 + _address + ":" + _port);
+                 + _address + ":" + getLocalPort());
       else
-        log.info(_protocol.getProtocolName() + " disabled *:" + _port);
+        log.info(_protocol.getProtocolName() + " disabled *:" + getLocalPort());
     }
   }
 
@@ -1286,22 +1312,12 @@ public class Port
    * @param isStart boolean to mark the first request on the thread for
    *   bookkeeping.
    */
-  public boolean accept(TcpConnection conn, boolean isStart)
+  public boolean accept(QSocket socket)
   {
-    boolean isDecrement = true;
+    boolean isDecrementIdle = true;
 
     try {
       int idleThreadCount = _idleThreadCount.incrementAndGet();
-
-      if (isStart) {
-        int count = _startThreadCount.decrementAndGet();
-
-        if (count < 0) {
-          _startThreadCount.set(0);
-          log.warning(conn + " _startThreadCount assertion failure");
-          // conn.getStartThread().printStackTrace();
-        }
-      }
 
       while (_lifecycle.isActive()) {
         long now = Alarm.getCurrentTime();
@@ -1311,18 +1327,14 @@ public class Port
         if (_idleThreadMax < idleThreadCount
             && _idleThreadCount.compareAndSet(idleThreadCount,
                                               idleThreadCount - 1)) {
-          isDecrement = false;
+          isDecrementIdle = false;
           _idleCloseExpire = now + _idleCloseTimeout;
 
           return false;
         }
 
-        QSocket socket = conn.startSocket();
-
         Thread.interrupted();
         if (_serverSocket.accept(socket)) {
-          conn.initSocket();
-
           if (_throttle.accept(socket))
             return true;
           else
@@ -1333,21 +1345,13 @@ public class Port
       if (_lifecycle.isActive() && log.isLoggable(Level.FINER))
         log.log(Level.FINER, e.toString(), e);
     } finally {
-      if (isDecrement)
+      if (isDecrementIdle)
         _idleThreadCount.decrementAndGet();
 
       if (isStartThreadRequired()) {
         // if there are not enough idle threads, wake the manager to
         // create a new one
-        Thread portThread = _portThread;
-
-        if (portThread != null && _isPortStart.compareAndSet(false, true)) {
-          try {
-            LockSupport.unpark(portThread);
-          } finally {
-            _isPortStart.set(false);
-          }
-        }
+        wake();
       }
     }
 
@@ -1369,6 +1373,7 @@ public class Port
   void startConnection(TcpConnection conn)
   {
     _startThreadCount.decrementAndGet();
+    wake();
   }
 
   /**
@@ -1385,6 +1390,7 @@ public class Port
   void threadEnd(TcpConnection conn)
   {
     _threadCount.decrementAndGet();
+    wake();
   }
 
   /**
@@ -1470,35 +1476,68 @@ public class Port
   }
 
   /**
+   * Reads data from a keepalive connection
+   */
+  boolean keepaliveThreadRead(ReadStream is)
+    throws IOException
+  {
+    if (isClosed())
+      return false;
+
+    if (is.getBufferAvailable() > 0) {
+      return true;
+    }
+
+    long timeout = getKeepaliveTimeout();
+
+    boolean isSelectManager = getServer().isSelectManagerEnabled();
+
+    if (isSelectManager) {
+      timeout = getBlockingTimeoutForSelect();
+    }
+
+    if (getSocketTimeout() < timeout)
+      timeout = getSocketTimeout();
+
+    if (timeout < 0)
+      timeout = 0;
+
+    // server/2l02
+
+    keepaliveThreadBegin();
+
+    try {
+      boolean result = is.fillWithTimeout(timeout);
+
+      return result;
+    } finally {
+      keepaliveThreadEnd();
+    }
+  }
+
+  /**
    * Suspends the controller (for comet-style ajax)
    *
    * @return true if the connection was added to the suspend list
    */
-  boolean suspend(TcpConnection conn)
+  void suspend(TcpConnection conn)
   {
     boolean isResume = false;
 
     if (conn.isWake()) {
-      isResume = true;
-      conn.setResume();
+      conn.toResume();
+
+      _threadPool.schedule(conn.getResumeTask());
     }
     else if (conn.isComet()) {
       conn.toSuspend();
 
       _suspendConnectionSet.add(conn);
-
-      return true;
     }
     else {
-      return false;
+      throw new IllegalStateException(L.l("{0} suspend is not allowed because the connection is not an asynchronous connection",
+                                          conn));
     }
-
-    if (isResume) {
-      _threadPool.schedule(conn.getResumeTask());
-      return true;
-    }
-    else
-      return false;
   }
 
   /**
@@ -1515,7 +1554,7 @@ public class Port
   boolean resume(TcpConnection conn)
   {
     if (_suspendConnectionSet.remove(conn)) {
-      conn.setResume();
+      conn.toResume();
 
       _threadPool.schedule(conn.getResumeTask());
 
@@ -1552,44 +1591,39 @@ public class Port
   /**
    * The port thread is responsible for creating new connections.
    */
-  public void run()
+  public void runTask()
   {
-    while (! _lifecycle.isDestroyed()) {
-      try {
-        // need delay to avoid spawing too many threads over a short time,
-        // when the load doesn't justify it
-        // Thread.yield();
+    if (_lifecycle.isDestroyed())
+      return;
 
-        // XXX: Thread.sleep(10);
+    try {
+      TcpConnection startConn = null;
 
-        TcpConnection startConn = null;
+      if (isStartThreadRequired()
+          && _lifecycle.isActive()
+          && _activeConnectionCount.get() <= _connectionMax) {
+        startConn = _freeConn.allocate();
 
-        if (isStartThreadRequired()
-            && _lifecycle.isActive()
-            && _activeConnectionCount.get() <= _connectionMax) {
-          startConn = _freeConn.allocate();
-
-          if (startConn == null || startConn.isDestroyed()) {
-            startConn = new TcpConnection(this, _serverSocket.createSocket());
-            startConn.setRequest(_protocol.createRequest(startConn));
-          }
-          else
-            startConn._isFree = false; // XXX: validation for 4.0
-
-          _startThreadCount.incrementAndGet();
-          _activeConnectionCount.incrementAndGet();
-          _activeConnectionSet.add(startConn);
-        }
-        else {
-          LockSupport.park();
+        if (startConn == null || startConn.isDestroyed()) {
+          int connId = _connectionCount.incrementAndGet();
+          QSocket socket = _serverSocket.createSocket();
+          startConn = new TcpConnection(connId, this, socket);
         }
 
-        if (startConn != null) {
-          _threadPool.schedule(startConn.getReadTask());
-        }
-      } catch (Throwable e) {
-        log.log(Level.SEVERE, e.toString(), e);
+        startConn.toInit(); // change to the init/ready state
       }
+
+      if (startConn != null) {
+        _startThreadCount.incrementAndGet();
+        _activeConnectionCount.incrementAndGet();
+        _activeConnectionSet.add(startConn);
+
+        if (! _threadPool.schedule(startConn.getAcceptTask())) {
+          log.severe(L.l("Schedule failed for {0}", startConn));
+        }
+      }
+    } catch (Throwable e) {
+      log.log(Level.SEVERE, e.toString(), e);
     }
   }
 
@@ -1632,13 +1666,7 @@ public class Port
   {
     closeConnection(conn);
 
-    // XXX: remove when 4.0 stable
-    if (conn._isFree) {
-      log.warning(conn + " double free");
-      Thread.dumpStack();
-      return;
-    }
-    conn._isFree = true;
+    conn.toIdle();
 
     _freeConn.free(conn);
   }
@@ -1659,12 +1687,11 @@ public class Port
   private void closeConnection(TcpConnection conn)
   {
     _activeConnectionSet.remove(conn);
+    _suspendConnectionSet.remove(conn);
     _activeConnectionCount.decrementAndGet();
 
     // wake the start thread
-    Thread portThread = _portThread;
-    if (portThread != null)
-      LockSupport.unpark(portThread);
+    wake();
   }
 
   /**
@@ -1680,6 +1707,8 @@ public class Port
 
     if (log.isLoggable(Level.FINE))
       log.fine(this + " closing");
+
+    super.destroy();
 
     Alarm suspendAlarm = _suspendAlarm;
     _suspendAlarm = null;
@@ -1738,9 +1767,7 @@ public class Port
     }
 
     // wake the start thread
-    Thread portThread = _portThread;
-    if (portThread != null)
-      LockSupport.unpark(portThread);
+    wake();
 
     // Close the socket server socket and send some request to make
     // sure the Port accept thread is woken and dies.
@@ -1785,6 +1812,11 @@ public class Port
     return _url;
   }
 
+  @Override
+  protected String getThreadName()
+  {
+    return "resin-port-" + getAddress() + ":" + getPort();
+  }
 
   @Override
   public String toString()
@@ -1793,45 +1825,68 @@ public class Port
   }
 
   public class SuspendReaper implements AlarmListener {
+    private ArrayList<TcpConnection> _suspendSet
+      = new ArrayList<TcpConnection>();
+
+    private ArrayList<TcpConnection> _timeoutSet
+      = new ArrayList<TcpConnection>();
+
+    private ArrayList<TcpConnection> _completeSet
+      = new ArrayList<TcpConnection>();
+
     public void handleAlarm(Alarm alarm)
     {
       try {
-        ArrayList<TcpConnection> oldList = null;
+        _suspendSet.clear();
+        _timeoutSet.clear();
+        _completeSet.clear();
 
         long now = Alarm.getCurrentTime();
 
         synchronized (_suspendConnectionSet) {
-          Iterator<TcpConnection> iter = _suspendConnectionSet.iterator();
+          _suspendSet.addAll(_suspendConnectionSet);
+        }
 
-          while (iter.hasNext()) {
-            TcpConnection conn = iter.next();
+        for (int i = _suspendSet.size() - 1; i >= 0; i--) {
+          TcpConnection conn = _suspendSet.get(i);
 
-            if (conn.getSuspendTime() + _suspendTimeMax < now) {
-              iter.remove();
+          if (conn.getIdleStartTime() + _suspendTimeMax < now) {
+            _timeoutSet.add(conn);
+          }
 
-              if (oldList == null)
-                oldList = new ArrayList<TcpConnection>();
-
-              oldList.add(conn);
-            }
+          // check periodically for end of file
+          if (conn.getIdleStartTime() + _suspendCloseTimeMax < now
+              && conn.isReadEof()) {
+            _completeSet.add(conn);
           }
         }
 
-        if (oldList != null) {
-          for (int i = 0; i < oldList.size(); i++) {
-            TcpConnection conn = oldList.get(i);
+        for (int i = _timeoutSet.size() - 1; i >= 0; i--) {
+          TcpConnection conn = _timeoutSet.get(i);
 
-            if (log.isLoggable(Level.FINE))
-              log.fine(this + " suspend idle timeout " + conn);
+          if (log.isLoggable(Level.FINE))
+            log.fine(this + " suspend idle timeout " + conn);
 
-            ConnectionController async = conn.getController();
-
-            if (async != null)
-              async.timeout();
-
-            conn.destroy();
-          }
+          conn.toTimeout();
         }
+
+        for (int i = _completeSet.size() - 1; i >= 0; i--) {
+          TcpConnection conn = _completeSet.get(i);
+
+          if (log.isLoggable(Level.FINE))
+            log.fine(this + " async end-of-file " + conn);
+
+          ConnectionController async = conn.getController();
+
+          if (async != null)
+            async.complete();
+
+          // server/1lc2
+          // conn.wake();
+          // conn.destroy();
+        }
+      } catch (Throwable e) {
+        e.printStackTrace();
       } finally {
         if (! isClosed())
           alarm.queue(_suspendReaperTimeout);

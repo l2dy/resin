@@ -30,6 +30,8 @@ package com.caucho.server.connection;
 
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
+import com.caucho.servlet.DuplexListener;
+import com.caucho.servlet.DuplexContext;
 import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ReadStream;
@@ -333,6 +335,15 @@ public class RequestAdapter extends RequestWrapper
   public void setHeader(String key, String value)
   {
   }
+
+  public void setSyntheticCacheHeader(boolean isSynthetic)
+  {
+  }
+
+  public boolean isSyntheticCacheHeader()
+  {
+    return false;
+  }
   
   public WebApp getWebApp()
   {
@@ -345,16 +356,6 @@ public class RequestAdapter extends RequestWrapper
 
     if (getRequest() instanceof CauchoRequest)
       ((CauchoRequest) getRequest()).setVaryCookie(cookie);
-  }
-
-  public String getVaryCookie()
-  {
-    // super.setVaryCookie(cookie);
-
-    if (getRequest() instanceof CauchoRequest)
-      return ((CauchoRequest) getRequest()).getVaryCookie();
-    else
-      return null;
   }
 
   public boolean getVaryCookies()
@@ -457,6 +458,34 @@ public class RequestAdapter extends RequestWrapper
       setHasCookie();
 
     return isValid;
+  }
+
+  public boolean isSessionIdFromCookie()
+  {
+    CauchoRequest cReq = getCauchoRequest();
+
+    if (cReq != null)
+      return cReq.isSessionIdFromCookie();
+    else
+      return isRequestedSessionIdFromCookie();
+  }
+
+  public String getSessionId()
+  {
+    CauchoRequest cReq = getCauchoRequest();
+
+    if (cReq != null)
+      return cReq.getSessionId();
+    else
+      return getRequestedSessionId();
+  }
+
+  public void setSessionId(String sessionId)
+  {
+    CauchoRequest cReq = getCauchoRequest();
+
+    if (cReq != null)
+      cReq.setSessionId(sessionId);
   }
 
   protected final SessionManager getSessionManager()
@@ -624,6 +653,16 @@ public class RequestAdapter extends RequestWrapper
     throws ServletException
   {
     getRequest().logout();
+  }
+
+  public DuplexContext startDuplex(DuplexListener listener)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public CauchoRequest getCauchoRequest()
+  {
+    return (CauchoRequest) getRequest();
   }
 
   /**

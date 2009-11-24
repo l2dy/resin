@@ -14,7 +14,7 @@ l_resin = element l:caucho.com {
   r_any-Group
 }
 
-r_cache = element cache {
+r_proxy-cache = element (proxy-cache|cache) {
   r_path?
 
   & (attribute disk-size { r_int } | element disk-size { r_int })?
@@ -53,8 +53,6 @@ r_cluster-Content =
 
   & r_access-log?
 
-  & r_cache?
-
   & (attribute connection-error-page { string }
      | element connection-error-page { string })?
 
@@ -82,11 +80,16 @@ r_cluster-Content =
   & (attribute invocation-cache-max-url-length { r_int-Type }
      | element invocation-cache-max-url-length { r_int-Type })?
 
+  & (attribute max-uri-length { r_int-Type }
+     | element max-uri-length { r_int-Type })?
+
   & r_machine*
 
   & r_persistent-store?
 
   & r_ping*
+
+  & r_proxy-cache?
 
   & r_redeploy-mode?
 
@@ -667,6 +670,9 @@ r_server-Content =
 
   & r_ping*
 
+  & (attribute ping-url { string }
+     | element ping-url { string })*
+
   & r_port-default*
 
   & r_protocol*
@@ -676,6 +682,9 @@ r_server-Content =
 
   & (attribute socket-timeout { r_period-Type }
      | element socket-timeout { r_period-Type })?
+
+  & (attribute stage { string }
+     | element stage { string })?
 
   & (attribute system-class-loader { r_class-Type }
      | element system-class-loader { r_class-Type })?
@@ -746,8 +755,8 @@ r_stat-item = element stat-item {
 }
 
 r_stat-service = element stat-service {
-  (attribute cpu-load-exit-threshold { r_double-Type }
-   | element cpu-load-exit-threshold { r_double-Type })?
+  (attribute unix-load-avg-exit-threshold { r_double-Type }
+   | element unix-load-avg-exit-threshold { r_double-Type })?
 
   & (attribute cpu-load-log-info-threshold { r_double-Type }
      | element cpu-load-log-info-threshold { r_double-Type })?
@@ -814,7 +823,8 @@ r_user-name =
   | element user-name { string }
 
 r_watchdog-log = element watchdog-log {
-  r_dir
+  (attribute log-directory { string }
+   | element log-directory { string })?
 
   & r_rollover-count?
 

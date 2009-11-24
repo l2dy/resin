@@ -29,51 +29,49 @@
 package com.caucho.jms.file;
 
 import java.io.Serializable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.util.ArrayList;
-import java.util.logging.*;
-
-import javax.jms.*;
-
-import com.caucho.jms.message.*;
-import com.caucho.jms.queue.*;
-import com.caucho.jms.memory.*;
-import com.caucho.jms.connection.*;
+import com.caucho.jms.memory.MemoryQueueImpl;
 
 /**
  * Implements a file queue.
  */
 public class FileSubscriberQueue extends MemoryQueueImpl
 {
-  private FileTopicImpl _topic;
-  private JmsSession _session;
-  private boolean _isNoLocal;
+  private static final Logger log
+           = Logger.getLogger(FileSubscriberQueue.class.getName());
   
-  FileSubscriberQueue(FileTopicImpl topic, JmsSession session, boolean noLocal)
+  private FileTopicImpl _topic;
+  private Object _publisher;
+  private boolean _isNoLocal;
+
+  FileSubscriberQueue(FileTopicImpl topic, Object publisher, boolean noLocal)
   {
     _topic = topic;
-    _session = session;
+    _publisher = publisher;
     _isNoLocal = noLocal;
   }
 
-    /*
-
   @Override
   public void send(String msgId,
-		   Serializable payload,
-		   int priority,
-		   long timeout)
+                   Serializable msg,
+                   int priority,
+                   long timeout,
+                   Object publisher)
   {
-    if (_isNoLocal && _session == session)
+    if (_isNoLocal && _publisher == publisher)
       return;
-    else
-    super.send(msgId, payload, priority, timeout);
+
+    if (log.isLoggable(Level.FINE))
+      log.fine(this + " send message " + msg);
+
+    super.send(msgId, msg, priority, timeout);
   }
-    */
 
   public String toString()
   {
-    return "FileSubscriberQueue[" + _topic.getName() + "]";
+    return getClass().getSimpleName() + "[" + _topic.getName() + "]";
   }
 }
 

@@ -192,6 +192,11 @@ matching the -server-id on the command line.</p>
   <td>256</td>
 </tr>
 <tr>
+  <td>max-uri-length</td>
+  <td>Maximum URI length allowed in request</td>
+  <td>1024</td>
+</tr>
+<tr>
   <td>machine</td>
   <td>Configuration for grouping &lt;server> onto physical machines</td>
   <td></td>
@@ -574,6 +579,20 @@ element invocation-cache-max-url-length {
 
 </defun>
 
+<defun title="&lt;max-uri-length>" version="Resin 4.0.2">
+<parents>cluster</parents>
+<default>1024</default>
+
+<p>Sets limit on longest URIs that can be served by Resin.</p>
+
+<def title="&lt;max-uri-length> schema">
+element max-uri-length {
+  r_int-Type
+}
+</def>
+
+</defun>
+
 <defun title="&lt;ping>" occur="*" version="Resin 3.0">
 <parents>cluster</parents>
 
@@ -615,6 +634,11 @@ PingThread will catch errors like deadlocks.</p>
   <td>try-count</td>
   <td>If a ping fails, number of times to retry before giving up and restarting</td>
   <td>required</td>
+</tr>
+<tr>
+  <td>freeze-timeout</td>
+  <td>Time with no response to detect a frozen jvm.</td>
+  <td>15m</td>
 </tr>
 <tr>
   <td>retry-time</td>

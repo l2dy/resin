@@ -1,10 +1,15 @@
-default namespace w = "urn:java:ee"
+default namespace w = "http://java.sun.com/xml/ns/javaee"
 
 namespace xsi="http://www.w3.org/2001/XMLSchema-instance"
 
-start = w_Beans
+start = w_beans
 
 w_Any = text | (attribute * {string} | element * { w_Any })*
+
+w_alternatives = element alternatives {
+  w_class*
+  & w_stereotype*
+}
 
 w_bean-Custom = element * - w:* {
   (w_bean-Field-Custom*
@@ -25,7 +30,7 @@ w_bean-Custom = element * - w:* {
    
    & element Production { w_bean-Custom* }?
    
-   & element Current { empty }?
+   & element Default { empty }?
    
    & element Decorates { empty }?
   )
@@ -44,16 +49,6 @@ w_class = element class {
   string
 }
 
-w_component = element component {
-  w_binding*
-  & w_class?
-  & w_init?
-  & w_name?
-  & w_producer?
-  & w_scope?
-  & w_type?
-}
-
 w_deploy = element Deploy {
   w_bean-Field-Custom*
   & w_standard?
@@ -62,21 +57,8 @@ w_deploy = element Deploy {
   & w_stereotype*
 }
 
-w_enable = element enable {
+w_decorators = element decorators {
   w_class*
-  & w_stereotype*
-}
-
-w_component-type =
-  attribute component-type { string }
-  | element component-type { string }
-
-w_component-types =  element component-types {
-  w_component-type*
-}
-
-w_decorators = element Decorators {
-  w_bean-Field-Custom*
 }
 
 w_name = element name {
@@ -91,8 +73,8 @@ w_new =
   attribute new { string }
   | element new { w_Any }
 
-w_interceptors = element Interceptors {
-  w_bean-Field-Custom*
+w_interceptors = element interceptors {
+  w_class*
 }
 
 w_producer = element producer {
@@ -119,7 +101,7 @@ w_standard = element Standard {
   empty
 }  
 
-w_Beans = element Beans {
+w_beans = element beans {
   attribute xsi:schemaLocation { string }?
   
   & w_bean-Custom*
@@ -128,7 +110,7 @@ w_Beans = element Beans {
   
   & w_deploy?
   
-  & w_enable?
+  & w_alternatives?
   
   & w_interceptors?
 }
