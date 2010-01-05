@@ -29,19 +29,19 @@
 
 package com.caucho.server.http;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
+
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.*;
-import com.caucho.server.port.*;
+import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.vfs.WriteStream;
-
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.logging.Level;
 
 public class HttpResponse extends AbstractHttpResponse
 {
@@ -69,6 +69,8 @@ public class HttpResponse extends AbstractHttpResponse
   private long _lastDate;
   private boolean _isChunked;
 
+  private WriteStream _rawWrite;
+
   /**
    * Creates a new HTTP-protocol response.
    *
@@ -76,9 +78,10 @@ public class HttpResponse extends AbstractHttpResponse
    */
   HttpResponse(HttpRequest request, WriteStream rawWrite)
   {
-    super(request, rawWrite);
+    super(request);
 
     _request = request;
+    _rawWrite = rawWrite;
 
     Server server = (Server) request.getDispatchServer();
 
@@ -88,12 +91,19 @@ public class HttpResponse extends AbstractHttpResponse
   @Override
   protected AbstractResponseStream createResponseStream()
   {
-    return new HttpResponseStream(this, getRawWrite());
+    HttpRequest request = (HttpRequest) getRequest();
+
+    return new HttpResponseStream(this, request.getRawWrite());
   }
 
   boolean isChunkedEncoding()
   {
     return _isChunked;
+  }
+
+  protected WriteStream getRawWrite()
+  {
+    return _rawWrite;
   }
 
   /**
@@ -123,7 +133,8 @@ public class HttpResponse extends AbstractHttpResponse
   /**
    * Writes the 100 continue response.
    */
-  protected void writeContinueInt(WriteStream os)
+  @Override
+    protected void writeContinueInt()
     throws IOException
   {
     // #2938, server/0558
@@ -144,7 +155,10 @@ public class HttpResponse extends AbstractHttpResponse
     os.flush();
     */
 
+    // server/269n
+    WriteStream os = getRawWrite();
     os.print("HTTP/1.1 100 Continue\r\n\r\n");
+    os.flush();
   }
 
   /**

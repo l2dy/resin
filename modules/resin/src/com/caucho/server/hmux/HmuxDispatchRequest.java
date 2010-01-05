@@ -29,6 +29,7 @@
 
 package com.caucho.server.hmux;
 
+import com.caucho.VersionFactory;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.ClusterPort;
 import com.caucho.server.cluster.ClusterServer;
@@ -102,6 +103,8 @@ public class HmuxDispatchRequest {
     String etag = null;
 
     while (true) {
+      os.flush();
+      
       code = is.read();
 
       switch (code) {
@@ -253,7 +256,7 @@ public class HmuxDispatchRequest {
     long crc64 = 0;
 
     if (! Alarm.isTest())
-      crc64 = Crc64.generate(crc64, com.caucho.Version.FULL_VERSION);
+      crc64 = Crc64.generate(crc64, VersionFactory.getFullVersion());
     
     queryServer(os);
 

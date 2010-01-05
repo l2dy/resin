@@ -28,7 +28,7 @@
 
 package com.caucho.filters;
 
-import com.caucho.server.connection.ToByteResponseStream;
+import com.caucho.server.http.ToByteResponseStream;
 import com.caucho.util.L10N;
 
 import java.io.IOException;
@@ -99,29 +99,12 @@ public class FilterWrapperResponseStream extends ToByteResponseStream {
   }
 
   /**
-   * Finish.
-   */
-  public void finish()
-    throws IOException
-  {
-    flushBuffer();
-
-    /*
-    if (_os != null)
-      _os.flush();
-    */
-
-    _response = null;
-    _os = null;
-  }
-
-  /**
    * Close.
    */
-  public void close()
+  public void closeImpl()
     throws IOException
   {
-    super.close();
+    super.closeImpl();
 
     _response = null;
     

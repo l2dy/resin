@@ -31,8 +31,6 @@ package com.caucho.bam;
 
 import java.io.Serializable;
 
-import com.caucho.util.*;
-
 /**
  * ActorClient is a convenience API for sending messages to other Actors,
  * which always using the actor's JID as the "from" parameter.
@@ -64,12 +62,27 @@ public interface ActorClient {
   /**
    * Registers a callback {@link com.caucho.bam.ActorStream} with the client
    */
-  public void setActorStream(ActorStream handler);
+  public void setClientStream(ActorStream clientStream);
 
   /**
    * Returns the registered callback {@link com.caucho.bam.ActorStream}.
    */
+  public ActorStream getClientStream();
+  
+  /**
+   * Returns the stream to this client.
+   */
   public ActorStream getActorStream();
+
+  /**
+   * The ActorStream to the link.
+   */
+  public ActorStream getLinkStream();
+
+  /**
+   * Sets the ActorStream to the link.
+   */
+  public void setLinkStream(ActorStream linkStream);
 
   //
   // message handling
@@ -203,113 +216,4 @@ public interface ActorClient {
   public void querySet(String to,
                        Serializable payload,
                        QueryCallback callback);
-
-  //
-  // presence handling
-  //
-
-  /**
-   * Announces a subscribing actor's presence, like an IM user logging on, or
-   * a subscriber logging on.
-   *
-   * @param to the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presence(String to,
-                       Serializable payload);
-
-  /**
-   * Announces a subscribing actor's logout, like an IM user logging out,
-   * or subscriber logging out.
-   *
-   * @param to the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnavailable(String to,
-                                  Serializable payload);
-
-  /**
-   * Presence probing packet from a publisher actor to a
-   * subscriber actor, used to query subscriber capabilities.
-   *
-   * @param to the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceProbe(String to,
-                            Serializable payload);
-
-  /**
-   * A subscription request from a subscriber to a publisher.
-   *
-   * @param to the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceSubscribe(String to,
-                                Serializable payload);
-
-  /**
-   * A subscription acceptance from a publisher to a subscriber.
-   *
-   * @param to the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceSubscribed(String to,
-                                 Serializable payload);
-
-  /**
-   * A unsubscription request from a subscriber to a publisher.
-   *
-   * @param to the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnsubscribe(String to,
-                                  Serializable payload);
-
-  /**
-   * A unsubscription acceptance from a publisher to a subscriber.
-   *
-   * @param to the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnsubscribed(String to,
-                                   Serializable payload);
-
-  /**
-   * A presence error message.
-   *
-   * @param to the originator actor's JID
-   * @param payload the presence payload
-   * @param error the error information
-   */
-  public void presenceError(String to,
-                            Serializable payload,
-                            ActorError error);
-
-  //
-  // callbacks and low-level routines
-  //
-
-  /**
-   * Returns the underlying ActorStream to the broker.
-   */
-  public ActorStream getBrokerStream();
-
-  /**
-   * Callback from the ActorStream to handle a queryResult.  Returns true
-   * if the client has a pending query, false otherwise.
-   */
-  public boolean onQueryResult(long id,
-                               String to,
-                               String from,
-                               Serializable payload);
-
-  /**
-   * Callback from the ActorStream to handle a queryResult.  Returns true
-   * if the client has a pending query, false otherwise.
-   */
-  public boolean onQueryError(long id,
-                              String to,
-                              String from,
-                              Serializable payload,
-                              ActorError error);
 }

@@ -1122,7 +1122,7 @@ abstract public class Value implements java.io.Serializable
   {
     return this;
   }
-
+  
   /**
    * Copy as an array item
    */
@@ -1171,6 +1171,14 @@ abstract public class Value implements java.io.Serializable
   public Value clone(Env env)
   {
     return this;
+  }
+  
+  /**
+   * Copy for saving a method's arguments.
+   */
+  public Value copySaveFunArg()
+  {
+    return copy();
   }
 
   /**

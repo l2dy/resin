@@ -30,8 +30,8 @@
 package com.caucho.bam;
 
 import java.io.Serializable;
-import java.util.*;
-import java.util.logging.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The abstract implementation of an {@link com.caucho.bam.ActorStream}
@@ -54,9 +54,9 @@ abstract public class AbstractActorStream implements ActorStream
   abstract public String getJid();
 
   /**
-   * Returns the stream to the broker.
+   * Returns the stream to the link.
    */
-  abstract public ActorStream getBrokerStream();
+  abstract public ActorStream getLinkStream();
 
   //
   // Unidirectional messages
@@ -79,6 +79,19 @@ abstract public class AbstractActorStream implements ActorStream
       log.finer(this + " message ignored " + payload
 		+ " {from:" + from + ", to:" + to + "}");
     }
+
+    String msg;
+    msg = (this + ": message is not implemented by this actor.\n"
+           + payload + " {from:" + from + ", to:" + to + "}");
+
+    ActorError error = new ActorError(ActorError.TYPE_CANCEL,
+                                      ActorError.FEATURE_NOT_IMPLEMENTED,
+                                      msg);
+
+    ActorStream linkStream = getLinkStream();
+
+    if (linkStream != null)
+      linkStream.messageError(from, to, payload, error);
   }
   
   /**
@@ -138,12 +151,12 @@ abstract public class AbstractActorStream implements ActorStream
 				      ActorError.FEATURE_NOT_IMPLEMENTED,
 				      msg);
 
-    ActorStream brokerStream = getBrokerStream();
+    ActorStream linkStream = getLinkStream();
 
-    if (brokerStream == null)
+    if (linkStream == null)
       throw new IllegalStateException(this + " brokerStream is missing and required to send an error for a QueryGet");
     
-    brokerStream.queryError(id, from, to, payload, error);
+    linkStream.queryError(id, from, to, payload, error);
   }
   
   /**
@@ -180,12 +193,12 @@ abstract public class AbstractActorStream implements ActorStream
 				      msg);
 
 
-    ActorStream brokerStream = getBrokerStream();
+    ActorStream linkStream = getLinkStream();
 
-    if (brokerStream == null)
+    if (linkStream == null)
       throw new IllegalStateException(this + " brokerStream is missing and required to send an error for a QueryGet");
     
-    brokerStream.queryError(id, from, to, payload, error);
+    linkStream.queryError(id, from, to, payload, error);
   }
   
   /**
@@ -235,173 +248,11 @@ abstract public class AbstractActorStream implements ActorStream
   //
   
   /**
-   * Handles a subscriber Actor's presence/login announcement.
-   * The default implementation ignores the packet.
-   *
-   * @param to the publisher actor's JID
-   * @param from the subscriber actor's JID
-   * @param payload the presence payload
+   * Tests if the stream is closed.
    */
-  public void presence(String to,
-		       String from,
-		       Serializable payload)
+  public boolean isClosed()
   {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presence ignored " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-  }
-  
-  /**
-   * Handles a subscriber Actor's logout announcement.
-   * The default implementation ignores the packet.
-   *
-   * @param to the publisher actor's JID
-   * @param from the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnavailable(String to,
-				      String from,
-				      Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceUnavailable ignored " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-  }
-
-  /**
-   * Handles a publisher's probing packet, used to query
-   * subscriber capabilities.  The default implementation ignores the
-   * packet.
-   *
-   * @param to the subscriber actor's JID
-   * @param from the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceProbe(String to,
-			    String from,
-			    Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceProbe ignored " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-  }
-
-  /**
-   * Handles a subscription request from a subscriber.
-   * The default implementation returns a feature-not-implemented
-   * error.
-   *
-   * @param to the publisher actor's JID
-   * @param from the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceSubscribe(String to,
-				String from,
-				Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceSubscribe rejected " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-
-    String msg
-      = (this + ": presenceSubscribe is not implemented by this actor.\n"
-	   + payload + " {from:" + from + ", to:" + to + "}");
-
-    ActorError error = new ActorError(ActorError.TYPE_CANCEL,
-				      ActorError.FEATURE_NOT_IMPLEMENTED,
-				      msg);
-
-    getBrokerStream().presenceError(from, to, payload, error);
-  }
-
-  /**
-   * Handles a subscription acceptance from a publisher.  The default
-   * implementation ignores the request.
-   *
-   * @param to the subscriber actor's JID
-   * @param from the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceSubscribed(String to,
-				 String from,
-				 Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceSubscribed ignored " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-  }
-
-  /**
-   * Handles a unsubscription request from a subscribing Actor.
-   * The default implementation returns a feature-not-implemented
-   * error.
-   *
-   * @param to the publisher actor's JID
-   * @param from the subscriber actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnsubscribe(String to,
-				  String from,
-				  Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceUnsubscribe default accept " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-
-    String msg;
-    msg = (this + ": presenceSubscribe is not implemented by this actor.\n"
-	   + payload + " {from:" + from + ", to:" + to + "}");
-
-    ActorError error = new ActorError(ActorError.TYPE_CANCEL,
-				      ActorError.FEATURE_NOT_IMPLEMENTED,
-				      msg);
-
-    getBrokerStream().presenceError(from, to, payload, error);
-  }
-
-  /**
-   * Handles a unsubscribed notification from a publishing Actor.
-   * The default implementation ignores the packet.
-   *
-   * @param to the subscriber actor's JID
-   * @param from the publisher actor's JID
-   * @param payload the presence payload
-   */
-  public void presenceUnsubscribed(String to,
-				   String from,
-				   Serializable payload)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceUnsubscribed ignored " + payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
-  }
-
-
-  /**
-   * Handles a presence error from a publishing Actor.
-   * The default implementation ignores the packet.
-   *
-   * @param to the target actor's JID
-   * @param from the source actor's JID
-   * @param payload the presence payload of the original request
-   * @param error description of the error
-   */
-  public void presenceError(String to,
-			    String from,
-			    Serializable payload,
-			    ActorError error)
-  {
-    if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " presenceError ignored " + error + " "+ payload
-		+ " {from:" + from + ", to:" + to + "}");
-    }
+    return false;
   }
 
   /**

@@ -280,7 +280,7 @@ public class OptionsModule extends AbstractQuercusModule {
    */
   public static Value getenv(Env env, StringValue key)
   {
-    Value serverVars = env.getGlobalVar("_SERVER");;
+    Value serverVars = env.getGlobalVar("_SERVER");
     Value val = serverVars.get(key);
 
     if (val == null || ! val.isset())
@@ -373,7 +373,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Sets an initialization value.
    */
-  public static Value ini_alter(Env env, String varName, String value)
+  public static Value ini_alter(Env env, String varName, StringValue value)
   {
     return ini_set(env, varName, value);
   }
@@ -381,14 +381,14 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Returns an initialization value.
    */
-  public static String ini_get(Env env, String varName)
+  public static StringValue ini_get(Env env, String varName)
   {
     StringValue v = env.getIni(varName);
 
     if (v != null)
-      return v.toString();
+      return v;
     else
-      return "";
+      return env.getEmptyString();
   }
 
   /**
@@ -454,7 +454,7 @@ public class OptionsModule extends AbstractQuercusModule {
     Value value = env.getConfigVar(name);
 
     if (value != null)
-      env.setIni(name, value.toString());
+      env.setIni(name, value.toStringValue());
 
     return NullValue.NULL;
   }
@@ -462,7 +462,7 @@ public class OptionsModule extends AbstractQuercusModule {
   /**
    * Sets an initialization value.
    */
-  public static StringValue ini_set(Env env, String varName, String value)
+  public static StringValue ini_set(Env env, String varName, StringValue value)
   {
     StringValue oldValue = env.setIni(varName, value);
 

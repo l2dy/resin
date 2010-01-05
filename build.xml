@@ -913,18 +913,22 @@
       <param name="maven.name" value="resin-maven-plugin"/>
     </antcall>
 
+    <!-- 4.0.2
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="netbeans"/>
       <param name="module.ext" value="nbm"/>
       <param name="jar.name" value="resin-netbeans.nbm"/>
       <param name="maven.name" value="resin-netbeans"/>
     </antcall>
+    -->
 
+    <!-- 4.0.2
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="spring"/>
       <param name="jar.name" value="resin-spring.jar"/>
       <param name="maven.name" value="resin-spring"/>
     </antcall>
+    -->
 
     <!--
     <antcall target="maven2-module" inheritRefs="true">

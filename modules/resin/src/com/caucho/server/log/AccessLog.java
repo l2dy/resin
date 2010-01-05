@@ -35,11 +35,11 @@ import com.caucho.config.types.CronType;
 import com.caucho.config.types.Period;
 import com.caucho.loader.CloseListener;
 import com.caucho.loader.Environment;
-import com.caucho.server.connection.AbstractHttpRequest;
-import com.caucho.server.connection.AbstractHttpResponse;
-import com.caucho.server.connection.CauchoRequest;
-import com.caucho.server.connection.HttpServletRequestImpl;
-import com.caucho.server.connection.HttpServletResponseImpl;
+import com.caucho.server.http.AbstractHttpRequest;
+import com.caucho.server.http.AbstractHttpResponse;
+import com.caucho.server.http.CauchoRequest;
+import com.caucho.server.http.HttpServletRequestImpl;
+import com.caucho.server.http.HttpServletResponseImpl;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.*;
 import com.caucho.vfs.Path;
@@ -104,7 +104,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   private final ByteBuffer _timeBuffer = new ByteBuffer();
   private long _lastTime;
 
-  private Alarm _alarm = new Alarm(this);
+  private Alarm _alarm = new WeakAlarm(this);
   private boolean _isActive;
 
   public AccessLog()
@@ -728,6 +728,8 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   public void destroy()
     throws IOException
   {
+    super.destroy();
+
     _isActive = false;
 
     Alarm alarm = _alarm;
@@ -737,6 +739,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
       alarm.dequeue();
 
     flush();
+
     _logWriter.close();
   }
 

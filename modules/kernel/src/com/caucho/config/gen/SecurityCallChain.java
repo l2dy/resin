@@ -136,11 +136,17 @@ public class SecurityCallChain extends AbstractCallChain {
     if (denyAll != null)
       _roles = new String[0];
   }
+  
+  //
+  // business method interception
+  //
 
   /**
    * Generates the static class prologue
    */
-  public void generatePrologue(JavaWriter out, HashMap map)
+  @Override
+  public void generateMethodPrologue(JavaWriter out, 
+                                     HashMap<String,Object> map)
     throws IOException
   {
     if (_roles != null) {
@@ -160,13 +166,17 @@ public class SecurityCallChain extends AbstractCallChain {
       out.println("};");
     }
 
-    _next.generatePrologue(out, map);
+    _next.generateMethodPrologue(out, map);
   }
+  
+  //
+  // invocation aspect code
 
   /**
    * Generates the method interceptor code
    */
-  public void generateCall(JavaWriter out)
+  @Override
+  public void generatePreTry(JavaWriter out)
     throws IOException
   {
     if (_roleVar != null) {
@@ -179,18 +189,23 @@ public class SecurityCallChain extends AbstractCallChain {
 		+ " com.caucho.security.SecurityContext.runAs(\"");
       out.printJavaString(_runAs);
       out.println("\");");
-
-      out.println("try {");
-      out.pushDepth();
     }
+    
+    super.generatePreTry(out);
+  }
 
-    _next.generateCall(out);
-
+  /**
+   * Generates the method interceptor code
+   */
+  @Override
+  public void generateFinally(JavaWriter out)
+    throws IOException
+  {
+    super.generateFinally(out);
+    
     if (_runAs != null) {
-      out.popDepth();
-      out.println("} finally {");
-      out.println("  com.caucho.security.SecurityContext.runAs(oldRunAs);");
-      out.println("}");
+      out.println();
+      out.println("com.caucho.security.SecurityContext.runAs(oldRunAs);");
     }
   }
 }

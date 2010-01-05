@@ -131,7 +131,7 @@ public class BamPhpActor extends SimpleActor {
       throw ConfigException.create(e);
     }
   }
-
+/*
   @Override
   public boolean startChild(String jid)
   {
@@ -140,7 +140,7 @@ public class BamPhpActor extends SimpleActor {
 
     return hasChild(jid);
   }
-
+*/
   boolean hasChild(String jid)
   {
     synchronized(_children) {
@@ -154,7 +154,7 @@ public class BamPhpActor extends SimpleActor {
       _children.put(jid, child);
     }
 
-    _broker.addActor(child);
+    _broker.addActor(child.getActorStream());
   }
 
   private void setId(Env env, long id)
@@ -293,118 +293,6 @@ public class BamPhpActor extends SimpleActor {
 
     try {
       setId(env, id);
-      setError(env, error);
-
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presence(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE, to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceUnavailable(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_UNAVAILABLE,
-			to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceProbe(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_PROBE, to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceSubscribe(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_SUBSCRIBE,
-			to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceSubscribed(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_SUBSCRIBED,
-			to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceUnsubscribe(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_UNSUBSCRIBE,
-			to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceUnsubscribed(String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_UNSUBSCRIBED, 
-			to, from, value);
-
-    try {
-      _page.executeTop(env);
-    }
-    finally {
-      env.close();
-    }
-  }
-
-  @Override
-  public void presenceError(String to, String from, 
-                            Serializable value, ActorError error)
-  {
-    Env env = createEnv(_page, BamEventType.PRESENCE_ERROR, to, from, value);
-
-    try {
       setError(env, error);
 
       _page.executeTop(env);

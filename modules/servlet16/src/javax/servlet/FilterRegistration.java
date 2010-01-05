@@ -31,6 +31,9 @@ package javax.servlet;
 
 import java.util.EnumSet;
 
+/**
+ * @Since Servlet 3.0
+ */
 public interface FilterRegistration
   extends Registration
 {

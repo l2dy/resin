@@ -33,8 +33,9 @@ import com.caucho.config.*;
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.AbstractContext;
-import com.caucho.ejb.AbstractServer;
 import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.server.AbstractServer;
+import com.caucho.ejb.server.EjbProducer;
 import com.caucho.jca.*;
 import com.caucho.util.L10N;
 
@@ -53,7 +54,7 @@ import java.util.logging.Logger;
 /**
  * JCA activation-spec server container for a message bean.
  */
-public class MessageServer extends AbstractServer
+public class MessageServer<T> extends AbstractServer<T>
   implements MessageEndpointFactory
 {
   private static final L10N L = new L10N(MessageServer.class);
@@ -67,7 +68,8 @@ public class MessageServer extends AbstractServer
 
   private Method _ejbCreate;
 
-  public MessageServer(EjbContainer ejbContainer, AnnotatedType annotatedType)
+  public MessageServer(EjbContainer ejbContainer, 
+                       AnnotatedType<T> annotatedType)
   {
     super(ejbContainer, annotatedType);
 
@@ -128,6 +130,8 @@ public class MessageServer extends AbstractServer
 	Class beanClass = getBeanSkelClass();
 
 	_ejbCreate = beanClass.getMethod("ejbCreate", new Class[0]);
+	  
+	// getProducer().bindInjection();
       } catch (Exception e) {
 	log.log(Level.FINEST, e.toString(), e);
       }
@@ -139,6 +143,8 @@ public class MessageServer extends AbstractServer
   @Override
   protected void bindContext()
   {
+    super.bindContext();
+    
     InjectManager manager = InjectManager.create();
     BeanFactory factory = manager.createBeanFactory(_context.getClass());
 
@@ -152,9 +158,9 @@ public class MessageServer extends AbstractServer
   public boolean start()
     throws Exception
   {
-    if (! super.start())
+     if (! super.start())
       return false;
-    
+     
     _ra.endpointActivation(this, _activationSpec);
 
     return true;
@@ -215,7 +221,7 @@ public class MessageServer extends AbstractServer
     return false;
   }
 
-  private Object createMessageListener()
+  private T createMessageListener()
     throws Exception
   {
     Thread thread = Thread.currentThread();
@@ -224,13 +230,15 @@ public class MessageServer extends AbstractServer
     try {
       thread.setContextClassLoader(getClassLoader());
       
-      Class beanClass = getBeanSkelClass();
+      Class<T> beanClass = getBeanSkelClass();
 
-      Constructor ctor = beanClass.getConstructor(new Class[] { MessageServer.class });
+      Constructor<T> ctor = beanClass.getConstructor(new Class[] { MessageServer.class });
     
-      Object listener = ctor.newInstance(this);
+      T listener = ctor.newInstance(this);
 
-      initInstance(listener);
+      EjbProducer<T> producer = getProducer();
+      
+      producer.initInstance(listener);
 
       if (_ejbCreate != null)
 	_ejbCreate.invoke(listener);

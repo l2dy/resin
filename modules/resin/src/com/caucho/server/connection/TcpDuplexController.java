@@ -32,7 +32,6 @@ package com.caucho.server.connection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.server.port.TcpConnection;
 import com.caucho.servlet.DuplexContext;
 import com.caucho.servlet.DuplexListener;
 import com.caucho.util.Alarm;
@@ -220,7 +219,7 @@ public class TcpDuplexController extends ConnectionController {
     TcpConnection conn = _conn;
 
     if (conn == null)
-      return getClass().getSimpleName() + "[closed]";
+      return getClass().getSimpleName() + "[" + _handler + ",closed]";
     else if (Alarm.isTest())
       return getClass().getSimpleName() + "[" + _handler + "]";
     else

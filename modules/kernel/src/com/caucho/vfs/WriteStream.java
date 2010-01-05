@@ -70,7 +70,7 @@ public class WriteStream extends OutputStreamWithBuffer
     _sysNewline = Path.getNewlineString();
     _sysNewlineBytes = _sysNewline.getBytes();
   }
-  
+
   private TempBuffer _tempWrite;
   private byte []_writeBuffer;
   private int _writeLength;
@@ -89,9 +89,8 @@ public class WriteStream extends OutputStreamWithBuffer
   private boolean _disableClose;
   private boolean _isDisableCloseSource;
   private boolean _disableFlush;
-  private boolean reuseBuffer;
+  private boolean _reuseBuffer;
 
-  private StreamWriter _writer;
   private StreamPrintWriter _printWriter;
 
   private String newline = "\n";
@@ -99,7 +98,7 @@ public class WriteStream extends OutputStreamWithBuffer
 
   /**
    * Creates an uninitialized stream. Use <code>init</code> to initialize.
-   */ 
+   */
   public WriteStream()
   {
   }
@@ -124,9 +123,9 @@ public class WriteStream extends OutputStreamWithBuffer
     _disableClose = false;
     _isDisableCloseSource = false;
 
-    if (this._source != null && this._source != source) {
+    if (_source != null && _source != source) {
       try {
-	close();
+        close();
       } catch (IOException e) {
       }
     }
@@ -139,10 +138,11 @@ public class WriteStream extends OutputStreamWithBuffer
       _writeBuffer = _tempWrite._buf;
     }
 
-    this._source = source;
+    _source = source;
 
     _position = 0;
     _writeLength = 0;
+    
     flushOnNewline = source.getFlushOnNewline();
     // Possibly, this should be dependent on the source.  For example,
     // a http: stream should behave the same on Mac as on unix.
@@ -178,7 +178,7 @@ public class WriteStream extends OutputStreamWithBuffer
   /**
    * Returns true if the buffer allows writes.
    *
-   * <p>LogStreams, used for debugging, use this feature to 
+   * <p>LogStreams, used for debugging, use this feature to
    * test if they should write with very little overhead.
    *
    * <code><pre>
@@ -202,7 +202,7 @@ public class WriteStream extends OutputStreamWithBuffer
 
   public void setReuseBuffer(boolean reuse)
   {
-    this.reuseBuffer = reuse;
+    _reuseBuffer = reuse;
   }
 
   /**
@@ -260,10 +260,10 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     int len = _writeLength;
     byte []writeBuffer = _writeBuffer;
-    
+
     if (writeBuffer.length <= len) {
       if (_source == null)
-	return;
+        return;
 
       _writeLength = 0;
       _source.write(writeBuffer, 0, len, false);
@@ -278,6 +278,8 @@ public class WriteStream extends OutputStreamWithBuffer
     if (_implicitFlush)
       flush();
   }
+  
+  private boolean _isDebug;
 
   /**
    * Writes a byte array
@@ -288,16 +290,16 @@ public class WriteStream extends OutputStreamWithBuffer
     
     int bufferLength = buffer.length;
     int writeLength = _writeLength;
-
+    
     StreamImpl source = _source;
     if (source == null)
       return;
-    
+
     if (bufferLength <= length) {
       if (source.write(buffer, 0, writeLength,
-			buf, offset, length, false)) {
-	_position += (writeLength + length);
-	return;
+                       buf, offset, length, false)) {
+        _position += (writeLength + length);
+        return;
       }
     }
 
@@ -305,8 +307,8 @@ public class WriteStream extends OutputStreamWithBuffer
       int sublen = bufferLength - writeLength;
 
       if (length < sublen)
-	sublen = length;
-      
+        sublen = length;
+
       System.arraycopy(buf, offset, buffer, writeLength, sublen);
 
       writeLength += sublen;
@@ -314,15 +316,16 @@ public class WriteStream extends OutputStreamWithBuffer
       length -= sublen;
 
       if (bufferLength <= writeLength) {
-	int len = writeLength;
-	writeLength = 0;
-	source.write(buffer, 0, len, false);
-	_position += len;
+        int len = writeLength;
+        writeLength = 0;
+        source.write(buffer, 0, len, false);
+        _position += len;
       }
     }
 
     _writeLength = writeLength;
 
+ 
     if (_implicitFlush)
       flush();
   }
@@ -336,7 +339,7 @@ public class WriteStream extends OutputStreamWithBuffer
 
     if (_source != null)
       _source.write(_writeBuffer, 0, offset, false);
-    
+
     _position += offset;
 
     if (_implicitFlush)
@@ -364,8 +367,9 @@ public class WriteStream extends OutputStreamWithBuffer
     int len = _writeLength;
     if (len > 0) {
       _writeLength = 0;
-      _source.write(_writeBuffer, 0, len, false);
       
+      _source.write(_writeBuffer, 0, len, false);
+
       _position += len;
     }
 
@@ -379,7 +383,7 @@ public class WriteStream extends OutputStreamWithBuffer
   public void flushToDisk() throws IOException
   {
     StreamImpl source = _source;
-    
+
     if (_disableFlush || source == null)
       return;
 
@@ -395,17 +399,20 @@ public class WriteStream extends OutputStreamWithBuffer
   /**
    * Flushes the buffer to the source.
    */
-  public void flushBuffer() throws IOException
+  public final void flushBuffer()
+    throws IOException
   {
+    final StreamImpl source = _source;
+
     if (_disableFlush || _source == null)
       return;
 
-    int len = _writeLength;
+    final int len = _writeLength;
     if (len > 0) {
       _writeLength = 0;
-      _source.write(_writeBuffer, 0, len, false);
+      source.write(_writeBuffer, 0, len, false);
       _position += len;
-      _source.flushBuffer();
+      source.flushBuffer();
     }
   }
 
@@ -418,7 +425,7 @@ public class WriteStream extends OutputStreamWithBuffer
     flushBuffer();
 
     StreamImpl source = _source;
-    
+
     if (source != null) {
       source.seekStart(pos);
       _position = pos;
@@ -434,7 +441,7 @@ public class WriteStream extends OutputStreamWithBuffer
     flushBuffer();
 
     StreamImpl source = _source;
-    
+
     if (source != null)
       source.seekEnd(offset);
 
@@ -456,15 +463,15 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     if (_source instanceof ReaderWriterStream)
       encoding = "UTF-8";
-    
+
     String mimeName = Encoding.getMimeName(encoding);
-    
+
     if (mimeName != null && mimeName.equals(_writeEncodingName))
       return;
 
     if (_source != null)
       _source.setWriteEncoding(encoding);
-    
+
     _writeEncoding = Encoding.getWriteEncoding(encoding);
     _writeEncodingName = mimeName;
   }
@@ -572,23 +579,23 @@ public class WriteStream extends OutputStreamWithBuffer
     if (_source == null)
       return;
 
-    byte []writeBuffer = this._writeBuffer;
+    byte []writeBuffer = _writeBuffer;
 
     while (length > 0) {
       int writeLength = _writeLength;
       int sublen = writeBuffer.length - writeLength;
 
       if (sublen <= 0) {
-	_source.write(writeBuffer, 0, writeLength, false);
-	_position += writeLength;
-	writeLength = 0;
-	sublen = writeBuffer.length - writeLength;
+        _source.write(writeBuffer, 0, writeLength, false);
+        _position += writeLength;
+        writeLength = 0;
+        sublen = writeBuffer.length - writeLength;
       }
       if (length < sublen)
-	sublen = length;
+        sublen = length;
 
       for (int i = sublen - 1; i >= 0; i--)
-	writeBuffer[writeLength + i] = (byte) buffer[offset + i];
+        writeBuffer[writeLength + i] = (byte) buffer[offset + i];
 
       _writeLength = writeLength + sublen;
       offset += sublen;
@@ -644,16 +651,16 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     if (string == null)
       string = "null";
-	
+
     int length = string.length();
     int offset = 0;
-    
+
     char []chars = _chars;
     if (chars == null) {
       _chars = new char[_charsLength];
       chars = _chars;
     }
-    
+
     while (length > 0) {
       int sublen = length < _charsLength ? length : _charsLength;
 
@@ -674,16 +681,16 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     if (string == null)
       string = "null";
-	
+
     int length = string.length();
     int offset = 0;
-    
+
     char []chars = _chars;
     if (chars == null) {
       _chars = new char[_charsLength];
       chars = _chars;
     }
-    
+
     while (length > 0) {
       int sublen = length < _charsLength ? length : _charsLength;
 
@@ -708,13 +715,13 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     if (string == null)
       string = "null";
-    
+
     char []chars = _chars;
     if (chars == null) {
       _chars = new char[_charsLength];
       chars = _chars;
     }
-    
+
     while (length > 0) {
       int sublen = length < _charsLength ? length : _charsLength;
 
@@ -765,23 +772,23 @@ public class WriteStream extends OutputStreamWithBuffer
 
     byte []buffer = _writeBuffer;
     int writeLength = this._writeLength;
-    
+
     if (writeLength + length < buffer.length) {
       writeLength += length;
       this._writeLength = writeLength + 1;
-      
+
       for (int j = 0; j <= length; j++) {
         buffer[writeLength - j] = (byte) (i % 10 + '0');
         i = i / 10;
       }
       return;
     }
-    
+
     if (_bytes == null)
       _bytes = new byte[32];
 
     int j = 31;
-    
+
     while (i > 0) {
       _bytes[--j] = (byte) ((i % 10) + '0');
       i /= 10;
@@ -799,7 +806,7 @@ public class WriteStream extends OutputStreamWithBuffer
       print("-9223372036854775808");
       return;
     }
-    
+
     if (_bytes == null)
       _bytes = new byte[32];
 
@@ -812,7 +819,7 @@ public class WriteStream extends OutputStreamWithBuffer
     }
 
     int j = 31;
-    
+
     while (i > 0) {
       _bytes[--j] = (byte) ((i % 10) + '0');
       i /= 10;
@@ -1016,7 +1023,7 @@ public class WriteStream extends OutputStreamWithBuffer
     int length = _writeBuffer.length;
     long outputLength = 0;
 
-    if (_writeLength >= length) {
+    if (length <= _writeLength) {
       int tmplen = _writeLength;
       _writeLength = 0;
       _source.write(_writeBuffer, 0, tmplen, false);
@@ -1025,16 +1032,16 @@ public class WriteStream extends OutputStreamWithBuffer
     }
 
     while ((len = source.read(_writeBuffer,
-			      _writeLength,
-			      length - _writeLength)) >= 0) {
+                              _writeLength,
+                              length - _writeLength)) >= 0) {
       _writeLength += len;
       outputLength += len;
-      
+
       if (length <= _writeLength) {
-	int tmplen = _writeLength;
-	_writeLength = 0;
-	_source.write(_writeBuffer, 0, tmplen, false);
-	_position += tmplen;
+        int tmplen = _writeLength;
+        _writeLength = 0;
+        _source.write(_writeBuffer, 0, tmplen, false);
+        _position += tmplen;
       }
     }
 
@@ -1079,7 +1086,6 @@ public class WriteStream extends OutputStreamWithBuffer
     if (source == null)
       return;
 
-    int len;
     int length = _writeBuffer.length;
 
     if (length <= _writeLength) {
@@ -1091,21 +1097,21 @@ public class WriteStream extends OutputStreamWithBuffer
 
     while (totalLength > 0) {
       int sublen = length - _writeLength;
-      
+
       if (totalLength < sublen)
         sublen = totalLength;
-      
+
       sublen = source.read(_writeBuffer, _writeLength, sublen);
       if (sublen < 0)
         break;
-      
+
       _writeLength += sublen;
       totalLength -= sublen;
       if (length <= _writeLength) {
-	int tmplen = _writeLength;
-	_writeLength = 0;
-	_source.write(_writeBuffer, 0, tmplen, false);
-	_position += tmplen;
+        int tmplen = _writeLength;
+        _writeLength = 0;
+        _source.write(_writeBuffer, 0, tmplen, false);
+        _position += tmplen;
       }
     }
 
@@ -1131,19 +1137,19 @@ public class WriteStream extends OutputStreamWithBuffer
     if (_writeLength >= length) {
       int tmplen = _writeLength;
       _writeLength = 0;
-      this._source.write(_writeBuffer, 0, tmplen, false);
+      _source.write(_writeBuffer, 0, tmplen, false);
       _position += tmplen;
     }
 
     while ((len = source.read(_writeBuffer,
-			      _writeLength,
-			      length - _writeLength)) >= 0) {
+                              _writeLength,
+                              length - _writeLength)) >= 0) {
       _writeLength += len;
       if (_writeLength >= length) {
-	int tmplen = _writeLength;
-	_writeLength = 0;
-	this._source.write(_writeBuffer, 0, tmplen, false);
-	_position += tmplen;
+        int tmplen = _writeLength;
+        _writeLength = 0;
+        _source.write(_writeBuffer, 0, tmplen, false);
+        _position += tmplen;
       }
     }
 
@@ -1162,10 +1168,10 @@ public class WriteStream extends OutputStreamWithBuffer
 
     try {
       if (is != null)
-	writeStream(is);
+        writeStream(is);
     } finally {
       if (is != null)
-	is.close();
+        is.close();
     }
   }
 
@@ -1211,13 +1217,14 @@ public class WriteStream extends OutputStreamWithBuffer
     try {
       int len = _writeLength;
       if (len > 0) {
-	_writeLength = 0;
+        _writeLength = 0;
+	
         if (s != null)
           s.write(_writeBuffer, 0, len, true);
       }
     } finally {
       if (_disableClose) {
-	return;
+        return;
       }
 
       _source = null;
@@ -1225,17 +1232,18 @@ public class WriteStream extends OutputStreamWithBuffer
       if (_writeEncoding != null)
         _writeEncoding = null;
 
-      if (! reuseBuffer) {
-        if (_tempWrite != null) {
-          TempBuffer.free(_tempWrite);
-          _tempWrite = null;
-        }
+      if (! _reuseBuffer) {
+        TempBuffer tempWrite = _tempWrite;
         _tempWrite = null;
         _writeBuffer = null;
+        
+        if (tempWrite != null) {
+          TempBuffer.free(tempWrite);
+        }
       }
 
       if (s != null && ! _isDisableCloseSource)
-	s.closeWrite();
+        s.closeWrite();
     }
   }
 
@@ -1245,16 +1253,17 @@ public class WriteStream extends OutputStreamWithBuffer
   public final void free()
   {
     _source = null;
-    
-    if (_tempWrite != null) {
-      TempBuffer.free(_tempWrite);
-      _tempWrite = null;
-    }
+
+    TempBuffer tempWrite = _tempWrite;
     
     _tempWrite = null;
     _writeBuffer = null;
-  }
     
+    if (tempWrite != null) {
+      TempBuffer.free(tempWrite);
+    }
+  }
+
 
   /**
    * Returns a named attribute.  For example, an HTTP stream
@@ -1288,7 +1297,7 @@ public class WriteStream extends OutputStreamWithBuffer
   /**
    * Lists all named attributes.
    */
-  public Iterator getAttributeNames()
+  public Iterator<String> getAttributeNames()
     throws IOException
   {
     return _source.getAttributeNames();
@@ -1322,7 +1331,7 @@ public class WriteStream extends OutputStreamWithBuffer
   {
     _source.setPath(path);
   }
-  
+
   /**
    * For testing, sets the system newlines.
    */
@@ -1393,62 +1402,5 @@ public class WriteStream extends OutputStreamWithBuffer
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _source + "]";
-  }
-
-  private class StreamWriter extends Writer
-    implements EnclosedWriteStream, FlushBuffer {
-    public final void write(char ch)
-      throws IOException
-    {
-      WriteStream.this.print(ch);
-    }
-
-    public final void write(char []buffer, int offset, int length)
-      throws IOException
-    {
-      WriteStream.this.print(buffer, offset, length);
-    }
-
-    public final void write(char []buffer)
-      throws IOException
-    {
-      WriteStream.this.print(buffer, 0, buffer.length);
-    }
-
-    public final void write(String string)
-      throws IOException
-    {
-      WriteStream.this.print(string);
-    }
-
-    public final void write(String string, int off, int len)
-      throws IOException
-    {
-      WriteStream.this.print(string, off, len);
-    }
-
-    public final void flush()
-      throws IOException
-    {
-      WriteStream.this.flush();
-    }
-
-    public final void flushBuffer()
-      throws IOException
-    {
-      WriteStream.this.flushBuffer();
-    }
-  
-    public final void close()
-      throws IOException
-    {
-      // XXX: if flush, then servlets are sloooow
-      // WriteStream.this.flush();
-    }
-
-    public WriteStream getWriteStream()
-    {
-      return WriteStream.this;
-    }
   }
 }

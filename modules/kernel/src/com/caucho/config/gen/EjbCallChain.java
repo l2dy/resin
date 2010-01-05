@@ -35,6 +35,28 @@ import com.caucho.java.JavaWriter;
 
 /**
  * Represents a filter for invoking a method
+ * 
+ * <code><pre>
+ * [method-prologue]
+ * MyType foo(args)
+ * {
+ *   [pre-try]
+ *   try {
+ *     [pre-call]
+ *     value = [call]
+ *     [post-call]
+ *     return value;
+ *   } catch (ApplicationException e) {
+ *     [application-exception]
+ *     throw e;
+ *   } catch (RuntimeException e) {
+ *     [system-exception]
+ *     throw e;
+ *   } finally {
+ *     [finally]
+ *   }
+ * }
+ * </pre></code>
  */
 public interface EjbCallChain {
   /**
@@ -45,23 +67,114 @@ public interface EjbCallChain {
   /**
    * Introspects the method for the default values
    */
-  public void introspect(ApiMethod apiMethod, ApiMethod implMethod);
+  public void introspect(ApiMethod apiMethod, 
+                         ApiMethod implMethod);
 
   /**
    * Generates the static class prologue
    */
-  @SuppressWarnings("unchecked")
-  public void generatePrologue(JavaWriter out, HashMap map) throws IOException;
+  public void generateBeanPrologue(JavaWriter out, 
+                                   HashMap<String,Object> map)
+    throws IOException;
 
   /**
    * Generates initialization in the constructor
    */
-  @SuppressWarnings("unchecked")
-  public void generateConstructor(JavaWriter out, HashMap map)
-      throws IOException;
+  public void generateBeanConstructor(JavaWriter out, 
+                                      HashMap<String,Object> map)
+    throws IOException;
+
+  /**
+   * Generates @PostConstruct code
+   */
+  public void generatePostConstruct(JavaWriter out, 
+                                    HashMap<String,Object> map)
+    throws IOException;
+  
+  //
+  // method call interception
+  //
+
+  /**
+   * Generates the static class prologue
+   */
+  public void generateMethodPrologue(JavaWriter out, 
+                                     HashMap<String,Object> map)
+    throws IOException;
+  
+  /**
+   * Generates code before the try block
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   [pre-try]
+   *   try {
+   *     ...
+   * }
+   * </pre></code>
+   */
+  public void generatePreTry(JavaWriter out)
+    throws IOException;
+  
+  /**
+   * Generates code before the call, in the try block.
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     [pre-call]
+   *     value = bean.myMethod(...);
+   *     ...
+   * }
+   * </pre></code>
+   */
+  public void generatePreCall(JavaWriter out)
+    throws IOException;
 
   /**
    * Generates the method interception code
    */
-  public void generateCall(JavaWriter out) throws IOException;
+  public void generateCall(JavaWriter out) 
+    throws IOException;
+  
+  /**
+   * Generates code after the call, before the return.
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     ...
+   *     value = bean.myMethod(...);
+   *     [post-call]
+   *     return value;
+   *   } finally {
+   *     ...
+   *   }
+   * }
+   * </pre></code>
+   */
+  public void generatePostCall(JavaWriter out)
+    throws IOException;
+  
+  /**
+   * Generates application (checked) exception code for
+   * the method.
+   */
+  public void generateApplicationException(JavaWriter out,
+                                           Class<?> exn)
+    throws IOException;
+  
+  /**
+   * Generates system (runtime) exception code for
+   * the method.
+   */
+  public void generateSystemException(JavaWriter out,
+                                      Class<?> exn)
+    throws IOException;
+  
+  /**
+   * Generates finally code for the method
+   */
+  public void generateFinally(JavaWriter out)
+    throws IOException;
 }

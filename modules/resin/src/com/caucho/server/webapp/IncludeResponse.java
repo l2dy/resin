@@ -31,6 +31,11 @@ package com.caucho.server.webapp;
 
 import com.caucho.server.connection.*;
 import com.caucho.server.cache.*;
+import com.caucho.server.http.AbstractResponseStream;
+import com.caucho.server.http.CauchoResponse;
+import com.caucho.server.http.CauchoResponseWrapper;
+import com.caucho.server.http.ResponseWriter;
+import com.caucho.server.http.ServletOutputStreamImpl;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 
@@ -78,7 +83,7 @@ class IncludeResponse extends CauchoResponseWrapper
    */
   void startRequest()
   {
-    _originalStream.startRequest();
+    _originalStream.start();
     _stream = _originalStream;
 
     _responseOutputStream.init(_stream);

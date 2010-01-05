@@ -45,24 +45,27 @@ import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.ejb.AbstractContext;
-import com.caucho.ejb.AbstractServer;
+import com.caucho.ejb.SessionPool;
 import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.server.AbstractServer;
 
 /**
  * Server container for a session bean.
  */
-abstract public class SessionServer extends AbstractServer {
-  private final static Logger log = Logger.getLogger(SessionServer.class
-      .getName());
+abstract public class SessionServer<T> extends AbstractServer<T> {
+  private final static Logger log
+     = Logger.getLogger(SessionServer.class.getName());
 
-  @SuppressWarnings("unchecked")
-  private HashMap<Class, InjectionTarget> _componentMap = new HashMap<Class, InjectionTarget>();
+  private HashMap<Class, InjectionTarget> _componentMap
+    = new HashMap<Class, InjectionTarget>();
 
-  @SuppressWarnings("unchecked")
-  private Bean _bean;
+  private Bean<?> _bean;
+  
+  private int _sessionIdleMax = 16;
+  private int _sessionConcurrentMax = -1;
+  private long _sessionConcurrentTimeout = -1;
 
-  @SuppressWarnings("unchecked")
-  public SessionServer(EjbContainer manager, AnnotatedType annotatedType)
+  public SessionServer(EjbContainer manager, AnnotatedType<T> annotatedType)
   {
     super(manager, annotatedType);
   }
@@ -73,17 +76,30 @@ abstract public class SessionServer extends AbstractServer {
     return "session:";
   }
 
-  @SuppressWarnings("unchecked")
   @Override
   public Bean getDeployBean()
   {
     return _bean;
   }
+  
+  public int getSessionIdleMax()
+  {
+    return _sessionIdleMax;
+  }
+  
+  public int getSessionConcurrentMax()
+  {
+    return _sessionConcurrentMax;
+  }
+  
+  public long getSessionConcurrentTimeout()
+  {
+    return _sessionConcurrentTimeout;
+  }
 
   /**
    * Initialize the server
    */
-  @SuppressWarnings("unchecked")
   @Override
   public void init() throws Exception
   {
@@ -96,6 +112,21 @@ abstract public class SessionServer extends AbstractServer {
       super.init();
 
       InjectManager beanManager = InjectManager.create();
+      
+      AnnotatedType<?> annType = getAnnotatedType();
+      SessionPool sessionPool = annType.getAnnotation(SessionPool.class);
+      
+      if (sessionPool != null) {
+        if (sessionPool.maxIdle() >= 0)
+          _sessionIdleMax = sessionPool.maxIdle();
+        
+        if (sessionPool.maxConcurrent() >= 0)
+          _sessionConcurrentMax = sessionPool.maxConcurrent();
+        
+        if (sessionPool.maxConcurrentTimeout() >= 0)
+          _sessionConcurrentTimeout = sessionPool.maxConcurrentTimeout();
+        
+      }
 
       BeanFactory factory
         = beanManager.createBeanFactory(SessionContext.class);
@@ -117,7 +148,6 @@ abstract public class SessionServer extends AbstractServer {
     log.fine(this + " initialized");
   }
 
-  @SuppressWarnings("unchecked")
   private void registerWebBeans()
   {
     Class beanClass = getBeanSkelClass();
@@ -168,39 +198,17 @@ abstract public class SessionServer extends AbstractServer {
     return _bean;
   }
 
-  @SuppressWarnings("unchecked")
   protected Bean createBean(ManagedBeanImpl mBean, Class api)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  protected void bindInjection()
-  {
-    super.bindInjection();
-
-    /*
-     * for (ComponentImpl comp : _componentMap.values()) { comp.bind(); }
-     */
-  }
-
-  @SuppressWarnings("unchecked")
   abstract protected InjectionTarget createSessionComponent(Class api,
       Class beanClass);
 
-  @SuppressWarnings("unchecked")
   protected InjectionTarget getComponent(Class api)
   {
     return _componentMap.get(api);
-  }
-
-  /**
-   * Returns the object key from a handle.
-   */
-  @SuppressWarnings("unchecked")
-  @Override
-  public Class getPrimaryKeyClass()
-  {
-    return null;
   }
 
   /**

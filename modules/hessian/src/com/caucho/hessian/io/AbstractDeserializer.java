@@ -53,10 +53,10 @@ import java.io.IOException;
 /**
  * Deserializing an object. 
  */
-abstract public class AbstractDeserializer implements Deserializer {
+public class AbstractDeserializer implements Deserializer {
   public static final NullDeserializer NULL = new NullDeserializer();
   
-  public Class getType()
+  public Class<?> getType()
   {
     return Object.class;
   }
@@ -104,24 +104,45 @@ abstract public class AbstractDeserializer implements Deserializer {
       throw error(className + ": unexpected null value");
   }
   
-  public Object readObject(AbstractHessianInput in, String []fieldNames)
-    throws IOException
+  /**
+   * Creates the field array for a class. The default
+   * implementation returns a String[] array.
+   *
+   * @param len number of items in the array
+   * @return the new empty array
+   */
+  public Object []createFields(int len)
   {
-    throw new UnsupportedOperationException(toString());
+    return new String[len];
   }
-
-  public Object []createFieldReaders(SerializerFactory factory,
-                                     String []fieldNames)
+  
+  /**
+   * Creates a field value class. The default
+   * implementation returns the String.
+   *
+   * @param len number of items in the array
+   * @return the new empty array
+   */
+  public Object createField(String name)
   {
-    return null;
+    return name;
   }
   
   public Object readObject(AbstractHessianInput in,
-                           String []fieldNames,
-                           Object []fieldReaders)
+                           String []fieldNames)
     throws IOException
   {
-    return readObject(in, fieldNames);
+    return readObject(in, (Object []) fieldNames);
+  }
+  
+  /**
+   * Reads an object instance from the input stream
+   */
+  public Object readObject(AbstractHessianInput in, 
+                           Object []fields)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(toString());
   }
 
   protected HessianProtocolException error(String msg)

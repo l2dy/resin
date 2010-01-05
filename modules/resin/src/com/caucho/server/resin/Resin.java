@@ -29,10 +29,12 @@
 
 package com.caucho.server.resin;
 
+import com.caucho.VersionFactory;
 import com.caucho.amber.manager.PersistenceEnvironmentListener;
 import com.caucho.bam.*;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.functions.FmtFunctions;
 import com.caucho.config.inject.BeanFactory;
@@ -115,8 +117,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   public static final int EXIT_OK = 0;
   public static final int EXIT_HALT = 3;
 
-  private static final String OBJECT_NAME= "resin:type=Resin";
-
   private static final EnvironmentLocal<Resin> _resinLocal
     = new EnvironmentLocal<Resin>();
 
@@ -127,7 +127,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   private boolean _isGlobal;
 
   private String _serverId = "";
-  private String _resinId;
   private final boolean _isWatchdog;
   private DynamicServer _dynamicServer;
 
@@ -141,14 +140,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
   private Path _resinDataDirectory;
 
-  private boolean _isGlobalSystemProperties;
-
   private long _minFreeMemory = 2 * 1024L * 1024L;
   private long _shutdownWaitMax = 60000L;
 
   private SecurityManager _securityManager;
-
-  private HashMap<String,Object> _variableMap = new HashMap<String,Object>();
 
   private ArrayList<ConfigProgram> _clusterDefaults
     = new ArrayList<ConfigProgram>();
@@ -166,8 +161,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   private String _licenseErrorMessage;
 
   private String _configFile;
-  private String _configServer;
-
   private Path _resinConf;
 
   private ClassLoader _systemClassLoader;
@@ -184,11 +177,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   private ModuleRepositoryImpl _repository = new ModuleRepositoryImpl();
   private TempFileManager _tempFileManager;
 
-  private HempBrokerManager _brokerManager;
-
   private ThreadPoolAdmin _threadPoolAdmin;
-  private MemoryAdmin _memoryAdmin;
-
   private ObjectName _objectName;
   private ResinAdmin _resinAdmin;
   private ResinActor _resinActor;
@@ -198,6 +187,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   private Socket _pingSocket;
 
   private String _stage = null;
+  private boolean _isDumpHeapOnExit;
 
   /**
    * Creates a new resin server.
@@ -263,8 +253,8 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     Resin resin = null;
 
     try {
-      Class cl = Class.forName("com.caucho.server.resin.ProResin");
-      Constructor ctor = cl.getConstructor(new Class[] { ClassLoader.class, boolean.class });
+      Class<?> cl = Class.forName("com.caucho.server.resin.ProResin");
+      Constructor<?> ctor = cl.getConstructor(new Class[] { ClassLoader.class, boolean.class });
 
       resin = (Resin) ctor.newInstance(loader, isWatchdog);
     } catch (ConfigException e) {
@@ -284,7 +274,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     if (resin == null) {
       try {
-        Class cl = Class.forName("com.caucho.license.LicenseCheckImpl");
+        Class<?> cl = Class.forName("com.caucho.license.LicenseCheckImpl");
         LicenseCheck license = (LicenseCheck) cl.newInstance();
 
         license.requirePersonal(1);
@@ -401,7 +391,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       Config.setProperty("system", System.getProperties());
       Config.setProperty("getenv", System.getenv());
 
-      _brokerManager = new HempBrokerManager();
+      new HempBrokerManager();
 
       _management = createResinManagement();
 
@@ -418,9 +408,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
           throw ConfigException.create(e);
         }
 
-        BeanFactory factory
-          = webBeans.createBeanFactory(ResinWebBeansProducer.class);
-
         webBeans.addManagedBean(webBeans.createManagedBean(ResinWebBeansProducer.class));
         webBeans.update();
       }
@@ -430,7 +417,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
       _threadPoolAdmin.register();
 
-      _memoryAdmin = MemoryAdmin.create();
+      MemoryAdmin.create();
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -699,6 +686,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     _clusterDefaults.add(program);
   }
 
+  @Configurable
   public Cluster createCluster()
     throws ConfigException
   {
@@ -715,6 +703,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     return new SingleCluster(this);
   }
 
+  @Configurable
   public void addCluster(Cluster cluster)
   {
     _clusters.add(cluster);
@@ -794,7 +783,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
    */
   public void setGlobalSystemProperties(boolean isGlobal)
   {
-    _isGlobalSystemProperties = isGlobal;
   }
 
   public SecurityManagerConfig createSecurityManager()
@@ -818,11 +806,13 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     return new TransactionManager(this);
   }
 
+  @Deprecated
   public void addManagement(ConfigProgram program)
   {
     _clusterDefaults.add(program);
   }
 
+  @Deprecated
   public Management createResinManagement()
   {
     if (_management == null) {
@@ -853,7 +843,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   /**
    * Adds a new security provider
    */
-  public void addSecurityProvider(Class providerClass)
+  public void addSecurityProvider(Class<?> providerClass)
     throws Exception
   {
     if (! Provider.class.isAssignableFrom(providerClass))
@@ -994,8 +984,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     if (! _lifecycle.toActive())
       return;
 
-    long start = Alarm.getExactTime();
-
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
@@ -1004,8 +992,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
       // force a GC on start
       System.gc();
-
-      Path repositoryPath = getResinDataDirectory().lookup("ivy");
 
       ClusterServer clusterServer = null;
 
@@ -1136,20 +1122,24 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     return _lifecycle.isDestroyed();
   }
 
-  /**
-   * Start the server shutdown
-   */
-  public void startShutdown(String msg)
+  public void startFailSafeShutdown(String msg)
   {
     // start the fail-safe thread in case the shutdown fails
     FailSafeHaltThread haltThread = _failSafeHaltThread;
     if (haltThread != null)
       haltThread.startShutdown();
 
+    log().severe(msg);
+  }
+  /**
+   * Start the server shutdown
+   */
+  public void startShutdown(String msg)
+  {
+    startFailSafeShutdown(msg);
+
     if (_lifecycle.isDestroying())
       return;
-
-    log().severe(msg);
 
     ShutdownThread shutdownThread = _shutdownThread;
     if (shutdownThread != null)
@@ -1160,15 +1150,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
   public void destroy()
   {
-    // start the fail-safe thread in case the shutdown fails
-    FailSafeHaltThread haltThread = _failSafeHaltThread;
-    if (haltThread != null)
-      haltThread.startShutdown();
+    startFailSafeShutdown("Resin shutdown from destroy() call");
 
     if (_lifecycle.isDestroying())
       return;
-
-    log().severe("Resin shutdown from destroy() call");
 
     shutdownImpl();
   }
@@ -1184,6 +1169,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       haltThread.startShutdown();
 
     try {
+      if (_isDumpHeapOnExit) {
+        dumpHeapOnExit();
+      }
+
       try {
         Socket socket = _pingSocket;
 
@@ -1279,8 +1268,12 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       }
       else if (argv[i].equals("-config-server")
                || argv[i].equals("--config-server")) {
-        _configServer = argv[i + 1];
         i += 2;
+      }
+      else if (argv[i].equals("--dump-heap-on-exit")) {
+        _isDumpHeapOnExit = true;
+
+        i += 1;
       }
       else if (i + 1 < len
                && (argv[i].equals("-dynamic-server")
@@ -1334,7 +1327,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       }
       else if (argv[i].equals("-version")
                || argv[i].equals("--version")) {
-        System.out.println(com.caucho.Version.FULL_VERSION);
+        System.out.println(VersionFactory.getFullVersion());
         System.exit(66);
       }
       else if (argv[i].equals("-watchdog-port")
@@ -1479,8 +1472,8 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     setShutdown(this);
 
-    System.out.println(com.caucho.Version.FULL_VERSION);
-    System.out.println(com.caucho.Version.COPYRIGHT);
+    System.out.println(VersionFactory.getFullVersion());
+    System.out.println(VersionFactory.getCopyright());
     System.out.println();
 
     String licenseMessage = getLicenseMessage();
@@ -1589,7 +1582,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     RandomUtil.addRandom(System.identityHashCode(_mainThread));
     RandomUtil.addRandom(System.identityHashCode(_systemClassLoader));
-    RandomUtil.addRandom(com.caucho.Version.FULL_VERSION);
+    RandomUtil.addRandom(VersionFactory.getFullVersion());
 
     try {
       RandomUtil.addRandom(InetAddress.getLocalHost().toString());
@@ -1613,6 +1606,24 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     */
   }
 
+  protected void dumpHeapOnExit()
+  {
+
+  }
+  
+  public void memoryShutdown(String msg)
+  {
+    _isDumpHeapOnExit = true;
+    
+    startShutdown(msg);
+    
+    try {
+      Thread.sleep(10 * 60 * 1000L);
+    } catch (Exception e) {
+      // interrupted exception
+    }
+  }
+
   /**
    * Thread to wait until Resin should be stopped.
    */
@@ -1630,15 +1641,20 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       try {
         Thread.sleep(10);
 
-        if (! checkMemory(runtime))
+        if (! checkMemory(runtime)) {
+          startFailSafeShutdown("Resin shutdown from out of memory");
+          dumpHeapOnExit();
           return;
+        }
 
-        if (! checkFileDescriptor())
+        if (! checkFileDescriptor()) {
+          startFailSafeShutdown("Resin shutdown from out of file descriptors");
+          dumpHeapOnExit();
           return;
+        }
 
         if (_waitIn != null) {
-          int len;
-          if ((len = _waitIn.read()) >= 0) {
+          if (_waitIn.read() >= 0) {
             socketExceptionCount = 0;
           }
           else
@@ -1671,11 +1687,14 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
         else if (socketExceptionCount > 100)
           return;
       } catch (OutOfMemoryError e) {
+        startFailSafeShutdown("Resin shutdown from out of memory");
+        dumpHeapOnExit();
+
         try {
           EnvironmentStream.getOriginalSystemErr().println("Resin halting due to out of memory");
         } catch (Exception e1) {
         } finally {
-          Runtime.getRuntime().halt(1);
+          System.exit(1);
         }
       } catch (Throwable e) {
         log().log(Level.WARNING, e.toString(), e);
@@ -1894,7 +1913,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     }
     else if (pkg.getSpecificationVersion() == null) {
       log().warning(L().l("{0} has no specification version.  Resin {1} requires version {2}.",
-                                    pkg, com.caucho.Version.VERSION,
+                                    pkg, VersionFactory.getVersion(),
                                     versions[0]));
 
       return;
@@ -1907,7 +1926,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     log().warning(L().l("Specification version {0} of {1} is not compatible with Resin {2}.  Resin {2} requires version {3}.",
                       pkg.getSpecificationVersion(),
-                      pkg, com.caucho.Version.VERSION,
+                      pkg, VersionFactory.getVersion(),
                       versions[0]));
   }
 
@@ -2092,7 +2111,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       if (Alarm.isTest())
         return "3.1.test";
       else
-        return com.caucho.Version.VERSION;
+        return VersionFactory.getVersion();
     }
 
     /**
@@ -2105,7 +2124,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       if (Alarm.isTest())
         return "19980508T0251";
       else
-        return com.caucho.Version.VERSION_DATE;
+        return VersionFactory.getVersionDate();
     }
 
     /**

@@ -98,6 +98,9 @@ public class SerializerFactory extends AbstractSerializerFactory
   private HashMap _cachedTypeDeserializerMap;
 
   private boolean _isAllowNonSerializable;
+  private boolean _isEnableUnsafeSerializer
+    = (UnsafeSerializer.isEnabled()
+        && UnsafeDeserializer.isEnabled());
 
   public SerializerFactory()
   {
@@ -188,7 +191,7 @@ public class SerializerFactory extends AbstractSerializerFactory
    *
    * @return a serializer object for the serialization.
    */
-  public Serializer getObjectSerializer(Class cl)
+  public Serializer getObjectSerializer(Class<?> cl)
     throws HessianProtocolException
   {
     Serializer serializer = getSerializer(cl);
@@ -333,8 +336,13 @@ public class SerializerFactory extends AbstractSerializerFactory
         && ! _isAllowNonSerializable) {
       throw new IllegalStateException("Serialized class " + cl.getName() + " must implement java.io.Serializable");
     }
-
-    return JavaSerializer.create(cl);
+    
+    if (_isEnableUnsafeSerializer
+        && JavaSerializer.getWriteReplace(cl) == null) {
+      return UnsafeSerializer.create(cl);
+    }
+    else
+      return JavaSerializer.create(cl);
   }
 
   /**
@@ -380,6 +388,7 @@ public class SerializerFactory extends AbstractSerializerFactory
       deserializer = factory.getDeserializer(cl);
     }
 
+    // XXX: need test
     deserializer = _contextFactory.getDeserializer(cl.getName());
 
     if (deserializer != null)
@@ -465,7 +474,14 @@ public class SerializerFactory extends AbstractSerializerFactory
    */
   protected Deserializer getDefaultDeserializer(Class cl)
   {
-    return new JavaDeserializer(cl);
+    if (InputStream.class.equals(cl))
+      return InputStreamDeserializer.DESER;
+    
+    if (_isEnableUnsafeSerializer) {
+      return new UnsafeDeserializer(cl);
+    }
+    else
+      return new JavaDeserializer(cl);
   }
 
   /**

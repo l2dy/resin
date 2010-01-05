@@ -85,6 +85,19 @@ fi
 
 AC_SUBST(resin_init_d)
 
+resin_pro=.
+resin_os=../resin_os
+is_dev=""
+
+if test -r "../pro/modules/c/src/resin/resin.h"; then
+  resin_pro="../pro"
+  resin_os="../../../../../resin/modules/c/src/resin_os"
+  is_dev="true"
+fi  
+
+AC_SUBST(resin_os)
+AC_SUBST(resin_pro)
+
 #
 # --with-java-home
 #
@@ -174,6 +187,7 @@ plugins=common
 LIBEXEC=libexec
 		
 AC_SUBST(plugins)
+AC_SUBST(resin_pro_plugins)
 AC_SUBST(LIBEXEC)
 dnl should be unnecessary
 AC_SUBST(LD)
@@ -798,21 +812,21 @@ fi
 # OS which can handle the Resin launcher
 #
 resin_pro_plugin=
-if test -r "modules/c/src/resin/jni_vfs.c"; then
+if test -r "${resin_pro}/modules/c/src/resin/jni_vfs.c"; then
    resin_pro_plugin="resin"
 fi
 	
 resin_ssl_plugin=
-if test -r "modules/c/src/resinssl/ssl.c"; then
+if test -r "${resin_pro}/modules/c/src/resinssl/ssl.c"; then
    resin_ssl_plugin="resinssl"
 fi
 
-resin_plugin=
+resin_pro_plugins=
 
 case "$target_cpu" in
   i?86)
 	CPU=i386
-	resin_plugin="$resin_pro_plugin $resin_ssl_plugin"
+	resin_pro_plugins="$resin_pro_plugin $resin_ssl_plugin"
 	;;
 
   sparc*)
@@ -821,12 +835,12 @@ case "$target_cpu" in
 	else
   	  CPU=sparc
 	fi
-	resin_plugin="$resin_pro_plugin $resin_ssl_plugin"
+	resin_pro_plugins="$resin_pro_plugin $resin_ssl_plugin"
 	;;
 
   x86_64)
 	CPU=$target_cpu
-	resin_plugin="$resin_pro_plugin $resin_ssl_plugin"
+	resin_pro_plugins="$resin_pro_plugin $resin_ssl_plugin"
 	;;
 	
   *)
@@ -879,7 +893,7 @@ case "$target_os" in
   *darwin*)
 	LD=gcc
 	SO=jnilib
-	resin_plugin="$resin_pro_plugin $resin_ssl_plugin"
+	resin_pro_plugins="$resin_pro_plugin $resin_ssl_plugin"
 	;;
 
   *hpux*)
@@ -972,9 +986,10 @@ else
 fi
 	
 if test -n "$JNI"; then
-  plugins="$plugins resin_os $resin_plugin"
-else  
-  echo "Can't JNI include files in JAVA_HOME: $JAVA_HOME"
+  plugins="$plugins resin_os"
+else
+  resin_pro_plugins=""
+  echo "Can't find JNI include files in JAVA_HOME: $JAVA_HOME"
 fi
 
 AC_SUBST(JNI)
@@ -1244,6 +1259,15 @@ if test "$debug" = true; then
   HARDCORE_CFLAGS="$HARDCORE_CFLAGS -DDEBUG"
 fi
 
+#
+# final cleanup
+#
+
+if test -z "${is_dev}"; then
+  plugins="$plugins $resin_pro_plugins"
+  resin_pro_plugins="$plugins"
+fi
+
 AC_OUTPUT([
 Makefile
 modules/c/src/Makefile
@@ -1253,10 +1277,11 @@ modules/c/src/resin_os/Makefile
 init.d/resin
 ], [])
 
-if test -n "${resin_pro_plugin}"; then
+if test -n "${resin_pro_plugins}"; then
   AC_OUTPUT([
-    modules/c/src/resin/Makefile
-    modules/c/src/resinssl/Makefile
+    ${resin_pro}/modules/c/src/Makefile
+    ${resin_pro}/modules/c/src/resin/Makefile
+    ${resin_pro}/modules/c/src/resinssl/Makefile
   ])
 fi
 

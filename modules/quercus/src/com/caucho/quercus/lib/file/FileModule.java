@@ -160,7 +160,7 @@ public class FileModule extends AbstractQuercusModule {
     else
       file = path.substring(p + 1, len);
 
-    if (suffix != null && file.endsWith(suffix))
+    if (suffix != null && file.endsWith(suffix) && !file.equals(suffix))
       file = file.substring(0, file.length() - suffix.length());
 
     return file;
@@ -861,7 +861,7 @@ public class FileModule extends AbstractQuercusModule {
   public static Value fileperms(Env env, Path path)
   {
     // php/160g
-    if (!path.canRead()) {
+    if (! path.canRead()) {
       env.warning(L.l("{0} cannot be read", path.getFullPath()));
       return BooleanValue.FALSE;
     }

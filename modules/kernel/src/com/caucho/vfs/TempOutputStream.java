@@ -40,7 +40,7 @@ public class TempOutputStream extends OutputStream
   {
     return _tail.getBuffer();
   }
-	   
+
   public void write(int ch)
   {
     if (_tail == null)
@@ -50,25 +50,42 @@ public class TempOutputStream extends OutputStream
 
     _tail.getBuffer()[_tail._length++] = (byte) ch;
   }
-    
+
   @Override
   public void write(byte []buf, int offset, int length)
   {
     int index = 0;
+
+    TempBuffer tail = _tail;
+    int bufferSize = TempBuffer.SIZE;
+    int tailLength;
+
+    if (tail != null)
+      tailLength = tail._length;
+    else
+      tailLength = 0;
+
     while (index < length) {
-      if (_tail == null)
-	addBuffer(TempBuffer.allocate());
-      else if (_tail._buf.length <= _tail._length)
-	addBuffer(TempBuffer.allocate());
+      if (tail == null) {
+        addBuffer(TempBuffer.allocate());
+        tail = _tail;
+        tailLength = tail._length;
+      }
+      else if (bufferSize <= tailLength) {
+        addBuffer(TempBuffer.allocate());
+        tail = _tail;
+        tailLength = tail._length;
+      }
 
-      int sublen = _tail._buf.length - _tail._length;
+      int sublen = bufferSize - tailLength;
       if (length - index < sublen)
-	sublen = length - index;
+        sublen = length - index;
 
-      System.arraycopy(buf, index + offset, _tail._buf, _tail._length, sublen);
+      System.arraycopy(buf, index + offset, tail._buf, tailLength, sublen);
 
       index += sublen;
-      _tail._length += sublen;
+      tailLength += sublen;
+      tail._length = tailLength;
     }
   }
 
@@ -108,12 +125,12 @@ public class TempOutputStream extends OutputStream
     throws IOException
   {
     close();
-    
+
     TempReadStream read = new TempReadStream(_head);
     read.setFreeWhenDone(true);
     _head = null;
     _tail = null;
-    
+
     return new ReadStream(read);
   }
 
@@ -128,7 +145,7 @@ public class TempOutputStream extends OutputStream
     TempBuffer head = _head;
     _head = null;
     _tail = null;
-    
+
     return new TempInputStream(head);
   }
 
@@ -143,7 +160,7 @@ public class TempOutputStream extends OutputStream
     TempBuffer head = _head;
     _head = null;
     _tail = null;
-    
+
     return new TempInputStream(head);
   }
 
@@ -156,7 +173,7 @@ public class TempOutputStream extends OutputStream
     close();
 
     TempBuffer head = _head;
-    
+
     return new TempInputStreamNoFree(head);
   }
 
@@ -191,7 +208,7 @@ public class TempOutputStream extends OutputStream
   public int getLength()
   {
     int length = 0;
-    
+
     for (TempBuffer ptr = _head; ptr != null; ptr = ptr._next) {
       length += ptr.getLength();
     }
@@ -213,13 +230,72 @@ public class TempOutputStream extends OutputStream
     return data;
   }
 
+  public void readAll(int position, char []buffer, int offset, int length)
+  {
+    int len = getLength();
+
+    TempBuffer ptr = _head;
+
+    for (; ptr != null && ptr.getLength() <= position; ptr = ptr._next) {
+      position -= ptr.getLength();
+    }
+
+    if (ptr == null)
+      return;
+
+    for (; ptr != null && length >= 0; ptr = ptr._next) {
+      int sublen = ptr.getLength() - position;
+
+      if (length < sublen)
+        sublen = length;
+
+      byte []dataBuffer = ptr.getBuffer();
+      int tail = position + sublen;
+
+      for (; position < tail; position++) {
+        buffer[offset++] = (char) (dataBuffer[position] & 0xff);
+      }
+
+      length -= sublen;
+    }
+  }
+
+  public void readAll(int position, byte []buffer, int offset, int length)
+  {
+    int len = getLength();
+
+    TempBuffer ptr = _head;
+
+    for (; ptr != null && ptr.getLength() <= position; ptr = ptr._next) {
+      position -= ptr.getLength();
+    }
+
+    if (ptr == null)
+      return;
+
+    for (; ptr != null && length >= 0; ptr = ptr._next) {
+      int sublen = ptr.getLength() - position;
+
+      if (length < sublen)
+        sublen = length;
+
+      byte []dataBuffer = ptr.getBuffer();
+
+      System.arraycopy(dataBuffer, position, buffer, offset, sublen);
+
+      offset += sublen;
+      position = 0;
+      length -= sublen;
+    }
+  }
+
   /**
    * Clean up the temp stream.
    */
   public void destroy()
   {
     TempBuffer ptr = _head;
-    
+
     _head = null;
     _tail = null;
 

@@ -1255,8 +1255,10 @@
       <arg value="install"/>
     </exec>
   </target>
-  
+<!--  
   <target name="debian" depends="compile,resin.dist.jar,debian-libexec,debian-perm">
+    -->
+  <target name="debian" depends="compile,resin.dist.jar,debian-libexec">
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
     </exec>
@@ -1272,7 +1274,9 @@
           preservelastmodified="true"
           overwrite="true">
       <fileset dir="${resin.install}/conf">
+        <!--
         <include name="admin-users.xml"/>
+        -->
         <include name="app-default.xml"/>
       </fileset>
     </copy>

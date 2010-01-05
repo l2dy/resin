@@ -29,24 +29,27 @@
 
 package com.caucho.server.cluster;
 
-import com.caucho.config.Configurable;
+import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.caucho.bam.ActorStream;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Period;
 import com.caucho.lifecycle.StartLifecycleException;
 import com.caucho.management.server.ClusterServerMXBean;
+import com.caucho.server.connection.Port;
+import com.caucho.server.connection.Protocol;
+import com.caucho.server.connection.ProtocolPort;
 import com.caucho.server.http.HttpProtocol;
-import com.caucho.server.port.*;
-import com.caucho.server.resin.*;
+import com.caucho.server.resin.Resin;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.QServerSocket;
-
-import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Defines a member of the cluster, corresponds to <server> in the conf file.
@@ -243,7 +246,7 @@ public final class ClusterServer {
    */
   public ClusterPod.Owner getTriadOwner()
   {
-    return getClusterPod().getOwner(getIndex());
+    return ClusterPod.getOwner(getIndex());
   }
 
   /**
@@ -702,6 +705,14 @@ public final class ClusterServer {
   public final ServerPool getServerPool()
   {
     return _serverPool;
+  }
+  
+  /**
+   * Returns the bam queue to the server.
+   */
+  public ActorStream getHmtpStream()
+  {
+    return null;
   }
 
   /**

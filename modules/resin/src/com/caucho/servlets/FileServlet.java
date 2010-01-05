@@ -29,8 +29,8 @@
 
 package com.caucho.servlets;
 
-import com.caucho.server.connection.CauchoRequest;
-import com.caucho.server.connection.CauchoResponse;
+import com.caucho.server.http.CauchoRequest;
+import com.caucho.server.http.CauchoResponse;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
@@ -237,7 +237,7 @@ public class FileServlet extends GenericServlet {
         char ch = relPath.charAt(i);
 
         if (ch == 0) {
-          res.sendError(res.SC_NOT_FOUND);
+          res.sendError(HttpServletResponse.SC_NOT_FOUND);
           return;
         }
       }
@@ -257,7 +257,7 @@ public class FileServlet extends GenericServlet {
       if (_dir != null)
         _dir.forward(req, res);
       else
-        res.sendError(res.SC_NOT_FOUND);
+        res.sendError(HttpServletResponse.SC_NOT_FOUND);
       return;
     }
 
@@ -265,7 +265,7 @@ public class FileServlet extends GenericServlet {
       if (isInclude)
         throw new FileNotFoundException(uri);
       else
-        res.sendError(res.SC_NOT_FOUND);
+        res.sendError(HttpServletResponse.SC_NOT_FOUND);
       return;
     }
 
@@ -274,7 +274,7 @@ public class FileServlet extends GenericServlet {
 
     if (ifMatch != null && ifMatch.equals(etag)) {
       res.addHeader("ETag", etag);
-      res.sendError(res.SC_NOT_MODIFIED);
+      res.sendError(HttpServletResponse.SC_NOT_MODIFIED);
       return;
     }
 
@@ -309,7 +309,7 @@ public class FileServlet extends GenericServlet {
       if (! isModified) {
         if (etag != null)
           res.addHeader("ETag", etag);
-        res.sendError(res.SC_NOT_MODIFIED);
+        res.sendError(HttpServletResponse.SC_NOT_MODIFIED);
         return;
       }
     }
@@ -412,6 +412,10 @@ public class FileServlet extends GenericServlet {
         last = 10 * last + ch - '0';
         hasLast = true;
       }
+      
+      // #3766 - browser errors in range
+      if (off < length && ch != ' ' && ch != ',')
+        return false;
 
       // Skip whitespace
       for (; off < length && (ch = range.charAt(off)) == ' '; off++) {
@@ -434,7 +438,7 @@ public class FileServlet extends GenericServlet {
         last = cacheLength - 1;
       }
 
-      if (last < first)
+      if (last <= first)
         break;
 
       if (cacheLength <= last) {

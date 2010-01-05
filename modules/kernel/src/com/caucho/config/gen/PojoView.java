@@ -53,6 +53,16 @@ public class PojoView extends View {
   }
 
   /**
+   * Returns the introspected methods
+   */
+  public ArrayList<? extends BusinessMethodGenerator> getMethods()
+  {
+    PojoBean bean = (PojoBean) getBean();
+    
+    return bean.getBusinessMethods();
+  }
+
+  /**
    * Generates the view code.
    */
   public void generate(JavaWriter out)

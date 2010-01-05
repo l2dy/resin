@@ -29,34 +29,41 @@
 
 package com.caucho.server.hmux;
 
-import com.caucho.server.connection.*;
-import com.caucho.server.util.CauchoSystem;
+import java.io.IOException;
+import java.util.ArrayList;
+
+import javax.servlet.http.Cookie;
+
+import com.caucho.server.http.AbstractHttpResponse;
+import com.caucho.server.http.AbstractResponseStream;
+import com.caucho.server.http.HttpServletResponseImpl;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.vfs.WriteStream;
-
-import javax.servlet.http.Cookie;
-import java.io.IOException;
-import java.util.ArrayList;
 
 /**
  * Handles a response for a srun connection, i.e. a connection to
  * a web server plugin.
  */
 public class HmuxResponse extends AbstractHttpResponse {
-  private HmuxRequest _req;
+  private final HmuxRequest _req;
 
   HmuxResponse(HmuxRequest request, WriteStream rawWrite)
   {
-    super(request, rawWrite);
+    super(request);
 
     _req = request;
+
+    if (_req == null)
+      throw new NullPointerException();
   }
 
   @Override
   protected AbstractResponseStream createResponseStream()
   {
-    return new HmuxResponseStream(_req, this, getRawWrite());
+    HmuxRequest request = (HmuxRequest) getRequest();
+
+    return new HmuxResponseStream(request, this, request.getRawWrite());
   }
 
   /**

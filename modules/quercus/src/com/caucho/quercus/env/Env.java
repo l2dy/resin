@@ -165,6 +165,9 @@ public class Env {
   private static final FreeList<QDate> _freeLocalDateList
     = new FreeList<QDate>(256);
 
+  private static final LruCache<String,StringValue> _internStringMap
+    = new LruCache<String,StringValue>(4096);
+
   protected final Quercus _quercus;
 
   private QuercusPage _page;
@@ -190,6 +193,10 @@ public class Env {
     = new HashMap<String, EnvVar>();
 
   private EnvVar []_globalList;
+  
+  // Statics
+  private Map<String, Var> _staticMap
+    = new HashMap<String, Var>();
 
   // Current env
   private Map<String, EnvVar> _map = _globalMap;
@@ -319,6 +326,8 @@ public class Env {
 
   private Object _duplex;
 
+  private StringValue _variablesOrder;
+  
   private CharBuffer _cb = new CharBuffer();
 
   public Env(Quercus quercus,
@@ -334,6 +343,9 @@ public class Env {
 
     _isAllowUrlInclude = quercus.isAllowUrlInclude();
     _isAllowUrlFopen = quercus.isAllowUrlFopen();
+    
+    _variablesOrder
+      = _quercus.getIniValue("variables_order").toStringValue(this);
 
     _page = page;
 
@@ -427,18 +439,80 @@ public class Env {
   {
     return getCurrent();
   }
+  
+  private void fillGet(ArrayValue array, boolean isMagicQuotes)
+  {
+    try {
+      String encoding = getHttpInputEncoding();
 
+      if (encoding == null)
+        encoding = "iso-8859-1";
+
+      _request.setCharacterEncoding(encoding);
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
+
+    ArrayList<String> keys = new ArrayList<String>();
+    keys.addAll(_request.getParameterMap().keySet());
+
+    Collections.sort(keys);
+
+    for (String key : keys) {
+      String []value = _request.getParameterValues(key);
+
+      Post.addFormValue(this,
+                        array,
+                        key,
+                        value,
+                        isMagicQuotes);
+    }
+  }
+
+  private void fillPost(ArrayValue array, ArrayValue postArray)
+  {
+    for (Map.Entry<Value, Value> entry : postArray.entrySet()) {
+      Value key = entry.getKey();
+      Value value = entry.getValue();
+
+      Value existingValue = array.get(key);
+
+      if (existingValue.isArray() && value.isArray())
+       existingValue.toArrayValue(this).putAll(value.toArrayValue(this));
+      else
+        array.put(entry.getKey(), entry.getValue().copy());
+    }
+  }
+  
+  private void fillCookies(ArrayValue array,
+                           Cookie []cookies,
+                           boolean isMagicQuotes)
+  {
+    for (int i = 0; cookies != null && i < cookies.length; i++) {
+      Cookie cookie = cookies[i];
+
+      String decodedValue = decodeValue(cookie.getValue());
+
+      Post.addFormValue(this,
+                        array,
+                        cookie.getName(),
+                        new String[] { decodedValue },
+                        isMagicQuotes);
+    }
+  }
+  
   protected void fillPost(ArrayValue postArray,
-                             ArrayValue files,
-                             HttpServletRequest request,
-                             boolean isMagicQuotes)
+                          ArrayValue files,
+                          HttpServletRequest request,
+                          boolean isMagicQuotes)
   {
     if (request != null && request.getMethod().equals("POST")) {
       Post.fillPost(this,
                     postArray,
                     files,
                     request,
-                    isMagicQuotes);
+                    isMagicQuotes,
+                    getIniBoolean("file_uploads"));
     } else if (request != null && ! request.getMethod().equals("GET")) {
       InputStream is = null;
 
@@ -1670,18 +1744,22 @@ public class Env {
    */
   public Value getValue(String name)
   {
-    EnvVar var = getEnvVar(name);
-
-    // XXX: not auto-create?
-
-    return var.get();
-
-    /*
+    return getValue(name, true, false);
+  }
+  
+  /**
+   * Gets a value.
+   */
+  public Value getValue(String name,
+                        boolean isAutoCreate,
+                        boolean isOutputNotice)
+  {
+    EnvVar var = getEnvVar(name, isAutoCreate, isOutputNotice);
+    
     if (var != null)
-      return var.toValue();
+      return var.get();
     else
       return NullValue.NULL;
-    */
   }
 
   /**
@@ -1781,7 +1859,7 @@ public class Env {
    */
   public Var getRef(String name, boolean isAutoCreate)
   {
-    EnvVar envVar = getEnvVar(name, isAutoCreate);
+    EnvVar envVar = getEnvVar(name, isAutoCreate, true);
 
     if (envVar != null)
       return envVar.getRef();
@@ -1811,7 +1889,7 @@ public class Env {
 
   public final EnvVar getEnvVar(String name)
   {
-    return getEnvVar(name, true);
+    return getEnvVar(name, true, false);
   }
 
   /**
@@ -1820,7 +1898,9 @@ public class Env {
    * @param name the variable name
    * @param var the current value of the variable
    */
-  public final EnvVar getEnvVar(String name, boolean isAutoCreate)
+  public final EnvVar getEnvVar(String name,
+                                boolean isAutoCreate,
+                                boolean isOutputNotice)
   {
     EnvVar envVar = _map.get(name);
 
@@ -1828,17 +1908,24 @@ public class Env {
       return envVar;
 
     if (_map == _globalMap)
-      return getGlobalEnvVar(name, isAutoCreate);
+      return getGlobalEnvVar(name, isAutoCreate, isOutputNotice);
 
     envVar = getSuperGlobalRef(name, true, false);
 
     // php/0809
     if (envVar != null)
       _globalMap.put(name, envVar);
-    else if (! isAutoCreate)
-      return null;
-    else
-      envVar = new EnvVarImpl(new Var());
+    else {
+      if (! isAutoCreate) {
+        // php/0206
+        if (isOutputNotice)
+          notice(L.l("${0} is an undefined variable", name));
+
+        return null;
+      }
+      else
+        envVar = new EnvVarImpl(new Var());
+    }
 
     _map.put(name, envVar);
 
@@ -1852,7 +1939,7 @@ public class Env {
    */
   public final EnvVar getGlobalEnvVar(String name)
   {
-    return getGlobalEnvVar(name, true);
+    return getGlobalEnvVar(name, true, false);
   }
 
   /**
@@ -1861,7 +1948,9 @@ public class Env {
    * @param name the variable name
    * @param isAutoCreate
    */
-  public final EnvVar getGlobalEnvVar(String name, boolean isAutoCreate)
+  public final EnvVar getGlobalEnvVar(String name,
+                                      boolean isAutoCreate,
+                                      boolean isOutputNotice)
   {
     EnvVar envVar = _globalMap.get(name);
 
@@ -1885,8 +1974,13 @@ public class Env {
       envVar = getGlobalScriptContextRef(name);
 
     if (envVar == null) {
-      if (! isAutoCreate)
+      if (! isAutoCreate) {
+        
+        if (isOutputNotice)
+          notice(L.l("${0} is an undefined variable", name));
+         
         return null;
+      }
 
       Var var = new Var();
       var.setGlobal();
@@ -1955,7 +2049,14 @@ public class Env {
    */
   public final Var getStaticVar(String name)
   {
-    return getGlobalVar(name);
+    Var var = _staticMap.get(name);
+    
+    if (var == null) {
+      var = new Var();
+      _staticMap.put(name, var);
+    }
+    
+    return var;
   }
 
   /**
@@ -1971,13 +2072,13 @@ public class Env {
     // php/324a
     // php/324b
     QuercusClass callingClass = getCallingClass(qThis);
-    
+
     if (callingClass.isA(className))
       className = callingClass.getName();
-    
-    name = className + "::" + name;
 
-    return getGlobalVar(name);
+    name = className + "::" + name;
+    
+    return getStaticVar(name);
   }
 
   /**
@@ -1988,7 +2089,7 @@ public class Env {
   public final Var unsetVar(String name)
   {
     EnvVar envVar = _map.get(name);
-
+    
     if (envVar != null)
       envVar.setRef(new Var());
 
@@ -2046,7 +2147,7 @@ public class Env {
   public final Var unsetGlobalVar(String name)
   {
     EnvVar envVar = _globalMap.get(name);
-
+    
     if (envVar != null)
       envVar.setRef(new Var());
 
@@ -2148,7 +2249,8 @@ public class Env {
 
         envVar.set(post);
 
-        if (_postArray.getSize() > 0) {
+        if (_variablesOrder.indexOf('P') >= 0
+            && _postArray.getSize() > 0) {
           for (Map.Entry<Value, Value> entry : _postArray.entrySet()) {
             post.put(entry.getKey(), entry.getValue());
           }
@@ -2206,16 +2308,19 @@ public class Env {
         ArrayValue array = new ArrayValueImpl();
         envVar.set(array);
 
-        String queryString = getQueryString();
+        if (_variablesOrder.indexOf('G') >= 0) {
+          String queryString = getQueryString();
 
-        if (queryString == null || queryString.length() == 0)
-          return envVar;
+          if (queryString == null || queryString.length() == 0)
+            return envVar;
 
-        StringUtility.parseStr(this,
-                               queryString,
-                               array,
-                               true,
-                               getHttpInputEncoding());
+          StringUtility.parseStr(this,
+                                 queryString,
+                                 array,
+                                 true,
+                                 getHttpInputEncoding());
+        }
+
 
         return envVar;
       }
@@ -2232,61 +2337,24 @@ public class Env {
 
         if (_request == null)
           return envVar;
-
-        try {
-          String encoding = getHttpInputEncoding();
-
-          if (encoding == null)
-            encoding = "iso-8859-1";
-
-          _request.setCharacterEncoding(encoding);
-        } catch (Exception e) {
-          log.log(Level.FINE, e.toString(), e);
-        }
-
-        ArrayList<String> keys = new ArrayList<String>();
-        keys.addAll(_request.getParameterMap().keySet());
-
-        Collections.sort(keys);
-
+        
         boolean isMagicQuotes = getIniBoolean("magic_quotes_gpc");
 
-        for (String key : keys) {
-          String []value = _request.getParameterValues(key);
-
-          Post.addFormValue(this,
-                            array,
-                            key,
-                            value,
-                            isMagicQuotes);
-        }
-
-        if (name.equals("_REQUEST") && _postArray != null) {
-
-          for (Map.Entry<Value, Value> entry : _postArray.entrySet()) {
-            Value key = entry.getKey();
-            Value value = entry.getValue();
-
-            Value existingValue = array.get(key);
-
-            if (existingValue.isArray() && value.isArray())
-             existingValue.toArrayValue(this).putAll(value.toArrayValue(this));
-            else
-              array.put(entry.getKey(), entry.getValue().copy());
+        int orderLen = _variablesOrder.length();
+        
+        for (int i = 0; i < orderLen; i++) {
+          switch (_variablesOrder.charAt(i)) {
+            case 'G':
+              fillGet(array, isMagicQuotes);
+              break;
+            case 'P':
+              if (_postArray.getSize() > 0)
+                fillPost(array, _postArray);
+              break;
+            case 'C':
+              fillCookies(array, _request.getCookies(), isMagicQuotes);
+              break;
           }
-        }
-
-        Cookie []cookies = _request.getCookies();
-        for (int i = 0; cookies != null && i < cookies.length; i++) {
-          Cookie cookie = cookies[i];
-
-          String decodedValue = decodeValue(cookie.getValue());
-
-          Post.addFormValue(this,
-                            array,
-                            cookie.getName(),
-                            new String[] { decodedValue },
-                            isMagicQuotes);
         }
 
         return envVar;
@@ -2325,34 +2393,40 @@ public class Env {
 
         _globalMap.put(name, envVar);
 
-        Value serverEnv = new ServerArrayValue(this);
+        Value serverEnv;
+
+        if (_variablesOrder.indexOf('S') >= 0) {
+          serverEnv = new ServerArrayValue(this);
+          
+          String query = getQueryString();
+
+          if (_quercus.getIniBoolean("register_argc_argv")
+              && query != null) {
+            ArrayValue argv = new ArrayValueImpl();
+
+            int i = 0;
+            int j = 0;
+            while ((j = query.indexOf('+', i)) >= 0) {
+              String sub = query.substring(i, j);
+
+              argv.put(sub);
+
+              i = j + 1;
+            }
+
+            if (i < query.length())
+              argv.put(query.substring(i));
+
+            serverEnv.put(createString("argc"),
+                          LongValue.create(argv.getSize()));
+
+            serverEnv.put(createString("argv"), argv);
+          }
+        }
+        else
+          serverEnv = new ArrayValueImpl();
 
         var.set(serverEnv);
-
-        String query = getQueryString();
-
-        if (_quercus.getIniBoolean("register_argc_argv")
-            && query != null) {
-          ArrayValue argv = new ArrayValueImpl();
-
-          int i = 0;
-          int j = 0;
-          while ((j = query.indexOf('+', i)) >= 0) {
-            String sub = query.substring(i, j);
-
-            argv.put(sub);
-
-            i = j + 1;
-          }
-
-          if (i < query.length())
-            argv.put(query.substring(i));
-
-          serverEnv.put(createString("argc"),
-                        LongValue.create(argv.getSize()));
-
-          serverEnv.put(createString("argv"), argv);
-        }
 
         return envVar;
       }
@@ -2380,7 +2454,10 @@ public class Env {
 
         _globalMap.put(name, envVar);
 
-        var.set(getCookies());
+        if (_variablesOrder.indexOf('C') >= 0)
+          var.set(getCookies());
+        else
+          var.set(new ArrayValueImpl());
 
         return envVar;
       }
@@ -2956,7 +3033,7 @@ public class Env {
 
     for (int i = 0; args != null && i < args.length; i++) {
       // php/3715, 3768
-      newArgs[i] = args[i].toValue().toArgValue();
+      newArgs[i] = args[i].toValue().copySaveFunArg();
     }
 
     _functionArgs = newArgs;
@@ -3010,7 +3087,7 @@ public class Env {
   {
     return getConstant(name, true);
   }
-  
+
   /**
    * Returns a constant.
    */
@@ -3638,6 +3715,9 @@ public class Env {
    */
   protected Value executePage(QuercusPage page)
   {
+    if (log.isLoggable(Level.FINEST))
+      log.finest(this + " executePage " + page);
+    
     if (page.getCompiledPage() != null)
       return page.getCompiledPage().execute(this);
     else
@@ -3932,6 +4012,7 @@ public class Env {
                          _classDef,
                          _qClass,
                          _const,
+                         _staticMap,
                          _globalMap,
                          _includeMap,
                          _importMap);
@@ -3985,6 +4066,11 @@ public class Env {
 
     System.arraycopy(constList, 0, _const, 0, constList.length);
 
+    IntMap staticNameMap = saveState.getStaticNameMap();
+    Value []staticList = saveState.getStaticList();
+    
+    _staticMap = new LazyStaticMap(staticNameMap, staticList);
+    
     IntMap globalNameMap = saveState.getGlobalNameMap();
     Value []globalList = saveState.getGlobalList();
 
@@ -4004,7 +4090,7 @@ public class Env {
     }
 
     // php/404j - include_once
-    HashMap<Path,QuercusPage> includeMap = saveState.getIncludeMap();
+    Map<Path,QuercusPage> includeMap = saveState.getIncludeMap();
     _includeMap = new HashMap<Path,QuercusPage>(includeMap);
 
     // php/404l
@@ -4121,8 +4207,18 @@ public class Env {
     }
     else if (_isUnicodeSemantics)
       return new UnicodeBuilderValue(s);
-    else
-      return new ConstStringValue(s);
+    else {
+      StringValue stringValue = _internStringMap.get(s);
+
+      if (stringValue == null) {
+        stringValue = new ConstStringValue(s);
+        _internStringMap.put(s, stringValue);
+      }
+
+      return stringValue;
+
+      // return new ConstStringValue(s);
+    }
   }
 
   /**
@@ -5087,10 +5183,12 @@ public class Env {
     }
   }
 
-
-
   void executePage(Path path)
   {
+    if (log.isLoggable(Level.FINEST)) {
+      log.finest(this + " execute " + path);
+    }
+ 
     try {
       QuercusPage page = _quercus.parse(path);
 
@@ -6075,6 +6173,7 @@ public class Env {
     if ((mask & (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR)) != 0)
     {
       String locPrefix = getLocationPrefix(location, loc);
+      QuercusErrorException exn;
 
       if (! "".equals(locPrefix)) {
         /*
@@ -6082,12 +6181,20 @@ public class Env {
                                               getCodeName(mask) +
                                               msg);
         */
-        throw new QuercusErrorException(locPrefix
+        exn = new QuercusErrorException(locPrefix
                                         + getCodeName(mask)
                                         + msg);
       }
       else
-        throw new QuercusErrorException(msg);
+        exn = new QuercusErrorException(msg);
+      
+      exn.fillInStackTrace();
+      
+      if (log.isLoggable(Level.FINER)) {
+        log.log(Level.FINER, exn.toString(), exn);
+      }
+      
+      throw exn;
     }
 
     return NullValue.NULL;

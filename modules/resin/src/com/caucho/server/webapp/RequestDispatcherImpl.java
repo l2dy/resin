@@ -29,11 +29,11 @@
 
 package com.caucho.server.webapp;
 
-import com.caucho.server.connection.AbstractHttpResponse;
-import com.caucho.server.connection.AbstractResponseStream;
-import com.caucho.server.connection.CauchoRequest;
-import com.caucho.server.connection.CauchoResponse;
 import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.http.AbstractHttpResponse;
+import com.caucho.server.http.AbstractResponseStream;
+import com.caucho.server.http.CauchoRequest;
+import com.caucho.server.http.CauchoResponse;
 import com.caucho.util.L10N;
 
 import javax.servlet.RequestDispatcher;
@@ -160,7 +160,7 @@ public class RequestDispatcherImpl implements RequestDispatcher {
     // jsp/15m8
     if (res.isCommitted() && method == null && ! allowForward) {
       IllegalStateException exn;
-      exn = new IllegalStateException("forward() not allowed after buffer has committed.");
+      exn = new IllegalStateException(L.l("forward() not allowed after buffer has committed."));
 
       if (cauchoRes == null || ! cauchoRes.hasError()) {
         if (cauchoRes != null)
@@ -492,7 +492,6 @@ public class RequestDispatcherImpl implements RequestDispatcher {
     subRequest.setPagePathInfo(subRequest.getPathInfo());
     subRequest.setPageQueryString(subRequest.getQueryString());
 
-    CauchoRequest oldRequest = null;
     AbstractResponseStream oldStream = null;
     /* XXX:
     if (response != null) {

@@ -60,7 +60,16 @@ public class JavaValue extends ObjectValue
 
     setQuercusClass(env.createJavaQuercusClass(def));
 
-    _env = env;
+    _classDef = def;
+    _object = object;
+  }
+
+  public JavaValue(Object object, JavaClassDef def, QuercusClass qClass)
+  {
+    super();
+
+    setQuercusClass(qClass);
+
     _classDef = def;
     _object = object;
   }
@@ -534,13 +543,16 @@ public class JavaValue extends ObjectValue
    * Converts to a java object.
    */
   @Override
-  public Object toJavaObject(Env env, Class type)
+  public final Object toJavaObject(Env env, Class type)
   {
-    if (type.isAssignableFrom(_object.getClass())) {
-      return _object;
+    final Object object = _object;
+    final Class objectClass = _object.getClass();
+
+    if (type == objectClass || type.isAssignableFrom(objectClass)) {
+      return object;
     } else {
       env.warning(L.l("Can't assign {0} to {1}",
-                      _object.getClass().getName(), type.getName()));
+                      objectClass.getName(), type.getName()));
 
       return null;
     }

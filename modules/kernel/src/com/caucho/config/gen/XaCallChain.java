@@ -28,6 +28,11 @@
  */
 package com.caucho.config.gen;
 
+import static javax.ejb.TransactionAttributeType.NOT_SUPPORTED;
+import static javax.ejb.TransactionAttributeType.REQUIRED;
+import static javax.ejb.TransactionAttributeType.REQUIRES_NEW;
+import static javax.ejb.TransactionAttributeType.SUPPORTS;
+
 import java.io.IOException;
 import java.util.HashMap;
 
@@ -39,19 +44,15 @@ import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
 
 import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
 
 /**
  * Represents the XA interception
  */
 public class XaCallChain extends AbstractCallChain {
-  @SuppressWarnings("unused")
-  private static final L10N L = new L10N(XaCallChain.class);
-
   private BusinessMethodGenerator _bizMethod;
   private EjbCallChain _next;
 
-  private TransactionAttributeType _xa;
+  private TransactionAttributeType _transactionType;
   private boolean _isContainerManaged = true;
   private boolean _isSessionSynchronization;
 
@@ -75,8 +76,8 @@ public class XaCallChain extends AbstractCallChain {
    */
   public boolean isEnhanced()
   {
-    return (_isContainerManaged && _xa != null && !_xa
-        .equals(TransactionAttributeType.SUPPORTS));
+    return (_isContainerManaged && _transactionType != null && !_transactionType
+        .equals(SUPPORTS));
   }
 
   /**
@@ -84,13 +85,12 @@ public class XaCallChain extends AbstractCallChain {
    */
   public TransactionAttributeType getTransactionType()
   {
-    return _xa;
+    return _transactionType;
   }
 
   /**
    * Introspects the method for the default values
    */
-  @SuppressWarnings("unchecked")
   public void introspect(ApiMethod apiMethod, ApiMethod implMethod)
   {
     ApiClass apiClass = apiMethod.getDeclaringClass();
@@ -108,7 +108,7 @@ public class XaCallChain extends AbstractCallChain {
       return;
     }
 
-    Class javaClass = beanClass.getJavaClass();
+    Class<?> javaClass = beanClass.getJavaClass();
 
     if (javaClass != null
         && SessionSynchronization.class.isAssignableFrom(javaClass)) {
@@ -132,73 +132,119 @@ public class XaCallChain extends AbstractCallChain {
     }
 
     if (xaAttr != null)
-      _xa = xaAttr.value();
+      _transactionType = xaAttr.value();
   }
+
+  //
+  // bean prologue generation
+  //
 
   /**
    * Generates the static class prologue
    */
-  @SuppressWarnings("unchecked")
   @Override
-  public void generatePrologue(JavaWriter out, HashMap map) throws IOException
+  public void generateMethodPrologue(JavaWriter out, HashMap<String, Object> map)
+      throws IOException
   {
-    if (_isContainerManaged && map.get("caucho.ejb.xa") == null) {
+    if (map.get("caucho.ejb.xa") == null) {
       map.put("caucho.ejb.xa", "done");
 
       out.println();
-      out.println("private static final com.caucho.ejb3.xa.XAManager _xa");
-      out.println("  = new com.caucho.ejb3.xa.XAManager();");
+      out.println("private static final com.caucho.ejb.util.XAManager _xa");
+      out.println("  = new com.caucho.ejb.util.XAManager();");
     }
 
-    _next.generatePrologue(out, map);
+    _next.generateMethodPrologue(out, map);
+  }
+
+  //
+  // method generation code
+  //
+
+  /**
+   * Generates code before the "try" block <code><pre>
+   * retType myMethod(...)
+   * {
+   *   [pre-try]
+   *   try {
+   *     ...
+   * }
+   * </pre></code>
+   */
+  @Override
+  public void generatePreTry(JavaWriter out) throws IOException
+  {
+    if (_isContainerManaged) {
+      out.println();
+      out.println("boolean isXAValid = false;");
+    }
+
+    if (!_isContainerManaged) {
+      out.println();
+      out.println("Transaction xa = null;");
+    } else if (_transactionType != null) {
+      switch (_transactionType) {
+      case NOT_SUPPORTED:
+      case REQUIRED:
+      case REQUIRES_NEW: {
+        out.println();
+        out.println("Transaction xa = null;");
+        break;
+      }
+      }
+    }
+
+    super.generatePreTry(out);
   }
 
   /**
-   * Generates the method interceptor code
+   * Generates the interceptor code after the try-block and before the call.
+   * 
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     [pre-call]
+   *     retValue = super.myMethod(...);
+   * }
+   * </pre></code>
    */
-  @SuppressWarnings("unchecked")
-  public void generateCall(JavaWriter out) throws IOException
+  @Override
+  public void generatePreCall(JavaWriter out) throws IOException
   {
-    boolean isPushDepth = false;
-
-    if (_isContainerManaged && _xa != null) {
-      switch (_xa) {
+    if (!_isContainerManaged) {
+      out.println("xa = _xa.beginNotSupported();");
+    } else if (_transactionType != null) {
+      switch (_transactionType) {
       case MANDATORY: {
+        out.println();
         out.println("_xa.beginMandatory();");
-      }
         break;
+      }
 
       case NEVER: {
+        out.println();
         out.println("_xa.beginNever();");
-      }
         break;
+      }
 
       case NOT_SUPPORTED: {
-        out.println("Transaction xa = _xa.beginNotSupported();");
         out.println();
-        out.println("try {");
-        out.pushDepth();
-        isPushDepth = true;
-      }
+        out.println("xa = _xa.beginNotSupported();");
         break;
+      }
 
       case REQUIRED: {
-        out.println("Transaction xa = _xa.beginRequired();");
         out.println();
-        out.println("try {");
-        out.pushDepth();
-        isPushDepth = true;
-      }
+        out.println("xa = _xa.beginRequired();");
         break;
+      }
 
       case REQUIRES_NEW: {
-        out.println("Transaction xa = _xa.beginRequiresNew();");
         out.println();
-        out.println("try {");
-        out.pushDepth();
-        isPushDepth = true;
-      }
+        out.println("xa = _xa.beginRequiresNew();");
         break;
+      }
       }
     }
 
@@ -208,69 +254,115 @@ public class XaCallChain extends AbstractCallChain {
       out.println(");");
     }
 
-    generateNext(out);
+    super.generatePreCall(out);
+  }
 
-    if (_isContainerManaged && _xa != null) {
-      if (isPushDepth)
-        out.popDepth();
+  /**
+   * Generates the interceptor code after invocation and before the call.
+   * 
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     retValue = super.myMethod(...);
+   *     [post-call]
+   *     return retValue;
+   *   } finally {
+   *     ...
+   *   }
+   * }
+   * </pre></code>
+   */
+  @Override
+  public void generatePostCall(JavaWriter out) throws IOException
+  {
+    super.generatePostCall(out);
 
-      for (Class exn : _bizMethod.getApiMethod().getExceptionTypes()) {
-        ApplicationException appExn = (ApplicationException) exn
-            .getAnnotation(ApplicationException.class);
-
-        if (appExn == null)
-          continue;
-
-        if (!RuntimeException.class.isAssignableFrom(exn) && appExn.rollback()) {
-          out.println("} catch (" + exn.getName() + " e) {");
-          out.println("  _xa.markRollback(e);");
-          out.println("  throw e;");
-        } else if (RuntimeException.class.isAssignableFrom(exn)
-            && !appExn.rollback()) {
-          out.println("} catch (" + exn.getName() + " e) {");
-          out.println("  throw e;");
-        }
-      }
-
-      switch (_xa) {
-      case REQUIRED:
-      case REQUIRES_NEW: {
-        out.println("} catch (RuntimeException e) {");
-        out.println("  _xa.markRollback(e);");
-        out.println("  throw e;");
-      }
-      }
-
-      switch (_xa) {
-      case NOT_SUPPORTED: {
-        out.println("} finally {");
-        out.println("  if (xa != null)");
-        out.println("    _xa.resume(xa);");
-        out.println("}");
-      }
-        break;
-
-      case REQUIRED: {
-        out.println("} finally {");
-        out.println("  if (xa == null)");
-        out.println("    _xa.commit();");
-        out.println("}");
-      }
-        break;
-
-      case REQUIRES_NEW: {
-        out.println("} finally {");
-        out.println("  _xa.endRequiresNew(xa);");
-        out.println("}");
-      }
-        break;
-      }
+    if (_isContainerManaged
+        && (_transactionType == REQUIRED || _transactionType == REQUIRES_NEW)) {
+      out.println("isXAValid = true;");
     }
   }
 
-  protected void generateNext(JavaWriter out) throws IOException
+  /**
+   * Generates aspect code for an application exception
+   * 
+   */
+  @Override
+  public void generateApplicationException(JavaWriter out, Class<?> exception)
+      throws IOException
   {
-    _next.generateCall(out);
+    super.generateApplicationException(out, exception);
+
+    ApplicationException applicationException = exception
+        .getAnnotation(ApplicationException.class);
+
+    if ((applicationException != null) && (applicationException.rollback())) {
+      if (_isContainerManaged && (_transactionType != NOT_SUPPORTED)) {
+        out.println("if (_xa.getTransaction() != null)");
+        out.println("  _xa.markRollback(e);");
+      }
+    } else if (_isContainerManaged
+        && (_transactionType == REQUIRED || _transactionType == REQUIRES_NEW)) {
+      out.println("isXAValid = true;");
+    }
+  }
+
+  @Override
+  public void generateSystemException(JavaWriter out, Class<?> exn)
+      throws IOException
+  {
+    if (_isContainerManaged) {
+      out.println("if (_xa.getTransaction() != null) {");
+      out.println("  _xa.markRollback(e);");
+      out.println("  isXAValid = true;");
+      out.println("}");
+    }
+  }
+
+  /**
+   * Generates the aspect code in the finally block.
+   * 
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     ...
+   *   } finally {
+   *     [finally]
+   *   }
+   * }
+   * </pre></code>
+   */
+  @Override
+  public void generateFinally(JavaWriter out) throws IOException
+  {
+    super.generateFinally(out);
+
+    if (!_isContainerManaged) {
+      out.println("if (xa != null)");
+      out.println("  _xa.resume(xa);");
+    } else if (_transactionType != null) {
+      switch (_transactionType) {
+      case NOT_SUPPORTED: {
+        out.println("if (xa != null)");
+        out.println("  _xa.resume(xa);");
+        break;
+      }
+
+      case REQUIRED: {
+        out.println();
+        out.println("if (xa == null)");
+        out.println("  _xa.commit(isXAValid);");
+        break;
+      }
+
+      case REQUIRES_NEW: {
+        out.println("_xa.endRequiresNew(xa, isXAValid);");
+        break;
+      }
+      }
+    }
   }
 
   public String toString()

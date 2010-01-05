@@ -29,8 +29,11 @@
 
 package com.caucho.server.cluster;
 
+import com.caucho.VersionFactory;
+import com.caucho.bam.ActorClient;
 import com.caucho.bam.ActorStream;
 import com.caucho.bam.Broker;
+import com.caucho.bam.SimpleActorClient;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.GlobalCache;
 import com.caucho.config.ConfigException;
@@ -43,7 +46,7 @@ import com.caucho.git.GitRepository;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.hemp.broker.DomainManager;
-import com.caucho.hemp.servlet.ServerLinkManager;
+import com.caucho.hemp.servlet.ServerAuthManager;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.ClassLoaderListener;
 import com.caucho.loader.DynamicClassLoader;
@@ -60,6 +63,10 @@ import com.caucho.security.AdminAuthenticator;
 import com.caucho.server.admin.Management;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cache.TempFileManager;
+import com.caucho.server.connection.AbstractSelectManager;
+import com.caucho.server.connection.Port;
+import com.caucho.server.connection.ProtocolDispatchServer;
+import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
@@ -78,10 +85,6 @@ import com.caucho.server.host.HostContainer;
 import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
 import com.caucho.server.log.AccessLog;
-import com.caucho.server.port.AbstractSelectManager;
-import com.caucho.server.port.Port;
-import com.caucho.server.port.ProtocolDispatchServer;
-import com.caucho.server.port.TcpConnection;
 import com.caucho.server.repository.Repository;
 import com.caucho.server.repository.FileRepository;
 import com.caucho.server.resin.Resin;
@@ -127,8 +130,6 @@ public class Server extends ProtocolDispatchServer
   private final Resin _resin;
   private final ClusterServer _selfServer;
 
-  private final String _id;
-
   private EnvironmentClassLoader _classLoader;
 
   private Throwable _configException;
@@ -140,9 +141,8 @@ public class Server extends ProtocolDispatchServer
   private HempBrokerManager _brokerManager;
   private DomainManager _domainManager;
   private HempBroker _broker;
-  private ServerLinkManager _serverLinkManager
-    = new ServerLinkManager();
-
+  private ServerAuthManager _serverLinkManager;
+  
   private GitRepository _git;
   private Repository _repository;
   private FileRepository _localRepository;
@@ -242,21 +242,17 @@ public class Server extends ProtocolDispatchServer
     _resin = cluster.getResin();
     _resin.setServer(this);
 
-    _id = cluster.getId() + ":" + clusterServer.getId();
-
     // pod id can't include the server since it's used as part of
     // cache ids
     String podId
       = (cluster.getId() + ":" + _selfServer.getClusterPod().getId());
 
-    _classLoader = (EnvironmentClassLoader) cluster.getClassLoader();
-
-    _classLoader.setId("server:" + podId);
+    _classLoader = EnvironmentClassLoader.create("server:" + podId);
 
     _serverLocal.set(this, _classLoader);
 
     if (! Alarm.isTest())
-      _serverHeader = "Resin/" + com.caucho.Version.VERSION;
+      _serverHeader = "Resin/" + VersionFactory.getVersion();
     else
       _serverHeader = "Resin/1.1";
 
@@ -274,26 +270,8 @@ public class Server extends ProtocolDispatchServer
         thread.setContextClassLoader(_classLoader);
 
         _serverIdLocal.set(_selfServer.getId());
-
-        _hostContainer = new HostContainer();
-        _hostContainer.setClassLoader(_classLoader);
-        _hostContainer.setDispatchServer(this);
-
-        _alarm = new Alarm(this);
-
-        _webBeans = InjectManager.create();
-
-        _brokerManager = createBrokerManager();
-        _domainManager = createDomainManager();
-
-        _broker = new HempBroker(getBamAdminName());
-
-        _brokerManager.addBroker(getBamAdminName(), _broker);
-        _brokerManager.addBroker("resin.caucho", _broker);
-
-        // Config.setProperty("server", new ServerVar(server), _classLoader);
-
-        _selfServer.getServerProgram().configure(this);
+        
+        preInit();
       } finally {
         thread.setContextClassLoader(oldLoader);
       }
@@ -304,6 +282,30 @@ public class Server extends ProtocolDispatchServer
     } finally {
       _lifecycle = new Lifecycle(log, toString(), Level.INFO);
     }
+  }
+  
+  protected void preInit()
+  {
+    _hostContainer = new HostContainer();
+    _hostContainer.setClassLoader(_classLoader);
+    _hostContainer.setDispatchServer(this);
+
+    _alarm = new Alarm(this);
+
+    _webBeans = InjectManager.create();
+
+    _brokerManager = createBrokerManager();
+    _domainManager = createDomainManager();
+
+    _broker = new HempBroker(getBamAdminName());
+
+    _brokerManager.addBroker(getBamAdminName(), _broker);
+    _brokerManager.addBroker("resin.caucho", _broker);
+
+    _serverLinkManager = new ServerAuthManager(this);
+    // Config.setProperty("server", new ServerVar(server), _classLoader);
+
+    _selfServer.getServerProgram().configure(this);
   }
 
   /**
@@ -394,7 +396,7 @@ public class Server extends ProtocolDispatchServer
   /**
    * Returns the HMTP link manager
    */
-  public ServerLinkManager getServerLinkManager()
+  public ServerAuthManager getServerLinkManager()
   {
     return _serverLinkManager;
   }
@@ -598,6 +600,14 @@ public class Server extends ProtocolDispatchServer
   public Broker getAdminBroker()
   {
     return getBamBroker();
+  }
+  
+  /**
+   * Creates a bam client to the admin.
+   */
+  public ActorClient createAdminClient(String uid)
+  {
+    return new SimpleActorClient(getAdminBroker(), uid, null);
   }
 
   /**
@@ -1847,7 +1857,7 @@ public class Server extends ProtocolDispatchServer
 
     if (_keepaliveSelectEnable) {
       try {
-        Class cl = Class.forName("com.caucho.server.port.JniSelectManager");
+        Class cl = Class.forName("com.caucho.server.connection.JniSelectManager");
         Method method = cl.getMethod("create", new Class[0]);
 
         initSelectManager((AbstractSelectManager) method.invoke(null, null));
@@ -2460,6 +2470,13 @@ public class Server extends ProtocolDispatchServer
       try {
         if (_selfServer.getClusterPort() != null)
           _selfServer.getClusterPort().close();
+      } catch (Throwable e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
+      
+      try {
+        if (_domainManager != null)
+          _domainManager.close();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }

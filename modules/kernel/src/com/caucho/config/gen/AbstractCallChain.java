@@ -46,6 +46,10 @@ abstract public class AbstractCallChain implements EjbCallChain {
 
     _next = next;
   }
+  
+  //
+  // introspection methods
+  //
 
   /**
    * Returns true if this filter will generate code.
@@ -60,34 +64,145 @@ abstract public class AbstractCallChain implements EjbCallChain {
   public void introspect(ApiMethod apiMethod, ApiMethod implMethod)
   {
   }
+  
+  //
+  // bean instance interception
+  //
 
   /**
    * Generates the static class prologue
    */
-  @SuppressWarnings("unchecked")
   @Override
-  public void generatePrologue(JavaWriter out, HashMap map) throws IOException
+  public void generateBeanPrologue(JavaWriter out, HashMap<String,Object> map)
+    throws IOException
   {
-    _next.generatePrologue(out, map);
+    _next.generateBeanPrologue(out, map);
   }
 
   /**
    * Generates initialization in the constructor
    */
-  @SuppressWarnings("unchecked")
   @Override
-  public void generateConstructor(JavaWriter out, HashMap map)
-      throws IOException
+  public void generateBeanConstructor(JavaWriter out, 
+                                      HashMap<String,Object> map)
+    throws IOException
   {
-    _next.generateConstructor(out, map);
+    _next.generateBeanConstructor(out, map);
+  }
+
+  /**
+   * Generates @PostConstruct code
+   */
+  @Override
+  public void generatePostConstruct(JavaWriter out, 
+                                    HashMap<String,Object> map)
+    throws IOException
+  {
+    _next.generatePostConstruct(out, map);
+  }
+  
+  //
+  // business method interception
+  //
+
+  /**
+   * Generates the static class prologue
+   */
+  @Override
+  public void generateMethodPrologue(JavaWriter out, HashMap<String,Object> map)
+    throws IOException
+  {
+    _next.generateMethodPrologue(out, map);
+  }
+  
+  /**
+   * Generates code before the try block
+   */
+  public void generatePreTry(JavaWriter out)
+    throws IOException
+  {
+    _next.generatePreTry(out);
+  }  
+  
+  /**
+   * Generates code before the call, in the try block.
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     [pre-call]
+   *     value = bean.myMethod(...);
+   *     ...
+   * }
+   * </pre></code>
+   */
+  public void generatePreCall(JavaWriter out)
+    throws IOException
+  {
+    _next.generatePreCall(out);
   }
 
   /**
    * Generates the method interception code
    */
-  @Override
-  public void generateCall(JavaWriter out) throws IOException
+  public void generateCall(JavaWriter out) 
+    throws IOException
   {
     _next.generateCall(out);
+  }
+  
+  /**
+   * Generates code after the call, before the return.
+   * <code><pre>
+   * retType myMethod(...)
+   * {
+   *   try {
+   *     ...
+   *     value = bean.myMethod(...);
+   *     [post-call]
+   *     return value;
+   *   } finally {
+   *     ...
+   *   }
+   * }
+   * </pre></code>
+   */
+  public void generatePostCall(JavaWriter out)
+    throws IOException
+  {
+    _next.generatePostCall(out);
+  }
+  
+  /**
+   * Generates application (checked) exception code for
+   * the method.
+   */
+  @Override
+  public void generateApplicationException(JavaWriter out,
+                                           Class<?> exn)
+    throws IOException
+  {
+    _next.generateApplicationException(out, exn);
+  }
+  
+  /**
+   * Generates system (runtime) exception code for
+   * the method.
+   */
+  @Override
+  public void generateSystemException(JavaWriter out,
+                                      Class<?> exn)
+    throws IOException
+  {
+    _next.generateSystemException(out, exn);
+  }
+  
+  /**
+   * Generates finally code for the method
+   */
+  public void generateFinally(JavaWriter out)
+    throws IOException
+  {
+    _next.generateFinally(out);
   }
 }

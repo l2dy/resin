@@ -238,7 +238,18 @@ public class ServerArrayValue extends ArrayValueImpl
     if (! _isFilled)
       fillMap();
     
-    return new ArrayValueImpl(this);
+    return super.copy();
+  }
+  
+  /**
+   * Copy for saving a function arguments.
+   */
+  public Value copySaveFunArg()
+  {
+    if (! _isFilled)
+      fillMap();
+    
+    return super.copySaveFunArg();
   }
 
   /**
@@ -434,7 +445,7 @@ public class ServerArrayValue extends ArrayValueImpl
     if (! _isFilled)
       fillMap();
     
-    return new ArrayValueImpl(this);
+    return super.copy();
   }
 }
 

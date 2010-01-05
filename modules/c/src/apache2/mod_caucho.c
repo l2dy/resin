@@ -88,13 +88,21 @@ cse_log(char *fmt, ...)
   strftime(timestamp, sizeof(timestamp), "[%m/%b/%Y:%H:%M:%S %z]",
 	   localtime(&t));
 
+#ifdef WIN32
+#if APR_HAS_THREADS
+  _snprintf(buffer, sizeof(buffer), "%s %d_%ld: ",
+	   timestamp, pid, (long int) apr_os_thread_current());
+#else   
+  _snprintf(buffer, sizeof(buffer), "%s %d: ", timestamp, pid);
+#endif
+#else
 #if APR_HAS_THREADS
   snprintf(buffer, sizeof(buffer), "%s %d_%ld: ",
 	   timestamp, pid, (long int) apr_os_thread_current());
 #else   
   snprintf(buffer, sizeof(buffer), "%s %d: ", timestamp, pid);
 #endif
-  
+#endif  
    va_start(args, fmt);
    vsprintf(buffer + strlen(buffer), fmt, args);
    va_end(args);
@@ -759,17 +767,17 @@ send_data(stream_t *s, request_rec *r)
 
     code = cse_read_byte(s);
 
-    LOG(("%s:%d:send_data(): code %c\n", __FILE__, __LINE__, code));
+    LOG(("%s:%d:send_data(): r-code %c\n", __FILE__, __LINE__, code));
     
     switch (code) {
     case HMUX_CHANNEL:
       channel = hmux_read_len(s);
-      LOG(("%s:%d:send_data(): channel %d\n", __FILE__, __LINE__, channel));
+      LOG(("%s:%d:send_data(): r-channel %d\n", __FILE__, __LINE__, channel));
       break;
       
     case HMUX_ACK:
       channel = hmux_read_len(s);
-      LOG(("%s:%d:send_data(): ack %d\n", __FILE__, __LINE__, channel));
+      LOG(("%s:%d:send_data(): r-ack %d\n", __FILE__, __LINE__, channel));
       return code;
       
     case HMUX_STATUS:
@@ -843,7 +851,6 @@ write_request(stream_t *s, request_rec *r, config_t *config,
   int len;
   int code = -1;
 
-  hmux_start_channel(s, 1);
   write_env(s, r);
   write_headers(s, r);
   write_added_headers(s, r);
@@ -855,19 +862,26 @@ write_request(stream_t *s, request_rec *r, config_t *config,
     int send_length = 0;
 
     while ((len = ap_get_client_block(r, buf, BUF_LENGTH)) > 0) {
-      cse_write_packet(s, HMUX_DATA, buf, len);
-
-      send_length += len;
+      LOG(("%s:%d:write-request(): w-D %d\n", __FILE__, __LINE__, len));
       
-      if (ack_size <= send_length) {
+      if (ack_size <= send_length + len && send_length > 0) {
+        LOG(("%s:%d:write-request(): w-Y send_length=%d ack_size=%d\n",
+             __FILE__, __LINE__, send_length, ack_size));
+        
 	send_length = 0;
 	cse_write_byte(s, HMUX_YIELD);
         code = send_data(s, r);
         if (code != HMUX_ACK)
           break;
       }
+
+      cse_write_packet(s, HMUX_DATA, buf, len);
+
+      send_length += len;
     }
   }
+
+  LOG(("%s:%d:write-request(): w-Q\n", __FILE__, __LINE__));
 
   cse_write_byte(s, HMUX_QUIT);
   code = send_data(s, r);

@@ -28,21 +28,22 @@
 
 package com.caucho.java;
 
+import com.caucho.config.ConfigException;
 import com.caucho.util.LineCompileException;
 import com.caucho.vfs.IOExceptionWrapper;
 
-public class JavaCompileException extends IOExceptionWrapper
+public class JavaCompileException extends ConfigException
   implements LineCompileException {
   public JavaCompileException(String message)
   {
     super(message);
   }
-  
+
   public JavaCompileException(String message, Throwable e)
   {
     super(message, e);
   }
-  
+
   public JavaCompileException(Throwable e)
   {
     super(e);

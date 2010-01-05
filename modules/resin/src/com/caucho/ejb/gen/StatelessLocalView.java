@@ -29,22 +29,12 @@
 
 package com.caucho.ejb.gen;
 
-import com.caucho.config.gen.*;
-import com.caucho.config.*;
-import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
-
-import javax.ejb.*;
-import java.io.IOException;
-import java.lang.reflect.*;
-import java.util.*;
+import com.caucho.config.gen.ApiClass;
 
 /**
  * Represents a public interface to a bean, e.g. a local stateless view
  */
 public class StatelessLocalView extends StatelessObjectView {
-  private static final L10N L = new L10N(StatelessLocalView.class);
-
   public StatelessLocalView(StatelessGenerator bean, ApiClass api)
   {
     super(bean, api);

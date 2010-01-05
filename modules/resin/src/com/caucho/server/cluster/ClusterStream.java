@@ -29,29 +29,35 @@
 
 package com.caucho.server.cluster;
 
-import com.caucho.admin.ActiveTimeProbe;
-import com.caucho.admin.ActiveProbe;
-import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorException;
-import com.caucho.bam.ActorStream;
-import com.caucho.hessian.io.*;
-import com.caucho.server.hmux.*;
-import com.caucho.util.*;
-import com.caucho.vfs.*;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.io.*;
-import java.util.logging.*;
+import com.caucho.admin.ActiveProbe;
+import com.caucho.admin.ActiveTimeProbe;
+import com.caucho.bam.ActorException;
+import com.caucho.hessian.io.Hessian2Output;
+import com.caucho.hessian.io.Hessian2StreamingInput;
+import com.caucho.server.hmux.HmuxRequest;
+import com.caucho.util.Alarm;
+import com.caucho.util.L10N;
+import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Defines a connection to the client.
  */
-public class ClusterStream implements ActorStream {
+public class ClusterStream {
   private static final L10N L = new L10N(ClusterStream.class);
 
   private static final Logger log
     = Logger.getLogger(ClusterStream.class.getName());
 
   private ServerPool _pool;
+  
+  // The pools sequence id when the stream was allocated.
+  private long _poolSequenceId;
 
   private ReadStream _is;
   private WriteStream _os;
@@ -68,7 +74,7 @@ public class ClusterStream implements ActorStream {
   private long _requestStartTime;
   private boolean _isIdle;
 
-  private long _freeTime;
+  private long _idleStartTime;
 
   private String _debugId;
 
@@ -76,6 +82,7 @@ public class ClusterStream implements ActorStream {
                 ReadStream is, WriteStream os)
   {
     _pool = pool;
+    _poolSequenceId = pool.getStartSequenceId();
     _is = is;
     _os = os;
 
@@ -103,7 +110,7 @@ public class ClusterStream implements ActorStream {
    */
   public ReadStream getReadStream()
   {
-    _freeTime = 0;
+    _idleStartTime = 0;
 
     return _is;
   }
@@ -113,7 +120,7 @@ public class ClusterStream implements ActorStream {
    */
   public WriteStream getWriteStream()
   {
-    _freeTime = 0;
+    _idleStartTime = 0;
 
     return _os;
   }
@@ -135,72 +142,60 @@ public class ClusterStream implements ActorStream {
   }
 
   /**
-   * Returns the hessian input stream
+   * Returns the idle start time, 
+   * i.e. the time the connection was last idle.
    */
-  public Hessian2StreamingInput getHessianInputStream()
+  public long getIdleStartTime()
   {
-    if (_in == null)
-      _in = new Hessian2StreamingInput(_is);
-
-    return _in;
+    return _idleStartTime;
   }
 
   /**
-   * Returns the hessian output stream
+   * Sets the idle start time. Because of clock skew and
+   * tcp delays, it's often better to use the request
+   * start time instead of the request end time for the
+   * idle start time.
    */
-  public Hessian2Output getHessianOutputStream()
+  public void setIdleStartTime(long idleStartTime)
   {
-    if (_out == null) {
-      OutputStream os = _os;
-
-      /*
-      if (log.isLoggable(Level.FINEST)) {
-        HessianDebugOutputStream hOs
-          = new HessianDebugOutputStream(os, log, Level.FINEST);
-        // hOs.startTop2();
-        os = hOs;
-      }
-      */
-        
-      _out = new Hessian2Output(os);
-    }
-
-    return _out;
+    _idleStartTime = idleStartTime;
   }
 
   /**
-   * Returns the free time, i.e. the time the connection was last idle.
+   * Sets the idle start time.
    */
-  public long getFreeTime()
+  public void clearIdleStartTime()
   {
-    return _freeTime;
-  }
-
-  /**
-   * Sets the free time.
-   */
-  public void setFreeTime(long freeTime)
-  {
-    _freeTime = freeTime;
-  }
-
-  /**
-   * Sets the free time.
-   */
-  public void clearFreeTime()
-  {
-    _freeTime = 0;
+    _idleStartTime = 0;
     _is.clearReadTime();
   }
 
   /**
    * Returns true if nearing end of free time.
    */
-  public boolean isLongIdle()
+  public boolean isIdleExpired()
   {
     long now = Alarm.getCurrentTime();
 
-    return (_pool.getLoadBalanceIdleTime() < now - _freeTime + 2000L);
+    return (_pool.getLoadBalanceIdleTime() < now - _idleStartTime);
+  }
+
+  /**
+   * Returns true if nearing end of free time.
+   */
+  public boolean isIdleAlmostExpired(long delta)
+  {
+    long now = Alarm.getCurrentTime();
+
+    return (_pool.getLoadBalanceIdleTime() < now - _idleStartTime + delta);
+  }
+  
+  /**
+   * Returns true if the sequence id is valid.
+   */
+  public boolean isPoolSequenceIdValid()
+  {
+    return _poolSequenceId == _pool.getStartSequenceId();
   }
 
   //
@@ -211,281 +206,26 @@ public class ClusterStream implements ActorStream {
   {
     return "clusterStream@admin.resin";
   }
-
-  public void message(String to, String from, Serializable query)
+  
+  public void switchToHmtp(boolean isUnidir)
   {
     try {
       WriteStream out = getWriteStream();
 
-      out.write(HmuxRequest.HMTP_MESSAGE);
+      if (isUnidir)
+        out.write(HmuxRequest.HMUX_TO_UNIDIR_HMTP);
+      else
+        out.write(HmuxRequest.HMUX_SWITCH_TO_HMTP);
+             
       out.write(0);
       out.write(1);
       boolean isAdmin = true;
       out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-      hOut.writeString(to);
-      hOut.writeString(from);
-
-      hOut.writeObject(query);
-      hOut.endPacket();
+      out.flush();
     } catch (IOException e) {
       throw new ActorException(e);
     }
-  }
-
-  public void messageError(String to,
-                           String from,
-                           Serializable query,
-                           ActorError error)
-  {
-    try {
-      WriteStream out = getWriteStream();
-
-      out.write(HmuxRequest.HMTP_MESSAGE_ERROR);
-      out.write(0);
-      out.write(1);
-      boolean isAdmin = true;
-      out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-      hOut.writeString(to);
-      hOut.writeString(from);
-
-      hOut.writeObject(query);
-      hOut.writeObject(error);
-
-      hOut.endPacket();
-    } catch (IOException e) {
-      throw new ActorException(e);
-    }
-  }
-
-  public void queryGet(long id, String to, String from,
-                          Serializable query)
-  {
-    try {
-      WriteStream out = getWriteStream();
-
-      out.write(HmuxRequest.HMTP_QUERY_GET);
-      out.write(0);
-      out.write(1);
-      boolean isAdmin = true;
-      out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-
-      hOut.writeString(to);
-      hOut.writeString(from);
-      hOut.writeLong(id);
-      hOut.writeObject(query);
-      hOut.endPacket();
-    } catch (IOException e) {
-      throw new ActorException(e);
-    }
-  }
-
-  public void querySet(long id,
-                       String to,
-                       String from,
-                       Serializable query)
-  {
-    try {
-      WriteStream out = getWriteStream();
-
-      out.write(HmuxRequest.HMTP_QUERY_SET);
-      out.write(0);
-      out.write(1);
-      boolean isAdmin = true;
-      out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-      hOut.writeString(to);
-      hOut.writeString(from);
-      hOut.writeLong(id);
-
-      hOut.writeObject(query);
-      hOut.endPacket();
-    } catch (IOException e) {
-      throw new ActorException(e);
-    }
-  }
-
-  public void queryResult(long id,
-                          String to,
-                          String from,
-                          Serializable query)
-  {
-    try {
-      WriteStream out = getWriteStream();
-
-      out.write(HmuxRequest.HMTP_QUERY_RESULT);
-      out.write(0);
-      out.write(1);
-      boolean isAdmin = true;
-      out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-      hOut.writeString(to);
-      hOut.writeString(from);
-      hOut.writeLong(id);
-      hOut.writeObject(query);
-      hOut.endPacket();
-    } catch (IOException e) {
-      throw new ActorException(e);
-    }
-  }
-
-  public void queryError(long id,
-                         String to,
-                         String from,
-                         Serializable query,
-                         ActorError error)
-  {
-    try {
-      WriteStream out = getWriteStream();
-
-      out.write(HmuxRequest.HMTP_QUERY_ERROR);
-      out.write(0);
-      out.write(1);
-      boolean isAdmin = true;
-      out.write(isAdmin ? 1 : 0);
-
-      Hessian2Output hOut = getHessianOutputStream();
-
-      hOut.startPacket();
-      hOut.writeString(to);
-      hOut.writeString(from);
-      hOut.writeLong(id);
-
-      hOut.writeObject(query);
-      hOut.writeObject(error);
-      hOut.endPacket();
-    } catch (IOException e) {
-      throw new ActorException(e);
-    }
-  }
-
-  public void presence(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceUnavailable(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceProbe(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceSubscribe(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceSubscribed(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceUnsubscribe(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceUnsubscribed(String to, String from, Serializable value)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public void presenceError(String to,
-                            String from,
-                            Serializable value,
-                            ActorError error)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  //
-  // HMTP readers
-  //
-
-  public Serializable readQueryResult(long id)
-    throws IOException
-  {
-    ReadStream in = getReadStream();
-
-    int code = in.read();
-
-    if (code < 0)
-      throw new EOFException(L.l("{0} unexpected end of file",
-                                 this));
-    else if (code == HmuxRequest.HMTP_QUERY_RESULT)
-      return parseQueryResult(id, in);
-    else if (code == HmuxRequest.HMTP_QUERY_ERROR)
-      return parseQueryError(id, in);
-    else
-      throw new IOException(L.l("{0} expected query result at '"
-                                + (char) code + "' " + code,
-                                this));
-  }
-
-  public Serializable parseQueryResult(long id, ReadStream is)
-    throws IOException
-  {
-    int len = (is.read() << 8) + is.read();
-    boolean isAdmin = is.read() != 0;
-
-    Hessian2StreamingInput hInStream = getHessianInputStream();
-
-    Hessian2Input hIn = hInStream.startPacket();
-
-    String to = hIn.readString();
-    String from = hIn.readString();
-
-    long resultId = hIn.readLong();
-
-    Serializable result = (Serializable) hIn.readObject();
-
-    hInStream.endPacket();
-
-    return result;
-  }
-
-  public Serializable parseQueryError(long id, ReadStream is)
-    throws IOException
-  {
-    int len = (is.read() << 8) + is.read();
-    boolean isAdmin = is.read() != 0;
-
-    Hessian2StreamingInput hInStream = getHessianInputStream();
-
-    Hessian2Input hIn = hInStream.startPacket();
-
-    String to = hIn.readString();
-    String from = hIn.readString();
-
-    long resultId = hIn.readLong();
-
-    Serializable result = (Serializable) hIn.readObject();
-    ActorError error = (ActorError) hIn.readObject();
-
-    hInStream.endPacket();
-
-    throw error.createException();
+    
   }
 
   /**
@@ -506,8 +246,15 @@ public class ClusterStream implements ActorStream {
 
   /**
    * Adds the stream to the free pool.
+   *
+   * The idleStartTime may be earlier than the current time
+   * to deal with TCP buffer delays. Typically it will be
+   * recorded as the start time of the request's write.
+   * 
+   * @param idleStartTime the time to be used as the start 
+   * of the idle period.
    */
-  public void free()
+  public void free(long idleStartTime)
   {
     if (_is == null) {
       IllegalStateException exn = new IllegalStateException(L.l("{0} unexpected free of closed stream", this));
@@ -526,14 +273,16 @@ public class ClusterStream implements ActorStream {
 
     // #2369 - the load balancer might set its own view of the free
     // time
-    if (_freeTime <= 0) {
-      _freeTime = _is.getReadTime();
+    if (idleStartTime <= 0) {
+      idleStartTime = _is.getReadTime();
 
-      if (_freeTime <= 0) {
+      if (idleStartTime <= 0) {
         // for write-only, the read time is zero
-        _freeTime = Alarm.getCurrentTime();
+        idleStartTime = Alarm.getCurrentTime();
       }
     }
+    
+    _idleStartTime = idleStartTime;
 
     _idleProbe.start();
     _isIdle = true;
@@ -549,6 +298,11 @@ public class ClusterStream implements ActorStream {
     }
 
     _requestStartTime = _requestTimeProbe.start();
+  }
+  
+  public boolean isClosed()
+  {
+    return _is == null;
   }
 
   public void close()
@@ -593,187 +347,6 @@ public class ClusterStream implements ActorStream {
       if (_isIdle)
         _idleProbe.end();
     }
-  }
-
-  /**
-   * Writes a hmux exit to the target.
-   */
-  public void writeExit()
-    throws IOException
-  {
-    _os.write(HmuxRequest.HMUX_EXIT);
-    _os.flush();
-  }
-
-  /**
-   * Writes a hmux quit to the target.
-   */
-  public void writeQuit()
-    throws IOException
-  {
-    _os.write(HmuxRequest.HMUX_QUIT);
-    _os.flush();
-  }
-
-  /**
-   * Writes a hmux yield to the target, used for unidirectional messages
-   */
-  public void writeYield()
-    throws IOException
-  {
-    _os.write(HmuxRequest.HMUX_YIELD);
-    _os.flush();
-  }
-
-  /**
-   * Flush to the target
-   */
-  public void flush()
-    throws IOException
-  {
-    _os.flush();
-  }
-
-  /**
-   * Writes a hmux int to the target.
-   */
-  public void writeInt(int code, int value)
-    throws IOException
-  {
-    WriteStream os = _os;
-
-    os.write(code);
-    os.write(0);
-    os.write(4);
-    os.write(value >> 24);
-    os.write(value >> 16);
-    os.write(value >> 8);
-    os.write(value);
-  }
-
-  public void writeLong(long id)
-    throws IOException
-  {
-    WriteStream os = _os;
-
-    os.write((int) (id >> 56));
-    os.write((int) (id >> 48));
-    os.write((int) (id >> 40));
-    os.write((int) (id >> 32));
-    os.write((int) (id >> 24));
-    os.write((int) (id >> 16));
-    os.write((int) (id >> 8));
-    os.write((int) id);
-  }
-
-  public void writeLong(int code, long id)
-    throws IOException
-  {
-    WriteStream os = _os;
-
-    os.write(code);
-    os.write(0);
-    os.write(8);
-    os.write((int) (id >> 56));
-    os.write((int) (id >> 48));
-    os.write((int) (id >> 40));
-    os.write((int) (id >> 32));
-    os.write((int) (id >> 24));
-    os.write((int) (id >> 16));
-    os.write((int) (id >> 8));
-    os.write((int) id);
-  }
-
-  public void writeString(String s)
-    throws IOException
-  {
-    int len = s.length();
-
-    WriteStream os = _os;
-
-    os.write(HmuxRequest.HMUX_STRING);
-    os.write(len >> 8);
-    os.write(len);
-    os.print(s);
-  }
-
-  public void writeString(int code, String s)
-    throws IOException
-  {
-    int len = s.length();
-
-    WriteStream os = _os;
-
-    os.write(code);
-    os.write(len >> 8);
-    os.write(len);
-    os.print(s);
-  }
-
-  /**
-   * Writes a hmux string to the target.
-   */
-  public void writeBinary(int code, byte []value)
-    throws IOException
-  {
-    WriteStream os = _os;
-
-    if (value == null) {
-      os.write(code);
-      os.write(0);
-      os.write(0);
-      return;
-    }
-
-    int len = value.length;
-
-    os.write(code);
-    os.write(len >> 8);
-    os.write(len);
-    os.write(value, 0, len);
-  }
-
-  /**
-   * Writes a hmux string to the target.
-   */
-  public void writeBinary(int code, byte []value, int offset, int len)
-    throws IOException
-  {
-    WriteStream os = _os;
-    os.write(code);
-    os.write(len >> 8);
-    os.write(len);
-    os.write(value, offset, len);
-  }
-
-  public long readLongValue()
-    throws IOException
-  {
-    ReadStream is = _is;
-
-    return (((long) is.read() << 56)
-            + ((long) is.read() << 48)
-            + ((long) is.read() << 40)
-            + ((long) is.read() << 32)
-            + ((long) is.read() << 24)
-            + ((long) is.read() << 16)
-            + ((long) is.read() << 8)
-            + ((long) is.read() << 0));
-  }
-
-  public String readStringValue()
-    throws IOException
-  {
-    ReadStream is = _is;
-
-    int len = (is.read() << 8) + is.read();
-
-    char []data = new char[len];
-
-    for (int i = 0; i < len; i++)
-      data[i] = (char) is.read();
-
-    return new String(data);
   }
 
   @Override

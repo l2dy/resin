@@ -352,7 +352,7 @@ abstract public class ArrayValue extends Value {
    */
   @Override
   abstract public Value copy();
-
+  
   /**
    * Copy for serialization
    */
@@ -680,7 +680,7 @@ abstract public class ArrayValue extends Value {
     Value value = get(key);
     
     // php/173m
-    return value == null || value != UnsetValue.UNSET;
+    return value != UnsetValue.UNSET;
   }
 
   /**

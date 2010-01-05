@@ -31,6 +31,7 @@ package com.caucho.config.gen;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.SerializeHandle;
+import com.caucho.config.inject.HandleAware;
 import com.caucho.java.JavaWriter;
 import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.util.L10N;
@@ -59,24 +60,24 @@ public class PojoBean extends BeanGenerator {
     = new ArrayList<BusinessMethodGenerator>();
 
   private boolean _isEnhanced;
-  private boolean _hasXA;
   private boolean _hasReadResolve;
-  private boolean _isReadResolveEnhanced;
   private boolean _isSingleton;
   private boolean _isSerializeHandle;
 
   public PojoBean(ApiClass beanClass)
   {
-    super(beanClass.getName() + "$ResinWebBean", beanClass);
+    super(beanClass.getName() + "__ResinWebBean", beanClass);
 
     setSuperClassName(beanClass.getName());
 
     if (beanClass.isAnnotationPresent(SerializeHandle.class)) {
       _isSerializeHandle = true;
 
-      addInterfaceName("java.io.Serializable");
-      addInterfaceName("com.caucho.config.inject.HandleAware");
+      addInterfaceName(Serializable.class.getName());
+      addInterfaceName(HandleAware.class.getName());
     }
+    
+    addInterfaceName(BeanInjectionTarget.class.getName());
 
     addImport("javax.transaction.*");
 
@@ -88,6 +89,11 @@ public class PojoBean extends BeanGenerator {
   public void setSingleton(boolean isSingleton)
   {
     _isSingleton = isSingleton;
+  }
+  
+  public ArrayList<BusinessMethodGenerator> getBusinessMethods()
+  {
+    return _businessMethods;
   }
 
   @Override
@@ -134,7 +140,6 @@ public class PojoBean extends BeanGenerator {
     if (Serializable.class.isAssignableFrom(_beanClass.getJavaClass())
         && ! _hasReadResolve
         && hasTransientInject(_beanClass.getJavaClass())) {
-      _isReadResolveEnhanced = true;
       _isEnhanced = true;
     }
 
@@ -161,11 +166,11 @@ public class PojoBean extends BeanGenerator {
     }
     else {
       for (Annotation ann : cl.getAnnotations()) {
-        Class annType = ann.annotationType();
+        Class<?> annType = ann.annotationType();
 
         if (annType.isAnnotationPresent(Stereotype.class)) {
           for (Annotation sAnn : ann.annotationType().getAnnotations()) {
-            Class sAnnType = sAnn.annotationType();
+            Class<?> sAnnType = sAnn.annotationType();
 
             if (sAnnType.isAnnotationPresent(InterceptorBinding.class)) {
               interceptorBindingList.add(sAnn);
@@ -186,7 +191,7 @@ public class PojoBean extends BeanGenerator {
     */
   }
 
-  private boolean hasTransientInject(Class cl)
+  private boolean hasTransientInject(Class<?> cl)
   {
     if (cl == null || Object.class.equals(cl))
       return false;
@@ -215,7 +220,7 @@ public class PojoBean extends BeanGenerator {
     return hasTransientInject(cl.getSuperclass());
   }
 
-  public Class generateClass()
+  public Class<?> generateClass()
   {
     if (! isEnhanced())
       return _beanClass.getJavaClass();
@@ -223,7 +228,7 @@ public class PojoBean extends BeanGenerator {
     try {
       JavaClassGenerator gen = new JavaClassGenerator();
 
-      Class cl = gen.preload(getFullClassName());
+      Class<?> cl = gen.preload(getFullClassName());
 
       if (cl != null)
         return cl;
@@ -249,20 +254,24 @@ public class PojoBean extends BeanGenerator {
   {
     generateHeader(out);
 
+    /*
     HashMap map = new HashMap();
     for (BusinessMethodGenerator method : _businessMethods) {
       method.generatePrologueTop(out, map);
     }
+    */
 
-    for (Constructor ctor
+    for (Constructor<?> ctor
            : _beanClass.getJavaClass().getDeclaredConstructors()) {
       if (Modifier.isPublic(ctor.getModifiers()))
         generateConstructor(out, ctor);
     }
+    
+    _view.generateBeanPrologue(out);
 
     generatePostConstruct(out);
 
-    map = new HashMap();
+    HashMap<String,Object> map = new HashMap<String,Object>();
     for (BusinessMethodGenerator method : _businessMethods) {
       method.generate(out, map);
     }
@@ -281,11 +290,13 @@ public class PojoBean extends BeanGenerator {
     out.println("private static final boolean __isFiner");
     out.println("  = __log.isLoggable(java.util.logging.Level.FINER);");
 
+    /*
     if (_hasXA) {
       out.println();
-      out.println("private static final com.caucho.ejb3.xa.XAManager _xa");
-      out.println("  = new com.caucho.ejb3.xa.XAManager();");
+      out.println("private static final com.caucho.ejb.gen.XAManager _xa");
+      out.println("  = new com.caucho.ejb.gen.XAManager();");
     }
+    */
 
     if (_isSerializeHandle) {
       generateSerializeHandle(out);
@@ -328,11 +339,11 @@ public class PojoBean extends BeanGenerator {
     throws IOException
   {
     out.println();
-    out.println("private void __caucho_postConstruct()");
+    out.println("public void __caucho_postConstruct()");
     out.println("{");
     out.pushDepth();
 
-    HashMap map = new HashMap();
+    HashMap<String,Object> map = new HashMap<String,Object>();
     for (BusinessMethodGenerator method : _businessMethods) {
       method.generatePostConstruct(out, map);
     }
@@ -360,7 +371,7 @@ public class PojoBean extends BeanGenerator {
   protected void generateConstructor(JavaWriter out, Constructor ctor)
     throws IOException
   {
-    Class []paramTypes = ctor.getParameterTypes();
+    Class<?> []paramTypes = ctor.getParameterTypes();
 
     out.print("public " + getClassName() + "(");
 
@@ -389,16 +400,16 @@ public class PojoBean extends BeanGenerator {
     }
     out.println(");");
 
-    HashMap map = new HashMap();
+    HashMap<String,Object> map = new HashMap<String,Object>();
     for (BusinessMethodGenerator method : _businessMethods) {
-      method.generateConstructorTop(out, map);
+      method.generateBeanConstructor(out, map);
     }
 
     out.popDepth();
     out.println("}");
   }
 
-  protected void generateThrows(JavaWriter out, Class []exnCls)
+  protected void generateThrows(JavaWriter out, Class<?> []exnCls)
     throws IOException
   {
     if (exnCls.length == 0)

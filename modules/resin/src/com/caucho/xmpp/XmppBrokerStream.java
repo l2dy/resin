@@ -33,6 +33,7 @@ import com.caucho.bam.ActorStream;
 import com.caucho.bam.ActorError;
 import com.caucho.bam.ActorClient;
 import com.caucho.bam.Broker;
+import com.caucho.bam.SimpleActorClient;
 import com.caucho.server.connection.*;
 import com.caucho.util.*;
 import com.caucho.vfs.*;
@@ -159,11 +160,8 @@ public class XmppBrokerStream
     
     _uid = uid + _broker.getJid();
     
-    _conn = _broker.getConnection(_toClient, _uid, password);
-
-    _jid = _conn.getJid();
-    
-    _toBroker = _conn.getBrokerStream();
+    _toBroker = _broker.getBrokerStream();
+    _jid = _broker.createClient(_toClient, uid, resource);
 
     return _jid;
   }
@@ -172,15 +170,9 @@ public class XmppBrokerStream
   {
     String password = null;
     
-    _conn = _broker.getConnection(_toClient, _uid, resource);
-
-    _jid = _conn.getJid();
-    
-    _toBroker = _conn.getBrokerStream();
-    
-    _reader.setJid(_jid);
-    _reader.setHandler(_toBroker);
-    
+    _toBroker = _broker.getBrokerStream();
+    _jid = _broker.createClient(_toClient, jid, resource);
+     
     return _jid;
   }
 
@@ -281,92 +273,9 @@ public class XmppBrokerStream
     _toBroker.queryError(id, to, _jid, value, error);
   }
   
-  /**
-   * Handles a presence availability packet.
-   *
-   * If the handler deals with clients, the "from" value should be ignored
-   * and replaced by the client's jid.
-   */
-  public void presence(String to,
-			   String from,
-			   Serializable data)
-
+  public boolean isClosed()
   {
-    _toBroker.presence(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence unavailability packet.
-   *
-   * If the handler deals with clients, the "from" value should be ignored
-   * and replaced by the client's jid.
-   */
-  public void presenceUnavailable(String to,
-				      String from,
-				      Serializable data)
-  {
-    _toBroker.presenceUnavailable(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence probe from another server
-   */
-  public void presenceProbe(String to,
-			      String from,
-			      Serializable data)
-  {
-    _toBroker.presenceProbe(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence subscribe request from a client
-   */
-  public void presenceSubscribe(String to,
-				    String from,
-				    Serializable data)
-  {
-    _toBroker.presenceSubscribe(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence subscribed result to a client
-   */
-  public void presenceSubscribed(String to,
-				     String from,
-				     Serializable data)
-  {
-    _toBroker.presenceSubscribed(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence unsubscribe request from a client
-   */
-  public void presenceUnsubscribe(String to,
-				      String from,
-				      Serializable data)
-  {
-    _toBroker.presenceUnsubscribe(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence unsubscribed result to a client
-   */
-  public void presenceUnsubscribed(String to,
-				       String from,
-				       Serializable data)
-  {
-    _toBroker.presenceUnsubscribed(to, _jid, data);
-  }
-  
-  /**
-   * Handles a presence unsubscribed result to a client
-   */
-  public void presenceError(String to,
-			      String from,
-			      Serializable data,
-			      ActorError error)
-  {
-    _toBroker.presenceError(to, _jid, data, error);
+    return _in == null;
   }
 
   public void close()

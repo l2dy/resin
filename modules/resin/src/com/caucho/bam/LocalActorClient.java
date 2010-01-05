@@ -29,28 +29,26 @@
 
 package com.caucho.bam;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.logging.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.lang.ref.SoftReference;
+import java.util.WeakHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 
 /**
- * BAM client
+ * LocalActorClient is a convenience class for the
  */
 public class LocalActorClient implements ActorClient {
   private static final Logger log
     = Logger.getLogger(LocalActorClient.class.getName());
 
-  private static final WeakHashMap<ClassLoader,ClientActorFactory>
-    _factoryMap = new WeakHashMap<ClassLoader,ClientActorFactory>();
-
-  private boolean _isFinest = log.isLoggable(Level.FINEST);
+  private static final WeakHashMap<ClassLoader,SoftReference<ActorClientFactory>>
+    _factoryMap = new WeakHashMap<ClassLoader,SoftReference<ActorClientFactory>>();
 
   private ActorClient _client;
-
-  private long _timeout = 10000L;
-  private boolean _isClosed;
 
   public LocalActorClient()
   {
@@ -64,7 +62,7 @@ public class LocalActorClient implements ActorClient {
 
   public LocalActorClient(String uid, String password)
   {
-    _client = getFactory().getConnection(uid, getClass().getSimpleName());
+    _client = getFactory().createClient(uid, getClass().getSimpleName());
   }
 
   /**
@@ -78,13 +76,21 @@ public class LocalActorClient implements ActorClient {
   /**
    * Sets the message handler
    */
-  public void setActorStream(ActorStream stream)
+  public void setClientStream(ActorStream stream)
   {
-    _client.setActorStream(stream);
+    _client.setClientStream(stream);
   }
 
   /**
    * Gets the message listener
+   */
+  public ActorStream getClientStream()
+  {
+    return _client.getClientStream();
+  }
+  
+  /**
+   * The stream to the ActorClient.
    */
   public ActorStream getActorStream()
   {
@@ -92,11 +98,19 @@ public class LocalActorClient implements ActorClient {
   }
 
   /**
-   * Returns the client stream
+   * The stream to the link.
    */
-  public ActorStream getBrokerStream()
+  public ActorStream getLinkStream()
   {
-    return _client.getBrokerStream();
+    return _client.getLinkStream();
+  }
+
+  /**
+   * The stream to the link.
+   */
+  public void setLinkStream(ActorStream linkStream)
+  {
+    _client.setLinkStream(linkStream);
   }
 
   public void message(String to,
@@ -149,48 +163,6 @@ public class LocalActorClient implements ActorClient {
     _client.querySet(to, payload, callback);
   }
 
-  public void presence(String to, Serializable payload)
-  {
-    _client.presence(to, payload);
-  }
-
-  public void presenceUnavailable(String to, Serializable payload)
-  {
-    _client.presenceUnavailable(to, payload);
-  }
-
-  public void presenceProbe(String to, Serializable payload)
-  {
-    _client.presenceProbe(to, payload);
-  }
-
-  public void presenceSubscribe(String to, Serializable payload)
-  {
-    _client.presenceSubscribe(to, payload);
-  }
-
-  public void presenceSubscribed(String to, Serializable payload)
-  {
-    _client.presenceSubscribed(to, payload);
-  }
-
-  public void presenceUnsubscribe(String to, Serializable payload)
-  {
-    _client.presenceUnsubscribe(to, payload);
-  }
-
-  public void presenceUnsubscribed(String to, Serializable payload)
-  {
-    _client.presenceUnsubscribed(to, payload);
-  }
-
-  public void presenceError(String to,
-                            Serializable payload,
-                            ActorError error)
-  {
-    _client.presenceError(to, payload, error);
-  }
-
   public boolean isClosed()
   {
     return _client.isClosed();
@@ -218,16 +190,21 @@ public class LocalActorClient implements ActorClient {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  private ClientActorFactory getFactory()
+  private ActorClientFactory getFactory()
   {
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
-    ClientActorFactory factory = null;
+    ActorClientFactory factory = null;
 
     synchronized (_factoryMap) {
-      factory = _factoryMap.get(loader);
+      SoftReference<ActorClientFactory> factoryRef
+        = _factoryMap.get(loader);
 
-      if (factory != null)
-        return factory;
+      if (factoryRef != null) {
+        factory = factoryRef.get();
+      
+        if (factory != null)
+          return factory;
+      }
     }
 
     try {
@@ -236,7 +213,7 @@ public class LocalActorClient implements ActorClient {
       if (name != null) {
         Class cl = Class.forName(name, false, loader);
 
-        factory = (ClientActorFactory) cl.newInstance();
+        factory = (ActorClientFactory) cl.newInstance();
       }
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -246,7 +223,7 @@ public class LocalActorClient implements ActorClient {
       throw new IllegalStateException("Can't find a valid ActorClient");
 
     synchronized (_factoryMap) {
-      _factoryMap.put(loader, factory);
+      _factoryMap.put(loader, new SoftReference<ActorClientFactory>(factory));
     }
 
     return factory;

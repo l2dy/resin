@@ -38,6 +38,8 @@ import java.util.HashMap;
  * The errors are defined in RFC-3920, XMPP
  */
 public class ActorError implements Serializable {
+  private static final long serialVersionUID = -2645943317009708218L;
+
   /**
    * Retry after providing credentials
    */
@@ -236,6 +238,7 @@ public class ActorError implements Serializable {
   /**
    * zero-arg constructor for Hessian
    */
+  @SuppressWarnings("unused")
   private ActorError()
   {
     this.type = null;
@@ -369,6 +372,9 @@ public class ActorError implements Serializable {
     case NOT_AUTHORIZED:
       return new NotAuthorizedException(this);
       
+    case FORBIDDEN:
+      return new ForbiddenException(this);
+      
     case REMOTE_CONNECTION_FAILED:
       return new RemoteConnectionFailedException(this);
       
@@ -411,6 +417,7 @@ public class ActorError implements Serializable {
       BAD_NAMESPACE_PREFIX,
       CONFLICT,
       CONNECTION_TIMEOUT,
+      FORBIDDEN,
       HOST_GONE,
       HOST_UNKNOWN,
       IMPROPER_ADDRESSING,
@@ -441,6 +448,8 @@ public class ActorError implements Serializable {
 		  ErrorGroup.FEATURE_NOT_IMPLEMENTED);
     _errorMap.put(NOT_AUTHORIZED,
 		  ErrorGroup.NOT_AUTHORIZED);
+    _errorMap.put(FORBIDDEN,
+		  ErrorGroup.FORBIDDEN);
     _errorMap.put(REMOTE_CONNECTION_FAILED,
 		  ErrorGroup.REMOTE_CONNECTION_FAILED);
     _errorMap.put(SERVICE_UNAVAILABLE,

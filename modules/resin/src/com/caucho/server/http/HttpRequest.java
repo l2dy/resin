@@ -39,10 +39,6 @@ import com.caucho.server.dispatch.BadRequestException;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationDecoder;
-import com.caucho.server.port.ServerRequest;
-import com.caucho.server.port.TcpServerRequest;
-import com.caucho.server.port.TcpConnection;
-import com.caucho.server.port.TcpCometController;
 import com.caucho.server.cluster.*;
 import com.caucho.server.webapp.*;
 import com.caucho.util.Alarm;
@@ -756,14 +752,14 @@ public class HttpRequest extends AbstractHttpRequest
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
     long startTime = 0;
-
+    
     try {
       thread.setContextClassLoader(_server.getClassLoader());
       
       startRequest(HttpBufferStore.allocate((Server) _server));
 
       if (! parseRequest()) {
-        return false;
+         return false;
       }
 
       CharSequence host = getInvocationHost();

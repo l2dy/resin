@@ -46,8 +46,6 @@ import java.util.*;
  * Represents a public interface to a bean, e.g. a local stateful view
  */
 abstract public class View {
-  private static final L10N L = new L10N(View.class);
-
   protected final BeanGenerator _bean;
   protected final ApiClass _viewClass;
 
@@ -135,11 +133,11 @@ abstract public class View {
     }
     else {
       for (Annotation ann : cl.getAnnotations()) {
-        Class annType = ann.annotationType();
+        Class<?> annType = ann.annotationType();
 
         if (annType.isAnnotationPresent(Stereotype.class)) {
           for (Annotation sAnn : ann.annotationType().getAnnotations()) {
-            Class sAnnType = sAnn.annotationType();
+            Class<?> sAnnType = sAnn.annotationType();
 
             if (sAnnType.isAnnotationPresent(InterceptorBinding.class)) {
               interceptorBindingList.add(sAnn);
@@ -240,41 +238,43 @@ abstract public class View {
   /**
    * Generates constructor addiontions
    */
-  public void generateBusinessConstructor(JavaWriter out)
+  public void generateBeanConstructor(JavaWriter out)
     throws IOException
   {
-    HashMap map = new HashMap();
-    generateBusinessConstructor(out, map);
+    HashMap<String,Object> map = new HashMap<String,Object>();
+    generateBeanConstructor(out, map);
   }
 
   /**
    * Generates constructor addiontions
    */
-  public void generateBusinessConstructor(JavaWriter out, HashMap map)
+  public void generateBeanConstructor(JavaWriter out, 
+                                          HashMap<String,Object> map)
     throws IOException
   {
     for (BusinessMethodGenerator method : getMethods()) {
-      method.generateConstructorTop(out, map);
+      method.generateBeanConstructor(out, map);
     }
   }
 
   /**
    * Generates prologue additions
    */
-  public void generateBusinessPrologue(JavaWriter out)
+  public void generateBeanPrologue(JavaWriter out)
     throws IOException
   {
-    generateBusinessPrologue(out, new HashMap());
+    generateBeanPrologue(out, new HashMap<String,Object>());
   }
 
   /**
    * Generates prologue additions
    */
-  public void generateBusinessPrologue(JavaWriter out, HashMap map)
+  public void generateBeanPrologue(JavaWriter out, 
+                                       HashMap<String,Object> map)
     throws IOException
   {
     for (BusinessMethodGenerator method : getMethods()) {
-      method.generatePrologueTop(out, map);
+      method.generateBeanPrologue(out, map);
     }
   }
 
@@ -286,7 +286,7 @@ abstract public class View {
      out.println("{");
      out.pushDepth();
 
-     HashMap map = new HashMap();
+     HashMap<String,Object> map = new HashMap<String,Object>();
      for (BusinessMethodGenerator method : getMethods()) {
        method.generatePostConstruct(out, map);
      }
@@ -302,7 +302,7 @@ abstract public class View {
   public void generateBusinessMethods(JavaWriter out)
     throws IOException
   {
-    HashMap map = new HashMap();
+    HashMap<String,Object> map = new HashMap<String,Object>();
     for (BusinessMethodGenerator method : getMethods()) {
       method.generate(out, map);
     }

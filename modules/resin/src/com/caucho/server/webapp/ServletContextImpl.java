@@ -29,11 +29,13 @@
 
 package com.caucho.server.webapp;
 
+import com.caucho.VersionFactory;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
 import javax.servlet.*;
+import javax.servlet.descriptor.JspConfigDescriptor;
 import java.io.*;
 import java.net.URL;
 import java.util.*;
@@ -104,7 +106,7 @@ public class ServletContextImpl extends ServletContextCompat
    */
   public String getServerInfo()
   {
-    return "Resin/" + com.caucho.Version.VERSION;
+    return "Resin/" + VersionFactory.getVersion();
   }
 
   /**
@@ -115,10 +117,20 @@ public class ServletContextImpl extends ServletContextCompat
     return 3;
   }
 
+  public int getEffectiveMajorVersion()
+  {
+    return 3;
+  }
+
   /**
    * Returns the servlet minor version
    */
   public int getMinorVersion()
+  {
+    return 0;
+  }
+
+  public int getEffectiveMinorVersion()
   {
     return 0;
   }
@@ -500,7 +512,43 @@ public class ServletContextImpl extends ServletContextCompat
   {
     throw new UnsupportedOperationException("unimplemented");
   }
-  
+
+  public void addListener(String className)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public <T extends EventListener> void addListener(T t)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public void addListener(Class<? extends EventListener> listenerClass)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public <T extends EventListener> T createListener(Class<T> listenerClass)
+    throws ServletException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public JspConfigDescriptor getJspConfigDescriptor()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public ClassLoader getClassLoader()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public void declareRoles(String... roleNames)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
   protected boolean isActive()
   {
     throw new UnsupportedOperationException("unimplemented");

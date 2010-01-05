@@ -58,6 +58,8 @@ public class Environment {
 
   private static ArrayList<ClassLoaderListener> _globalLoaderListeners
     = new ArrayList<ClassLoaderListener>();
+  
+  // private static EnvironmentClassLoader _envSystemClassLoader;
 
   /**
    * Returns the local environment.
@@ -115,6 +117,13 @@ public class Environment {
         return;
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null) {
+      _envSystemClassLoader.addListener(listener);
+      return;
+    }
+    */
 
     _globalEnvironmentListeners.add(listener);
   }
@@ -237,6 +246,13 @@ public class Environment {
         return;
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null) {
+      _envSystemClassLoader.addListener(listener);
+      return;
+    }
+    */
 
     _globalLoaderListeners.add(listener);
   }
@@ -491,6 +507,11 @@ public class Environment {
           return value;
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null)
+      return _envSystemClassLoader.getAttribute(name);
+      */
 
     return null;
   }
@@ -524,6 +545,11 @@ public class Environment {
         return ((EnvironmentClassLoader) loader).getAttribute(name);
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null)
+      return _envSystemClassLoader.getAttribute(name);
+      */
 
     return null;
   }
@@ -564,10 +590,19 @@ public class Environment {
 
         envLoader.setAttribute(name, value);
 
-        if (oldValue != null)
-          return oldValue;
+        return oldValue;
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null) {
+      Object oldValue = _envSystemClassLoader.getAttribute(name);
+
+      _envSystemClassLoader.setAttribute(name, value);
+
+      return oldValue;
+    }
+    */
 
     return null;
   }
@@ -677,18 +712,7 @@ public class Environment {
   {
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
-    for (; loader != null; loader = loader.getParent()) {
-      if (loader instanceof EnvironmentClassLoader) {
-        String name = ((EnvironmentClassLoader) loader).getId();
-
-        if (name != null)
-          return name;
-        else
-          return "";
-      }
-    }
-
-    return Thread.currentThread().getContextClassLoader().toString();
+    return getEnvironmentName(loader);
   }
 
   /**
@@ -706,6 +730,17 @@ public class Environment {
           return "";
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null) {
+      String name = _envSystemClassLoader.getId();
+      
+      if (name != null)
+        return name;
+      else
+        return "";
+    }
+    */
 
     return Thread.currentThread().getContextClassLoader().toString();
   }
@@ -725,6 +760,12 @@ public class Environment {
         return;
       }
     }
+    
+    /*
+    if (_envSystemClassLoader != null) {
+      _envSystemClassLoader.applyVisibleModules(apply);
+    }
+    */
   }
 
   /**
@@ -747,7 +788,7 @@ public class Environment {
         return ((EnvironmentClassLoader) loader).getLocalClassPath();
       }
     }
-
+    
     return CauchoSystem.getClassPath();
   }
 
@@ -810,9 +851,9 @@ public class Environment {
 
       boolean isGlobalLoadable = false;
       try {
-        Class cl = Class.forName("com.caucho.naming.InitialContextFactoryImpl",
-                                 false,
-                                 systemLoader);
+        Class<?> cl = Class.forName("com.caucho.naming.InitialContextFactoryImpl",
+                                    false,
+                                    systemLoader);
 
         isGlobalLoadable = (cl != null);
       } catch (Exception e) {
@@ -865,9 +906,9 @@ public class Environment {
                     Jmx.getGlobalMBeanServer());
 
       try {
-        Class cl = Class.forName("com.caucho.server.resin.EnvInit",
-                                 false,
-                                 systemLoader);
+        Class<?> cl = Class.forName("com.caucho.server.resin.EnvInit",
+                                    false,
+                                    systemLoader);
 
         cl.newInstance();
       } catch (Exception e) {
@@ -898,4 +939,18 @@ public class Environment {
 
     return _log;
   }
+
+  /*
+  static {
+    try {
+      ClassLoader systemClassLoader = ClassLoader.getSystemClassLoader();
+      
+      if (systemClassLoader instanceof EnvironmentClassLoader)
+        _envSystemClassLoader
+          = (EnvironmentClassLoader) systemClassLoader;
+    } catch (Exception e) {
+      // can't log this early in startup
+    }
+  }
+  */
 }

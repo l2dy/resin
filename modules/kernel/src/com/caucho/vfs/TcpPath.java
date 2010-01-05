@@ -42,15 +42,17 @@ import java.util.Map;
 public class TcpPath extends Path {
   // Attribute name for connection timeouts
   public static final String CONNECT_TIMEOUT = "connect-timeout";
-  
+
   protected String _host;
   protected int _port;
   protected SocketAddress _address;
-  protected long _timeout = 5000L;
+  protected long _connectTimeout = 5000L;
+  protected long _socketTimeout = 600000L;
+  private boolean _noDelay;
 
   public TcpPath(TcpPath root, String userPath,
-		 Map<String,Object> newAttributes,
-		 String host, int port)
+                 Map<String,Object> newAttributes,
+                 String host, int port)
   {
     super(root);
 
@@ -60,15 +62,22 @@ public class TcpPath extends Path {
     _port = port == 0 ? 80 : port;
 
     if (newAttributes != null) {
-      Object timeout = newAttributes.get("connect-timeout");
+      Object connTimeout = newAttributes.get("connect-timeout");
 
-      if (timeout instanceof Number)
-	_timeout = ((Number) timeout).longValue();
+      if (connTimeout instanceof Number)
+        _connectTimeout = ((Number) connTimeout).longValue();
       
-      timeout = newAttributes.get("timeout");
+      Object socketTimeout = newAttributes.get("socket-timeout");
 
-      if (timeout instanceof Number)
-	_timeout = ((Number) timeout).longValue();
+      if (socketTimeout == null)
+        socketTimeout = newAttributes.get("timeout");
+
+      if (socketTimeout instanceof Number)
+        _socketTimeout = ((Number) socketTimeout).longValue();
+      
+      if (Boolean.TRUE.equals(newAttributes.get("no-delay"))) {
+        _noDelay = true;
+      }
     }
   }
 
@@ -77,7 +86,7 @@ public class TcpPath extends Path {
    */
   protected Path schemeWalk(String userPath,
                             Map<String,Object> newAttributes,
-			    String uri,
+                            String uri,
                             int offset)
   {
     int length = uri.length();
@@ -91,7 +100,7 @@ public class TcpPath extends Path {
     int i = 2 + offset;
     int ch = 0;
     for (; i < length && (ch = uri.charAt(i)) != ':' && ch != '/' && ch != '?';
-	 i++) {
+         i++) {
       buf.append((char) ch);
     }
 
@@ -102,7 +111,7 @@ public class TcpPath extends Path {
     int port = 0;
     if (ch == ':') {
       for (i++; i < length && (ch = uri.charAt(i)) >= '0' && ch <= '9'; i++) {
-	port = 10 * port + uri.charAt(i) - '0';
+        port = 10 * port + uri.charAt(i) - '0';
       }
     }
 
@@ -110,8 +119,8 @@ public class TcpPath extends Path {
   }
 
   protected TcpPath create(TcpPath root,
-			   String userPath, Map<String,Object> newAttributes,
-			   String host, int port)
+                           String userPath, Map<String,Object> newAttributes,
+                           String host, int port)
   {
     return new TcpPath(root, userPath, newAttributes, host, port);
   }
@@ -151,12 +160,12 @@ public class TcpPath extends Path {
 
   public StreamImpl openReadImpl() throws IOException
   {
-    return TcpStream.openRead(this, _timeout);
+    return TcpStream.openRead(this, _connectTimeout, _socketTimeout, _noDelay);
   }
 
   public StreamImpl openReadWriteImpl() throws IOException
   {
-    return TcpStream.openReadWrite(this, _timeout);
+    return TcpStream.openReadWrite(this, _connectTimeout, _socketTimeout, _noDelay);
   }
 
   @Override

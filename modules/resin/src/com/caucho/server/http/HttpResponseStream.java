@@ -29,27 +29,21 @@
 
 package com.caucho.server.http;
 
-import com.caucho.server.connection.*;
-import com.caucho.util.L10N;
-import com.caucho.vfs.*;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletResponse;
-import java.io.*;
-import java.util.*;
-import java.util.logging.*;
+import com.caucho.util.L10N;
+import com.caucho.vfs.WriteStream;
 
 public class HttpResponseStream extends ResponseStream {
   private static final Logger log
     = Logger.getLogger(HttpResponseStream.class.getName());
 
-  private static final L10N L = new L10N(HttpResponseStream.class);
-
   private static final int _tailChunkedLength = 7;
   private static final byte []_tailChunked
     = new byte[] {'\r', '\n', '0', '\r', '\n', '\r', '\n'};
-
-  private final byte []_buffer = new byte[16];
 
   private HttpResponse _response;
   private WriteStream _next;
@@ -68,6 +62,7 @@ public class HttpResponseStream extends ResponseStream {
   /**
    * initializes the Response stream at the beginning of a request.
    */
+  @Override
   public void start()
   {
     super.start();
@@ -125,6 +120,10 @@ public class HttpResponseStream extends ResponseStream {
   @Override
   protected void setNextBufferOffset(int offset)
   {
+    if (log.isLoggable(Level.FINER)) {
+      log.finer(dbgId() + "write-set-offset(" + offset + ")");
+    }
+    
     _next.setBufferOffset(offset);
   }
 
@@ -137,12 +136,17 @@ public class HttpResponseStream extends ResponseStream {
     int bufferStart = _bufferStartOffset;
 
     if (log.isLoggable(Level.FINER))
-      log.finer(dbgId() + "write-chunk2(" + (offset - bufferStart) + ")");
-
+      log.finer(dbgId() + "write-next-buffer(" + (offset - bufferStart) + ")");
+    
     if (bufferStart > 0) {
       byte []buffer = next.getBuffer();
 
-      writeChunkHeader(buffer, bufferStart, offset - bufferStart);
+      int len = offset - bufferStart;
+
+      if (len > 0)
+        writeChunkHeader(buffer, bufferStart, offset - bufferStart);
+      else
+        offset = bufferStart - 8;
 
       _bufferStartOffset = 0;
     }
@@ -151,7 +155,7 @@ public class HttpResponseStream extends ResponseStream {
   }
 
   @Override
-  protected void flushNext()
+  public void flushNext()
     throws IOException
   {
     if (log.isLoggable(Level.FINE))
@@ -171,34 +175,53 @@ public class HttpResponseStream extends ResponseStream {
   protected void closeNext()
     throws IOException
   {
-    if (log.isLoggable(Level.FINE))
-      log.fine(dbgId() + "close()");
-
-    _next.close();
-
     _bufferStartOffset = 0;
+
+    AbstractHttpRequest req = _response.getRequest();
+    if (req.isComet() || req.isDuplex()) {
+    }
+    else if (! req.allowKeepalive()) {
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(dbgId() + "close stream");
+      }
+
+      _next.close();
+    }
+    else {
+      // close();
+
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(dbgId() + "finish/keepalive");
+      }
+    }
   }
 
   @Override
   protected void writeTail()
     throws IOException
   {
+    if (! _isChunkedEncoding) {
+      // server/0550
+      _next.flush();
+      return;
+    }
+    
     int bufferStart = _bufferStartOffset;
 
     int bufferOffset = _next.getBufferOffset();
-
     if (bufferStart < bufferOffset) {
       if (log.isLoggable(Level.FINER))
-        log.finer(dbgId() + "write-chunk-tail(" + (bufferOffset - bufferStart) + ")");
+        log.finer(dbgId() + "write-tail(" + (bufferOffset - bufferStart) + ")");
     }
-
-    if (! _isChunkedEncoding)
-      return;
 
     if (bufferStart > 0) {
       byte []buffer = _next.getBuffer();
+      int len = bufferOffset - bufferStart;
 
-      writeChunkHeader(buffer, bufferStart, bufferOffset - bufferStart);
+      if (len > 0)
+        writeChunkHeader(buffer, bufferStart, len);
+      else
+        bufferOffset = bufferStart - 8;
 
       _bufferStartOffset = 0;
     }
@@ -224,6 +247,8 @@ public class HttpResponseStream extends ResponseStream {
 
     if (log.isLoggable(Level.FINER))
       log.finer(dbgId() + "write-chunk-tail(" + _tailChunkedLength + ")");
+
+    _next.flush();
   }
 
   /**
@@ -232,6 +257,9 @@ public class HttpResponseStream extends ResponseStream {
   private void writeChunkHeader(byte []buffer, int start, int length)
     throws IOException
   {
+    if (length == 0)
+      throw new IllegalStateException();
+
     buffer[start - 8] = (byte) '\r';
     buffer[start - 7] = (byte) '\n';
     buffer[start - 6] = hexDigit(length >> 12);

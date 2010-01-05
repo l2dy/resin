@@ -31,6 +31,8 @@ package com.caucho.server.connection;
 
 import javax.servlet.*;
 
+import com.caucho.server.http.HttpServletRequestImpl;
+
 /**
  * Implementation of the Servlet 3.0 AsyncContext
  */
@@ -83,6 +85,34 @@ public class AsyncContextImpl implements AsyncContext
 
   public void start(Runnable task)
   {
+  }
+
+  public void addListener(AsyncListener listener)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public void addListener(AsyncListener listener,
+                          ServletRequest request,
+                          ServletResponse response)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public <T extends AsyncListener> T createListener(Class<T> cl)
+    throws ServletException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public void setTimeout(long timeout)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  public long getTimeout()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   public String toString()

@@ -16,7 +16,7 @@ resin_home=@resin_home@
 JNI_INCLUDE=@JNI_INCLUDE@
 INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common -I../resin
 CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @CFLAGS_JNI@ @CFLAGS_SHLIB@ @CFLAGS_OPENSSL@
-OBJ=@SSL_OBJ@ ../resin_os/memory.o ../resin_os/std.o ../resin_os/java.o
+OBJ=@SSL_OBJ@ @resin_os@/memory.o @resin_os@/std.o @resin_os@/java.o
 
 all	: libresinssl.$(SO)
 
