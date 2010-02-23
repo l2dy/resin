@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,16 +29,10 @@
 
 package com.caucho.ejb.gen;
 
-import com.caucho.config.gen.*;
-import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
-
-import java.io.*;
-import java.lang.reflect.*;
-import java.util.*;
-import javax.annotation.security.*;
-import javax.ejb.*;
-import javax.interceptor.*;
+import com.caucho.config.gen.ApiMethod;
+import com.caucho.config.gen.BusinessMethodGenerator;
+import com.caucho.config.gen.EjbCallChain;
+import com.caucho.config.gen.XaCallChain;
 
 /**
  * Represents a message local business method

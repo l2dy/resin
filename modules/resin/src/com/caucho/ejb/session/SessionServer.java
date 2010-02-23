@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.logging.Logger;
 
+import javax.annotation.security.DeclareRoles;
+import javax.annotation.security.RolesAllowed;
 import javax.ejb.EJBHome;
 import javax.ejb.EJBLocalHome;
 import javax.ejb.SessionContext;
@@ -44,9 +46,8 @@ import javax.inject.Named;
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.ejb.AbstractContext;
-import com.caucho.ejb.SessionPool;
 import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.server.AbstractContext;
 import com.caucho.ejb.server.AbstractServer;
 
 /**
@@ -59,15 +60,42 @@ abstract public class SessionServer<T> extends AbstractServer<T> {
   private HashMap<Class, InjectionTarget> _componentMap
     = new HashMap<Class, InjectionTarget>();
 
-  private Bean<?> _bean;
+  private Bean<T> _bean;
   
   private int _sessionIdleMax = 16;
   private int _sessionConcurrentMax = -1;
   private long _sessionConcurrentTimeout = -1;
+  
+  private String[] _declaredRoles;
 
   public SessionServer(EjbContainer manager, AnnotatedType<T> annotatedType)
   {
     super(manager, annotatedType);
+    
+    DeclareRoles declareRoles 
+      = annotatedType.getJavaClass().getAnnotation(DeclareRoles.class);
+
+    RolesAllowed rolesAllowed 
+      = annotatedType.getJavaClass().getAnnotation(RolesAllowed.class); 
+    
+    if (declareRoles != null && rolesAllowed != null) {
+      _declaredRoles = new String[declareRoles.value().length +
+                                  rolesAllowed.value().length];
+
+      System.arraycopy(declareRoles.value(), 0, 
+          _declaredRoles, 0, 
+          declareRoles.value().length);
+
+      System.arraycopy(rolesAllowed.value(), 0, 
+          _declaredRoles, declareRoles.value().length, 
+          rolesAllowed.value().length);
+    }
+    else if (declareRoles != null) {
+      _declaredRoles = declareRoles.value();
+    }
+    else if (rolesAllowed != null) {
+      _declaredRoles = rolesAllowed.value();
+    }
   }
 
   @Override
@@ -77,7 +105,7 @@ abstract public class SessionServer<T> extends AbstractServer<T> {
   }
 
   @Override
-  public Bean getDeployBean()
+  public Bean<T> getDeployBean()
   {
     return _bean;
   }
@@ -128,17 +156,13 @@ abstract public class SessionServer<T> extends AbstractServer<T> {
         
       }
 
-      BeanFactory factory
+      BeanFactory<SessionContext> factory
         = beanManager.createBeanFactory(SessionContext.class);
+      
+      AbstractContext context = getSessionContext();
+      context.setDeclaredRoles(_declaredRoles);
 
-      _component = factory.singleton(getSessionContext());
-
-      beanManager.addBean(_component);
-
-      if (_localHomeClass != null)
-        _localHome = (EJBLocalHome) getLocalObject(_localHomeClass);
-      if (_remoteHomeClass != null)
-        _remoteHome = (EJBHome) getRemoteObject(_remoteHomeClass);
+      beanManager.addBean(factory.singleton(context));
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -150,9 +174,9 @@ abstract public class SessionServer<T> extends AbstractServer<T> {
 
   private void registerWebBeans()
   {
-    Class beanClass = getBeanSkelClass();
-    ArrayList<Class> localApiList = getLocalApiList();
-    ArrayList<Class> remoteApiList = getRemoteApiList();
+    Class<?> beanClass = getBeanSkelClass();
+    ArrayList<Class<?>> localApiList = getLocalApiList();
+    ArrayList<Class<?>> remoteApiList = getRemoteApiList();
 
     if (beanClass != null && (localApiList != null || remoteApiList != null)) {
       InjectManager beanManager = InjectManager.create();
@@ -209,15 +233,6 @@ abstract public class SessionServer<T> extends AbstractServer<T> {
   protected InjectionTarget getComponent(Class api)
   {
     return _componentMap.get(api);
-  }
-
-  /**
-   * Returns the EJBLocalHome stub for the container
-   */
-  @Override
-  public EJBLocalHome getEJBLocalHome()
-  {
-    return _localHome;
   }
 
   @Override

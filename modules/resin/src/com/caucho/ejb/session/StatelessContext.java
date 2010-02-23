@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.ejb.session;
 import javax.ejb.*;
 
 import com.caucho.config.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.ejb.*;
 import com.caucho.ejb.server.AbstractServer;
 import com.caucho.ejb.server.EjbProducer;
@@ -42,10 +43,10 @@ import com.caucho.util.*;
 abstract public class StatelessContext<T> extends AbstractSessionContext {
   private static final L10N L = new L10N(StatelessContext.class);
   
-  private transient StatelessServer _server;
+  private transient StatelessManager _server;
   private StatelessPool<T> _statelessPool;
 
-  public StatelessContext(StatelessServer server)
+  public StatelessContext(StatelessManager server)
   {
     assert(server != null);
 
@@ -55,7 +56,7 @@ abstract public class StatelessContext<T> extends AbstractSessionContext {
   /**
    * Returns the server which owns this bean.
    */
-  public StatelessServer getStatelessServer()
+  public StatelessManager getStatelessManager()
   {
     return _server;
   }
@@ -98,7 +99,7 @@ abstract public class StatelessContext<T> extends AbstractSessionContext {
    */
   public EJBObject getEJBObject()
   {
-    return (EJBObject) getStatelessServer().getRemoteObject();
+    return (EJBObject) getStatelessManager().getRemoteObject();
   }
 
   /**

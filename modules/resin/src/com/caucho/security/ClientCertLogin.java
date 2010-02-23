@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,7 +47,7 @@ public class ClientCertLogin extends AbstractLogin {
    */
   public String getAuthType()
   {
-    return "CLIENT-CERT";
+    return "CLIENT_CERT";
   }
   
   /**
@@ -68,7 +68,13 @@ public class ClientCertLogin extends AbstractLogin {
   {
     return getUserPrincipal(request, response, application);
   }
-  
+
+  @Override
+  public Principal getUserPrincipal(HttpServletRequest request)
+  {
+    return getUserPrincipal(request, null, null);
+  }
+
   /**
    * Returns the current user with the user name and password.
    *
@@ -81,7 +87,6 @@ public class ClientCertLogin extends AbstractLogin {
   public Principal getUserPrincipal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     ServletContext application)
-    throws ServletException
   {
     X509Certificate []certs;
 

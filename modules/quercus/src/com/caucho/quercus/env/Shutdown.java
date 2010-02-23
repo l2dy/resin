@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,10 +33,10 @@ package com.caucho.quercus.env;
  * Represents a PHP shutdown function.
  */
 public class Shutdown {
-  private final Callback _callback;
+  private final Callable _callback;
   private final Value []_args;
 
-  public Shutdown(Callback callback, Value []args)
+  public Shutdown(Callable callback, Value []args)
   {
     _callback = callback;
     _args = args;

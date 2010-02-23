@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,8 +32,8 @@ package com.caucho.server.e_app;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.EjbRef;
-import com.caucho.ejb.AbstractStubLoader;
 import com.caucho.ejb.EJBClientInterface;
+import com.caucho.ejb.session.AbstractStubLoader;
 import com.caucho.java.WorkDir;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.Environment;

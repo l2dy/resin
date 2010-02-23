@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,14 +29,15 @@
 
 package com.caucho.config.program;
 
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ValueGenerator;
-import com.caucho.config.ConfigContext;
 import com.caucho.config.ConfigException;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.scope.DependentScope;
 import com.caucho.util.L10N;
 
 import javax.rmi.PortableRemoteObject;
+import javax.enterprise.context.spi.CreationalContext;
 import java.lang.reflect.Field;
 import java.util.logging.Logger;
 
@@ -63,22 +64,24 @@ public class FieldGeneratorProgram extends ConfigProgram
     return _field.getName();
   }
 
-  Class getType()
+  Class<?> getType()
   {
     return _field.getType();
   }
 
-  Class getDeclaringClass()
+  Class<?> getDeclaringClass()
   {
     return _field.getDeclaringClass();
   }
 
   @Override
-  public void inject(Object bean, ConfigContext env)
+  public <T> void inject(T bean, CreationalContext<T> env)
     throws ConfigException
   {
+    Object value = null;
+    
     try {
-      Object value = _gen.create();
+      value = _gen.create();
 
       // XXX TCK: ejb30/bb/session/stateless/sessioncontext/descriptor/getBusinessObjectLocal1, needs QA
       if (value != null
@@ -90,6 +93,10 @@ public class FieldGeneratorProgram extends ConfigProgram
       _field.set(bean, value);
     } catch (ConfigException e) {
       throw e;
+    } catch (ClassCastException e) {
+      throw ConfigException.create(L.l("{0}: value {1} be cast to {2}",
+                                       location(), value, _field.getType().getName()),
+                                   e);
     } catch (Exception e) {
       throw ConfigException.create(location(), e);
     }

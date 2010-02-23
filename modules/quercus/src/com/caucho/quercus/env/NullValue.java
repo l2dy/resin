@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -494,7 +494,7 @@ public class NullValue extends Value
    * Converts to a reference variable
    */
   @Override
-  public Value toRefArgument()
+  public Value toArgRef()
   {
     return this;
   }
@@ -705,6 +705,12 @@ public class NullValue extends Value
   private Object readResolve()
   {
     return NULL;
+  }
+
+  @Override
+  public int hashCode()
+  {
+    return 17;
   }
 }
 

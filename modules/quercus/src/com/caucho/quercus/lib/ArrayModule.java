@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -594,11 +594,9 @@ public class ArrayModule
     ArrayValue filteredArray = new ArrayValueImpl();
 
     if (! callbackName.isDefault()) {
-      Callback callback = env.createCallback(callbackName);
+      Callable callback = callbackName.toCallable(env);
       
-      if (callback == null || ! callback.isValid()) {
-        env.warning(L.l("The second argument, '{0}', is not a valid callback",
-                        callbackName));
+      if (callback == null || ! callback.isValid(env)) {
         return NullValue.NULL;
       }
 
@@ -615,12 +613,13 @@ public class ArrayModule
             value = ((ArrayValue.Entry) entry).getRawValue();
           else
             value = entry.getValue();
-
-          boolean isMatch = callback.call(env, array, key, value).toBoolean();
-
-          if (isMatch) {
+ 
+          // php/1740          
+          boolean isMatch 
+            = callback.callArray(env, array, key, value).toBoolean();
+          
+          if (isMatch)
             filteredArray.put(key, value);
-          }
         }
       }
       catch (Exception t) {
@@ -749,15 +748,15 @@ public class ArrayModule
    */
   public static Value array_reduce(Env env,
                                    ArrayValue array,
-                                   Callback callback,
+                                   Callable callable,
                                    @Optional("NULL") Value initialValue)
   {
     if (array == null)
       return NullValue.NULL;
 
-    if (callback == null || ! callback.isValid()) {
-      env.warning("The second argument, '" + callback +
-                  "', should be a valid callback");
+    if (callable == null || ! callable.isValid(env)) {
+      env.warning("The second argument, '" + callable
+                  + "', should be a valid callable");
 
       return NullValue.NULL;
     }
@@ -767,7 +766,7 @@ public class ArrayModule
     for (Map.Entry<Value, Value> entry : array.entrySet()) {
       try {
         // XXX: will this callback modify the array?
-        result = callback.call(env, result, entry.getValue());
+        result = callable.call(env, result, entry.getValue());
       }
       catch (Exception t) {
         // XXX: may be used for error checking later
@@ -1156,10 +1155,10 @@ public class ArrayModule
    */
   public static boolean array_walk(Env env,
                                    @Reference Value arrayVar,
-                                   Callback callback,
+                                   Callable callback,
                                    @Optional("NULL") Value userData)
   {
-    if (callback == null || ! callback.isValid()) {
+    if (callback == null || ! callback.isValid(env)) {
       env.error(L.l("'{0}' is an unknown function.", callback.getCallbackName()));
       return false;
     }
@@ -1178,12 +1177,13 @@ public class ArrayModule
         Value key = entry.getKey();
         Value value;
         
+        // php/1741
         if (entry instanceof ArrayValue.Entry)
           value = ((ArrayValue.Entry) entry).getRawValue();
         else
           value = entry.getValue();
         
-        callback.call(env, array, key, value, key, userData);
+        callback.callArray(env, array, key, value, userData);
       }
       
       return true;
@@ -1208,10 +1208,10 @@ public class ArrayModule
    */
   public static boolean array_walk_recursive(Env env,
                                              @Reference Value arrayVar,
-                                             Callback callback,
+                                             Callable callback,
                                              @Optional("NULL") Value extra)
   {
-    if (callback == null || ! callback.isValid()) {
+    if (callback == null || ! callback.isValid(env)) {
       env.error(L.l("'{0}' is an unknown function.", callback.getCallbackName()));
       return false;
     }
@@ -1230,6 +1230,7 @@ public class ArrayModule
         Value key = entry.getKey();
         Value value;
         
+        // php/1742
         if (entry instanceof ArrayValue.Entry)
           value = ((ArrayValue.Entry) entry).getRawValue();
         else
@@ -1245,7 +1246,7 @@ public class ArrayModule
             return false;
         }
         else
-          callback.call(env, array, key, value, key, extra);
+          callback.callArray(env, array, key, value, key, extra);
       }
 
       return true;
@@ -1588,7 +1589,7 @@ public class ArrayModule
    */
   public static boolean usort(Env env,
                               @Reference Value arrayVar,
-                              Callback func,
+                              Callable func,
                               @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
@@ -1596,7 +1597,9 @@ public class ArrayModule
     if (array == null)
       return false;
 
-    if (! func.isValid()) {
+    if (func == null)
+      return false;
+    else if (! func.isValid(env)) {
       env.warning(L.l("Invalid comparison function"));
       return false;
     }
@@ -1623,15 +1626,18 @@ public class ArrayModule
    */
   public static boolean uasort(Env env,
                                @Reference Value arrayVar,
-                               Callback func,
+                               Callable func,
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
     
     if (array == null)
       return false;
+    
+    if (func == null)
+      return false;
 
-    if (! func.isValid()) {
+    if (! func.isValid(env)) {
       env.warning(L.l("Invalid comparison function"));
       return false;
     }
@@ -1655,7 +1661,7 @@ public class ArrayModule
    */
   public static boolean uksort(Env env,
                                @Reference Value arrayVar,
-                               Callback func,
+                               Callable func,
                                @Optional long sortFlag)
   {
     ArrayValue array = arrayVar.toArrayValue(env);
@@ -1663,7 +1669,7 @@ public class ArrayModule
     if (array == null)
       return false;
 
-    if (!func.isValid()) {
+    if (!func.isValid(env)) {
       env.warning(L.l("Invalid comparison function"));
       return false;
     }
@@ -1780,7 +1786,7 @@ public class ArrayModule
 
       entryValue = array.get(entryKey);
 
-      String symbolName = entryKey.toString();
+      StringValue symbolName = entryKey.toStringValue();
 
       if (validVariableName(symbolName)) {
         env.setValue(symbolName, entryValue);
@@ -1840,44 +1846,44 @@ public class ArrayModule
       Value entryValue;
 
       if (extrRefs)
-        entryValue = array.getRef(entryKey);
+        entryValue = array.getVar(entryKey);
       else
         entryValue = array.get(entryKey);
 
-      String symbolName = entryKey.toString();
+      StringValue symbolName = entryKey.toStringValue();
 
       Value tableValue = env.getValue(symbolName);
 
       switch ((int) extractType) {
       case EXTR_SKIP:
         if (! tableValue.isNull())
-          symbolName = "";
+          symbolName = env.createString("");
 
         break;
       case EXTR_PREFIX_SAME:
         if (! tableValue.isNull())
-          symbolName = prefix + symbolName;
+          symbolName = env.createString(prefix + symbolName);
 
         break;
       case EXTR_PREFIX_ALL:
-        symbolName = prefix + symbolName;
+        symbolName = env.createString(prefix + symbolName);
 
         break;
       case EXTR_PREFIX_INVALID:
         if (! validVariableName(symbolName))
-          symbolName = prefix + symbolName;
+          symbolName = env.createString(prefix + symbolName);
 
         break;
       case EXTR_IF_EXISTS:
         if (tableValue.isNull())
-          symbolName = "";//entryValue = tableValue;
+          symbolName = env.createString("");//entryValue = tableValue;
 
         break;
       case EXTR_PREFIX_IF_EXISTS:
         if (! tableValue.isNull())
-          symbolName = prefix + symbolName;
+          symbolName = env.createString(prefix + symbolName);
         else
-          symbolName = "";
+          symbolName = env.createString("");
 
         break;
       default:
@@ -1901,7 +1907,7 @@ public class ArrayModule
    * @param variableName the name to check
    * @return true if the name is valid, false otherwise
    */
-  private static boolean validVariableName(String variableName)
+  private static boolean validVariableName(StringValue variableName)
   {
     if (variableName.length() < 1)
       return false;
@@ -2519,7 +2525,7 @@ public class ArrayModule
    * @param args the vector of array arguments
    * @return an array with all of the mapped values
    */
-  public static Value array_map(Env env, Callback fun,
+  public static Value array_map(Env env, Callable fun,
                                 ArrayValue arg, Value []args)
   {
     // XXX: drupal
@@ -2844,24 +2850,10 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callback cmp;
-
-    try {
-      cmp = env.createCallback(callbackValue);
-    }
-    catch (Exception t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    Callable cmp = callbackValue.toCallable(env);
+    
+    if (! cmp.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmp == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue diffArray = new ArrayValueImpl();
 
@@ -2934,24 +2926,10 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callback cmp;
-
-    try {
-      cmp = env.createCallback(callbackValue);
-    }
-    catch (Exception t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    Callable cmp = callbackValue.toCallable(env);
+    
+    if (! cmp.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmp == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue diffArray = new ArrayValueImpl();
 
@@ -3032,45 +3010,17 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callback cmpValue;
+    Callable cmpValue = callbackValue.toCallable(env);
 
-    try {
-      cmpValue = env.createCallback(callbackValue);
-    }
-    catch (Exception t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    if (! cmpValue.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmpValue == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callback cmpKey;
+    Callable cmpKey = callbackKey.toCallable(env);
 
-    try {
-      cmpKey = env.createCallback(callbackKey);
-    }
-    catch (Exception t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackKey.toString());
-
+    if (! cmpKey.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmpKey == null) {
-      env.warning("Not a valid callback " + callbackKey.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue diffArray = new ArrayValueImpl();
 
@@ -3152,24 +3102,10 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callback cmp;
-
-    try {
-      cmp = env.createCallback(callbackValue);
-    }
-    catch (Throwable t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    Callable cmp = callbackValue.toCallable(env);
+    
+    if (! cmp.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmp == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue interArray = new ArrayValueImpl();
 
@@ -3241,24 +3177,10 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callback cmp;
-
-    try {
-      cmp = env.createCallback(callbackValue);
-    }
-    catch (Throwable t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    Callable cmp = callbackValue.toCallable(env);
+    
+    if (! cmp.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmp == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue interArray = new ArrayValueImpl();
 
@@ -3338,45 +3260,17 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callback cmpValue;
-
-    try {
-      cmpValue = env.createCallback(callbackValue);
-    }
-    catch (Throwable t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackValue.toString());
-
+    Callable cmpValue = callbackValue.toCallable(env);
+    
+    if (! cmpValue.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmpValue == null) {
-      env.warning("Not a valid callback " + callbackValue.toString());
-
-      return NullValue.NULL;
-    }
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callback cmpKey;
-
-    try {
-      cmpKey = env.createCallback(callbackKey);
-    }
-    catch (Throwable t) {
-      log.log(Level.WARNING, t.toString(), t);
-
-      env.warning("Not a valid callback " + callbackKey.toString());
-
+    Callable cmpKey = callbackKey.toCallable(env);
+    
+    if (! cmpKey.isValid(env))
       return NullValue.NULL;
-    }
-
-    if (cmpKey == null) {
-      env.warning("Not a valid callback " + callbackKey.toString());
-
-      return NullValue.NULL;
-    }
 
     ArrayValue interArray = new ArrayValueImpl();
 
@@ -3442,7 +3336,7 @@ public class ArrayModule
 
     for (Value variableName : variables) {
       if (variableName.isString()) {
-        Var var = env.getRef(variableName.toString(), false);
+        Var var = env.getRef(variableName.toStringValue(), false);
 
         if (var != null)
           compactArray.put(variableName, var.toValue());
@@ -3658,11 +3552,11 @@ public class ArrayModule
 
     private int _order;
 
-    private Callback _func;
+    private Callable _func;
 
     private Env _env;
 
-    CompareCallBack(AbstractGet getter, int order, Callback func,
+    CompareCallBack(AbstractGet getter, int order, Callable func,
                     Env env)
     {
       _getter = getter;

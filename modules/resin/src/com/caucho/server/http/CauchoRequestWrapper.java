@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,6 +44,7 @@ import javax.servlet.http.*;
 public class CauchoRequestWrapper extends AbstractCauchoRequest {
   // the wrapped request
   private HttpServletRequest _request;
+  private CauchoResponse _response;
 
   //
   // ServletRequest
@@ -69,11 +70,24 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     _request = request;
   }
   
+  @Override
   public HttpServletRequest getRequest()
   {
     return _request;
   }
   
+  public void setResponse(CauchoResponse response)
+  {
+    _response = response;
+  }
+  
+  @Override
+  public CauchoResponse getResponse()
+  {
+    return _response;
+  }
+  
+  @Override
   public String getProtocol()
   {
     return _request.getProtocol();
@@ -202,16 +216,19 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     _request.setAttribute(name, o);
   }
   
-  public Enumeration getAttributeNames()
+  @Override
+  public Enumeration<String> getAttributeNames()
   {
     return _request.getAttributeNames();
   }
   
+  @Override
   public void removeAttribute(String name)
   {
     _request.removeAttribute(name);
   }
   
+  @Override
   public RequestDispatcher getRequestDispatcher(String path)
   {
     if (path == null || path.length() == 0)
@@ -255,16 +272,17 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return getWebApp();
   }
 
-  public void addAsyncListener(AsyncListener listener)
+  public AsyncContext startAsync()
+    throws IllegalStateException
   {
-    _request.addAsyncListener(listener);
+    return _request.startAsync();
   }
 
-  public void addAsyncListener(AsyncListener listener,
-			       ServletRequest request,
-			       ServletResponse response)
+  public AsyncContext startAsync(ServletRequest servletRequest,
+                                 ServletResponse servletResponse)
+    throws IllegalStateException
   {
-    _request.addAsyncListener(listener, request, response);
+    return _request.startAsync(servletRequest, servletResponse);
   }
 
   public AsyncContext getAsyncContext()
@@ -282,25 +300,12 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return _request.isAsyncSupported();
   }
 
-  public AsyncContext startAsync()
-    throws IllegalStateException
-  {
-    return _request.startAsync();
-  }
-
-  public AsyncContext startAsync(ServletRequest servletRequest,
-                                 ServletResponse servletResponse)
-    throws IllegalStateException
-  {
-    return _request.startAsync(servletRequest, servletResponse);
-  }
-
   public boolean isWrapperFor(ServletRequest wrapped)
   {
     return _request == wrapped;
   }
 
-  public boolean isWrapperFor(Class wrappedType)
+  public boolean isWrapperFor(Class<?> wrappedType)
   {
     return wrappedType.isAssignableFrom(_request.getClass());
   }
@@ -327,6 +332,7 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   /**
    * Returns the URL for the request
    */
+  @Override
   public StringBuffer getRequestURL()
   {
     StringBuffer sb = new StringBuffer();
@@ -349,16 +355,19 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return sb;
   }
   
+  @Override
   public String getContextPath()
   {
     return _request.getContextPath();
   }
   
+  @Override
   public String getServletPath()
   {
     return _request.getServletPath();
   }
   
+  @Override
   public String getPathInfo()
   {
     return _request.getPathInfo();
@@ -367,6 +376,7 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   /**
    * Returns the real path of pathInfo.
    */
+  @Override
   public String getPathTranslated()
   {
     // server/106w
@@ -378,26 +388,31 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
       return getRealPath(pathInfo);
   }
   
+  @Override
   public String getQueryString()
   {
     return _request.getQueryString();
   }
   
+  @Override
   public String getHeader(String name)
   {
     return _request.getHeader(name);
   }
   
+  @Override
   public Enumeration getHeaders(String name)
   {
     return _request.getHeaders(name);
   }
   
+  @Override
   public Enumeration getHeaderNames()
   {
     return _request.getHeaderNames();
   }
   
+  @Override
   public int getIntHeader(String name)
   {
     return _request.getIntHeader(name);
@@ -470,21 +485,25 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return _request.getRemoteUser();
   }
   
+  /*
   public Principal getUserPrincipal()
   {
     return _request.getUserPrincipal();
   }
+  */
   
   public boolean isRequestedSessionIdFromUrl()
   {
     return _request.isRequestedSessionIdFromUrl();
   }
 
+  /*
   public boolean authenticate(HttpServletResponse response)
     throws IOException, ServletException
   {
     return _request.authenticate(response);
   }
+  */
 
   public Part getPart(String name)
     throws IOException, ServletException
@@ -492,24 +511,26 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return _request.getPart(name);
   }
 
-  public Iterable<Part> getParts()
+  public Collection<Part> getParts()
     throws IOException, ServletException
   {
     return _request.getParts();
   }
-
+  
+  /*
   public void login(String username, String password)
     throws ServletException
   {
     _request.login(username, password);
   }
+  */
 
   public void logout()
     throws ServletException
   {
     _request.logout();
   }
-
+  
   //
   // CauchoRequest
   //
@@ -680,11 +701,11 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     return cRequest.isDuplex();
   }
   
-  public boolean allowKeepalive()
+  public boolean isKeepaliveAllowed()
   {
     CauchoRequest cRequest = (CauchoRequest) _request;
 
-    return cRequest.allowKeepalive();
+    return cRequest.isKeepaliveAllowed();
   }
   
   public boolean isClientDisconnect()
@@ -701,19 +722,31 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     cRequest.clientDisconnect();
   }
 
+  @Override
   public boolean isLoginRequested()
   {
     CauchoRequest cRequest = (CauchoRequest) _request;
 
     return cRequest.isLoginRequested();
   }
-  
+
+  @Override
+  public void requestLogin()
+  {
+    CauchoRequest cRequest = (CauchoRequest) _request;
+
+    if (cRequest != null)
+      cRequest.requestLogin();
+  }
+ 
+  /*
   public boolean login(boolean isFail)
   {
     CauchoRequest cRequest = (CauchoRequest) _request;
 
     return cRequest.login(isFail);
   }
+  */
   
   public ServletResponse getServletResponse()
   {

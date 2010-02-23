@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -181,7 +181,7 @@ public class FormLoginServlet extends GenericServlet {
   {
     if (login == null)
       throw new ServletException(L.l("j_security_check requires a login"));
-    
+
     if (login instanceof FormLogin)
       return (FormLogin) login;
     else if (login instanceof LoginList) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -175,9 +175,9 @@ public class CopyArrayValue extends ArrayValue {
    * Convert to an argument value.
    */
   @Override
-  public Value toArgValue()
+  public Value toLocalValue()
   {
-    return getCopyArray().toArgValue();
+    return getCopyArray().toLocalValue();
   }
 
   /**
@@ -192,9 +192,9 @@ public class CopyArrayValue extends ArrayValue {
   /**
    * Sets the array ref.
    */
-  public Var putRef()
+  public Var putVar()
   {
-    return getCopyArray().putRef();
+    return getCopyArray().putVar();
   }
 
   /**
@@ -280,9 +280,9 @@ public class CopyArrayValue extends ArrayValue {
   /**
    * Returns the array ref.
    */
-  public Var getRef(Value index)
+  public Var getVar(Value index)
   {
-    return getCopyArray().getRef(index);
+    return getCopyArray().getVar(index);
   }
 
   /**

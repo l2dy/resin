@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,8 +35,8 @@ import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.log.AbstractRolloverLog;
 import com.caucho.log.RotateStream;
+import com.caucho.server.cluster.ProtocolPort;
 import com.caucho.server.connection.Port;
-import com.caucho.server.connection.ProtocolPort;
 import com.caucho.util.*;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -134,7 +134,7 @@ public class ResinQuercusServlet extends QuercusServletImpl
    * Returns the Quercus instance.
    */
   @Override
-  protected Quercus getQuercus()
+  protected QuercusContext getQuercus()
   {
     synchronized (this) {
       if (_quercus == null)

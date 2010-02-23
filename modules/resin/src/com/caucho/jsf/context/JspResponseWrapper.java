@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,7 +32,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.util.Collection;
 import java.util.Locale;
+import java.util.Collection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -285,14 +287,14 @@ public class JspResponseWrapper extends CauchoResponseWrapper
     throw new UnsupportedOperationException("unimplemented");
   }
 
-  public Iterable<String> getHeaders(String name)
+  public Collection<String> getHeaders(String name)
   {
-    throw new UnsupportedOperationException("unimplemented");
+    return _response.getHeaders(name);
   }
 
-  public Iterable<String> getHeaderNames()
+  public Collection<String> getHeaderNames()
   {
-    throw new UnsupportedOperationException("unimplemented");
+    return _response.getHeaderNames();
   }
 
   /**

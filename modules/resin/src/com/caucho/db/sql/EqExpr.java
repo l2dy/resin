@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -73,8 +73,10 @@ final class EqExpr extends Expr {
     else if (newRight.isLong() && (newLeft.isLong() || newLeft.isParam()))
       return new LongEqExpr(newLeft, newRight);
 
-    if (newLeft.isDouble() || newRight.isDouble())
-      return new DoubleEqExpr(newLeft, newRight);
+    if (newLeft.isDouble() && (newRight.isDouble() || newRight.isParam()))
+        return new DoubleEqExpr(newLeft, newRight);
+    if (newRight.isDouble() && (newLeft.isDouble() || newLeft.isParam()))
+        return new DoubleEqExpr(newLeft, newRight);
 
     if (_left == newLeft && _right == newRight)
       return this;

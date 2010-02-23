@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,36 +31,55 @@ package com.caucho.quercus.env;
 
 import java.util.*;
 
+import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.function.FunSpecialCall;
+import com.caucho.quercus.program.ClassDef;
+import com.caucho.util.L10N;
+import com.caucho.util.Primes;
+
 /**
  * Case-insensitive method mapping
  */
-public class MethodMap<V>
+public final class MethodMap<V>
 {
+  private static final L10N L = new L10N(MethodMap.class);
+  
+  private final QuercusClass _quercusClass;
+  private final ClassDef _classDef;
+  
   private Entry<V> []_entries = new Entry[16];
+  private int _prime = Primes.getBiggestPrime(_entries.length);
   private int _size;
-    
-  public void put(char []buffer, int length, V value)
+  
+  public MethodMap(QuercusClass quercusClass, ClassDef classDef)
   {
+    _quercusClass = quercusClass;
+    _classDef = classDef;
+  }
+    
+  public void put(String methodName, V value)
+  {
+    StringValue name = MethodIntern.intern(methodName);
+    
     if (_entries.length <= _size * 4)
       resize();
     
-    int hash = hash(buffer, length);
-
-    char []key = new char[length];
-    System.arraycopy(buffer, 0, key, 0, length);
-
-    int bucket = hash & (_entries.length - 1);
+    int hash = name.hashCodeCaseInsensitive();
+      
+    int bucket = (hash & 0x7fffffff) % _prime;
 
     Entry<V> entry;
-    for (entry = _entries[bucket]; entry != null; entry = entry._next) {
-      if (match(entry._key, key, length)) {
-        entry._value = value;
+    for (entry = _entries[bucket]; entry != null; entry = entry.getNext()) {
+      StringValue entryKey = entry.getKey();
+      
+      if (name == entryKey || name.equalsIgnoreCase(entryKey)) {
+        entry.setValue(value);
 
         return;
       }
     }
     
-    entry = new Entry<V>(buffer, value);
+    entry = new Entry<V>(name, value);
 
     entry._next = _entries[bucket];
     _entries[bucket] = entry;
@@ -68,40 +87,83 @@ public class MethodMap<V>
 
   }
 
-  public boolean containsKey(String key)
+  public boolean containsKey(StringValue key)
   {
-    return get(key) != null;
+    int hash = key.hashCodeCaseInsensitive();
+    
+    final int bucket = (hash & 0x7fffffff) % _prime;
+    
+    for (Entry<V> entry = _entries[bucket];
+         entry != null;
+         entry = entry.getNext()) {
+      final StringValue entryKey = entry.getKey();
+
+      if (key == entryKey || key.equalsIgnoreCase(entryKey))
+        return true;
+    }
+    
+    return false;
   }
 
-  public V get(int hash, char []buffer, int length)
+  public final V get(final StringValue key, int hash)
   {
-    int bucket = hash & (_entries.length - 1);
+    final int bucket = (hash & 0x7fffffff) % _prime;
+    
+    for (Entry<V> entry = _entries[bucket];
+         entry != null;
+         entry = entry.getNext()) {
+      final StringValue entryKey = entry.getKey();
+
+      if (key == entryKey || key.equalsIgnoreCase(entryKey))
+        return entry._value;
+    }
+    
+    AbstractFunction call = null;
+    
+    if (_quercusClass != null)
+      call = _quercusClass.getCall();
+    else if (_classDef != null) {
+      call = _classDef.getCall();
+    }
+    
+    if (call != null)
+      return (V) new FunSpecialCall(call, key);
+
+    Env env = Env.getCurrent();
+    
+    if (_quercusClass != null) {
+      env.error(L.l("Call to undefined method {0}::{1}",
+                    _quercusClass.getName(), key));
+    }
+    else {
+      env.error(L.l("Call to undefined function {0}",
+                    key));
+    }
+    
+    throw new IllegalStateException();
+  }
+
+  public V getRaw(StringValue key)
+  {
+    int hash = key.hashCodeCaseInsensitive();
+
+    int bucket = (hash & 0x7fffffff) % _prime;
 
     for (Entry<V> entry = _entries[bucket];
          entry != null;
-         entry = entry._next) {
-      char []key = entry._key;
+         entry = entry.getNext()) {
+      StringValue entryKey = entry.getKey();
 
-      if (match(key, buffer, length))
-        return entry._value;
+      if (key == entryKey || key.equalsIgnoreCase(entryKey))
+        return entry.getValue();
     }
-
+    
     return null;
   }
 
-  public void put(String keyString, V value)
+  public V get(StringValue key)
   {
-    char []key = keyString.toCharArray();
-
-    put(key, key.length, value);
-  }
-
-  public V get(String keyString)
-  {
-    char []key = keyString.toCharArray();
-    int hash = hash(key, key.length);
-
-    return get(hash, key, key.length);
+    return get(key, key.hashCodeCaseInsensitive());
   }
 
   public Iterable<V> values()
@@ -142,17 +204,18 @@ public class MethodMap<V>
   private void resize()
   {
     Entry<V> []newEntries = new Entry[2 * _entries.length];
-
+    int newPrime = Primes.getBiggestPrime(newEntries.length);
+    
     for (int i = 0; i < _entries.length; i++) {
       Entry<V> entry = _entries[i];
       
       while (entry != null) {
-        Entry<V> next = entry._next;
+        Entry<V> next = entry.getNext();
 
-        int hash = hash(entry._key, entry._key.length);
-        int bucket = hash & (newEntries.length - 1);
+        int hash = entry._key.hashCodeCaseInsensitive();
+        int bucket = (hash & 0x7fffffff) % newPrime;
 
-        entry._next = newEntries[bucket];
+        entry.setNext(newEntries[bucket]);
         newEntries[bucket] = entry;
         
         entry = next;
@@ -160,52 +223,44 @@ public class MethodMap<V>
     }
 
     _entries = newEntries;
+    _prime = newPrime;
   }
-
-  public static int hash(char []buffer, int length)
-  {
-    int hash = 17;
-
-    for (length--; length >= 0; length--) {
-      int ch = buffer[length];
-
-      if ('A' <= ch && ch <= 'Z')
-        ch += 'a' - 'A';
-      
-      hash = 65537 * hash + ch;
-    }
-
-    return hash;
-  }
-
-  public static int hash(String string)
-  {
-    int hash = 17;
-
-    int length = string.length();
-    for (length--; length >= 0; length--) {
-      int ch = string.charAt(length);
-
-      if ('A' <= ch && ch <= 'Z')
-        ch += 'a' - 'A';
-      
-      hash = 65537 * hash + ch;
-    }
-
-    return hash;
-  }
-    
 
   final static class Entry<V> {
-    final char []_key;
-    V _value;
+    private final StringValue _key;
+    private V _value;
     
-    Entry<V> _next;
+    private Entry<V> _next;
 
-    Entry(char []key, V value)
+    Entry(StringValue key, V value)
     {
       _key = key;
       _value = value;
+    }
+    
+    public final StringValue getKey()
+    {
+      return _key;
+    }
+    
+    public final V getValue()
+    {
+      return _value;
+    }
+    
+    public void setValue(V value)
+    {
+      _value = value;
+    }
+    
+    public Entry<V> getNext()
+    {
+      return _next;
+    }
+    
+    public void setNext(Entry<V> next)
+    {
+      _next = next;
     }
   }
 

@@ -1,5 +1,4 @@
-<project name="resin" default="compile" basedir="."
-         xmlns:ivy="antlib:org.apache.ivy.ant">
+<project name="resin" default="compile" basedir=".">
   <import file="build-common.xml"/>
   <property name="jar.update" value="true"/>
 
@@ -7,6 +6,8 @@
   <property name="jdkapi.href" value="http://java.sun.com/j2se/1.5.0/docs/api"/>
 
   <property name="shell" value="bash"/>
+
+  <property name="debian.component" value="universe"/>
 
   <target name="compile" 
           depends="init, hessian, javaee, jaxstream, jcache, portlet, script, resin-kernel, quercus, resin, ecmascript, inject, webutil, conf, ext, j2ee-management, j2ee-deploy">
@@ -135,11 +136,9 @@
     </antcall>
     -->
 
-    <!-- xxx 4.0.2
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
     </antcall>
-    -->
     
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
@@ -158,6 +157,13 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="compat"/>
       <param name="module.jar" value="resin-compat.jar"/>
+    </antcall>
+  </target>
+     
+  <target name="junit" depends="init">
+    <antcall target="module" inheritRefs="true">
+      <param name="module.name" value="junit"/>
+      <param name="module.jar" value="resin-junit.jar"/>
     </antcall>
   </target>
 
@@ -245,13 +251,6 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="jms"/>
       <param name="module.jar" value="jms-11.jar"/>
-    </antcall>
-  </target>
-
-  <target name="servlet15" depends="init">
-    <antcall target="module" inheritRefs="true">
-      <param name="module.name" value="servlet15"/>
-      <param name="module.jar" value="servlet-15.jar"/>
     </antcall>
   </target>
 
@@ -449,8 +448,8 @@
   </target>
 
   <target name="version">
-    <copy file="${modules}/resin/src/com/caucho/Version.tmpl"
-          tofile="${modules}/resin/src/com/caucho/Version.java"
+    <copy file="${modules}/kernel/src/com/caucho/Version.tmpl"
+          tofile="${modules}/kernel/src/com/caucho/Version.java"
           preservelastmodified="true"
           overwrite="true">
       <filterset>
@@ -834,7 +833,7 @@
     <delete dir="${dist}/${dist.name}"/>
   </target>
 
-  <target name="dist" depends="dist.clean, configure, compile, servlet15, update, artifacts, resin.dist.build, dist.package"/>
+  <target name="dist" depends="dist.clean, configure, compile, update, junit, artifacts, ant, resin.dist.build, dist.package"/>
 
   <target name="configure">
      <copy tofile="modules/c/src/resin/Makefile.in"
@@ -863,7 +862,7 @@
      <exec executable="autoconf"/>
   </target>
 
-  <target name="maven-dist" depends="init, compile, ant, maven-plugin, artifacts, resin.dist.jar">
+  <target name="maven-dist" depends="init, compile, ant, maven-plugin, artifacts, netbeans, resin.dist.jar">
     <property name="maven" value="${maven.root}/com/caucho/"/>
     
     <antcall target="maven2-jar" inheritRefs="true">
@@ -913,22 +912,18 @@
       <param name="maven.name" value="resin-maven-plugin"/>
     </antcall>
 
-    <!-- 4.0.2
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="netbeans"/>
       <param name="module.ext" value="nbm"/>
       <param name="jar.name" value="resin-netbeans.nbm"/>
       <param name="maven.name" value="resin-netbeans"/>
     </antcall>
-    -->
 
-    <!-- 4.0.2
     <antcall target="maven2-artifact" inheritRefs="true">
       <param name="module.name" value="spring"/>
       <param name="jar.name" value="resin-spring.jar"/>
       <param name="maven.name" value="resin-spring"/>
     </antcall>
-    -->
 
     <!--
     <antcall target="maven2-module" inheritRefs="true">
@@ -1079,7 +1074,7 @@
   <target name="distclean" depends="init, clean, win32clean">
     <delete dir="${install}/conf"/>
     <delete dir="${lib}"/>
-    <delete dir="${ivy.lib}"/>
+    <delete dir="${maven.lib}"/>
     <delete dir="${clientlib}"/>
     <delete dir="${install}/unix"/>
 

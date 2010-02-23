@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,57 +29,54 @@
 
 package com.caucho.quercus.expr;
 
-import com.caucho.quercus.Location;
-import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.QuercusClass;
-import com.caucho.quercus.env.Value;
-import com.caucho.quercus.function.AbstractFunction;
-import com.caucho.quercus.program.Arg;
-import com.caucho.util.L10N;
-
 import java.util.ArrayList;
 
+import com.caucho.quercus.Location;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.MethodIntern;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.util.L10N;
+
 /**
- * Represents a PHP parent:: method call expression.
+ * A Foo::bar(...) method call expression.
  */
-public class ClassMethodExpr extends Expr {
+public class ClassMethodExpr extends AbstractMethodExpr {
   private static final L10N L = new L10N(ClassMethodExpr.class);
 
   protected final String _className;
-  protected final String _name;
+  protected final StringValue _methodName;
+  protected final int _hash;
   protected final Expr []_args;
 
   protected boolean _isMethod;
 
-  public ClassMethodExpr(Location location, String className, String name, ArrayList<Expr> args)
+  public ClassMethodExpr(Location location, String className, 
+                         String methodName, 
+                         ArrayList<Expr> args)
   {
     super(location);
     _className = className.intern();
     
-    _name = name.intern();
+    _methodName = MethodIntern.intern(methodName);
+    _hash = _methodName.hashCodeCaseInsensitive();
 
     _args = new Expr[args.size()];
     args.toArray(_args);
   }
 
-  public ClassMethodExpr(Location location, String className, String name, Expr []args)
+  public ClassMethodExpr(Location location, String className,
+                         String methodName, Expr []args)
   {
     super(location);
+    
     _className = className.intern();
     
-    _name = name.intern();
+    _methodName = MethodIntern.intern(methodName);
+    _hash = _methodName.hashCodeCaseInsensitive();
 
     _args = args;
-  }
-
-  public ClassMethodExpr(String className, String name, ArrayList<Expr> args)
-  {
-    this(Location.UNKNOWN, className, name, args);
-  }
-
-  public ClassMethodExpr(String className, String name, Expr []args)
-  {
-    this(Location.UNKNOWN, className, name, args);
   }
   
   /**
@@ -96,30 +93,40 @@ public class ClassMethodExpr extends Expr {
     if (cl == null)
       throw env.createErrorException(L.l("{0} is an unknown class", _className));
 
-    AbstractFunction fun = cl.getFunction(_name);
-    
-    Value []values = new Value[_args.length];
-    
-    for (int i = 0; i < values.length; i++) {
-      // php/09e1
-      values[i] = _args[i].evalArg(env, true);
-    }
+    Value []values = evalArgs(env, _args);
 
-    Value obj = env.getThis();
-    env.pushCall(this, obj, values);
+    Value oldThis = env.getThis();
+    
+    // php/09qe
+    Value qThis = oldThis;
+    /*
+    if (oldThis.isNull()) {
+      qThis = cl;
+      env.setThis(qThis);
+    }
+    else
+      qThis = oldThis;
+      */
+    // php/024b
+    // qThis = cl;
+    
+    env.pushCall(this, cl, values);
+    // QuercusClass oldClass = env.setCallingClass(cl);
 
     try {
       env.checkTimeout();
-
-      return fun.callMethod(env, obj, values);
+      
+      return cl.callMethod(env, qThis, _methodName, _hash, values);
     } finally {
       env.popCall();
+      env.setThis(oldThis);
+      // env.setCallingClass(oldClass);
     }
   }
   
   public String toString()
   {
-    return _className + "::" + _name + "()";
+    return _className + "::" + _methodName + "()";
   }
 }
 

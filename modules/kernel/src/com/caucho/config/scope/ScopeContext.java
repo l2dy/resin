@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,7 +36,7 @@ import javax.enterprise.context.spi.*;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 
-import com.caucho.config.ConfigContext;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.HandleAware;
 
 /**
@@ -64,7 +64,7 @@ abstract public class ScopeContext implements Context {
     ScopeMap scopeMap = getScopeMap();
 
     if (scopeMap != null) {
-      return (T) scopeMap.get(bean);
+      return scopeMap.get(bean);
     }
 
     return null;
@@ -78,7 +78,7 @@ abstract public class ScopeContext implements Context {
     T instance = null;
 
     if (scopeMap != null) {
-      instance = (T) scopeMap.get(bean);
+      instance = scopeMap.get(bean);
 
       if (instance != null)
         return instance;
@@ -87,9 +87,9 @@ abstract public class ScopeContext implements Context {
     if (creationalContext == null)
       return null;
 
-    ConfigContext env = (ConfigContext) creationalContext;
+    // ConfigContext env = (ConfigContext) creationalContext;
 
-    env.setScope(this, bean);
+    // env.setScope(this, bean);
 
     if (scopeMap == null)
       scopeMap = createScopeMap();

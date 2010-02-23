@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -50,7 +50,7 @@ import java.util.logging.Logger;
 /**
  * Facade for the PHP language.
  */
-public class ResinQuercus extends Quercus
+public class ResinQuercus extends QuercusContext
 {
   private static L10N L = new L10N(ResinQuercus.class);
   private static final Logger log

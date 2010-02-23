@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -178,7 +178,7 @@ public interface ServletRequest {
    * }
    * </pre></code>
    */
-  public Enumeration getParameterNames();
+  public Enumeration<String> getParameterNames();
 
   /**
    * Returns a Map of the form parameters.  The map is immutable.
@@ -186,7 +186,7 @@ public interface ServletRequest {
    * and the values are String arrays as returned by
    * <code>getParameterValues</code>.
    */
-  public Map getParameterMap();
+  public Map<String,String[]> getParameterMap();
 
   /**
    * Returns an InputStream to retrieve POST data from the request.
@@ -234,7 +234,7 @@ public interface ServletRequest {
   /**
    * Returns an enumeration of all locales acceptable by the client.
    */
-  public Enumeration getLocales();
+  public Enumeration<Locale> getLocales();
 
   /**
    * Returns true if the connection is secure, e.g. it uses SSL.
@@ -260,7 +260,7 @@ public interface ServletRequest {
   /**
    * Enumerates all attribute names in the request.
    */
-  public Enumeration getAttributeNames();
+  public Enumeration<String> getAttributeNames();
 
   /**
    * Removes the given attribute.
@@ -293,6 +293,8 @@ public interface ServletRequest {
 
   /**
    * Returns the path of the URI.
+   * 
+   * @deprecated
    */
   public String getRealPath(String uri);
 
@@ -301,27 +303,10 @@ public interface ServletRequest {
   //
 
   /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
+   * Returns DispatcherType
+   * @return
    */
-  public void addAsyncListener(AsyncListener listener);
-
-  /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
-   */
-  public void addAsyncListener(AsyncListener listener,
-                               ServletRequest request,
-                               ServletResponse response);
-
-  /**
-   * Returns the async context for the request
-   *
-   * @since Servlet 3.0
-   */
-  public AsyncContext getAsyncContext();
+  public DispatcherType getDispatcherType();
 
   /**
    * Returns the servlet context for the request
@@ -329,23 +314,13 @@ public interface ServletRequest {
    * @since Servlet 3.0
    */
   public ServletContext getServletContext();
+  
+  //
+  // Servlet 3.0 async
+  //
 
   /**
-   * Returns true if the request is in async.
-   *
-   * @since Servlet 3.0
-   */
-  public boolean isAsyncStarted();
-
-  /**
-   * Returns true if the request supports async
-   *
-   * @since Servlet 3.0
-   */
-  public boolean isAsyncSupported();
-
-  /**
-   * Starts an async mode
+   * Starts an async/comet mode
    *
    * @since Servlet 3.0
    */
@@ -362,9 +337,23 @@ public interface ServletRequest {
     throws IllegalStateException;
 
   /**
-   * Returns DispatcherType
-   * @return
+   * Returns the async context for the request
+   *
+   * @since Servlet 3.0
    */
-  public DispatcherType getDispatcherType();
+  public AsyncContext getAsyncContext();
 
+  /**
+   * Returns true if the request is in async.
+   *
+   * @since Servlet 3.0
+   */
+  public boolean isAsyncStarted();
+
+  /**
+   * Returns true if the request supports async
+   *
+   * @since Servlet 3.0
+   */
+  public boolean isAsyncSupported();
 }

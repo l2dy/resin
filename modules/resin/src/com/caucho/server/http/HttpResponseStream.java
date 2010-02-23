@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -123,7 +123,7 @@ public class HttpResponseStream extends ResponseStream {
     if (log.isLoggable(Level.FINER)) {
       log.finer(dbgId() + "write-set-offset(" + offset + ")");
     }
-    
+
     _next.setBufferOffset(offset);
   }
 
@@ -137,7 +137,7 @@ public class HttpResponseStream extends ResponseStream {
 
     if (log.isLoggable(Level.FINER))
       log.finer(dbgId() + "write-next-buffer(" + (offset - bufferStart) + ")");
-    
+
     if (bufferStart > 0) {
       byte []buffer = next.getBuffer();
 
@@ -178,14 +178,18 @@ public class HttpResponseStream extends ResponseStream {
     _bufferStartOffset = 0;
 
     AbstractHttpRequest req = _response.getRequest();
-    if (req.isComet() || req.isDuplex()) {
+    if (req.isCometActive() || req.isDuplex()) {
     }
-    else if (! req.allowKeepalive()) {
+    else if (! req.isKeepaliveAllowed()) {
       if (log.isLoggable(Level.FINE)) {
         log.fine(dbgId() + "close stream");
       }
 
-      _next.close();
+      try {
+        _next.close();
+      } catch (IOException e) {
+        log.log(Level.FINER, e.toString(), e);
+      }
     }
     else {
       // close();
@@ -205,7 +209,7 @@ public class HttpResponseStream extends ResponseStream {
       _next.flush();
       return;
     }
-    
+
     int bufferStart = _bufferStartOffset;
 
     int bufferOffset = _next.getBufferOffset();

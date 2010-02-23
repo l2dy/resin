@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.ejb.session;
 import javax.ejb.TimerService;
 
 import com.caucho.config.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.ejb.*;
 import com.caucho.ejb.server.AbstractServer;
 import com.caucho.util.*;
@@ -41,9 +42,9 @@ import com.caucho.util.*;
 abstract public class StatefulContext extends AbstractSessionContext {
   private static final L10N L = new L10N(StatefulContext.class);
     
-  private transient StatefulServer _server;
+  private transient StatefulManager _server;
 
-  public StatefulContext(StatefulServer server)
+  public StatefulContext(StatefulManager server)
   {
     assert(server != null);
 
@@ -53,7 +54,7 @@ abstract public class StatefulContext extends AbstractSessionContext {
   /**
    * Returns the server which owns this bean.
    */
-  public StatefulServer getStatefulServer()
+  public StatefulManager getStatefulManager()
   {
     return _server;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -392,15 +392,15 @@ public final class Vfs {
 
     if (jniFilePath != null) {
       DEFAULT_SCHEME_MAP.put("file", jniFilePath);
-      
+
       SchemeMap localMap = _localSchemeMap.get();
       if (localMap != null)
-	localMap.put("file", jniFilePath);
-      
+        localMap.put("file", jniFilePath);
+
       localMap = _localSchemeMap.get(ClassLoader.getSystemClassLoader());
       if (localMap != null)
-	localMap.put("file", jniFilePath);
-      
+        localMap.put("file", jniFilePath);
+
       Vfs.PWD = jniFilePath;
       Vfs.setPwd(jniFilePath);
     }

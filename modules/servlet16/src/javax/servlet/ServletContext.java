@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -98,6 +98,9 @@ import java.util.*;
  * as a way for servlets to communicate.
  */
 public interface ServletContext {
+  public static final String ORDERED_LIBS = "javax.servlet.context.orderedLibs"; 
+  public static final String TEMPDIR = "javax.servlet.context.tempdir"; 
+
   /**
    * Returns the URL prefix for the ServletContext.
    */
@@ -155,7 +158,7 @@ public interface ServletContext {
 
   /**
    * Returns the ServletContext for the uri.
-   * Note: the uri is <em>not</em> relative to the application.
+   * Note: the uri is <em>not</em> relative to the application.T
    *
    * @param uri path relative to the root
    * @return the ServletContext responsible for the given uri.
@@ -283,7 +286,7 @@ public interface ServletContext {
   /**
    * Returns the set all resources held by the application.
    */
-  public Set getResourcePaths(String prefix);
+  public Set<String> getResourcePaths(String prefix);
 
   /**
    * Returns the resource as a stream.  In general, the
@@ -303,7 +306,7 @@ public interface ServletContext {
   /**
    * @deprecated
    */
-  public Enumeration getServlets();
+  public Enumeration<Servlet> getServlets();
 
   /**
    * @deprecated
@@ -353,37 +356,22 @@ public interface ServletContext {
 
   /**
    * Adds a servlet with the given className to context
-   * @param servletName
-   * @param className
-   * @return
-   */
-  public ServletRegistration.Dynamic addServlet(
-        String servletName, String className);
+  */
+  public ServletRegistration.Dynamic addServlet(String servletName, String className);
 
   /**
    * Adds a servlet to context
-   * @param servletName
-   * @param servlet
-   * @return
    */
-  public ServletRegistration.Dynamic addServlet(
-      String servletName, Servlet servlet);
+  public ServletRegistration.Dynamic addServlet(String servletName, Servlet servlet);
 
   /**
-   *
-   * @param servletName
-   * @param servletClass
-   * @return
+   * Adds a servlet class to the servlet container.
    */
   public ServletRegistration.Dynamic addServlet(String servletName,
-      Class <? extends Servlet> servletClass);
+                                                Class <? extends Servlet> servletClass);
 
   /**
-   *
-   * @param c
-   * @param <T>
-   * @return
-   * @throws ServletException
+   * Creates a servlet instance using the web-apps injection.
    */
   public <T extends Servlet> T createServlet(Class<T> c)
       throws ServletException;
@@ -406,8 +394,7 @@ public interface ServletContext {
    * @param className
    * @return
    */
-  public FilterRegistration.Dynamic addFilter(
-      String filterName, String className);
+  public FilterRegistration.Dynamic addFilter(String filterName, String className);
 
   /**
    * Adds a dynamic filter registration using filter
@@ -416,8 +403,7 @@ public interface ServletContext {
    * @param filter
    * @return
    */
-  public FilterRegistration.Dynamic addFilter(
-    String filterName, Filter filter);
+  public FilterRegistration.Dynamic addFilter(String filterName, Filter filter);
 
   /**
    * Adds a filter using filterClass

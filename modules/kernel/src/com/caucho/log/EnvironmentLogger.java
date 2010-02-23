@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,6 +46,8 @@ import java.util.logging.Logger;
  * Proxy logger that understands the environment.
  */
 class EnvironmentLogger extends Logger implements ClassLoaderListener {
+  private static final Handler[] EMPTY_HANDLERS = new Handler[0];
+  
   private static ClassLoader _systemClassLoader;
   
   // The custom local handlers
@@ -348,7 +350,12 @@ class EnvironmentLogger extends Logger implements ClassLoaderListener {
    */
   public Handler []getHandlers()
   {
-    return _localHandlers.get();
+    Handler []handlers = _localHandlers.get();
+    
+    if (handlers != null)
+      return handlers;
+    else
+      return EMPTY_HANDLERS;
   }
 
   /**

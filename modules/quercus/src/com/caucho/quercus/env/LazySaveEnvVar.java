@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -63,17 +63,17 @@ public class LazySaveEnvVar extends EnvVar
   /**
    * Returns the current Var.
    */
-  public Var getRef()
+  public Var getVar()
   {
-    return getEnvVar().getRef();
+    return getEnvVar().getVar();
   }
 
   /**
    * Sets the var.
    */
-  public Var setRef(Var var)
+  public Var setVar(Var var)
   {
-    return getEnvVar().setRef(var);
+    return getEnvVar().setVar(var);
   }
 
   private EnvVar getEnvVar()

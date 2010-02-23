@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -216,6 +216,11 @@ public class StubServletRequest implements CauchoRequest {
   {
     return false;
   }
+
+  @Override
+  public void requestLogin()
+  {
+  }
   
   public boolean isClientDisconnect()
   {
@@ -226,7 +231,7 @@ public class StubServletRequest implements CauchoRequest {
   {
   }
 
-  public boolean allowKeepalive()
+  public boolean isKeepaliveAllowed()
   {
     return false;
   }
@@ -307,7 +312,7 @@ public class StubServletRequest implements CauchoRequest {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  public Iterable<Part> getParts()
+  public Collection<Part> getParts()
     throws IOException, ServletException
   {
     throw new UnsupportedOperationException(getClass().getName());

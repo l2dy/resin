@@ -38,6 +38,7 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.ObjectValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.Arg;
 import com.caucho.quercus.program.ClassDef;
@@ -70,7 +71,7 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
     _clsName = clsName;
   }
   
-  public static ReflectionMethod __construct(Env env, Value obj, String name)
+  public static ReflectionMethod __construct(Env env, Value obj, StringValue name)
   {
     String clsName;
     
@@ -79,7 +80,7 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
     else
       clsName = obj.toString();
     
-    return new ReflectionMethod(clsName, env.findFunction(clsName, name));
+    return new ReflectionMethod(clsName, env.getClass(clsName).getFunction(name));
   }
   
   public static String export(Env env,
@@ -92,12 +93,13 @@ public class ReflectionMethod extends ReflectionFunctionAbstract
   
   public Value invoke(Env env, ObjectValue object, Value []args)
   {
-    return getFunction().callMethod(env, object, args);
+    return getFunction().callMethod(env, object.getQuercusClass(), object, args);
   }
   
   public Value invokeArgs(Env env, ObjectValue object, ArrayValue args)
   {
-    return getFunction().callMethod(env, object, args.getValueArray(env));
+    return getFunction().callMethod(env, object.getQuercusClass(), object, 
+                                    args.getValueArray(env));
   }
   
   public boolean isFinal()

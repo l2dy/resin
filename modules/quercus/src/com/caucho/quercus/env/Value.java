@@ -54,6 +54,8 @@ abstract public class Value implements java.io.Serializable
 {
   protected static final L10N L = new L10N(Value.class);
 
+  private static final Value []NULL_ARG_VALUES = new Value[0];
+
   public static final StringValue SCALAR_V = new ConstStringValue("scalar");
 
   public static final Value []NULL_VALUE_ARRAY = new Value[0];
@@ -77,6 +79,22 @@ abstract public class Value implements java.io.Serializable
   public QuercusClass getQuercusClass()
   {
     return null;
+  }
+
+  /**
+   * Returns the called class
+   */
+  public Value getCalledClass(Env env)
+  {
+    QuercusClass qClass = getQuercusClass();
+
+    if (qClass != null)
+      return env.createString(qClass.getName());
+    else {
+      env.warning(L.l("get_called_class() must be called in a class context"));
+
+      return BooleanValue.FALSE;
+    }
   }
 
   //
@@ -588,6 +606,9 @@ abstract public class Value implements java.io.Serializable
    */
   public Value toAutoArray()
   {
+    Env.getCurrent().warning(L.l("'{0}' cannot be used as an array.", 
+                                 toDebugString()));
+
     return this;
   }
 
@@ -727,7 +748,7 @@ abstract public class Value implements java.io.Serializable
   /**
    * Converts to a java Collection object.
    */
-  public Collection toJavaCollection(Env env, Class type)
+  public Collection<?> toJavaCollection(Env env, Class<?> type)
   {
     env.warning(L.l("Can't convert {0} to Java {1}",
             getClass().getName(), type.getName()));
@@ -738,7 +759,7 @@ abstract public class Value implements java.io.Serializable
   /**
    * Converts to a java List object.
    */
-  public List toJavaList(Env env, Class type)
+  public List<?> toJavaList(Env env, Class<?> type)
   {
     env.warning(L.l("Can't convert {0} to Java {1}",
             getClass().getName(), type.getName()));
@@ -749,7 +770,7 @@ abstract public class Value implements java.io.Serializable
   /**
    * Converts to a java Map object.
    */
-  public Map toJavaMap(Env env, Class type)
+  public Map<?,?> toJavaMap(Env env, Class<?> type)
   {
     env.warning(L.l("Can't convert {0} to Java {1}",
             getClass().getName(), type.getName()));
@@ -849,7 +870,7 @@ abstract public class Value implements java.io.Serializable
    *
    * where $a is never assigned or modified
    */
-  public Value toArgValueReadOnly()
+  public Value toLocalValueReadOnly()
   {
     return this;
   }
@@ -861,7 +882,51 @@ abstract public class Value implements java.io.Serializable
    *
    * where $a is never assigned, but might be modified, e.g. $a[3] = 9
    */
-  public Value toArgValue()
+  public Value toLocalValue()
+  {
+    return this;
+  }
+
+  /**
+   * Convert to a function argument value, e.g. for
+   *
+   * function foo($a)
+   *
+   * where $a may be assigned.
+   */
+  public Value toLocalRef()
+  {
+    return this;
+  }
+
+  /**
+   * Convert to a function argument value, e.g. for
+   *
+   * function foo($a)
+   *
+   * where $a is used as a variable in the function
+   */
+  public Var toLocalVar()
+  {
+    return toLocalRef().toVar();
+  }
+
+  /**
+   * Convert to a function argument reference value, e.g. for
+   *
+   * function foo(&$a)
+   *
+   * where $a is used as a variable in the function
+   */
+  public Var toLocalVarDeclAsRef()
+  {
+    return new Var(this);
+  }
+  
+  /**
+   * Converts to a local $this, which can depend on the calling class
+   */
+  public Value toLocalThis(QuercusClass qClass)
   {
     return this;
   }
@@ -879,25 +944,9 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
-   * Convert to a function argument value, e.g. for
-   *
-   * function foo($a)
-   *
-   * where $a is used as a variable in the function
+   * Converts to a Var.
    */
   public Var toVar()
-  {
-    return new Var(toArgValue());
-  }
-
-  /**
-   * Convert to a function argument reference value, e.g. for
-   *
-   * function foo(&$a)
-   *
-   * where $a is used as a variable in the function
-   */
-  public Var toRefVar()
   {
     return new Var(this);
   }
@@ -909,7 +958,7 @@ abstract public class Value implements java.io.Serializable
    *
    * where $a is used as a variable in the function
    */
-  public Value toRefArgument()
+  public Value toArgRef()
   {
     Env.getCurrent().warning(L.l("'{0}' is an invalid reference, because only variables may be passed by reference.",
                                  this));
@@ -1078,6 +1127,33 @@ abstract public class Value implements java.io.Serializable
   {
     return new DoubleValue(toDouble());
   }
+  
+  /**
+   * Returns true for a callable object.
+   */
+  public boolean isCallable(Env env)
+  {
+    return false;
+  }
+  
+  /**
+   * Returns the callable's name for is_callable()
+   */
+  public String getCallableName()
+  {
+    return null;
+  }
+  
+  /**
+   * Converts to a callable
+   */
+  public Callable toCallable(Env env)
+  {
+    env.warning(L.l("Callable: '{0}' is not a valid callable argument",
+                    toString()));
+
+    return new CallbackError(toString());
+  }
 
   //
   // Operations
@@ -1122,7 +1198,7 @@ abstract public class Value implements java.io.Serializable
   {
     return this;
   }
-  
+
   /**
    * Copy as an array item
    */
@@ -1172,7 +1248,7 @@ abstract public class Value implements java.io.Serializable
   {
     return this;
   }
-  
+
   /**
    * Copy for saving a method's arguments.
    */
@@ -1272,224 +1348,467 @@ abstract public class Value implements java.io.Serializable
   }
 
   //
-  // Methods from hash parameters
+  // function invocation
+  //
+
+  /**
+   * Evaluates the function.
+   */
+  public Value call(Env env, Value []args)
+  {
+    Callable call = toCallable(env);
+
+    if (call != null)
+      return call.call(env, args);
+    else
+      return env.warning(L.l("{0} is not a valid function",
+                             this));
+  }
+
+  /**
+   * Evaluates the function, returning a reference.
+   */
+  public Value callRef(Env env, Value []args)
+  {
+    AbstractFunction fun = env.getFunction(this);
+
+    if (fun != null)
+      return fun.callRef(env, args);
+    else
+      return env.warning(L.l("{0} is not a valid function",
+                             this));
+  }
+
+  /**
+   * Evaluates the function, returning a copy
+   */
+  public Value callCopy(Env env, Value []args)
+  {
+    AbstractFunction fun = env.getFunction(this);
+
+    if (fun != null)
+      return fun.callCopy(env, args);
+    else
+      return env.warning(L.l("{0} is not a valid function",
+                             this));
+  }
+
+  /**
+   * Evaluates the function.
+   */
+  public Value call(Env env)
+  {
+    return call(env, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function.
+   */
+  public Value callRef(Env env)
+  {
+    return callRef(env, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function with an argument .
+   */
+  public Value call(Env env, Value a1)
+  {
+    return call(env, new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function with an argument .
+   */
+  public Value callRef(Env env, Value a1)
+  {
+    return callRef(env, new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value call(Env env, Value a1, Value a2)
+  {
+    return call(env, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value callRef(Env env, Value a1, Value a2)
+  {
+    return callRef(env, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value call(Env env, Value a1, Value a2, Value a3)
+  {
+    return call(env, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value callRef(Env env, Value a1, Value a2, Value a3)
+  {
+    return callRef(env, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value call(Env env, Value a1, Value a2, Value a3, Value a4)
+  {
+    return call(env, new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value callRef(Env env, Value a1, Value a2, Value a3, Value a4)
+  {
+    return callRef(env, new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value call(Env env, Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return call(env, new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  public Value callRef(Env env,
+                       Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return callRef(env, new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  //
+  // Methods invocation
   //
 
   /**
    * Evaluates a method.
    */
   public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Expr []args)
-  {
-    Value []value = new Value[args.length];
-
-    for (int i = 0; i < args.length; i++) {
-      value[i] = args[i].eval(env);
-    }
-
-    return callMethod(env, hash, name, nameLen,
-                      value);
-  }
-
-  /**
-   * Evaluates a method.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
+                          StringValue methodName, int hash,
                           Value []args)
   {
-    switch (args.length) {
-    case 0:
-      return callMethod(env, hash, name, nameLen);
-
-    case 1:
-      return callMethod(env, hash, name, nameLen,
-                        args[0]);
-
-    case 2:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1]);
-
-    case 3:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2]);
-
-    case 4:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2], args[3]);
-
-    case 5:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2], args[3], args[4]);
-
-    default:
-      return errorNoMethod(env, name, nameLen);
-    }
-  }
-
-  /**
-   * Evaluates a method with 0 args.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen)
-  {
-    return errorNoMethod(env, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 1 arg.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Value a0)
-  {
-    return errorNoMethod(env, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 1 arg.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Value a0, Value a1)
-  {
-    return errorNoMethod(env, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 3 args.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Value a0, Value a1, Value a2)
-  {
-    return errorNoMethod(env, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 4 args.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Value a0, Value a1, Value a2, Value a3)
-  {
-    return errorNoMethod(env, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 5 args.
-   */
-  public Value callMethod(Env env,
-                          int hash, char []name, int nameLen,
-                          Value a0, Value a1, Value a2, Value a3, Value a5)
-  {
-    return errorNoMethod(env, name, nameLen);
+    if (isNull())
+      return env.error(L.l("Method call '{0}' is not allowed for a null value.",
+                           methodName));
+    else
+      return env.error(L.l("'{0}' is an unknown method of {1}.", methodName, toDebugString()));
   }
 
   /**
    * Evaluates a method.
    */
-  public Value callMethodRef(Env env,
-                             int hash, char []name, int nameLen,
-                             Expr []args)
+  public final Value callMethod(Env env,
+                                StringValue methodName,
+                                Value []args)
   {
-    Value []value = new Value[args.length];
-
-    for (int i = 0; i < args.length; i++) {
-      value[i] = args[i].eval(env);
-    }
-
-    return callMethodRef(env, hash, name, nameLen, value);
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash, args);
   }
+
 
   /**
    * Evaluates a method.
    */
   public Value callMethodRef(Env env,
-                             int hash, char []name, int nameLen,
+                             StringValue methodName, int hash,
                              Value []args)
   {
-    switch (args.length) {
-    case 0:
-      return callMethodRef(env, hash, name, nameLen);
+    return callMethod(env, methodName, hash, args);
+  }
 
-    case 1:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0]);
-
-    case 2:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1]);
-
-    case 3:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2]);
-
-    case 4:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2], args[3]);
-
-    case 5:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2], args[3], args[4]);
-
-    default:
-      return errorNoMethod(env, name, nameLen);
-    }
+  /**
+   * Evaluates a method.
+   */
+  public final Value callMethodRef(Env env,
+                                   StringValue methodName,
+                                   Value []args)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash, args);
   }
 
   /**
    * Evaluates a method with 0 args.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen)
+  public Value callMethod(Env env, StringValue methodName, int hash)
   {
-    return errorNoMethod(env, name, nameLen);
+    return callMethod(env, methodName, hash, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates a method with 0 args.
+   */
+  public final Value callMethod(Env env, StringValue methodName)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash);
+  }
+
+  /**
+   * Evaluates a method with 0 args.
+   */
+  public Value callMethodRef(Env env, StringValue methodName, int hash)
+  {
+    return callMethodRef(env, methodName, hash, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates a method with 0 args.
+   */
+  public final Value callMethodRef(Env env, StringValue methodName)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash);
   }
 
   /**
    * Evaluates a method with 1 arg.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen,
-                             Value a0)
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1)
   {
-    return errorNoMethod(env, name, nameLen);
+    return callMethod(env, methodName, hash, new Value[] { a1 });
   }
 
   /**
    * Evaluates a method with 1 arg.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen,
-                             Value a0, Value a1)
+  public final Value callMethod(Env env,
+                                StringValue methodName,
+                                Value a1)
   {
-    return errorNoMethod(env, name, nameLen);
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash, a1);
+  }
+
+  /**
+   * Evaluates a method with 1 arg.
+   */
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1)
+  {
+    return callMethodRef(env, methodName, hash, new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates a method with 1 arg.
+   */
+  public final Value callMethodRef(Env env,
+                                   StringValue methodName,
+                                   Value a1)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash, a1);
+  }
+
+  /**
+   * Evaluates a method with 2 args.
+   */
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2)
+  {
+    return callMethod(env, methodName, hash, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates a method with 2 args.
+   */
+  public final Value callMethod(Env env,
+                                StringValue methodName,
+                                Value a1, Value a2)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash,
+                      a1, a2);
+  }
+
+  /**
+   * Evaluates a method with 2 args.
+   */
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2)
+  {
+    return callMethodRef(env, methodName, hash, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates a method with 2 args.
+   */
+  public final Value callMethodRef(Env env,
+                                   StringValue methodName,
+                                   Value a1, Value a2)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash,
+                         a1, a2);
   }
 
   /**
    * Evaluates a method with 3 args.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen,
-                             Value a0, Value a1, Value a2)
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3)
   {
-    return errorNoMethod(env, name, nameLen);
+    return callMethod(env, methodName, hash, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates a method with 3 args.
+   */
+  public final Value callMethod(Env env,
+                                StringValue methodName,
+                                Value a1, Value a2, Value a3)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash,
+                      a1, a2, a3);
+  }
+
+  /**
+   * Evaluates a method with 3 args.
+   */
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2, Value a3)
+  {
+    return callMethodRef(env, methodName, hash, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates a method with 3 args.
+   */
+  public final Value callMethodRef(Env env,
+                                   StringValue methodName,
+                                   Value a1, Value a2, Value a3)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash,
+                         a1, a2, a3);
   }
 
   /**
    * Evaluates a method with 4 args.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen,
-                             Value a0, Value a1, Value a2, Value a3)
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4)
   {
-    return errorNoMethod(env, name, nameLen);
+    return callMethod(env, methodName, hash,
+                      new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates a method with 4 args.
+   */
+  public final Value callMethod(Env env,
+                                StringValue methodName,
+                                Value a1, Value a2, Value a3, Value a4)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash,
+                      a1, a2, a3, a4);
+  }
+
+  /**
+   * Evaluates a method with 4 args.
+   */
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2, Value a3, Value a4)
+  {
+    return callMethodRef(env, methodName, hash,
+                         new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates a method with 4 args.
+   */
+  public final Value callMethodRef(Env env,
+                                   StringValue methodName,
+                                   Value a1, Value a2, Value a3, Value a4)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash,
+                         a1, a2, a3, a4);
   }
 
   /**
    * Evaluates a method with 5 args.
    */
-  public Value callMethodRef(Env env, int hash, char []name, int nameLen,
-                             Value a0, Value a1, Value a2, Value a3, Value a5)
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4, Value a5)
   {
-    return errorNoMethod(env, name, nameLen);
+    return callMethod(env, methodName, hash,
+                      new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates a method with 5 args.
+   */
+  public final Value callMethod(Env env,
+                             StringValue methodName,
+                             Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethod(env, methodName, hash,
+                         a1, a2, a3, a4, a5);
+  }
+
+  /**
+   * Evaluates a method with 5 args.
+   */
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return callMethodRef(env, methodName, hash,
+                         new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates a method with 5 args.
+   */
+  public final Value callMethodRef(Env env,
+                             StringValue methodName,
+                             Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    int hash = methodName.hashCodeCaseInsensitive();
+    
+    return callMethodRef(env, methodName, hash,
+                         a1, a2, a3, a4, a5);
   }
 
   //
@@ -1499,295 +1818,7 @@ abstract public class Value implements java.io.Serializable
   /**
    * Evaluates a method.
    */
-  public Value callMethod(Env env, StringValue nameValue, Expr []args)
-  {
-    Value []value = new Value[args.length];
-
-    for (int i = 0; i < args.length; i++) {
-      value[i] = args[i].eval(env);
-    }
-
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      value);
-  }
-
-  /**
-   * Evaluates a method.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value []args)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    switch (args.length) {
-    case 0:
-      return callMethod(env, hash, name, nameLen);
-
-    case 1:
-      return callMethod(env, hash, name, nameLen,
-                        args[0]);
-
-    case 2:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1]);
-
-    case 3:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2]);
-
-    case 4:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2], args[3]);
-
-    case 5:
-      return callMethod(env, hash, name, nameLen,
-                        args[0], args[1], args[2], args[3], args[4]);
-
-    default:
-      return callMethod(env, hash, name, nameLen, args);
-    }
-  }
-
-  /**
-   * Evaluates a method with 0 args.
-   */
-  public Value callMethod(Env env, StringValue nameValue)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 1 arg.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value a0)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      a0);
-  }
-
-  /**
-   * Evaluates a method with 1 arg.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value a0, Value a1)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      a0, a1);
-  }
-
-  /**
-   * Evaluates a method with 3 args.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value a0, Value a1, Value a2)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      a0, a1, a2);
-  }
-
-  /**
-   * Evaluates a method with 4 args.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value a0, Value a1, Value a2, Value a3)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      a0, a1, a2, a3);
-  }
-
-  /**
-   * Evaluates a method with 5 args.
-   */
-  public Value callMethod(Env env,
-                          StringValue nameValue,
-                          Value a0, Value a1, Value a2, Value a3, Value a4)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethod(env, hash, name, nameLen,
-                      a0, a1, a2, a3, a4);
-  }
-
-  /**
-   * Evaluates a method.
-   */
-  public Value callMethodRef(Env env,
-                             StringValue nameValue,
-                             Expr []args)
-  {
-    Value []value = new Value[args.length];
-
-    for (int i = 0; i < args.length; i++) {
-      value[i] = args[i].eval(env);
-    }
-
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen, value);
-  }
-
-  /**
-   * Evaluates a method.
-   */
-  public Value callMethodRef(Env env,
-                             StringValue nameValue,
-                             Value []args)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    switch (args.length) {
-    case 0:
-      return callMethodRef(env, hash, name, nameLen);
-
-    case 1:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0]);
-
-    case 2:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1]);
-
-    case 3:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2]);
-
-    case 4:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2], args[3]);
-
-    case 5:
-      return callMethodRef(env, hash, name, nameLen,
-                           args[0], args[1], args[2], args[3], args[4]);
-
-    default:
-      return errorNoMethod(env, name, nameLen);
-    }
-  }
-
-  /**
-   * Evaluates a method with 0 args.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen);
-  }
-
-  /**
-   * Evaluates a method with 1 arg.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue,
-                             Value a0)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen,
-                         a0);
-  }
-
-  /**
-   * Evaluates a method with 2 args.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue,
-                             Value a0, Value a1)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen,
-                         a0, a1);
-  }
-
-  /**
-   * Evaluates a method with 3 args.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue,
-                             Value a0, Value a1, Value a2)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen,
-                         a0, a1, a2);
-  }
-
-  /**
-   * Evaluates a method with 4 args.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue,
-                             Value a0, Value a1, Value a2, Value a3)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen,
-                         a0, a1, a2, a3);
-  }
-
-  /**
-   * Evaluates a method with 5 args.
-   */
-  public Value callMethodRef(Env env, StringValue nameValue,
-                             Value a0, Value a1, Value a2, Value a3, Value a4)
-  {
-    char []name = nameValue.getRawCharArray();
-    int nameLen = nameValue.length();
-    int hash = MethodMap.hash(name, nameLen);
-
-    return callMethodRef(env, hash, name, nameLen,
-                         a0, a1, a2, a3, a4);
-  }
-
-  /**
-   * Evaluates a method.
-   */
-  public Value callClassMethod(Env env, AbstractFunction fun, Value []args)
+  private Value callClassMethod(Env env, AbstractFunction fun, Value []args)
   {
     return NullValue.NULL;
   }
@@ -1856,6 +1887,54 @@ abstract public class Value implements java.io.Serializable
   public Value postincr(int incr)
   {
     return increment(incr);
+  }
+
+  /**
+   * Return the next integer
+   */
+  public Value addOne()
+  {
+    return add(1);
+  }
+
+  /**
+   * Return the previous integer
+   */
+  public Value subOne()
+  {
+    return sub(1);
+  }
+
+  /**
+   * Pre-increment the following value.
+   */
+  public Value preincr()
+  {
+    return increment(1);
+  }
+
+  /**
+   * Post-increment the following value.
+   */
+  public Value postincr()
+  {
+    return increment(1);
+  }
+
+  /**
+   * Pre-increment the following value.
+   */
+  public Value predecr()
+  {
+    return increment(-1);
+  }
+
+  /**
+   * Post-increment the following value.
+   */
+  public Value postdecr()
+  {
+    return increment(-1);
   }
 
   /**
@@ -2143,14 +2222,9 @@ abstract public class Value implements java.io.Serializable
   /**
    * Returns the field ref.
    */
-  public Var getFieldRef(Env env, StringValue name)
+  public Var getFieldVar(Env env, StringValue name)
   {
-    Value value = getField(env, name);
-
-    if (value instanceof Var)
-      return (Var) value;
-    else
-      return new Var(value);
+    return getField(env, name).toVar();
   }
 
   /**
@@ -2158,7 +2232,7 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getFieldArg(Env env, StringValue name, boolean isTop)
   {
-    return getFieldRef(env, name);
+    return getFieldVar(env, name);
   }
 
   /**
@@ -2166,7 +2240,7 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getFieldArgRef(Env env, StringValue name)
   {
-    return getFieldRef(env, name);
+    return getFieldVar(env, name);
   }
 
   /**
@@ -2264,7 +2338,7 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
-   * Returns the field value
+   * Returns the field as a Var or Value.
    */
   public Value getThisField(Env env, StringValue name)
   {
@@ -2272,16 +2346,11 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
-   * Returns the field ref.
+   * Returns the field as a Var.
    */
-  public Var getThisFieldRef(Env env, StringValue name)
+  public Var getThisFieldVar(Env env, StringValue name)
   {
-    Value value = getThisField(env, name);
-
-    if (value instanceof Var)
-      return (Var) value;
-    else
-      return new Var(value);
+    return getThisField(env, name).toVar();
   }
 
   /**
@@ -2289,7 +2358,7 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getThisFieldArg(Env env, StringValue name)
   {
-    return getThisFieldRef(env, name);
+    return getThisFieldVar(env, name);
   }
 
   /**
@@ -2297,7 +2366,7 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getThisFieldArgRef(Env env, StringValue name)
   {
-    return getThisFieldRef(env, name);
+    return getThisFieldVar(env, name);
   }
 
   /**
@@ -2406,14 +2475,22 @@ abstract public class Value implements java.io.Serializable
   /**
    * Returns a reference to the array value.
    */
-  public Var getRef(Value index)
+  public Var getVar(Value index)
   {
     Value value = get(index);
 
-    if (value instanceof Var)
+    if (value.isVar())
       return (Var) value;
     else
       return new Var(value);
+  }
+
+  /**
+   * Returns a reference to the array value.
+   */
+  public Value getRef(Value index)
+  {
+    return get(index);
   }
 
   /**
@@ -2447,7 +2524,9 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getArray(Value index)
   {
-    return NullValue.NULL;
+    Value var = getVar(index);
+    
+    return var.toAutoArray();
   }
 
   /**
@@ -2465,9 +2544,22 @@ abstract public class Value implements java.io.Serializable
    */
   public Value getObject(Env env, Value index)
   {
-    return NullValue.NULL;
+    Value var = getVar(index);
+    
+    if (var.isset())
+      return var.toValue();
+    else {
+      var.set(env.createObject());
+      
+      return var.toValue();
+    }
   }
 
+  public boolean isVar()
+  {
+    return false;
+  }
+  
   /**
    * Sets the value ref.
    */
@@ -2477,10 +2569,13 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
-   * Sets the array ref.
+   * Sets the array ref and returns the value
    */
   public Value put(Value index, Value value)
   {
+    Env.getCurrent().warning(L.l("{0} cannot be used as an array",
+                                 toDebugString()));
+    
     return value;
   }
 
@@ -2502,6 +2597,12 @@ abstract public class Value implements java.io.Serializable
    */
   public Value put(Value value)
   {
+    /*
+    Env.getCurrent().warning(L.l("{0} cannot be used as an array",
+                                 toDebugString()));
+                                 */
+
+    
     return value;
   }
 
@@ -2512,13 +2613,18 @@ abstract public class Value implements java.io.Serializable
    */
   public Value append(Value index, Value value)
   {
-    return this;
+    Value array = toAutoArray();
+    
+    if (array.isArray())
+      return array.append(index, value);
+    else
+      return array;
   }
 
   /**
-   * Sets the array ref.
+   * Sets the array tail, returning the Var of the tail.
    */
-  public Var putRef()
+  public Var putVar()
   {
     return new Var();
   }
@@ -2542,7 +2648,7 @@ abstract public class Value implements java.io.Serializable
   {
     return false;
   }
-  
+
   /**
    * Returns true if the key exists in the array.
    */
@@ -2550,7 +2656,7 @@ abstract public class Value implements java.io.Serializable
   {
     return isset(key);
   }
-  
+
   /**
    * Returns the corresponding value if this array contains the given key
    *
@@ -2815,6 +2921,17 @@ abstract public class Value implements java.io.Serializable
   {
     for (int i = 0; i < depth; i++)
       out.print(' ');
+  }
+
+  public int getHashCode()
+  {
+    return hashCode();
+  }
+
+  @Override
+  public int hashCode()
+  {
+    return 1021;
   }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -106,6 +106,12 @@ public class QDate {
   // static dates for the static formatting
   private static QDate _gmtDate = new QDate(false);
   private static QDate _localDate = new QDate(true);
+  
+  private static final FreeList<QDate> _freeLocalDate
+    = new FreeList<QDate>(8);
+  
+  private static final FreeList<QDate> _freeGmtDate
+    = new FreeList<QDate>(8);
 
   private TimeZone _timeZone;
   private Calendar _calendar;
@@ -210,6 +216,23 @@ public class QDate {
   {
     return new QDate(true);
   }
+  
+  public static QDate allocateLocalDate()
+  {
+    QDate date = _freeLocalDate.allocate();
+    
+    if (date == null)
+      date = new QDate(true);
+    
+    return date;
+  }
+  
+  public static void freeLocalDate(QDate date)
+  {
+    _freeLocalDate.free(date);
+  }
+  
+  
 
   /**
    * Sets the time in milliseconds since the epoch and calculate

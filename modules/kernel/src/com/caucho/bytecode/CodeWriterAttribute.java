@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -238,6 +238,21 @@ public class CodeWriterAttribute extends CodeAttribute {
     int index = addMethodRef(className, methodName, signature);
     
     write(CodeVisitor.INVOKESPECIAL);
+    write(index >> 8);
+    write(index);
+  }
+
+  public void invokestatic(String className,
+                           String methodName,
+                           String signature,
+                           int argStack,
+                           int returnStack)
+  {
+    _stack += returnStack - argStack;
+
+    int index = addMethodRef(className, methodName, signature);
+    
+    write(CodeVisitor.INVOKESTATIC);
     write(index >> 8);
     write(index);
   }

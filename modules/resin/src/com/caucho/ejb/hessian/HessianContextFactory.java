@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -65,6 +65,7 @@ public class HessianContextFactory implements InitialContextFactory {
       String auth = Base64.encode(user + ':' + pw);
       
       HessianModel model = new HessianModel(prefix);
+      /* XXX: needs replacement
       HessianClientContainer client;
       try {
 	client = new HessianClientContainer(model.getURLPrefix());
@@ -74,7 +75,7 @@ public class HessianContextFactory implements InitialContextFactory {
       }
 
       model.setClientContainer(client);
-      
+      */
       return new ContextImpl(model, environment);
     }
 

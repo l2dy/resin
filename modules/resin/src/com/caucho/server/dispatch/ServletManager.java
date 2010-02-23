@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,13 +31,24 @@ package com.caucho.server.dispatch;
 
 import com.caucho.util.L10N;
 import com.caucho.config.*;
+import com.caucho.config.inject.InjectManager;
 
 import javax.annotation.PostConstruct;
+import javax.el.ELContext;
+import javax.el.ELContextEvent;
+import javax.el.ELContextListener;
+import javax.el.ELResolver;
+import javax.faces.FactoryFinder;
+import javax.faces.application.Application;
+import javax.faces.application.ApplicationFactory;
+import javax.faces.context.FacesContextFactory;
 import javax.servlet.FilterChain;
 import javax.servlet.Servlet;
 import javax.servlet.ServletException;
+import javax.servlet.ServletSecurityElement;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -50,14 +61,23 @@ public class ServletManager {
 
   private HashMap<String,ServletConfigImpl> _servlets
     = new HashMap<String,ServletConfigImpl>();
-  
+
   private ArrayList<ServletConfigImpl> _servletList
     = new ArrayList<ServletConfigImpl>();
-  
+
   private ArrayList<ServletConfigImpl> _cronList
   = new ArrayList<ServletConfigImpl>();
 
+  private Map<Class<? extends Servlet>, ServletSecurityElement>
+    _servletSecurityElements
+    = new HashMap<Class<? extends Servlet>, ServletSecurityElement>();
+
   private boolean _isLazyValidate;
+
+
+  public ServletManager()
+  {
+  }
 
   /**
    * Sets true if validation is lazy.
@@ -71,7 +91,7 @@ public class ServletManager {
   {
     for (ServletConfigImpl servletConfig : _servletList) {
       String className = servletConfig.getServletClass().getName();
-      
+
       if ("javax.faces.webapp.FacesServlet".equals(className))
         return true;
     }
@@ -142,6 +162,17 @@ public class ServletManager {
     }
   }
 
+  public void addSecurityElement(Class<? extends Servlet> servletClass,
+                                   ServletSecurityElement securityElement)
+  {
+    _servletSecurityElements.put(servletClass, securityElement);
+  }
+
+  public ServletSecurityElement getSecurityElement(Class<? extends Servlet> servletClass)
+  {
+    return _servletSecurityElements.get(servletClass);
+  }
+
   /**
    * Returns ServletConfigImpl to the servlet manager.
    */
@@ -164,7 +195,7 @@ public class ServletManager {
   {
     ArrayList<ServletConfigImpl> loadOnStartup;
     loadOnStartup = new ArrayList<ServletConfigImpl>();
-    
+
     for (int j = 0; j < _servletList.size(); j++) {
       ServletConfigImpl config = _servletList.get(j);
 
@@ -180,7 +211,7 @@ public class ServletManager {
           break;
         }
       }
-      
+
       if (i == loadOnStartup.size())
         loadOnStartup.add(config);
 
@@ -193,14 +224,14 @@ public class ServletManager {
       ServletConfigImpl config = loadOnStartup.get(i);
 
       try {
-	config.createServlet(false);
+        config.createServlet(false);
       } catch (ServletException e) {
-	// XXX: should JSP failure also cause a system failure?
-	if (config.getJspFile() == null)
-	  throw e;
-	else {
-	  log.log(Level.WARNING, e.toString(), e);
-	}
+        // XXX: should JSP failure also cause a system failure?
+        if (config.getJspFile() == null)
+          throw e;
+        else {
+          log.log(Level.WARNING, e.toString(), e);
+        }
       }
     }
   }
@@ -209,7 +240,7 @@ public class ServletManager {
    * Creates the servlet chain for the servlet.
    */
   public FilterChain createServletChain(String servletName,
-					ServletConfigImpl config,
+                                        ServletConfigImpl config,
                                         ServletInvocation invocation)
     throws ServletException
   {
@@ -265,7 +296,7 @@ public class ServletManager {
   {
     ArrayList<ServletConfigImpl> servletList;
     servletList = new ArrayList<ServletConfigImpl>();
-    
+
     if (_servletList != null) {
       synchronized (_servletList) {
         servletList.addAll(_servletList);
@@ -276,10 +307,26 @@ public class ServletManager {
       ServletConfigImpl config = servletList.get(i);
 
       try {
-	config.close();
+        config.close();
       } catch (Throwable e) {
         log.log(Level.FINE, e.toString(), e);
       }
     }
+  }
+
+  class Listener implements ELContextListener {
+
+    /* (non-Javadoc)
+     * @see javax.el.ELContextListener#contextCreated(javax.el.ELContextEvent)
+     */
+    @Override
+    public void contextCreated(ELContextEvent event)
+    {
+      // TODO Auto-generated method stub
+
+     ELContext elContext = event.getELContext();
+     ELResolver resolver = elContext.getELResolver();
+    }
+
   }
 }

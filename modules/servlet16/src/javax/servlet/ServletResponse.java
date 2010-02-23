@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -162,25 +162,4 @@ public interface ServletResponse {
    * engine will handle this.
    */
   public void setContentLength(int len);
-
-  /**
-   * Disables the response
-   *
-   * @since Servlet 3.0
-   */
-  public void disable();
-
-  /**
-   * Enables the response
-   *
-   * @since Servlet 3.0
-   */
-  public void enable();
-
-  /**
-   * Returns true if the response is disabled
-   *
-   * @since Servlet 3.0
-   */
-  public boolean isDisabled();
 }

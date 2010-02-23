@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,6 +30,7 @@
 package com.caucho.config.program;
 
 import com.caucho.config.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.AbstractInjectionPoint;
 import com.caucho.config.j2ee.*;
@@ -42,6 +43,8 @@ import java.util.HashSet;
 import java.util.logging.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
+
+import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.inject.Qualifier;
@@ -83,7 +86,7 @@ public class FieldComponentProgram extends ConfigProgram
 				     _field.getAnnotations());
   }
 
-  public void inject(Object bean, ConfigContext env)
+  public <T> void inject(T bean, CreationalContext<T> env)
   {
     Object value = null;
     

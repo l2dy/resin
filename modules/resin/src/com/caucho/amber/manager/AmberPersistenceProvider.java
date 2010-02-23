@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,8 @@ import com.caucho.util.L10N;
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.spi.PersistenceProvider;
 import javax.persistence.spi.PersistenceUnitInfo;
+import javax.persistence.spi.ProviderUtil;
+
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -80,6 +82,21 @@ public class AmberPersistenceProvider implements PersistenceProvider {
     createContainerEntityManagerFactory(PersistenceUnitInfo info,
                                         Map map)
   {
+    AmberContainer container = AmberContainer.create();
+    
+    if (container == null)
+      return null;
+    
+    return container.createEntityManagerFactory(info);
+  }
+
+  /* (non-Javadoc)
+   * @see javax.persistence.spi.PersistenceProvider#getProviderUtil()
+   */
+  @Override
+  public ProviderUtil getProviderUtil()
+  {
+    // TODO Auto-generated method stub
     return null;
   }
 }

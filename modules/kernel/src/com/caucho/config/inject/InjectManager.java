@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -58,7 +58,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.*;
 
+import javax.annotation.Resource;
 import javax.decorator.Delegate;
+import javax.ejb.EJB;
 import javax.el.*;
 import javax.enterprise.event.Event;
 import javax.enterprise.event.Observes;
@@ -76,6 +78,8 @@ import javax.inject.Inject;
 import javax.inject.Qualifier;
 import javax.inject.Scope;
 import javax.naming.*;
+import javax.persistence.PersistenceContext;
+import javax.persistence.PersistenceUnit;
 
 /**
  * The web beans container for a given environment.
@@ -120,6 +124,8 @@ public class InjectManager
 
   private static final Class<?> []_forbiddenAnnotations;
   private static final Class<?> []_forbiddenClasses;
+  
+  private static final ClassLoader _systemClassLoader;
 
   private String _id;
 
@@ -143,6 +149,9 @@ public class InjectManager
     = new HashMap<Class<?>,Integer>();
 
   private BaseTypeFactory _baseTypeFactory = new BaseTypeFactory();
+  
+  private HashMap<Class<?>,InjectionPointHandler> _injectionMap
+    = new HashMap<Class<?>,InjectionPointHandler>();
 
   //
   // self configuration
@@ -176,11 +185,11 @@ public class InjectManager
   private HashMap<Class<?>,ObserverMap> _observerMap
     = new HashMap<Class<?>,ObserverMap>();
 
-  private HashMap<Type,Bean> _newBeanMap
-    = new HashMap<Type,Bean>();
+  private HashMap<Type,Bean<?>> _newBeanMap
+    = new HashMap<Type,Bean<?>>();
 
-  private HashMap<Class,Context> _contextMap
-    = new HashMap<Class,Context>();
+  private HashMap<Class<?>,Context> _contextMap
+    = new HashMap<Class<?>,Context>();
 
   private HashMap<Class,ArrayList<ObserverMap>> _observerListCache
     = new HashMap<Class,ArrayList<ObserverMap>>();
@@ -190,6 +199,8 @@ public class InjectManager
 
   private ArrayList<DecoratorEntry> _decoratorList
     = new ArrayList<DecoratorEntry>();
+  
+  private HashSet<Bean<?>> _beanSet = new HashSet<Bean<?>>();
 
   private boolean _isUpdateNeeded = true;
 
@@ -246,8 +257,13 @@ public class InjectManager
     try {
       thread.setContextClassLoader(_classLoader);
 
-      if (isSetLocal)
+      if (isSetLocal) {
         _localContainer.set(this, _classLoader);
+        
+        if (_parent == null) {
+          _localContainer.setGlobal(this);
+        }
+      }
 
       try {
         InitialContext ic = new InitialContext();
@@ -266,12 +282,21 @@ public class InjectManager
       addContext("com.caucho.server.webbeans.ConversationScope");
       addContext(_applicationScope);
       addContext(_singletonScope);
+      
+      _injectionMap.put(PersistenceContext.class, 
+                        new PersistenceContextHandler(this));
+      _injectionMap.put(PersistenceUnit.class,
+                        new PersistenceUnitHandler(this));
+      _injectionMap.put(Resource.class,
+                        new ResourceHandler(this));
+      _injectionMap.put(EJB.class,
+                        new EjbHandler(this));
 
       _deploymentMap.put(CauchoDeployment.class, 0);
       // DEFAULT_PRIORITY
       _deploymentMap.put(Configured.class, 2);
 
-      BeanFactory factory = createBeanFactory(InjectManager.class);
+      BeanFactory<InjectManager> factory = createBeanFactory(InjectManager.class);
       // factory.deployment(Standard.class);
       factory.type(InjectManager.class);
       factory.type(BeanManager.class);
@@ -305,8 +330,8 @@ public class InjectManager
     try {
       ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
-      Class cl = Class.forName(className, false, loader);
-      Constructor ctor= cl.getConstructor(new Class[] { InjectManager.class });
+      Class<?> cl = Class.forName(className, false, loader);
+      Constructor<?> ctor= cl.getConstructor(new Class[] { InjectManager.class });
 
       Extension extension = (Extension) ctor.newInstance(this);
 
@@ -319,7 +344,7 @@ public class InjectManager
   private void addContext(String contextClassName)
   {
     try {
-      Class cl = Class.forName(contextClassName);
+      Class<?> cl = Class.forName(contextClassName);
       Context context = (Context) cl.newInstance();
 
       addContext(context);
@@ -361,20 +386,33 @@ public class InjectManager
    */
   public static InjectManager create(ClassLoader loader)
   {
-    InjectManager webBeans = null;
+    InjectManager manager = null;
 
     synchronized (_localContainer) {
-      webBeans = _localContainer.getLevel(loader);
+      manager = _localContainer.getLevel(loader);
 
-      if (webBeans == null) {
+      if (manager == null) {
         EnvironmentClassLoader envLoader
           = Environment.getEnvironmentClassLoader(loader);
+        
+        // XXX: issues with system class loader?
+        /*
+        if (envLoader == null) {
+          // InjectManager requires an EnvironmentClassLoader
+          
+          envLoader = Environment.getEnvironmentClassLoader(_systemClassLoader);
+          
+          if (envLoader == null)
+            throw new IllegalStateException(L.l("CanDI requires an active Resin environment {0}",
+                                                loader));
+        }
+        */
         
         // ejb doesn't create a new InjectManager even though it's a new
         // environment
         if (envLoader != null 
             && Boolean.FALSE.equals(envLoader.getAttribute("caucho.inject"))) {
-          webBeans = create(envLoader.getParent());
+          manager = create(envLoader.getParent());
         }
 
         String id;
@@ -384,14 +422,14 @@ public class InjectManager
         else
           id = "";
 
-        if (webBeans == null)
-          webBeans = new InjectManager(id, null, envLoader, true);
+        if (manager == null)
+          manager = new InjectManager(id, null, envLoader, true);
 
         // _localContainer.set(webBeans, loader);
       }
     }
 
-    return webBeans;
+    return manager;
   }
 
   /**
@@ -427,31 +465,12 @@ public class InjectManager
     _parent = parent;
   }
 
-  private void init()
-  {
-    try {
-      _isUpdateNeeded = true;
-
-      update();
-    } catch (RuntimeException e) {
-      _configException = e;
-
-      throw _configException;
-    } catch (Exception e) {
-      _configException = ConfigException.create(e);
-
-      throw _configException;
-    }
-
-    Environment.addEnvironmentListener(this);
-  }
-
   public void addPath(Path path)
   {
     _pendingPathList.add(path);
   }
 
-  public void setDeploymentTypes(ArrayList<Class> deploymentList)
+  public void setDeploymentTypes(ArrayList<Class<?>> deploymentList)
   {
     _deploymentMap.clear();
 
@@ -508,9 +527,7 @@ public class InjectManager
     if (log.isLoggable(Level.FINEST))
       log.finest(bean + "(" + type + ") added to " + this);
 
-    Class rawType = type.getRawClass();
-
-    WebComponent webComponent;
+    Class<?> rawType = type.getRawClass();
 
     Set<TypedBean> beanSet = _selfBeanMap.get(rawType);
 
@@ -528,7 +545,7 @@ public class InjectManager
    *
    * @param scope the scope annotation type identifying the scope
    */
-  public ScopeContext getScopeContext(Class scope)
+  public ScopeContext getScopeContext(Class<?> scope)
   {
     if (scope == null)
       throw new NullPointerException();
@@ -604,13 +621,13 @@ public class InjectManager
    */
   public <T> T createTransientObject(Class<T> type)
   {
-    ManagedBeanImpl<T> factory = createManagedBean(type);
+    ManagedBeanImpl<T> bean = createManagedBean(type);
 
     // server/10gn
     //return factory.create(new ConfigContext());
-    InjectionTarget<T> injectionTarget = factory.getInjectionTarget();
+    InjectionTarget<T> injectionTarget = bean.getInjectionTarget();
 
-    ConfigContext env = ConfigContext.create();
+    CreationalContext<T> env = new CreationalContextImpl<T>(bean);
 
     T instance = injectionTarget.produce(env);
     injectionTarget.inject(instance, env);
@@ -629,7 +646,7 @@ public class InjectManager
    */
   public <T> BeanFactory<T> createBeanFactory(ManagedBeanImpl<T> managedBean)
   {
-    return new BeanFactory(managedBean);
+    return new BeanFactory<T>(managedBean);
   }
 
   /**
@@ -710,7 +727,7 @@ public class InjectManager
    */
   public boolean isInterceptorBindingType(Class<? extends Annotation> annotationType)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return annotationType.isAnnotationPresent(Qualifier.class);
   }
 
   /**
@@ -718,7 +735,7 @@ public class InjectManager
    */
   public Set<Annotation> getInterceptorBindingTypeDefinition(Class<? extends Annotation> bindingType)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return new HashSet<Annotation>();
   }
 
   /**
@@ -726,7 +743,7 @@ public class InjectManager
    */
   public boolean isStereotype(Class<? extends Annotation> annotationType)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return annotationType.isAnnotationPresent(Stereotype.class);
   }
 
   /**
@@ -752,7 +769,7 @@ public class InjectManager
   /**
    * Creates a BaseType from a Type
    */
-  public BaseType createClassBaseType(Class type)
+  public BaseType createClassBaseType(Class<?> type)
   {
     return _baseTypeFactory.createClass(type);
   }
@@ -778,8 +795,8 @@ public class InjectManager
    */
   public <T> AnnotatedType<T> processAnnotatedType(AnnotatedType<T> type)
   {
-    ProcessAnnotatedTypeImpl processType
-      = new ProcessAnnotatedTypeImpl(type);
+    ProcessAnnotatedTypeImpl<T> processType
+      = new ProcessAnnotatedTypeImpl<T>(type);
 
     fireExtensionEvent(processType);
 
@@ -884,7 +901,7 @@ public class InjectManager
   /**
    * Adds a new bean definition to the manager
    */
-  public void addBean(Bean<?> bean)
+  public <T> void addBean(Bean<T> bean)
   {
     bean = processBean(bean);
 
@@ -896,7 +913,9 @@ public class InjectManager
 
     _version.incrementAndGet();
 
-    bean = new InjectBean(bean, this);
+    // bean = new InjectBean<T>(bean, this);
+    
+    _beanSet.add(bean);
 
     for (Type type : bean.getTypes()) {
       addBeanByType(type, bean);
@@ -905,17 +924,6 @@ public class InjectManager
     if (bean.getName() != null) {
       addBeanByName(bean.getName(), bean);
     }
-
-
-    /*
-    if (bean instanceof ManagedBeanImpl) {
-      ManagedBeanImpl<?> mBean = (ManagedBeanImpl) bean;
-
-      for (ProducesBean producerBean : mBean.getProducerBeans()) {
-        addBean(producerBean);
-      }
-    }
-    */
 
     if (bean instanceof PassivationCapable) {
       PassivationCapable pass = (PassivationCapable) bean;
@@ -927,7 +935,7 @@ public class InjectManager
     registerJmx(bean);
   }
 
-  private void registerJmx(Bean bean)
+  private void registerJmx(Bean<?> bean)
   {
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -953,7 +961,10 @@ public class InjectManager
   {
     ArrayList<Bean<?>> beanList = findByName(name);
 
-    return new LinkedHashSet<Bean<?>>(beanList);
+    if (beanList != null)
+      return new LinkedHashSet<Bean<?>>(beanList);
+    else
+      return new LinkedHashSet<Bean<?>>();
   }
 
   /**
@@ -965,7 +976,7 @@ public class InjectManager
   public Set<Bean<?>> getBeans(Type type,
                                Annotation... bindings)
   {
-    Set set = resolve(type, bindings);
+    Set<Bean<?>> set = resolve(type, bindings);
 
     if (set != null)
       return (Set<Bean<?>>) set;
@@ -976,19 +987,7 @@ public class InjectManager
   /**
    * Returns the web beans component with a given binding list.
    */
-  private Set resolve(Type type,
-                      Set<Annotation> bindingSet)
-  {
-    Annotation []bindings = new Annotation[bindingSet.size()];
-    bindingSet.toArray(bindings);
-
-    return resolve(type, bindings);
-  }
-
-  /**
-   * Returns the web beans component with a given binding list.
-   */
-  private Set resolve(Type type, Annotation []bindings)
+  private Set<Bean<?>> resolve(Type type, Annotation []bindings)
   {
     if (bindings == null || bindings.length == 0) {
       if (Object.class.equals(type))
@@ -1011,7 +1010,7 @@ public class InjectManager
     WebComponent component = getWebComponent(baseType);
 
     if (component != null) {
-      Set beans = component.resolve(baseType, bindings);
+      Set<Bean<?>> beans = component.resolve(baseType, bindings);
 
       if (beans != null && beans.size() > 0) {
         if (log.isLoggable(Level.FINEST))
@@ -1023,8 +1022,8 @@ public class InjectManager
     }
     else if (New.class.equals(bindings[0].annotationType())) {
       // ioc/0721
-      HashSet set = new HashSet();
-      AbstractBean newBean = new NewBean(this, new AnnotatedTypeImpl(baseType.getRawClass(), baseType.getRawClass()));
+      HashSet<Bean<?>> set = new HashSet<Bean<?>>();
+      AbstractBean<?> newBean = new NewBean(this, new AnnotatedTypeImpl(baseType.getRawClass(), baseType.getRawClass()));
       newBean.introspect();
 
       set.add(newBean);
@@ -1032,7 +1031,7 @@ public class InjectManager
       return set;
     }
 
-    Class rawType = baseType.getRawClass();
+    Class<?> rawType = baseType.getRawClass();
 
     if (Instance.class.equals(rawType)) {
       BaseType []param = baseType.getParameters();
@@ -1084,14 +1083,14 @@ public class InjectManager
   /**
    * Returns the web beans component with a given binding list.
    */
-  public Set<Bean> resolveAllByType(Class type)
+  public Set<Bean<?>> resolveAllByType(Class<?> type)
   {
     Annotation []bindings = new Annotation[0];
 
     WebComponent component = getWebComponent(createBaseType(type));
 
     if (component != null) {
-      Set beans = component.resolve(type, bindings);
+      Set<Bean<?>> beans = component.resolve(type, bindings);
 
       if (log.isLoggable(Level.FINEST))
         log.finest(this + " bind(" + getSimpleName(type)
@@ -1110,8 +1109,6 @@ public class InjectManager
 
   private WebComponent getWebComponent(BaseType baseType)
   {
-    Class rawClass = baseType.getRawClass();
-
     if (_beanMap == null)
       return null;
 
@@ -1177,11 +1174,11 @@ public class InjectManager
 
   public <X> Bean<? extends X> resolve(Set<Bean<? extends X>> beans)
   {
-    Bean bestBean = null;
-    Bean secondBean = null;
+    Bean<? extends X> bestBean = null;
+    Bean<? extends X> secondBean = null;
     int bestPriority = -1;
 
-    for (Bean bean : beans) {
+    for (Bean<? extends X> bean : beans) {
       int priority = getDeploymentPriority(bean);
 
       if (bestPriority < priority) {
@@ -1205,7 +1202,7 @@ public class InjectManager
     //     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  public int getDeploymentPriority(Bean bean)
+  public int getDeploymentPriority(Bean<?> bean)
   {
     int priority = DEFAULT_PRIORITY;
 
@@ -1220,9 +1217,9 @@ public class InjectManager
       }
     }
 
-    if (bean instanceof AbstractBean) {
+    if (bean instanceof AbstractBean<?>) {
       // ioc/0213
-      AbstractBean absBean = (AbstractBean) bean;
+      AbstractBean<?> absBean = (AbstractBean<?>) bean;
 
       if (absBean.getBeanManager() == this)
         priority += 1000000;
@@ -1233,12 +1230,10 @@ public class InjectManager
     return priority;
   }
 
-  private Set resolveAllBeans()
+  private Set<Bean<?>> resolveAllBeans()
   {
-    Annotation []bindings = new Annotation[0];
-
     synchronized (_beanMap) {
-      LinkedHashSet beans = new LinkedHashSet();
+      LinkedHashSet<Bean<?>> beans = new LinkedHashSet<Bean<?>>();
 
       for (Set<TypedBean> comp : _selfBeanMap.values()) {
         for (TypedBean typedBean : comp) {
@@ -1250,9 +1245,10 @@ public class InjectManager
     }
   }
 
-  public <T> CreationalContext<T> createCreationalContext(Contextual<T> bean)
+  @Override
+  public <T> CreationalContextImpl<T> createCreationalContext(Contextual<T> bean)
   {
-    return (CreationalContext<T>) new ConfigContext();
+    return new CreationalContextImpl<T>(bean);
   }
 
   /**
@@ -1295,11 +1291,13 @@ public class InjectManager
    *
    * @return an instance of the bean obeying scope
    */
+  @Override
   public Object getReference(Bean<?> bean,
                              Type type,
                              CreationalContext<?> createContext)
   {
-    ConfigContext env = (ConfigContext) createContext;
+    CreationalContextImpl<?> env
+      = (CreationalContextImpl<?>) createContext;
 
     if (env != null) {
       Object object = env.get(bean);
@@ -1323,42 +1321,28 @@ public class InjectManager
     return getReference(bean, bean.getBeanClass(), env);
   }
 
-  private Object getInstanceRec(Bean<?> bean,
-                                Type type,
-                                CreationalContext createContext,
-                                InjectManager topManager)
+  private <T> T getInstanceRec(Bean<T> bean,
+                               Type type,
+                               CreationalContext<?> createContext,
+                               InjectManager topManager)
   {
     if (createContext == null)
       throw new NullPointerException();
-
-    /* XXX: temp API change
-    if (bean.getManager() != this) {
-      if (getParent() == null) {
-        throw new IllegalStateException(L.l("{0}: unknown bean {1} with owning manager {2}",
-                                            topManager,
-                                            bean,
-                                            bean.getManager()));
-      }
-
-      return getParent().getInstanceRec(bean, createContext, topManager);
-    }
-    else
-    */
-    Class scopeType = bean.getScope();
+    
+    CreationalContextImpl<T> env
+      = (CreationalContextImpl<T>) createContext;
+    
+    Class<? extends Annotation> scopeType = bean.getScope();
 
     if (Dependent.class.equals(scopeType)) {
       // server/4764
-      ConfigContext env = (ConfigContext) createContext;
 
-      if (bean instanceof InjectBean)
-        bean = ((InjectBean) bean).getBean();
-
-      Object instance = env.get(bean);
-
-      if (instance == null)
-        instance = bean.create(env);
-
-      return instance;
+      T instance = env.get(bean);
+      
+      if (instance != null)
+        return instance;
+      else
+        return bean.create(env);
     }
 
     if (scopeType == null) {
@@ -1367,8 +1351,8 @@ public class InjectManager
 
     InjectManager ownerManager;
 
-    if (bean instanceof AbstractBean)
-      ownerManager = ((AbstractBean) bean).getBeanManager();
+    if (bean instanceof AbstractBean<?>)
+      ownerManager = ((AbstractBean<?>) bean).getBeanManager();
     else
       ownerManager = this;
 
@@ -1377,25 +1361,16 @@ public class InjectManager
     if (context == null)
       return null;
 
-    if (createContext != null) {
-    }
-    else if ((bean instanceof AbstractBean)
-             && (context instanceof ScopeContext)) {
-      createContext = new ConfigContext((AbstractBean) bean,
-                                        null,
-                                        (ScopeContext) context);
-    }
-    else {
-      ConfigContext parent = ConfigContext.getCurrent();
+    //CreationalContextImpl<T> createContext
+    //  = new CreationalContextImpl<T>(bean, parentEnv);
 
-      createContext = new ConfigContext(parent);
-    }
-
+    /*
     // ioc/0b10
-    if (bean instanceof InjectBean)
-      bean = ((InjectBean) bean).getBean();
-
-    return context.get(bean, createContext);
+    if (bean instanceof InjectBean<?>)
+      bean = ((InjectBean<T>) bean).getBean();
+      */
+    
+    return context.get(bean, env);
   }
 
   private RuntimeException unsatisfiedException(Type type,
@@ -1423,7 +1398,7 @@ public class InjectManager
     }
   }
 
-  private String listToLines(List list)
+  private String listToLines(List<?> list)
   {
     StringBuilder sb = new StringBuilder();
 
@@ -1457,30 +1432,77 @@ public class InjectManager
 
     return list;
   }
+  
+  InjectionPointHandler getInjectionPointHandler(AnnotatedField<?> field)
+  {
+    // InjectIntrospector.introspect(_injectProgramList, field);
+    
+    for (Annotation ann : field.getAnnotations()) {
+      Class<? extends Annotation> annType = ann.annotationType();
+      
+      InjectionPointHandler handler = _injectionMap.get(annType);
+      
+      if (handler != null) {
+        return handler;
+      }
+    }
+    
+    return null;
+  }
+  
+  InjectionPointHandler getInjectionPointHandler(AnnotatedMethod<?> method)
+  {
+    // InjectIntrospector.introspect(_injectProgramList, field);
+    
+    for (Annotation ann : method.getAnnotations()) {
+      Class<? extends Annotation> annType = ann.annotationType();
+      
+      InjectionPointHandler handler = _injectionMap.get(annType);
+      
+      if (handler != null) {
+        return handler;
+      }
+    }
+    
+    return null;
+  }
 
   /**
    * Internal callback during creation to get a new injection instance.
    */
   public Object getInjectableReference(InjectionPoint ij,
-                                       CreationalContext<?> cxt)
+                                       CreationalContext<?> parentCxt)
   {
-    Bean bean = resolveByInjectionPoint(ij);
-
+    Bean<?> bean = resolveByInjectionPoint(ij);
+    
     if (bean instanceof ScopeAdapterBean) {
       ScopeAdapterBean simpleBean = (ScopeAdapterBean) bean;
 
-      Object adapter = simpleBean.getScopeAdapter(cxt);
+      Object adapter = simpleBean.getScopeAdapter(parentCxt);
 
       if (adapter != null)
         return adapter;
     }
+    
+    CreationalContextImpl<?> parentEnv
+      = (CreationalContextImpl<?>) parentCxt;
+    
+    Object value = CreationalContextImpl.find(parentEnv, bean);
+    
+    if (value != null)
+      return value;
 
+    CreationalContext<?> cxt
+      = new CreationalContextImpl(bean, parentCxt, ij);
+    
+    /*
     if (cxt instanceof ConfigContext) {
       ConfigContext env = (ConfigContext) cxt;
 
       // ioc/0770
       env.setInjectionPoint(ij);
     }
+    */
 
     return getReference(bean, ij.getType(), cxt);
   }
@@ -1490,10 +1512,10 @@ public class InjectManager
    */
   public <T> T getInstanceToInject(InjectionPoint ij)
   {
-    return (T) getInjectableReference(ij, new ConfigContext());
+    return (T) getInjectableReference(ij, null);
   }
 
-  public Bean resolveByInjectionPoint(InjectionPoint ij)
+  public Bean<?> resolveByInjectionPoint(InjectionPoint ij)
   {
     Type type = ij.getType();
     Set<Annotation> qualifiers = ij.getQualifiers();
@@ -1501,7 +1523,7 @@ public class InjectManager
     return resolveByInjectionPoint(type, qualifiers);
   }
 
-  public Bean resolveByInjectionPoint(Type type, Set<Annotation> bindingSet)
+  public Bean<?> resolveByInjectionPoint(Type type, Set<Annotation> bindingSet)
   {
     Annotation []bindings;
 
@@ -1518,7 +1540,7 @@ public class InjectManager
       bindings = new Annotation[] { CurrentLiteral.CURRENT };
 
     Set<Bean<?>> set = getBeans(type, bindings);
-
+    
     if (set == null || set.size() == 0) {
       throw unsatisfiedException(type, bindings);
     }
@@ -1546,14 +1568,14 @@ public class InjectManager
 */
   }
 
-  private Bean createNewBean(Type type)
+  private Bean<?> createNewBean(Type type)
   {
-    Bean bean = _newBeanMap.get(type);
+    Bean<?> bean = _newBeanMap.get(type);
 
     if (bean == null) {
       BaseType baseType = createBaseType(type);
 
-      AbstractBean newBean = new NewBean(this, new AnnotatedTypeImpl(baseType.getRawClass(), baseType.getRawClass()));
+      AbstractBean<?> newBean = new NewBean(this, new AnnotatedTypeImpl(baseType.getRawClass(), baseType.getRawClass()));
       newBean.introspect();
 
       _newBeanMap.put(type, bean);
@@ -1673,7 +1695,7 @@ public class InjectManager
                           BaseType eventBaseType,
                           Annotation... bindings)
   {
-    Class eventType = eventBaseType.getRawClass();
+    Class<?> eventType = eventBaseType.getRawClass();
 
     checkActive();
 
@@ -1726,7 +1748,7 @@ public class InjectManager
                            BaseType eventBaseType,
                            Annotation... bindings)
   {
-    Class eventType = eventBaseType.getRawClass();
+    Class<?> eventType = eventBaseType.getRawClass();
 
     checkActive();
 
@@ -1915,13 +1937,13 @@ public class InjectManager
                                      ArrayList<ObserverMap> list,
                                      BaseType eventType)
   {
-    Class cl = eventType.getRawClass();
+    Class<?> cl = eventType.getRawClass();
 
     // XXX: generic
     if (cl.getSuperclass() != null)
       fillLocalObserverList(localMap, list, createBaseType(cl.getSuperclass()));
 
-    for (Class iface : cl.getInterfaces()) {
+    for (Class<?> iface : cl.getInterfaces()) {
       fillLocalObserverList(localMap, list, createBaseType(iface));
     }
 
@@ -2031,6 +2053,9 @@ public class InjectManager
 
     if (bindings == null || bindings.length == 0)
       bindings = CURRENT_ANN;
+    
+    if (_decoratorList == null)
+      return decorators;
 
     for (DecoratorEntry entry : _decoratorList) {
       Decorator decorator = entry.getDecorator();
@@ -2202,6 +2227,7 @@ public class InjectManager
       Class cl;
 
       cl = Class.forName(className, false, _classLoader);
+      
 
       if (! isValidSimpleBean(cl))
         return;
@@ -2416,6 +2442,88 @@ public class InjectManager
       }
     } catch (IOException e) {
       log.log(Level.WARNING, e.toString(), e);
+    }
+  }
+
+  public <T> ArrayList<T> loadServices(Class<T> serviceClass)
+  {
+    return loadServices(serviceClass, new HashSet<URL>());
+  }
+  
+  private <T> ArrayList<T> loadServices(Class<T> serviceApiClass, 
+                                        HashSet<URL> serviceSet)
+  {
+    ArrayList<T> services = new ArrayList<T>();
+    
+    try {
+      ClassLoader loader = _classLoader;
+      
+      if (loader == null)
+        return services;
+
+      Enumeration e = loader.getResources("META-INF/services/" 
+                                          + serviceApiClass.getName());
+
+      while (e.hasMoreElements()) {
+        URL url = (URL) e.nextElement();
+
+        if (serviceSet.contains(url))
+          continue;
+
+        serviceSet.add(url);
+
+        InputStream is = null;
+        try {
+          is = url.openStream();
+          ReadStream in = Vfs.openRead(is);
+
+          String line;
+
+          while ((line = in.readLine()) != null) {
+            int p = line.indexOf('#');
+            if (p >= 0)
+              line = line.substring(0, p);
+            line = line.trim();
+
+            if (line.length() > 0) {
+              Class<T> cl = loadServiceClass(serviceApiClass, line);
+              
+              if (cl != null)
+                services.add(createTransientObject(cl));
+            }
+          }
+
+          in.close();
+        } catch (IOException e1) {
+          log.log(Level.WARNING, e1.toString(), e1);
+        } finally {
+          IoUtil.close(is);
+        }
+      }
+    } catch (IOException e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
+    
+    return services;
+  }
+
+  private <T> Class<T> loadServiceClass(Class<T> serviceApi, 
+                                        String className)
+  {
+    try {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+      Class serviceClass= Class.forName(className, false, loader);
+
+      if (! serviceApi.isAssignableFrom(serviceClass))
+        throw new InjectionException(L.l("'{0}' is not a valid servicebecause it does not implement {1}",
+                                         serviceClass, serviceApi.getName()));
+      
+      return serviceClass;
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+      
+      return null;
     }
   }
 
@@ -2904,6 +3012,11 @@ public class InjectManager
 
       return _type.equals(bean._type) && _bean.equals(bean._bean);
     }
+    
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _type + "," + _bean + "]";
+    }
   }
 
   static class FillByName implements EnvironmentApply
@@ -3177,7 +3290,7 @@ public class InjectManager
       _loader = Thread.currentThread().getContextClassLoader();
 
       if (bean instanceof AbstractBean) {
-        AbstractBean absBean = (AbstractBean) bean;
+        AbstractBean<X> absBean = (AbstractBean<X>) bean;
         Annotated annotated = absBean.getAnnotated();
 
         if (annotated != null
@@ -3208,6 +3321,7 @@ public class InjectManager
         return null;
     }
 
+    @Override
     public X create(CreationalContext<X> env)
     {
       Thread thread = Thread.currentThread();
@@ -3225,6 +3339,7 @@ public class InjectManager
       }
     }
 
+    @Override
     public int hashCode()
     {
       return getBean().hashCode();
@@ -3277,5 +3392,17 @@ public class InjectManager
 
     _forbiddenClasses = new Class[forbiddenClasses.size()];
     forbiddenClasses.toArray(_forbiddenClasses);
+    
+    ClassLoader systemClassLoader = null;
+    
+    try {
+      systemClassLoader = ClassLoader.getSystemClassLoader();
+    } catch (Throwable e) {
+      // a security manager may not allow this call
+      
+      log.log(Level.FINEST, e.toString(), e);
+    }
+    
+    _systemClassLoader = systemClassLoader;
   }
 }

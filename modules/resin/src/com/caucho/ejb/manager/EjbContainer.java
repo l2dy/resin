@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -69,7 +69,8 @@ public class EjbContainer implements ScanListener, EnvironmentListener {
   private static final Logger log = Logger.getLogger(EjbContainer.class
       .getName());
 
-  private static final EnvironmentLocal<EjbContainer> _localContainer = new EnvironmentLocal<EjbContainer>();
+  private static final EnvironmentLocal<EjbContainer> _localContainer
+    = new EnvironmentLocal<EjbContainer>();
 
   private final EnvironmentClassLoader _classLoader;
   private final ClassLoader _tempClassLoader;
@@ -363,29 +364,6 @@ public class EjbContainer implements ScanListener, EnvironmentListener {
   }
 
   //
-  // Deployment information
-  //
-
-  /**
-   * Returns the information for a client remote configuration, e.g. the
-   * <ejb-ref> needed for the client to properly connect.
-   *
-   * Only needed for the TCK.
-   */
-  public String getClientRemoteConfig()
-  {
-    StringBuilder sb = new StringBuilder();
-
-    sb.append("<!-- test references -->");
-
-    for (AbstractServer server : _serverList) {
-      server.addClientRemoteConfig(sb);
-    }
-
-    return sb.toString();
-  }
-
-  //
   // ScanListener
   //
 
@@ -418,10 +396,15 @@ public class EjbContainer implements ScanListener, EnvironmentListener {
    */
   public boolean isRootScannable(Path root)
   {
-    if (! _ejbUrls.contains(root.getURL())
-        &&  ! root.lookup("META-INF/ejb-jar.xml").canRead()) {
+    if (! root.lookup("META-INF/ejb-jar.xml").canRead()) {
       return false;
     }
+    else if (_ejbUrls.contains(root.getURL())) {
+      return false;
+    }
+    
+    if (log.isLoggable(Level.FINE))
+      log.fine("EJB scanning '" + root.getFullPath() + "'");
 
     EjbRootConfig context = _configManager.createRootConfig(root);
 

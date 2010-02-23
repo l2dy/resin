@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,7 @@ package javax.servlet.http;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletException;
 import java.security.Principal;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.io.IOException;
 
@@ -131,6 +132,8 @@ public interface HttpServletRequest extends ServletRequest {
    * Returns the URI part corresponding to the selected servlet.
    * The URI is relative to the application.
    *
+   * Returns an emtpy string for a servlet matched on /*
+   *
    * <p/>Corresponds to CGI's <code>SCRIPT_NAME</code>
    *
    * <code>getServletPath()</code> is /servlet/Hello for the uri
@@ -188,11 +191,11 @@ public interface HttpServletRequest extends ServletRequest {
    * @param name the header name
    * @return an enumeration of the header values.
    */
-  public Enumeration getHeaders(String name);
+  public Enumeration<String> getHeaders(String name);
   /**
    * Returns an enumeration of all headers sent by the client.
    */
-  public Enumeration getHeaderNames();
+  public Enumeration<String> getHeaderNames();
   /**
    * Converts a header value to an integer.
    *
@@ -290,7 +293,7 @@ public interface HttpServletRequest extends ServletRequest {
   /**
    * @since Servlet 3.0
    */
-  public Iterable<Part> getParts()
+  public Collection<Part> getParts()
     throws IOException, ServletException;
 
 

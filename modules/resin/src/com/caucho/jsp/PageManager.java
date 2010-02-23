@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,11 +29,28 @@
 
 package com.caucho.jsp;
 
-import com.caucho.config.ConfigContext;
-import com.caucho.config.j2ee.InjectIntrospector;
-import com.caucho.config.program.ConfigProgram;
+import java.io.FileNotFoundException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionTarget;
+import javax.servlet.Servlet;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSession;
+import javax.servlet.jsp.JspContext;
+import javax.servlet.jsp.PageContext;
+
+import com.caucho.config.inject.ConfigContext;
+import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.scope.DependentScope;
 import com.caucho.java.JavaCompiler;
 import com.caucho.jsp.cfg.JspPropertyGroup;
 import com.caucho.loader.Environment;
@@ -46,19 +63,6 @@ import com.caucho.util.LruCache;
 import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.PersistentDependency;
-
-import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.InjectionTarget;
-import javax.servlet.*;
-import javax.servlet.http.*;
-import javax.servlet.jsp.PageContext;
-import javax.servlet.jsp.JspContext;
-import javax.servlet.ServletConfig;
-import java.io.FileNotFoundException;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Parent template manager for both JspManager and XtpManager.  PageManager
@@ -350,7 +354,7 @@ abstract public class PageManager {
 	  = beanManager.createAnnotatedType(page.getClass());
 	InjectionTarget inject = beanManager.createInjectionTarget(annType);
 
-	ConfigContext env = new ConfigContext();
+	CreationalContext<?> env = CreationalContextImpl.create();
 
 	inject.inject(page, env);
 	inject.postConstruct(page);

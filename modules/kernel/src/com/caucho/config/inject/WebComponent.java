@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -65,7 +65,7 @@ public class WebComponent {
 
   private ArrayList<BeanEntry> _beanList = new ArrayList<BeanEntry>();
 
-  public WebComponent(InjectManager beanManager, Class rawType)
+  public WebComponent(InjectManager beanManager, Class<?> rawType)
   {
     _beanManager = beanManager;
     _rawType = rawType;

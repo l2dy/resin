@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -202,7 +202,7 @@ public class BeanConfig {
   public void setScope(String scope)
   {
     if ("singleton".equals(scope))
-      _scope = Singleton.class;
+      _scope = javax.inject.Singleton.class;
     else if ("dependent".equals(scope))
       _scope = Dependent.class;
     else if ("request".equals(scope))

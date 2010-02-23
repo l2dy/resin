@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -142,7 +142,7 @@ public class DependencyComponent extends ClassComponent {
     out.println("{");
     out.pushDepth();
 
-    printVersionChange(out);
+    //printVersionChange(out);
 
     out.println("for (int i = _caucho_depend.length - 1; i >= 0; i--) {");
     out.println("  if (_caucho_depend[i].isModified())");

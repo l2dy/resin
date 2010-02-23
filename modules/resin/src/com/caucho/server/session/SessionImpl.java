@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -76,6 +76,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   private long _accessTime;
   // maximum time the session may stay alive.
   private long _idleTimeout;
+  private boolean _isIdleSet;
 
   // true if the session is new
   private boolean _isNew = true;
@@ -104,6 +105,9 @@ public class SessionImpl implements HttpSession, CacheListener {
   public SessionImpl(SessionManager manager, String id, long creationTime)
   {
     _manager = manager;
+    
+    // TCK requires exact time
+    creationTime = Alarm.getExactTime();
 
     _creationTime = creationTime;
     _accessTime = creationTime;
@@ -183,6 +187,8 @@ public class SessionImpl implements HttpSession, CacheListener {
       _idleTimeout = Long.MAX_VALUE / 2;
     else
       _idleTimeout = ((long) value) * 1000;
+
+    _isIdleSet = true;
   }
 
   /**
@@ -449,6 +455,9 @@ public class SessionImpl implements HttpSession, CacheListener {
     // e.g. server 'C' when 'A' and 'B' have no record of session
     if (_isValid)
       unbind();
+    
+    // TCK now cares about exact time
+    now = Alarm.getCurrentTime();
 
     _isValid = true;
     _isNew = true;
@@ -510,7 +519,15 @@ public class SessionImpl implements HttpSession, CacheListener {
     if (_clusterObject != null)
       _clusterObject.objectAccess();
     */
+    // TCK now cares about exact time
+    /*now = Alarm.getExactTime();
 
+    _accessTime = now;*/
+  }
+  
+  public void setAccessTime(long now)
+  {
+    // server/0123 (vs TCK?)
     _accessTime = now;
   }
 
@@ -523,7 +540,10 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public void finishRequest()
   {
+    // server/0122
     _accessTime = Alarm.getCurrentTime();
+    _isNew = false;
+    
     // update cache access?
     if (_useCount.decrementAndGet() > 0)
       return;
@@ -544,6 +564,11 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     if (! _isValid)
       return false;
+    else if (_isIdleSet && _accessTime + _idleTimeout < Alarm.getCurrentTime()) {
+      // server/01o2 (tck)
+    
+      return false;
+    }
 
     // server/01k0
     if (_useCount.get() > 1)
@@ -676,6 +701,8 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     if (log.isLoggable(Level.FINER))
       log.fine(this + " reset");
+
+    now = Alarm.getCurrentTime();
 
     unbind();
     _isValid = true;

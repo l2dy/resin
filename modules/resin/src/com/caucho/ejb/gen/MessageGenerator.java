@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,22 +29,25 @@
 
 package com.caucho.ejb.gen;
 
-import com.caucho.config.gen.*;
-import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
+import static javax.ejb.TransactionAttributeType.REQUIRED;
 
-import javax.ejb.*;
-import static javax.ejb.TransactionAttributeType.*;
 import java.io.IOException;
-import java.lang.reflect.*;
-import java.util.*;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+
+import javax.ejb.MessageDrivenBean;
+
+import com.caucho.config.gen.ApiClass;
+import com.caucho.config.gen.BeanGenerator;
+import com.caucho.config.gen.BusinessMethodGenerator;
+import com.caucho.config.gen.View;
+import com.caucho.java.JavaWriter;
 
 /**
  * Generates the skeleton for a message bean.
  */
 public class MessageGenerator extends BeanGenerator {
-  private static final L10N L = new L10N(BeanGenerator.class);
-
   private MessageView _view;
   private ArrayList<View> _views = new ArrayList<View>();
   
@@ -75,7 +78,7 @@ public class MessageGenerator extends BeanGenerator {
 
     sb.append(".");
     sb.append(className);
-    sb.append("__EJB");
+    sb.append("__BeanContext");
 
     return sb.toString();
   }
@@ -186,7 +189,7 @@ public class MessageGenerator extends BeanGenerator {
 	out.print(api.getName());
 	out.print("\", new Class[] { ");
 
-	for (Class cl : api.getParameterTypes()) {
+	for (Class<?> cl : api.getParameterTypes()) {
 	  out.printClass(cl);
 	  out.print(".class, ");
 	}

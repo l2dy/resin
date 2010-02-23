@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,15 +49,18 @@ public class Persistence {
 
   private static final String SERVICE
     = "META-INF/services/javax.persistence.spi.PersistenceProvider";
+  
   private static WeakHashMap<ClassLoader,PersistenceProvider[]>
     _providerMap = new WeakHashMap<ClassLoader,PersistenceProvider[]>();
   
   private static final String AMBER_PROVIDER
     = "com.caucho.amber.manager.AmberPersistenceProvider";
 
+  @Deprecated
   protected static final java.util.Set<PersistenceProvider> providers
     = new HashSet<PersistenceProvider>();
 
+  @Deprecated
   public static final String PERSISTENCE_PROVIDER
     = "javax.persistence.spi.PeristenceProvider";
 
@@ -88,8 +91,9 @@ public class Persistence {
    * @param name - the name of the persistence unit
    * @param props - persistence unit properties
    */
-  public static EntityManagerFactory createEntityManagerFactory(String name,
-                                                                Map props)
+  @SuppressWarnings("unchecked")
+  public static EntityManagerFactory 
+  createEntityManagerFactory(String name, Map props)
   {
     for (PersistenceProvider provider : getProviderList()) {
       EntityManagerFactory factory;
@@ -101,6 +105,13 @@ public class Persistence {
     }
 
     return null;
+  }
+  
+  public static PersistenceUtil getPersistenceUtil()
+  {
+    // XXX:
+    
+    throw new UnsupportedOperationException();
   }
 
   private static PersistenceProvider []getProviderList()
@@ -115,7 +126,7 @@ public class Persistence {
     ArrayList<PersistenceProvider> list = new ArrayList<PersistenceProvider>();
 
     try {
-      Class cl = Class.forName(AMBER_PROVIDER, false, loader);
+      Class<?> cl = Class.forName(AMBER_PROVIDER, false, loader);
 
       PersistenceProvider provider = (PersistenceProvider) cl.newInstance();
 
@@ -125,10 +136,10 @@ public class Persistence {
     }
 
     try {
-      Enumeration e = loader.getResources(SERVICE);
+      Enumeration<URL> e = loader.getResources(SERVICE);
 
       while (e.hasMoreElements()) {
-        URL url = (URL) e.nextElement();
+        URL url = e.nextElement();
 
         PersistenceProvider provider = loadProvider(url, loader);
 

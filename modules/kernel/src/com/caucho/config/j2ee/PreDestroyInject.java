@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,12 +30,14 @@
 package com.caucho.config.j2ee;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.ConfigContext;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.util.*;
 
 import java.lang.reflect.*;
 import java.util.logging.Logger;
+
+import javax.enterprise.context.spi.CreationalContext;
 
 
 public class PreDestroyInject extends ConfigProgram
@@ -53,7 +55,7 @@ public class PreDestroyInject extends ConfigProgram
   }
 
   @Override
-  public void inject(Object value, ConfigContext env)
+  public <T> void inject(T value, CreationalContext<T> env)
     throws ConfigException
   {
     try {

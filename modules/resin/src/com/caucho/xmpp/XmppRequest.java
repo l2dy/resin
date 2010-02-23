@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,10 +41,11 @@ import javax.xml.stream.XMLStreamReader;
 
 import com.caucho.bam.Broker;
 import com.caucho.hemp.broker.HempBrokerManager;
+import com.caucho.server.connection.AbstractProtocolConnection;
+import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.connection.TcpDuplexController;
 import com.caucho.server.connection.TcpDuplexHandler;
-import com.caucho.server.connection.TcpServerRequest;
 import com.caucho.util.Base64;
 import com.caucho.util.L10N;
 import com.caucho.util.RandomUtil;
@@ -56,7 +57,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * XMPP protocol
  */
-public class XmppRequest implements TcpServerRequest {
+public class XmppRequest extends AbstractProtocolConnection {
   private static final L10N L = new L10N(XmppRequest.class);
   private static final Logger log
     = Logger.getLogger(XmppRequest.class.getName());
@@ -574,7 +575,7 @@ public class XmppRequest implements TcpServerRequest {
   /**
    * Handles a close event when the connection is closed.
    */
-  public void protocolCloseEvent()
+  public void onCloseConnection()
   {
     _requestId++;
     

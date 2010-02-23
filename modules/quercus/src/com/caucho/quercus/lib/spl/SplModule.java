@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -97,7 +97,7 @@ public class SplModule extends AbstractQuercusModule
   }
   
   public static boolean spl_autoload_register(Env env,
-                                              @Optional Callback fun)
+                                              @Optional Callable fun)
   {
     if (fun == null)
       fun = new CallbackFunction(env, "spl_autoload");
@@ -108,7 +108,7 @@ public class SplModule extends AbstractQuercusModule
   }
   
   public static boolean spl_autoload_unregister(Env env,
-                                                Callback fun)
+                                                Callable fun)
   {
     env.removeAutoloadFunction(fun);
     
@@ -117,7 +117,7 @@ public class SplModule extends AbstractQuercusModule
   
   public static Value spl_autoload_functions(Env env)
   {
-    ArrayList<Callback> funList = env.getAutoloadFunctions();
+    ArrayList<Callable> funList = env.getAutoloadFunctions();
     
     if (funList == null)
       return BooleanValue.FALSE;
@@ -126,7 +126,7 @@ public class SplModule extends AbstractQuercusModule
 
     int size = funList.size();
     for (int i = 0; i < size; i++) {
-      Callback cb = funList.get(i);
+      Callable cb = funList.get(i);
       
       array.put(env.createString(cb.toString()));
     }

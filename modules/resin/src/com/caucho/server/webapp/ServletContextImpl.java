@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -140,6 +140,7 @@ public class ServletContextImpl extends ServletContextCompat
    */
   public boolean setInitParameter(String name, String value)
   {
+
     if (isActive())
       throw new IllegalStateException(L.l("setInitParameter must be called before the web-app has been initialized, because it's required by the servlet spec."));
 
@@ -171,7 +172,7 @@ public class ServletContextImpl extends ServletContextCompat
   /**
    * Gets the init params
    */
-  public Enumeration getInitParameterNames()
+  public Enumeration<String> getInitParameterNames()
   {
     return Collections.enumeration(_initParams.keySet());
   }
@@ -191,7 +192,7 @@ public class ServletContextImpl extends ServletContextCompat
   /**
    * Returns an enumeration of the attribute names.
    */
-  public Enumeration getAttributeNames()
+  public Enumeration<String> getAttributeNames()
   {
     synchronized (_attributes) {
       return Collections.enumeration(_attributes.keySet());
@@ -207,7 +208,7 @@ public class ServletContextImpl extends ServletContextCompat
   public void setAttribute(String name, Object value)
   {
     Object oldValue;
-
+    
     synchronized (_attributes) {
       if (value != null)
         oldValue = _attributes.put(name, value);
@@ -235,7 +236,7 @@ public class ServletContextImpl extends ServletContextCompat
             listener.attributeReplaced(event);
           else
             listener.attributeAdded(event);
-        } catch (Throwable e) {
+        } catch (Exception e) {
           log.log(Level.FINE, e.toString(), e);
         }
       }
@@ -431,12 +432,12 @@ public class ServletContextImpl extends ServletContextCompat
     throw new UnsupportedOperationException("getServlet is deprecated");
   }
 
-  public Enumeration getServletNames()
+  public Enumeration<String> getServletNames()
   {
     throw new UnsupportedOperationException("getServletNames is deprecated");
   }
 
-  public Enumeration getServlets()
+  public Enumeration<Servlet> getServlets()
   {
     throw new UnsupportedOperationException("getServlets is deprecated");
   }
@@ -507,8 +508,13 @@ public class ServletContextImpl extends ServletContextCompat
   {
     throw new UnsupportedOperationException("unimplemented");
   }
-
-  public Map<String, FilterRegistration> getFilterRegistrations()
+  
+  /**
+   * Returns filter registrations
+   * @return
+   */
+  @Override
+  public Map<String, ? extends FilterRegistration> getFilterRegistrations()
   {
     throw new UnsupportedOperationException("unimplemented");
   }
@@ -524,12 +530,6 @@ public class ServletContextImpl extends ServletContextCompat
   }
 
   public void addListener(Class<? extends EventListener> listenerClass)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public <T extends EventListener> T createListener(Class<T> listenerClass)
-    throws ServletException
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
@@ -552,5 +552,16 @@ public class ServletContextImpl extends ServletContextCompat
   protected boolean isActive()
   {
     throw new UnsupportedOperationException("unimplemented");
+  }
+
+  /* (non-Javadoc)
+   * @see javax.servlet.ServletContext#createListener(java.lang.Class)
+   */
+  @Override
+  public <T extends EventListener> T createListener(Class<T> listenerClass)
+    throws ServletException 
+  {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

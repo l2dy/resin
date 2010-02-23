@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -387,8 +387,8 @@ abstract public class GenericTag extends JspContainerNode
 	out.printClass(_tagClass);
 	out.println(" " + _tag.getId() + " = null;");
 
-	_isDeclaringInstance = true;
       }
+      _isDeclaringInstance = true;
 
       /*
       if (SimpleTag.class.isAssignableFrom(_tagClass) && hasCustomTag())

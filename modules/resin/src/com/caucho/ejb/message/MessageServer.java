@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,8 +32,8 @@ package com.caucho.ejb.message;
 import com.caucho.config.*;
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.ejb.AbstractContext;
 import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.server.AbstractContext;
 import com.caucho.ejb.server.AbstractServer;
 import com.caucho.ejb.server.EjbProducer;
 import com.caucho.jca.*;
@@ -127,7 +127,7 @@ public class MessageServer<T> extends AbstractServer<T>
 			getEJBName()));
 
       try {
-	Class beanClass = getBeanSkelClass();
+	Class<?> beanClass = getBeanSkelClass();
 
 	_ejbCreate = beanClass.getMethod("ejbCreate", new Class[0]);
 	  
@@ -146,7 +146,7 @@ public class MessageServer<T> extends AbstractServer<T>
     super.bindContext();
     
     InjectManager manager = InjectManager.create();
-    BeanFactory factory = manager.createBeanFactory(_context.getClass());
+    BeanFactory<?> factory = manager.createBeanFactory(_context.getClass());
 
     manager.addBean(factory.singleton(_context));
   }
@@ -158,8 +158,10 @@ public class MessageServer<T> extends AbstractServer<T>
   public boolean start()
     throws Exception
   {
-     if (! super.start())
+    if (! super.start())
       return false;
+     
+    // _ra.start(ResourceManagerImpl.create());
      
     _ra.endpointActivation(this, _activationSpec);
 

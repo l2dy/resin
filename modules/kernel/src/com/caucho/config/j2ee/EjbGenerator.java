@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,11 +30,11 @@
 package com.caucho.config.j2ee;
 
 import com.caucho.config.inject.AbstractBean;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ValueGenerator;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.ConfigException;
-import com.caucho.config.ConfigContext;
 import com.caucho.naming.*;
 import com.caucho.util.L10N;
 

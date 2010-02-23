@@ -32,7 +32,8 @@ package com.caucho.quercus.lib.reflection;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
-import com.caucho.quercus.expr.RequiredExpr;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.expr.ParamRequiredExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.Arg;
 import com.caucho.util.L10N;
@@ -67,7 +68,7 @@ public class ReflectionParameter
   
   public static ReflectionParameter __construct(Env env,
                                                 String funName,
-                                                String paramName)
+                                                StringValue paramName)
   {
     AbstractFunction fun = env.findFunction(funName);
     
@@ -89,7 +90,7 @@ public class ReflectionParameter
     return null;
   }
   
-  public String getName()
+  public StringValue getName()
   {
     return _arg.getName();
   }
@@ -146,7 +147,7 @@ public class ReflectionParameter
   
   public boolean isOptional()
   {
-    return ! (_arg.getDefault() instanceof RequiredExpr);
+    return ! (_arg.getDefault() instanceof ParamRequiredExpr);
   }
   
   public boolean isDefaultValueAvailable()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -295,17 +295,6 @@ public abstract class AbstractGenerator {
       depend.addDependency(depends.get(i));
 
     depend.generate(getOut());
-  }
-
-  /**
-   * Prints code to detect a version change.
-   */
-  protected void printVersionChange()
-    throws IOException
-  {
-    println("if (com.caucho.server.util.CauchoSystem.getVersionId() != " +
-            CauchoSystem.getVersionId() + ")");
-    println("  return true;");
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -96,6 +96,14 @@ public abstract class Attribute {
   public boolean isAllowText()
   {
     return true;
+  }
+
+  /**
+   * True if the attribute is annotated with a @Configurable
+   */
+  public boolean isConfigurable()
+  {
+    return false;
   }
   
   /**

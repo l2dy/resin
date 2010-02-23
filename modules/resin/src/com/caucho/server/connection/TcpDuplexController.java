@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,8 +32,6 @@ package com.caucho.server.connection;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.servlet.DuplexContext;
-import com.caucho.servlet.DuplexListener;
 import com.caucho.util.Alarm;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
@@ -43,7 +41,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * Public API to control a http upgrade connection.
  */
-public class TcpDuplexController extends ConnectionController {
+public class TcpDuplexController extends AsyncController {
   private static final L10N L = new L10N(TcpDuplexController.class);
   private static final Logger log
     = Logger.getLogger(TcpDuplexController.class.getName());

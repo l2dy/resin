@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1014,7 +1014,7 @@ public abstract class JspNode {
 
     String fragmentVar = frag.getFragmentName();
 
-    cb.append(fragmentVar + " = _CauchoFragment.create(" + fragmentVar
+    cb.append(fragmentVar + " = createFragment(" + fragmentVar
 	      + ", " + index
 	      + ", _jsp_parentContext"
 	      + ", " + contextVar

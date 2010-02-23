@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -69,11 +69,12 @@ public class ValueMarshal extends Marshal
   {
     if (_isPassThru) {
       // php/0433
-      return value;
+      return value.toLocalRef();
     }
     else {
       // php/3c81
-      return value.toValue();
+      // return value.toLocalValue();
+      return value.toLocalValueReadOnly(); // non-copy
     }
   }
 

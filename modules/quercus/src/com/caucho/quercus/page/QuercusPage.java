@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,7 +30,7 @@
 package com.caucho.quercus.page;
 
 import com.caucho.quercus.Location;
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
@@ -147,15 +147,15 @@ abstract public class QuercusPage
   {
     QuercusPage compile = getCompiledPage();
 
-    if (compile != null)
-      return compile.executeTop(env);
-    
     Path oldPwd = env.getPwd();
 
     Path pwd = getPwd(env);
 
     env.setPwd(pwd);
     try {
+      if (compile != null)
+        return compile.executeTop(env);
+      
       return execute(env);
     } catch (QuercusLanguageException e) {
       if (env.getExceptionHandler() != null) {
@@ -210,7 +210,7 @@ abstract public class QuercusPage
    *
    * @param quercus the owning engine
    */
-  public void init(Quercus quercus)
+  public void init(QuercusContext quercus)
   {
   }
 

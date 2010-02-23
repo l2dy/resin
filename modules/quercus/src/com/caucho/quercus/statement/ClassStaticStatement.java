@@ -31,7 +31,9 @@ package com.caucho.quercus.statement;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.expr.VarExpr;
@@ -45,7 +47,7 @@ public class ClassStaticStatement
   protected final String _className;
   protected final VarExpr _var;
   protected final Expr _initValue;
-  protected String _staticName;
+  protected StringValue _staticName;
   
   /**
    * Creates the echo statement.
@@ -65,17 +67,23 @@ public class ClassStaticStatement
   public Value execute(Env env)
   {
     try {
+      // XXX: this isn't reliable, needs to be Quercus-based
       if (_staticName == null)
         _staticName = env.createStaticName();
 
-      String className = _className;
-      String staticName = _staticName;
+      // String className = _className;
+      StringValue staticName = _staticName;
 
       Value qThis = env.getThis();
       
-      Var var = env.getStaticClassVar(qThis, className, staticName);
+      QuercusClass qClass = qThis.getQuercusClass();
+      String className = qClass.getName();
       
-      env.setValue(_var.getName(), var);
+      // Var var = qClass.getStaticFieldVar(env, env.createString(staticName));
+      // Var var = qClass.getStaticFieldVar(env, staticName);
+      Var var = env.getStaticVar(env.createString(className + "::" + staticName));
+      
+      env.setVar(_var.getName(), var);
 
       if (! var.isset() && _initValue != null)
         var.set(_initValue.eval(env));

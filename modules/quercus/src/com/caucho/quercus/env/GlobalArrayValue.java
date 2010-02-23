@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -63,7 +63,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
    */
   public ArrayValue append(Value key, Value value)
   {
-    _env.setGlobalValue(key.toString(), value);
+    _env.setGlobalValue(key.toStringValue(), value);
 
     return this;
   }
@@ -73,15 +73,15 @@ public class GlobalArrayValue extends ArrayValueImpl {
    */
   public Value get(Value key)
   {
-    return _env.getGlobalValue(key.toString());
+    return _env.getGlobalValue(key.toStringValue());
   }
   
   /**
    * Returns the array ref.
    */
-  public Var getRef(Value key)
+  public Var getVar(Value key)
   {
-    return _env.getGlobalRef(key.toString());
+    return _env.getGlobalRef(key.toStringValue());
   }
 
   /**
@@ -90,7 +90,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
   @Override
   public Value getArg(Value index, boolean isTop)
   {
-    return getRef(index);
+    return getVar(index);
   }
 
   /**
@@ -98,7 +98,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
    */
   public Value getArray(Value index)
   {
-    Value array = getRef(index).toAutoArray();
+    Value array = getVar(index).toAutoArray();
 
     return array;
   }
@@ -109,7 +109,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
   @Override
   public Value remove(Value key)
   {
-    return _env.unsetGlobalVar(key.toString());
+    return _env.unsetGlobalVar(key.toStringValue());
   }
   
   /**
@@ -133,7 +133,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
    */
   public Value containsKey(Value key)
   {
-    EnvVar var = _env.getGlobalEnv().get(key.toString());
+    EnvVar var = _env.getGlobalEnv().get(key.toStringValue());
 
     if (var != null)
       return var.get();
@@ -155,7 +155,7 @@ public class GlobalArrayValue extends ArrayValueImpl {
    */
   public boolean keyExists(Value key)
   {
-    EnvVar var = _env.getGlobalEnv().get(key.toString());
+    EnvVar var = _env.getGlobalEnv().get(key.toStringValue());
     
     return var != null;
   }
@@ -208,8 +208,8 @@ public class GlobalArrayValue extends ArrayValueImpl {
   {
     ArrayValue array = new ArrayValueImpl();
     
-    for(Map.Entry<String,EnvVar> entry : _env.getGlobalEnv().entrySet()) {
-      Value key = _env.createString(entry.getKey());
+    for(Map.Entry<StringValue,EnvVar> entry : _env.getGlobalEnv().entrySet()) {
+      Value key = entry.getKey();
       Value val = entry.getValue().get();
       
       array.put(key, val);

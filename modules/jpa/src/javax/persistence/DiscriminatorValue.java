@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,5 +44,5 @@ public @interface DiscriminatorValue {
    * (Optional) The value that indicates that the row is an entity of the
    * annotated entity type.
    */
-  String value();
+  String value() default "";
 }

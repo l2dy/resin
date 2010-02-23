@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package com.caucho.ejb.session;
 import java.util.*;
 
 import com.caucho.config.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.naming.*;
 
 /**
@@ -56,6 +57,6 @@ public class StatefulProviderProxy implements ObjectProxy
   public Object createObject(Hashtable env)
   {
     // XXX: should be the bean
-    return _provider.__caucho_createNew(null, new ConfigContext());
+    return _provider.__caucho_createNew(null, null);
   }
 }

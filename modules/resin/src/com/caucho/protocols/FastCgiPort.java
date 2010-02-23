@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,8 +31,8 @@ package com.caucho.protocols;
 
 import com.caucho.config.program.ConfigProgram;
 
-import com.caucho.server.connection.Protocol;
-import com.caucho.server.connection.ProtocolPort;
+import com.caucho.server.cluster.ProtocolPort;
+import com.caucho.server.connection.AbstractProtocol;
 import com.caucho.server.fastcgi.FastCgiProtocol;
 
 /**
@@ -40,7 +40,7 @@ import com.caucho.server.fastcgi.FastCgiProtocol;
  */
 public class FastCgiPort extends ProtocolPort
 {
-  public Protocol getProtocol()
+  public AbstractProtocol getProtocol()
   {
     return new FastCgiProtocol();
   }

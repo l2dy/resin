@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,7 +31,7 @@ package com.caucho.quercus.env;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.StringLiteralExpr;
+import com.caucho.quercus.expr.LiteralStringExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.vfs.WriteStream;
 
@@ -65,22 +65,22 @@ public class CopyObjectExtValue extends ObjectExtValue
    * Returns the array ref.
    */
   @Override
-  public Var getFieldRef(Env env, StringValue name)
+  public Var getFieldVar(Env env, StringValue name)
   {
     _root.setModified();
 
-    return super.getFieldRef(env, name);
+    return super.getFieldVar(env, name);
   }
 
   /**
    * Returns the array ref.
    */
   @Override
-  public Var getThisFieldRef(Env env, StringValue name)
+  public Var getThisFieldVar(Env env, StringValue name)
   {
     _root.setModified();
 
-    return super.getThisFieldRef(env, name);
+    return super.getThisFieldVar(env, name);
   }
 
   /**

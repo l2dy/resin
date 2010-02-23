@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.annotation.Name;
@@ -47,7 +47,7 @@ public class QuercusModule extends AbstractQuercusModule
    * Returns the Quercus object.
    */
   @Name("quercus_get_quercus")
-  public static Quercus get_quercus(Env env)
+  public static QuercusContext get_quercus(Env env)
   {
     return env.getQuercus();
   }
@@ -166,7 +166,7 @@ public class QuercusModule extends AbstractQuercusModule
    * Special quercus-only import statements.
    */
   @Name("quercus_import")
-  public static void quercus_import(Env env, String name)
+  public static void q_import(Env env, String name)
   {
     if (name.endsWith("*"))
       env.addWildcardImport(name);

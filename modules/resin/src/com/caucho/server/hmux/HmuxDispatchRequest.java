@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -398,17 +398,18 @@ public class HmuxDispatchRequest {
     for (int i = 0; i < servers.length; i++) {
       ClusterServer server = servers[i];
 
-      if (server != null && server.getClusterPort() != null) {
-	ClusterPort port = server.getClusterPort();
-	
-	String srunHost = port.getAddress() + ":" + port.getPort();
+      if (server != null) {
+	String srunHost = server.getAddress() + ":" + server.getPort();
 
 	/*
 	if (server.isBackup())
 	  writeString(os, HMUX_SRUN_BACKUP, srunHost);
 	else
 	*/
-	if (server.isSSL())
+	
+	boolean isSSL = false; // server.isSSL();
+	
+	if (isSSL)
 	  writeString(os, HMUX_SRUN_SSL, srunHost);
 	else
 	  writeString(os, HMUX_SRUN, srunHost);

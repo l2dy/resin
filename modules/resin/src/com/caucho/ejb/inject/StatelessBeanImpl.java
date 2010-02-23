@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,13 +29,13 @@
 
 package com.caucho.ejb.inject;
 
-import com.caucho.config.ConfigContext;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ScopeAdapterBean;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.session.StatelessProvider;
-import com.caucho.ejb.session.StatelessServer;
+import com.caucho.ejb.session.StatelessManager;
 import com.caucho.util.L10N;
 
 import java.lang.annotation.Annotation;
@@ -44,7 +44,6 @@ import java.lang.reflect.Type;
 import java.util.Set;
 
 import javax.enterprise.inject.spi.*;
-import javax.enterprise.inject.spi.InjectionTarget;
 import javax.enterprise.context.spi.Contextual;
 import javax.enterprise.context.spi.CreationalContext;
 
@@ -55,13 +54,13 @@ public class StatelessBeanImpl<X> extends SessionBeanImpl<X>
 {
   private static final L10N L = new L10N(StatelessBeanImpl.class);
 
-  private StatelessServer _server;
+  private StatelessManager _server;
   private String _name;
   private StatelessProvider _producer;
 
   private InjectionTarget _target;
   
-  public StatelessBeanImpl(StatelessServer server,
+  public StatelessBeanImpl(StatelessManager server,
 			   ManagedBeanImpl<X> bean,
                            StatelessProvider producer)
   {

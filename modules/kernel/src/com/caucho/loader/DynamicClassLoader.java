@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1298,6 +1298,11 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       loaders.get(i).validate();
   }
 
+  public void scanRoot()
+  {
+    _hasNewLoader = true;
+  }
+  
   public void scan()
   {
   }
@@ -1617,9 +1622,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
       bBuf = buffer.getBuffer();
       bLen = buffer.length();
-
+      
       if (_classFileTransformerList != null) {
-        Class redefineClass = null;
+        Class<?> redefineClass = null;
         String className = name.replace('.', '/');
 
         if (bBuf.length != bLen) {

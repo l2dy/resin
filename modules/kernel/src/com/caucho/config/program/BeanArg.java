@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,38 +29,24 @@
 
 package com.caucho.config.program;
 
-import com.caucho.config.*;
-import com.caucho.config.annotation.StartupType;
-import com.caucho.config.inject.AnnotatedTypeImpl;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.program.*;
-import com.caucho.config.type.*;
-import com.caucho.util.*;
-import com.caucho.xml.QName;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
+import java.util.HashSet;
 
-import java.util.*;
-import java.util.logging.*;
-import java.lang.reflect.*;
-import java.lang.annotation.*;
-
-import javax.annotation.*;
-import javax.enterprise.inject.spi.AnnotatedConstructor;
-import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeanManager;
 
-import org.w3c.dom.Node;
+import com.caucho.config.inject.CreationalContextImpl;
+import com.caucho.config.inject.InjectManager;
 
 /**
  * Custom bean configured by namespace
  */
-public class BeanArg extends Arg {
-  private static final L10N L = new L10N(BeanArg.class);
-  
+public class BeanArg<T> extends Arg<T> {
   private InjectManager _beanManager;
   private Type _type;
   private Annotation []_bindings;
-  private Bean _bean;
+  private Bean<?> _bean;
 
   public BeanArg(Type type, Annotation []bindings)
   {
@@ -70,6 +56,7 @@ public class BeanArg extends Arg {
     _bindings = bindings;
   }
 
+  @Override
   public void bind()
   {
     if (_bean == null) {
@@ -92,23 +79,15 @@ public class BeanArg extends Arg {
     }
   }
 
-  private ArrayList<Annotation> toList(Annotation []annList)
-  {
-    ArrayList<Annotation> list = new ArrayList<Annotation>();
-
-    for (Annotation ann : annList) {
-      list.add(ann);
-    }
-
-    return list;
-  }
-    
-  public Object eval(ConfigContext env)
+  @Override
+  public Object eval(CreationalContext<T> parentEnv)
   {
     if (_bean == null)
       bind();
 
+    CreationalContext<T> beanEnv = new CreationalContextImpl(_bean, parentEnv);
+    
     // XXX: getInstance for injection?
-    return _beanManager.getReference(_bean, _type, env);
+    return _beanManager.getReference(_bean, _type, beanEnv);
   }
 }

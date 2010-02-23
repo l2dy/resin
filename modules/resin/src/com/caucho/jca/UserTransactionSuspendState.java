@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,12 +41,12 @@ public class UserTransactionSuspendState {
     = Logger.getLogger(UserTransactionSuspendState.class.getName());
   private static final L10N L = new L10N(UserTransactionSuspendState.class);
 
-  private ArrayList<PoolItem> _poolItems = new ArrayList<PoolItem>();
+  private ArrayList<ManagedPoolItem> _poolItems = new ArrayList<ManagedPoolItem>();
   
   /**
    * Creates the suspend state.
    */
-  public UserTransactionSuspendState(ArrayList<PoolItem> poolItems)
+  public UserTransactionSuspendState(ArrayList<ManagedPoolItem> poolItems)
   {
     _poolItems.addAll(poolItems);
   }
@@ -54,7 +54,7 @@ public class UserTransactionSuspendState {
   /**
    * Returns the pooled items.
    */
-  public ArrayList<PoolItem> getPoolItems()
+  public ArrayList<ManagedPoolItem> getPoolItems()
   {
     return _poolItems;
   }

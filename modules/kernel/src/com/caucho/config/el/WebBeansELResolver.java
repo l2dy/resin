@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,8 +46,14 @@ public class WebBeansELResolver extends ELResolver {
 
   public WebBeansELResolver()
   {
-    _webBeans = InjectManager.create();
+    this(InjectManager.create());
+    
     _webBeans.update();
+  }
+
+  public WebBeansELResolver(InjectManager beanManager)
+  {
+    _webBeans = beanManager;
   }
 
   public Class<?> getCommonPropertyType(ELContext context,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,17 +29,16 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.scope.DependentScope;
-import com.caucho.config.type.*;
+import javax.enterprise.context.spi.CreationalContext;
+
 import com.caucho.config.program.Arg;
-import com.caucho.xml.QName;
 
 /**
  * A saved program for creating a constructor argument
  */
-public class InjectionPointArg extends Arg {
-  public Object eval(ConfigContext env)
+public class InjectionPointArg<T> extends Arg<T> {
+  @Override
+  public T eval(CreationalContext<T> env)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }

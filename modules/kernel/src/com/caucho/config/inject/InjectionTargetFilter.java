@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,6 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.ConfigContext;
 import com.caucho.config.scope.ScopeContext;
 import com.caucho.config.scope.ApplicationScope;
 import com.caucho.config.program.ConfigProgram;
@@ -80,7 +79,7 @@ public class InjectionTargetFilter<T> implements InjectionTarget<T>,
     _next.inject(instance, ctx);
 
     if (_init != null)
-      _init.inject(instance, (ConfigContext) ctx);
+      _init.inject(instance, ctx);
   }
 
   public void postConstruct(T instance)

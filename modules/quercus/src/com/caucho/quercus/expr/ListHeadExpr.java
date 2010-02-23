@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,12 @@
 
 package com.caucho.quercus.expr;
 
+import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Value;
+import com.caucho.util.L10N;
 
 import java.util.ArrayList;
 
@@ -39,6 +42,8 @@ import java.util.ArrayList;
  * Represents a list assignment expression.
  */
 public class ListHeadExpr extends Expr {
+  private static final L10N L = new L10N(ListHeadExpr.class);
+  
   protected final Expr []_varList;
   protected final Value []_keyList;
 
@@ -79,14 +84,57 @@ public class ListHeadExpr extends Expr {
    *
    * @return the expression value.
    */
-  public void evalAssign(Env env, Value value)
+  public Value evalAssignValue(Env env, Value value)
   {
     int len = _varList.length;
 
     for (int i = 0; i < len; i++) {
       if (_varList[i] != null)
-        _varList[i].evalAssign(env, value.get(_keyList[i]).copy());
+        _varList[i].evalAssignValue(env, value.get(_keyList[i]).copy());
     }
+    
+    return value;
+  }
+  
+  public Value evalAssignEachValue(Env env, Value value)
+  {
+    if (! (value instanceof ArrayValue)) {
+      env.error(L.l("variable passed to each must reference an array"));
+      return NullValue.NULL;
+    }
+
+    ArrayValue array = (ArrayValue) value;
+    
+    if (_varList.length > 0 && _varList[0] != null)
+      _varList[0].evalAssignValue(env, array.key());
+
+    if (_varList.length > 1 && _varList[1] != null)
+      _varList[1].evalAssignValue(env, array.current().copy());
+      
+    return array.each();
+  }
+  
+  public boolean evalEachBoolean(Env env, Value value)
+  {
+    if (! (value instanceof ArrayValue)) {
+      env.error(L.l("variable passed to each must reference an array"));
+      return false;
+    }
+
+    ArrayValue array = (ArrayValue) value;
+    
+    if (! array.hasCurrent())
+      return false;
+    
+    if (_varList.length > 0 && _varList[0] != null)
+      _varList[0].evalAssignValue(env, array.key());
+
+    if (_varList.length > 1 && _varList[1] != null)
+      _varList[1].evalAssignValue(env, array.current().copy());
+
+    array.next();
+
+    return true;
   }
 }
 

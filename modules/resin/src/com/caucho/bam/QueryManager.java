@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,8 +44,6 @@ public class QueryManager {
   private final AtomicLong _qId = new AtomicLong();
 
   private final QueryMap _queryMap = new QueryMap();
-
-  private long _timeout = 10000L;
 
   public QueryManager()
   {

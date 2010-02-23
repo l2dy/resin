@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -282,6 +282,67 @@ public class DoubleValue extends NumberValue
   public Value add(long lValue)
   {
     return new DoubleValue(lValue + _value);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value addOne()
+  {
+    return new DoubleValue(_value + 1);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value subOne()
+  {
+    double next = _value - 1;
+    
+    /*
+    if (next == (long) next)
+      return LongValue.create(next);
+    else
+    */
+    return new DoubleValue(next);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value preincr()
+  {
+    return new DoubleValue(_value + 1);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value predecr()
+  {
+    return new DoubleValue(_value - 1);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value postincr()
+  {
+    return new DoubleValue(_value + 1);
+  }
+
+  /**
+   * Increment the following value.
+   */
+  @Override
+  public Value postdecr()
+  {
+    return new DoubleValue(_value - 1);
   }
 
   /**

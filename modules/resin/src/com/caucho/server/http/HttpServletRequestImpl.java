@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,28 +29,6 @@
 
 package com.caucho.server.http;
 
-import com.caucho.config.scope.ScopeRemoveListener;
-import com.caucho.i18n.CharacterEncoding;
-import com.caucho.security.Authenticator;
-import com.caucho.security.AbstractLogin;
-import com.caucho.security.Login;
-import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.AsyncListenerNode;
-import com.caucho.server.connection.Connection;
-import com.caucho.server.connection.ConnectionCometController;
-import com.caucho.server.connection.TcpDuplexController;
-import com.caucho.server.connection.TcpDuplexHandler;
-import com.caucho.server.dispatch.Invocation;
-import com.caucho.server.session.SessionManager;
-import com.caucho.server.webapp.WebApp;
-import com.caucho.servlet.DuplexContext;
-import com.caucho.servlet.DuplexListener;
-import com.caucho.servlet.WebSocketServletRequest;
-import com.caucho.servlet.WebSocketContext;
-import com.caucho.servlet.WebSocketListener;
-import com.caucho.util.*;
-import com.caucho.vfs.*;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,20 +36,59 @@ import java.io.OutputStream;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.logging.Logger;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import javax.servlet.*;
-import javax.servlet.annotation.MultipartConfig;
+import javax.servlet.AsyncContext;
+import javax.servlet.DispatcherType;
+import javax.servlet.MultipartConfigElement;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.ServletInputStream;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletRequestAttributeEvent;
+import javax.servlet.ServletRequestAttributeListener;
+import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
+
+import com.caucho.config.scope.ScopeRemoveListener;
+import com.caucho.i18n.CharacterEncoding;
+import com.caucho.security.AbstractLogin;
+import com.caucho.security.Authenticator;
+import com.caucho.security.Login;
+import com.caucho.server.cluster.Server;
+import com.caucho.server.connection.TcpDuplexController;
+import com.caucho.server.connection.TcpDuplexHandler;
+import com.caucho.server.connection.TransportConnection;
+import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.session.SessionManager;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.servlet.DuplexContext;
+import com.caucho.servlet.DuplexListener;
+import com.caucho.servlet.WebSocketContext;
+import com.caucho.servlet.WebSocketListener;
+import com.caucho.servlet.WebSocketServletRequest;
+import com.caucho.util.CharBuffer;
+import com.caucho.util.CharSegment;
+import com.caucho.util.HashMapImpl;
+import com.caucho.util.L10N;
+import com.caucho.util.NullEnumeration;
+import com.caucho.vfs.Encoding;
+import com.caucho.vfs.FilePath;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.Vfs;
+import com.caucho.vfs.WriteStream;
 
 /**
  * User facade for http requests.
@@ -92,7 +109,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
 
   private final HttpServletResponseImpl _response;
 
-  private boolean _isSecure;
+  private Boolean _isSecure;
 
   private Invocation _invocation;
 
@@ -123,9 +140,8 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   private boolean _isSyntheticCacheHeader;
 
   // comet
-  private AsyncListenerNode _asyncListenerNode;
   private long _asyncTimeout = 10000;
-  private ConnectionCometController _comet;
+  private AsyncContextImpl _asyncContext;
 
   private ArrayList<Path> _closeOnExit;
 
@@ -141,8 +157,6 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
 
     _response = new HttpServletResponseImpl(this,
                                             request.getAbstractHttpResponse());
-
-    _isSecure = request.isSecure();
   }
 
   public HttpServletResponseImpl getResponse()
@@ -157,6 +171,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the prococol, e.g. "HTTP/1.1"
    */
+  @Override
   public String getProtocol()
   {
     return _request.getProtocol();
@@ -165,6 +180,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the request scheme, e.g. "http"
    */
+  @Override
   public String getScheme()
   {
     String scheme = _request.getScheme();
@@ -185,6 +201,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * correct call for forming urls, but may not contain the host that Resin is
    * actually listening on.
    */
+  @Override
   public String getServerName()
   {
     return _request.getServerName();
@@ -202,6 +219,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * (getServerPort() == 443), {@link #isSecure()} is provided for
    * that purpose.
    */
+  @Override
   public int getServerPort()
   {
     return _request.getServerPort();
@@ -210,6 +228,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the IP address of the remote host, i.e. the client browser.
    */
+  @Override
   public String getRemoteAddr()
   {
     return _request.getRemoteAddr();
@@ -218,6 +237,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the DNS hostname of the remote host, i.e. the client browser.
    */
+  @Override
   public String getRemoteHost()
   {
     return _request.getRemoteHost();
@@ -228,6 +248,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since 2.4
    */
+  @Override
   public int getRemotePort()
   {
     return _request.getRemotePort();
@@ -241,6 +262,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since 2.4
    */
+  @Override
   public String getLocalAddr()
   {
     return _request.getLocalAddr();
@@ -256,6 +278,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since 2.4
    */
+  @Override
   public String getLocalName()
   {
     return _request.getLocalAddr();
@@ -274,6 +297,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since 2.4
    */
+  @Override
   public int getLocalPort()
   {
     return _request.getLocalPort();
@@ -284,6 +308,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * <code>setCharacterEncoding</code> must be called before calling
    * <code>getReader</code> or reading any parameters.
    */
+  @Override
   public void setCharacterEncoding(String encoding)
     throws java.io.UnsupportedEncodingException
   {
@@ -295,6 +320,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * The stream will automatically end when the end of the POST data
    * is complete.
    */
+  @Override
   public ServletInputStream getInputStream()
     throws IOException
   {
@@ -311,6 +337,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * based on the request data and is the same as
    * <code>getCharacterEncoding()</code>
    */
+  @Override
   public BufferedReader getReader()
     throws IOException, IllegalStateException
   {
@@ -325,6 +352,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the character encoding of the POSTed data.
    */
+  @Override
   public String getCharacterEncoding()
   {
     return _request.getCharacterEncoding();
@@ -339,6 +367,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * <p>The upshot is, rely on the input stream to end when the data
    * completes.
    */
+  @Override
   public int getContentLength()
   {
     return _request.getContentLength();
@@ -347,6 +376,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the request's mime-type.
    */
+  @Override
   public String getContentType()
   {
     return _request.getContentType();
@@ -356,6 +386,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * Returns the request's preferred locale, based on the Accept-Language
    * header.  If unspecified, returns the server's default locale.
    */
+  @Override
   public Locale getLocale()
   {
     return _request.getLocale();
@@ -364,6 +395,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns an enumeration of all locales acceptable by the client.
    */
+  @Override
   public Enumeration<Locale> getLocales()
   {
     return _request.getLocales();
@@ -372,9 +404,13 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns true if the connection is secure, e.g. it uses SSL.
    */
+  @Override
   public boolean isSecure()
   {
-    return _isSecure;
+    if (_isSecure != null)
+      return _isSecure;
+    else
+      return _request.isSecure();
   }
 
   //
@@ -388,6 +424,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @return the attribute value.
    */
+  @Override
   public Object getAttribute(String name)
   {
     HashMapImpl<String,Object> attributes = _attributes;
@@ -408,6 +445,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns an enumeration of the request attribute names.
    */
+  @Override
   public Enumeration<String> getAttributeNames()
   {
     HashMapImpl<String,Object> attributes = _attributes;
@@ -432,6 +470,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name the attribute name.
    * @param value the new attribute value.
    */
+  @Override
   public void setAttribute(String name, Object value)
   {
     HashMapImpl<String,Object> attributes = _attributes;
@@ -476,6 +515,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @param name the attribute name.
    */
+  @Override
   public void removeAttribute(String name)
   {
     HashMapImpl<String,Object> attributes = _attributes;
@@ -526,6 +566,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * (including query string) for the included file.
    * @return RequestDispatcher for later inclusion or forwarding.
    */
+  @Override
   public RequestDispatcher getRequestDispatcher(String path)
   {
     if (path == null || path.length() == 0)
@@ -562,6 +603,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since Servlet 3.0
    */
+  @Override
   public ServletContext getServletContext()
   {
     Invocation invocation = _invocation;
@@ -577,113 +619,11 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since Servlet 3.0
    */
+  @Override
   public ServletResponse getServletResponse()
   {
     return _response;
   }
-
-  /**
-   * Suspend the request
-   *
-   * @since Servlet 3.0
-   */
-  public void suspend(long timeout)
-  {
-    suspend();
-
-    // _comet.setTimeout(timeout);
-  }
-
-  /**
-   * Suspend the request
-   *
-   * @since Servlet 3.0
-   */
-  public void suspend()
-  {
-    if (_comet == null) {
-      _comet = _request.getConnection().toComet(true, this, _response);
-      _comet.setAsyncListenerNode(_asyncListenerNode);
-    }
-
-    _comet.suspend();
-  }
-
-  /**
-   * Resume the request
-   *
-   * @since Servlet 3.0
-   */
-  public void resume()
-  {
-    if (_comet != null)
-      _comet.wake();
-  }
-
-  /**
-   * Complete the request
-   *
-   * @since Servlet 3.0
-   */
-  public void complete()
-  {
-    if (_comet != null) {
-      _comet.complete();
-    }
-  }
-
-  /**
-   * Returns true if the servlet is suspended
-   *
-   * @since Servlet 3.0
-   */
-  /*
-  public boolean isSuspended()
-  {
-    if (_comet != null)
-      return _comet.isSuspended();
-    else
-      return false;
-  }
-  */
-
-  /**
-   * Returns true if the servlet is resumed
-   *
-   * @since Servlet 3.0
-   */
-  /*
-  public boolean isResumed()
-  {
-    // return _comet != null && ! _comet.isInitial() && ! _comet.isComplete();
-    return _comet != null && ! _comet.isComplete();
-  }
-  */
-
-  /**
-   * Returns true if the servlet timed out
-   *
-   * @since Servlet 3.0
-   */
-  public boolean isTimeout()
-  {
-    return _comet != null && _comet.isTimeout();
-  }
-
-  /**
-   * Returns true for the initial dispatch
-   *
-   * @since Servlet 3.0
-   */
-  /*
-  public boolean isInitial()
-  {
-    if (_comet != null)
-      return _comet.isInitial();
-    else
-      return true;
-  }
-  */
 
   //
   // HttpServletRequest APIs
@@ -694,6 +634,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * <p/>Equivalent to CGI's <code>REQUEST_METHOD</code>
    */
+  @Override
   public String getMethod()
   {
     return _request.getMethod();
@@ -702,6 +643,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the URI for the request
    */
+  @Override
   public String getRequestURI()
   {
     if (_invocation != null)
@@ -719,12 +661,6 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     return _invocation.getRawURI();
   }
-
-  /*
-  public abstract byte []getUriBuffer();
-
-  public abstract int getUriLength();
-  */
 
   /**
    * Returns the context part of the uri.  The context part is the part
@@ -798,6 +734,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the URL for the request
    */
+  @Override
   public StringBuffer getRequestURL()
   {
     StringBuffer sb = new StringBuffer();
@@ -808,9 +745,9 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     sb.append(getServerName());
     int port = getServerPort();
 
-    if (port > 0 &&
-        port != 80 &&
-        port != 443) {
+    if (port > 0
+        && port != 80
+        && port != 443) {
       sb.append(":");
       sb.append(port);
     }
@@ -823,6 +760,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * @deprecated As of JSDK 2.1
    */
+  @Override
   public String getRealPath(String path)
   {
     if (path == null)
@@ -845,6 +783,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the real path of pathInfo.
    */
+  @Override
   public String getPathTranslated()
   {
     String pathInfo = getPathInfo();
@@ -858,6 +797,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the current page's query string.
    */
+  @Override
   public String getQueryString()
   {
     if (_invocation != null)
@@ -890,6 +830,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name the header name
    * @return the header value
    */
+  @Override
   public String getHeader(String name)
   {
     return _request.getHeader(name);
@@ -902,6 +843,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name the header name
    * @return an enumeration of the header values.
    */
+  @Override
   public Enumeration<String> getHeaders(String name)
   {
     return _request.getHeaders(name);
@@ -910,6 +852,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns an enumeration of all headers sent by the client.
    */
+  @Override
   public Enumeration<String> getHeaderNames()
   {
     return _request.getHeaderNames();
@@ -921,6 +864,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name the header name
    * @return the header value converted to an integer
    */
+  @Override
   public int getIntHeader(String name)
   {
     return _request.getIntHeader(name);
@@ -936,6 +880,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name the header name
    * @return the header value converted to an date
    */
+  @Override
   public long getDateHeader(String name)
   {
     return _request.getDateHeader(name);
@@ -948,6 +893,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns an enumeration of the form names.
    */
+  @Override
   public Enumeration<String> getParameterNames()
   {
     if (_filledForm == null)
@@ -959,6 +905,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns a map of the form.
    */
+  @Override
   public Map<String,String[]> getParameterMap()
   {
     if (_filledForm == null)
@@ -973,6 +920,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * @param name key in the form
    * @return value matching the key
    */
+  @Override
   public String []getParameterValues(String name)
   {
     if (_filledForm == null)
@@ -984,6 +932,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the form primary value for the given name.
    */
+  @Override
   public String getParameter(String name)
   {
     String []values = getParameterValues(name);
@@ -997,7 +946,8 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * @since Servlet 3.0
    */
-  public Iterable<Part> getParts()
+  @Override
+  public Collection<Part> getParts()
     throws IOException, ServletException
   {
     if (! getContentType().startsWith("multipart/form-data"))
@@ -1009,7 +959,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     return _parts;
   }
 
-  public Part createPart(String name, Map<String, List<String>> headers)
+  Part createPart(String name, Map<String, List<String>> headers)
   {
     return new PartImpl(name, headers);
   }
@@ -1017,6 +967,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * @since Servlet 3.0
    */
+  @Override
   public Part getPart(String name)
     throws IOException, ServletException
   {
@@ -1190,6 +1141,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns an array of all cookies sent by the client.
    */
+  @Override
   public Cookie []getCookies()
   {
     if (_cookiesIn == null) {
@@ -1227,6 +1179,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns the named cookie from the browser
    */
+  @Override
   public Cookie getCookie(String name)
   {
     /*
@@ -1263,6 +1216,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    * the cookie to change the page contents, the caching sets
    * vary: JSESSIONID.
    */
+  @Override
   public String getRequestedSessionId()
   {
     SessionManager manager = getSessionManager();
@@ -1353,6 +1307,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns true if the current sessionId came from a cookie.
    */
+  @Override
   public boolean isRequestedSessionIdFromCookie()
   {
     return findSessionIdFromCookie() != null;
@@ -1361,6 +1316,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Returns true if the current sessionId came from the url.
    */
+  @Override
   public boolean isRequestedSessionIdFromURL()
   {
     return findSessionIdFromUrl() != null;
@@ -1369,6 +1325,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * @deprecated
    */
+  @Override
   public boolean isRequestedSessionIdFromUrl()
   {
     return isRequestedSessionIdFromURL();
@@ -1435,48 +1392,26 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     else
       return null;
   }
-
   /**
    * Returns true if any authentication is requested
    */
+  @Override
   public boolean isLoginRequested()
   {
     return _isLoginRequested;
   }
-
-  /**
-   * @since Servlet 3.0
-   */
-  public boolean authenticate(HttpServletResponse response)
-    throws IOException, ServletException
+  
+  @Override
+  public void requestLogin()
   {
-    WebApp webApp = getWebApp();
-
-    if (webApp == null)
-      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
-
-    // server/1aj{0,1}
-    Authenticator auth = webApp.getConfiguredAuthenticator();
-
-    if (auth == null)
-      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
-
-    Login login = webApp.getLogin();
-
-    if (login == null)
-      throw new ServletException(L.l("No authentication mechanism is configured for '{0}'", getWebApp()));
-
-    Principal principal = login.login(this, response, true);
-
-    if (principal != null)
-      return true;
-
-    return false;
+    _isLoginRequested = true;
   }
 
   /**
    * @since Servlet 3.0
    */
+  /*
+  @Override
   public void login(String username, String password)
     throws ServletException
   {
@@ -1508,29 +1443,30 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     setAttribute(Login.LOGIN_PASSWORD, password);
 
     try {
-      login.login(this, getResponse(), true);
+      login.login(this, getResponse(), false);
     }
     finally {
       removeAttribute(Login.LOGIN_USER);
       removeAttribute(Login.LOGIN_PASSWORD);
     }
+
+    principal = login.getUserPrincipal(this);
+
+    if (principal == null)
+      throw new ServletException("can't authenticate a user");
   }
+  */
 
   /**
    * Authenticate the user.
    */
+  /*
+  @Override
   public boolean login(boolean isFail)
   {
     try {
-      /*
-      Principal user = null;
-      user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
-
-      if (user != null)
-        return true;
-      */
-
       WebApp webApp = getWebApp();
+      
       if (webApp == null) {
         if (log.isLoggable(Level.FINE))
           log.finer("authentication failed, no web-app found");
@@ -1547,14 +1483,6 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
         Principal user = login.login(this, getResponse(), isFail);
 
         return user != null;
-        /*
-        if (user == null)
-          return false;
-
-        setAttribute(AbstractLogin.LOGIN_NAME, user);
-
-        return true;
-        */
       }
       else if (isFail) {
         if (log.isLoggable(Level.FINE))
@@ -1576,6 +1504,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
       return false;
     }
   }
+  */
 
   /**
    * Gets the remote user from the authorization type
@@ -1610,42 +1539,6 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
       return user.getName();
     else
       return null;
-  }
-
-  /**
-   * Returns the Principal representing the logged in user.
-   */
-  public Principal getUserPrincipal()
-  {
-    _isLoginRequested = true;
-
-    Principal user;
-    user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
-
-    if (user != null)
-      return user;
-
-    WebApp app = getWebApp();
-    if (app == null)
-      return null;
-
-    // If the authenticator can find the user, return it.
-    Login login = app.getLogin();
-
-    if (login != null) {
-      user = login.getUserPrincipal(this);
-
-      if (user != null) {
-        _response.setPrivateCache(true);
-      }
-      else {
-        // server/123h, server/1920
-        // distinguishes between setPrivateCache and setPrivateOrResinCache
-        // _response.setPrivateOrResinCache(true);
-      }
-    }
-
-    return user;
   }
 
   /**
@@ -1779,22 +1672,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
 
   public boolean isComet()
   {
-    return _request.isComet();
-  }
-
-  public ConnectionCometController toComet()
-  {
-    if (_comet == null) {
-      _comet = _request.getConnection().toComet(true, this, _response);
-      _comet.setAsyncListenerNode(_asyncListenerNode);
-    }
-
-    return _comet;
-  }
-
-  public ConnectionCometController getCometController()
-  {
-    return _comet;
+    return _request.isCometActive();
   }
 
   /**
@@ -1818,9 +1696,9 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     _request.killKeepalive();
   }
 
-  public boolean allowKeepalive()
+  public boolean isKeepaliveAllowed()
   {
-    return _request.allowKeepalive();
+    return _request.isKeepaliveAllowed();
   }
 
   public boolean isClientDisconnect()
@@ -1833,7 +1711,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     _request.clientDisconnect();
   }
 
-  public Connection getConnection()
+  public TransportConnection getConnection()
   {
     return _request.getConnection();
   }
@@ -1874,67 +1752,27 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
 
   public void finishInvocation()
   {
+    AsyncContextImpl asyncContext = _asyncContext;
+    
+    if (asyncContext != null)
+      asyncContext.onComplete();
+    
     _request.finishInvocation();
   }
 
   //
-  // servlet 3.0
+  // servlet 3.0 async support
   //
-
-  /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
-   */
-  public void addAsyncListener(AsyncListener listener)
-  {
-    if (_comet == null) {
-      _asyncListenerNode
-        = new AsyncListenerNode(listener, this, _response, _asyncListenerNode);
-    }
-    else
-      _comet.addAsyncListener(listener, this, _response);
-  }
-
-  /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
-   */
-  public void addAsyncListener(AsyncListener listener,
-                               ServletRequest request,
-                               ServletResponse response)
-  {
-    if (_comet == null) {
-      _asyncListenerNode
-        = new AsyncListenerNode(listener, request, response,
-                                _asyncListenerNode);
-    }
-    else
-      _comet.addAsyncListener(listener, request, response);
-  }
-
-  /**
-   * Returns the async context for the request
-   *
-   * @since Servlet 3.0
-   */
-  public AsyncContext getAsyncContext()
-  {
-    if (_comet != null)
-      return (AsyncContext) _comet;
-    else
-      throw new IllegalStateException(L.l("getAsyncContext() must be called after asyncStarted() has started a new AsyncContext."));
-  }
 
   /**
    * Returns true if the request is in async.
    *
    * @since Servlet 3.0
    */
+  @Override
   public boolean isAsyncStarted()
   {
-    return _comet != null;
+    return _request.isCometActive();
   }
 
   /**
@@ -1942,6 +1780,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since Servlet 3.0
    */
+  @Override
   public boolean isAsyncSupported()
   {
     Invocation invocation = _invocation;
@@ -1952,28 +1791,15 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
       return false;
   }
 
-
   /**
    * Starts an async mode
    *
    * @since Servlet 3.0
    */
+  @Override
   public AsyncContext startAsync()
   {
-    if (! isAsyncSupported())
-      throw new IllegalStateException(L.l("The servlet '{0}' at '{1}' does not support async because the servlet or one of the filters does not support asynchronous mode.  The servlet should be annotated with a @WebServlet(asyncSupported=true) annotation or have a <async-supported> tag in the web.xml.",
-                                          getServletName(), getServletPath()));
-
-    if (_comet == null) {
-      _comet = _request.getConnection().toComet(true, this, _response);
-      if (_asyncTimeout > 0)
-        _comet.setMaxIdleTime(_asyncTimeout);
-      _comet.setAsyncListenerNode(_asyncListenerNode);
-    }
-
-    _comet.suspend();
-
-    return (AsyncContext) _comet;
+    return startAsync(this, _response);
   }
 
   /**
@@ -1981,17 +1807,41 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
    *
    * @since Servlet 3.0
    */
+  @Override
   public AsyncContext startAsync(ServletRequest request,
                                  ServletResponse response)
   {
-    if (_comet == null) {
-      _comet = _request.getConnection().toComet(false, request, response);
-      _comet.setAsyncListenerNode(_asyncListenerNode);
+    
+    if (! isAsyncSupported())
+      throw new IllegalStateException(L.l("The servlet '{0}' at '{1}' does not support async because the servlet or one of the filters does not support asynchronous mode.  The servlet should be annotated with a @WebServlet(asyncSupported=true) annotation or have a <async-supported> tag in the web.xml.",
+                                          getServletName(), getServletPath()));
+
+    if (_request.isCometActive()) {
+      throw new IllegalStateException(L.l("startAsync may not be called twice on the same dispatch."));
     }
 
-    _comet.suspend();
+    boolean isOriginal = (request == this && response == _response);
+      
+    _asyncContext = new AsyncContextImpl(_request, request, response, isOriginal);
+      
+    if (_asyncTimeout > 0)
+      _asyncContext.setTimeout(_asyncTimeout);
 
-    return (AsyncContext) _comet;
+    return _asyncContext;
+  }
+
+  /**
+   * Returns the async context for the request
+   *
+   * @since Servlet 3.0
+   */
+  @Override
+  public AsyncContextImpl getAsyncContext()
+  {
+    if (_asyncContext != null)
+      return _asyncContext;
+    else
+      throw new IllegalStateException(L.l("getAsyncContext() must be called after asyncStarted() has started a new AsyncContext."));
   }
 
   //
@@ -2103,6 +1953,15 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   protected void finishRequest()
     throws IOException
   {
+    AsyncContextImpl comet = _asyncContext;
+    _asyncContext = null;
+    
+    /* server/1ld5
+    if (comet != null) {
+      comet.onComplete();
+    }
+    */
+    
     super.finishRequest();
 
     // ioc/0a10
@@ -2119,6 +1978,8 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
         }
       }
     }
+    
+    _request = null;
   }
 
   public void cleanup()
@@ -2166,6 +2027,11 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
       return _invocation.getWebApp();
     else
       return null;
+  }
+  
+  public boolean isClosed()
+  {
+    return _request == null;
   }
 
   @Override
@@ -2220,12 +2086,12 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
       return null;
     }
 
-    public Iterable<String> getHeaderNames()
+    public Collection<String> getHeaderNames()
     {
       return _headers.keySet();
     }
 
-    public Iterable<String> getHeaders(String name)
+    public Collection<String> getHeaders(String name)
     {
       return _headers.get(name);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,8 @@ import com.caucho.util.L10N;
 
 import javax.ejb.*;
 import javax.enterprise.inject.spi.AnnotatedType;
+
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
 /**
@@ -47,8 +49,6 @@ public class EjbStatelessBean extends EjbSessionBean {
   public EjbStatelessBean(EjbConfig ejbConfig, String ejbModuleName)
   {
     super(ejbConfig, ejbModuleName);
-
-    setSessionType("Stateless");
   }
 
   /**
@@ -59,8 +59,6 @@ public class EjbStatelessBean extends EjbSessionBean {
 			 Stateless stateless)
   {
     super(ejbConfig, annType, stateless.name());
-
-    setSessionType("Stateless");
   }
 
   /**
@@ -69,5 +67,11 @@ public class EjbStatelessBean extends EjbSessionBean {
   public String getEJBKind()
   {
     return "stateless";
+  }
+  
+  @Override
+  public Class<? extends Annotation> getSessionType()
+  {
+    return Stateless.class;
   }
 }

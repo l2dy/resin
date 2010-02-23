@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -226,6 +226,7 @@ public class AmberPersistenceUnit {
   private void bindProxy()
     throws Exception
   {
+    /*
     String name = getName();
 
     // XXX: is "default" appropriate?
@@ -253,6 +254,7 @@ public class AmberPersistenceUnit {
       = AmberContainer.getPersistenceContextJndiPrefix() + '/' + name;
 
     Jndi.bindDeepShort(jndiName, factory);
+    */
   }
 
   public EntityManager getEntityManager()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,12 +39,13 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
+import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.InjectionTarget;
 
 import org.w3c.dom.Node;
 
-import com.caucho.config.ConfigContext;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.DependencyBean;
 import com.caucho.config.TagName;
 import com.caucho.config.annotation.DisableConfig;
@@ -56,9 +57,10 @@ import com.caucho.config.attribute.ProgramAttribute;
 import com.caucho.config.attribute.PropertyAttribute;
 import com.caucho.config.attribute.SetterAttribute;
 import com.caucho.config.attribute.TextAttribute;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.InjectionTargetImpl;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.j2ee.InjectIntrospector;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.PropertyStringProgram;
 import com.caucho.config.types.CustomBeanConfig;
@@ -72,7 +74,7 @@ import com.caucho.xml.QNode;
 /**
  * Represents an introspected bean type for configuration.
  */
-public class BeanType<T> extends ConfigType
+public class BeanType<T> extends ConfigType<T>
 {
   private static final L10N L = new L10N(BeanType.class);
   private static final Logger log
@@ -113,21 +115,19 @@ public class BeanType<T> extends ConfigType
   private Attribute _addBean; // add(Object)
   private Attribute _setProperty;
 
-  private HashMap<Class,Attribute> _addMethodMap
-    = new HashMap<Class,Attribute>();
+  private HashMap<Class<?>,Attribute> _addMethodMap
+    = new HashMap<Class<?>,Attribute>();
 
   private Attribute _addCustomBean;
-  private Attribute _addAnnotation;
-  
-  private ManagedBeanImpl _component;
+  private ManagedBeanImpl<T> _bean;
 
   private ArrayList<ConfigProgram> _injectList;
   private ArrayList<ConfigProgram> _initList;
 
   private boolean _isIntrospecting;
   private boolean _isIntrospected;
-  private boolean _isIntrospectComplete;
-  private ArrayList<BeanType> _pendingChildList = new ArrayList<BeanType>();
+  private ArrayList<BeanType<?>> _pendingChildList
+    = new ArrayList<BeanType<?>>();
 
   public BeanType(Class<T> beanClass)
   {
@@ -137,7 +137,7 @@ public class BeanType<T> extends ConfigType
   /**
    * Returns the given type.
    */
-  public Class getType()
+  public Class<T> getType()
   {
     return _beanClass;
   }
@@ -149,7 +149,6 @@ public class BeanType<T> extends ConfigType
 
   protected void setAddAnnotation(Attribute addAnnotation)
   {
-    _addAnnotation = addAnnotation;
   }
 
   /**
@@ -159,21 +158,21 @@ public class BeanType<T> extends ConfigType
   public Object create(Object parent, QName name)
   {
     try {
-      if (_component == null) {
+      InjectManager webBeans
+        = InjectManager.create(_beanClass.getClassLoader());
+      
+      if (_bean == null) {
 	if (_beanClass.isInterface())
 	  throw new ConfigException(L.l("{0} cannot be instantiated because it is an interface",
 					_beanClass.getName()));
 
-	InjectManager webBeans
-	  = InjectManager.create(_beanClass.getClassLoader());
-
-	_component = webBeans.createManagedBean(_beanClass);
+	_bean = webBeans.createManagedBean(_beanClass);
       }
 
-      InjectionTarget injection = _component.getInjectionTarget();
-      ConfigContext env = ConfigContext.create();
+      InjectionTarget<T> injection = _bean.getInjectionTarget();
+      CreationalContext<T> env = webBeans.createCreationalContext(_bean);
 
-      Object bean = injection.produce(env);
+      T bean = injection.produce(env);
       injection.inject(bean, env);
 
       if (_setParent != null
@@ -201,11 +200,11 @@ public class BeanType<T> extends ConfigType
    * Returns a constructor with a given number of arguments
    */
   @Override
-  public Constructor getConstructor(int count)
+  public Constructor<T> getConstructor(int count)
   {
-    for (Constructor ctor : _beanClass.getConstructors()) {
+    for (Constructor<?> ctor : _beanClass.getConstructors()) {
       if (ctor.getParameterTypes().length == count)
-	return ctor;
+	return (Constructor<T>) ctor;
     }
     
     throw new ConfigException(L.l("{0} does not have any constructor with {1} arguments",
@@ -314,6 +313,7 @@ public class BeanType<T> extends ConfigType
   /**
    * Returns any add attributes to add arbitrary content
    */
+  @Override
   public Attribute getAddAttribute(Class cl)
   {
     if (cl == null)
@@ -771,40 +771,19 @@ public class BeanType<T> extends ConfigType
 	Class<?> type = paramTypes[0];
 
 	String className = name.substring(3);
-	String propName = toXmlName(name.substring(3));
+	String xmlName = toXmlName(name.substring(3));
 
         TagName tagName = method.getAnnotation(TagName.class);
 
-        if (tagName != null)
-          propName = tagName.value();
+        if (tagName != null) {
+          for (String propName : tagName.value()) {
+            addProp(propName, method);
+          }
+        }
+        else
+          addProp(xmlName, method);
 
-        Attribute attr;
-	
-	if (propName.equals("text")
-	    && (paramTypes[0].equals(String.class)
-		|| paramTypes[0].equals(RawString.class))) {
-	  attr = new TextAttribute(method, type);
-	  _addText = attr;
-	  _attributeMap.put("#text", attr);
-	}
-	else
-	  attr = new SetterAttribute(method, type);
-
-	_attributeMap.put(propName, attr);
-	// server/2e28 vs jms/2193
-	// _attributeMap.put(className, attr);
-
-	if (propName.equals("value")) {
-	  _attributeMap.put("#text", attr);
-
-	  // server/12aa
-	  if (_addText == null)
-	    _addText = attr;
-	}
-
-	propName = toCamelName(className);
-	
-	_attributeMap.put(propName, attr);
+	addProp(toCamelName(className), method);
       }
       else if ((name.startsWith("create")
 		&& paramTypes.length == 0
@@ -815,22 +794,77 @@ public class BeanType<T> extends ConfigType
 
 	CreateAttribute attr = new CreateAttribute(method, type, setter);
 
-	String propName = toXmlName(name.substring(6));
+	String xmlName = toXmlName(name.substring(6));
 
         TagName tagName = method.getAnnotation(TagName.class);
 
-        if (tagName != null)
-          propName = tagName.value();
-
-        _attributeMap.put(propName, attr);
+        if (tagName != null) {
+          for (String propName : tagName.value()) {
+            addProp(propName, attr);
+          }
+        }
+        else {
+          addProp(xmlName, attr);
+        }
       }
     }
   }
+  
+  private void addProp(String propName, 
+                       Method method)
+  {
+    Attribute attr;
+    
+    Class<?> []paramTypes = method.getParameterTypes();
+    Class<?> type = paramTypes[0];
+    
+    if (propName.equals("text")
+        && (type.equals(String.class)
+            || type.equals(RawString.class))) {
+      attr = new TextAttribute(method, type);
+      _addText = attr;
+      _attributeMap.put("#text", attr);
+    }
+    else
+      attr = new SetterAttribute(method, type);
+    
+    addProp(propName, attr);
+  }
+  
+  private void addProp(String propName, Attribute attr)
+  {
+    Attribute oldAttr = _attributeMap.get(propName);
+    
+    if (oldAttr == null) {
+      _attributeMap.put(propName, attr);
+    }
+    else if (oldAttr.isConfigurable() && ! attr.isConfigurable()) {
+    }
+    else if (attr.isConfigurable() && ! oldAttr.isConfigurable()) {
+      _attributeMap.put(propName, attr);
+    }
+    else {
+      log.fine(L.l("{0}: conflicting attribute for '{1}' between {2} and {3}",
+                   this, propName, attr, oldAttr));    
+    }
+    
+    // server/2e28 vs jms/2193
+    // _attributeMap.put(className, attr);
+
+    if (propName.equals("value")) {
+      _attributeMap.put("#text", attr);
+
+      // server/12aa
+      if (_addText == null)
+        _addText = attr;
+    }
+  }
+
 
   /**
    * Introspect the bean for configuration
    */
-  protected void introspectInject()
+  private void introspectInject()
   {
     synchronized (_introspectLock) {
       if (_injectList != null)
@@ -839,9 +873,9 @@ public class BeanType<T> extends ConfigType
       _injectList = new ArrayList<ConfigProgram>();
       _initList = new ArrayList<ConfigProgram>();
     
-      InjectIntrospector.introspectInject(_injectList, _beanClass);
+      // InjectionTargetImpl.introspectInject(_injectList, _beanClass);
 
-      InjectIntrospector.introspectInit(_initList, _beanClass, null);
+      InjectionTargetImpl.introspectInit(_initList, _beanClass, null);
     }
   }
 

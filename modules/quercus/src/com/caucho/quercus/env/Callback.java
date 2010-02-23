@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,10 +32,17 @@ package com.caucho.quercus.env;
 /**
  * Represents a call to a function.
  */
-abstract public class Callback extends Value {
+abstract public class Callback extends Value implements Callable {
   
-  /*
+  @Override
+  public Callable toCallable(Env env)
+  {
+    return this;
+  }
+  
+  /**
    * Evaluates a callback where the first argument is from an array.
+   * The callback may be modifying that array element.
    * For ArrayModule.
    * 
    * @param env
@@ -43,142 +50,115 @@ abstract public class Callback extends Value {
    * @param key index of a1 in the array
    * @param a1 need to make a reference to this variable
    */
-  final public Value call(Env env,
-                          ArrayValue array,
-                          Value key,
-                          Value a1)
+  @Override
+  final public Value callArray(Env env,
+                               ArrayValue array,
+                               Value key,
+                               Value a1)
   {
+    // php/1740
+    
     Value result;  
 
     if (a1 instanceof Var) {
-      a1 = new RefVar((Var)a1);
+      a1 = new ArgRef((Var) a1);
 
       result = call(env, a1);
     }
     else {
-      a1 = new Var(a1);
+      Value aVar = new Var(a1);
 
-      result = call(env, a1);
+      result = call(env, aVar);
 
-      array.put(key, a1.toValue());
+      Value aNew = aVar.toValue();
+      
+      if (aNew != a1)
+        array.put(key, aNew);
     }
 
     return result;
   }
   
-  /*
+  /**
    * Evaluates a callback where the first argument is from an array.
+   * The callback may be modifying that array element.
    * For ArrayModule.
    * 
    * @param env
    * @param array from which a1 came from
    * @param key index of a1 in the array
    * @param a1 need to make a reference to this variable
-   * @param a2 additional argument to pass to the callback
    */
-  final public Value call(Env env,
-                          ArrayValue array,
-                          Value key,
-                          Value a1,
-                          Value a2)
+  @Override
+  final public Value callArray(Env env,
+                               ArrayValue array,
+                               Value key,
+                               Value a1,
+                               Value a2)
   {
+    // php/1740
+    
     Value result;  
 
     if (a1 instanceof Var) {
-      a1 = new RefVar((Var)a1);
+      a1 = new ArgRef((Var) a1);
 
       result = call(env, a1, a2);
     }
     else {
-      a1 = new Var(a1);
+      Value aVar = new Var(a1);
 
-      result = call(env, a1, a2);
+      result = call(env, aVar, a2);
 
-      array.put(key, a1.toValue());
+      Value aNew = aVar.toValue();
+      
+      if (aNew != a1)
+        array.put(key, aNew);
     }
 
     return result;
   }
   
-  /*
+  /**
    * Evaluates a callback where the first argument is from an array.
+   * The callback may be modifying that array element.
    * For ArrayModule.
    * 
    * @param env
    * @param array from which a1 came from
    * @param key index of a1 in the array
    * @param a1 need to make a reference to this variable
-   * @param a2 additional argument to pass to the callback
-   * @param a3 additional argument to pass to the callback
    */
-  final public Value call(Env env,
-                          ArrayValue array,
-                          Value key,
-                          Value a1,
-                          Value a2,
-                          Value a3)
+  @Override
+  final public Value callArray(Env env,
+                               ArrayValue array,
+                               Value key,
+                               Value a1,
+                               Value a2,
+                               Value a3)
   {
+    // php/1740
+    
     Value result;  
 
     if (a1 instanceof Var) {
-      a1 = new RefVar((Var)a1);
+      a1 = new ArgRef((Var) a1);
 
       result = call(env, a1, a2, a3);
     }
     else {
-      a1 = new Var(a1);
+      Value aVar = new Var(a1);
 
-      result = call(env, a1, a2, a3);
+      result = call(env, aVar, a2, a3);
 
-      array.put(key, a1.toValue());
+      Value aNew = aVar.toValue();
+      
+      if (aNew != a1)
+        array.put(key, aNew);
     }
 
     return result;
   }
-  
-  /**
-   * Evaluates the callback with no arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env);
-
-  /**
-   * Evaluates the callback with 1 arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env, Value a1);
-
-  /**
-   * Evaluates the callback with 2 arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env, Value a1, Value a2);
-
-  /**
-   * Evaluates the callback with 3 arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env, Value a1, Value a2, Value a3);
-
-  /**
-   * Evaluates the callback with 4 arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env, Value a1, Value a2, Value a3,
-                             Value a4);
-
-  /**
-   * Evaluates the callback with 5 arguments.
-   *
-   * @param env the calling environment
-   */
-  abstract public Value call(Env env, Value a1, Value a2, Value a3,
-                             Value a4, Value a5);
 
   /**
    * Evaluates the callback with variable arguments.
@@ -191,7 +171,8 @@ abstract public class Callback extends Value {
    * 
    * @return true if this is an invalid callback reference
    */
-  abstract public boolean isValid();
+  @Override
+  abstract public boolean isValid(Env env);
 
   /**
    * Returns the name of the callback.
@@ -203,7 +184,7 @@ abstract public class Callback extends Value {
    * Returns true if this callback is implemented internally (i.e. in Java).
    *
    */
-  abstract public boolean isInternal();
+  abstract public boolean isInternal(Env env);
   
   public String toString()
   {

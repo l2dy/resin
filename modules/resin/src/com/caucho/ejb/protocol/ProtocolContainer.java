@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -103,17 +103,7 @@ public class ProtocolContainer {
   public void removeServer(AbstractServer server)
   {
   }
-
-  protected HandleEncoder createHandleEncoder(AbstractServer server,
-                                              Class primaryKeyClass)
-    throws ConfigException
-  {
-    if (_urlPrefix != null)
-      return new HandleEncoder(server, _urlPrefix + server.getProtocolId());
-    else
-      return new HandleEncoder(server, server.getProtocolId());
-  }
-
+  
   /**
    * Returns the skeleton
    */

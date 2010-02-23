@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -764,6 +764,11 @@ public class LargeStringBuilderValue
 
   private void ensureCapacity(int newCapacity)
   {
+    if (newCapacity > 10000000) {
+      Thread.dumpStack();
+      throw new IllegalStateException();
+    }
+    
     int chunk = _length / SIZE;
     int endChunk = newCapacity / SIZE;
 

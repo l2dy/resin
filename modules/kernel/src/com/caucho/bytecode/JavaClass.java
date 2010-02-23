@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -83,6 +83,11 @@ public class JavaClass extends JClass {
   private JavaAnnotation []_annotations;
 
   private boolean _isWrite;
+
+  public JavaClass()
+  {
+    this(new JavaClassLoader());
+  }
 
   public JavaClass(JavaClassLoader loader)
   {

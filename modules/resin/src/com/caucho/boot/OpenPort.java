@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,7 +34,6 @@ import java.net.InetAddress;
 import com.caucho.config.ConfigException;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.server.connection.Port;
-import com.caucho.server.http.HttpProtocol;
 import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.SSLFactory;
 
@@ -45,12 +44,14 @@ public class OpenPort extends Port
 {
   public OpenPort()
   {
-    super.setClass(HttpProtocol.class); // dummy
+    // super.setClass(HttpProtocol.class); // dummy
   }
 
+  /*
   public void setClass(Class cl)
   {
   }
+  */
 
   /**
    * Sets the SSL factory

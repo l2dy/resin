@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -177,9 +177,9 @@ public class ServerPool
          server.getId(),
          "Resin|Cluster",
          getStatId(server),
-         server.getClusterPort().getAddress(),
-         server.getClusterPort().getPort(),
-         server.getClusterPort().isSSL());
+         server.getAddress(),
+         server.getPort(),
+         server.isSSL());
 
     _loadBalanceConnectTimeout = server.getLoadBalanceConnectTimeout();
     _loadBalanceConnectionMin = server.getLoadBalanceConnectionMin();

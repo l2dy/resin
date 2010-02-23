@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -292,8 +292,10 @@ public class JavaTagGenerator extends JavaJspGenerator {
 
     generateDoTag(out, _rootNode);
 
-    if (isStaticDoTag())
-      generateStaticDoTag(out, _rootNode);
+    // if (isStaticDoTag())
+    //  generateStaticDoTag(out, _rootNode);
+    
+    generateDoTagImpl(out, _rootNode);
 
     generateTagInfo(out);
     
@@ -302,7 +304,8 @@ public class JavaTagGenerator extends JavaJspGenerator {
 
   protected boolean isStaticDoTag()
   {
-    return ! hasScripting();
+    // return ! hasScripting();
+    return false;
   }
 
   /**
@@ -360,7 +363,8 @@ public class JavaTagGenerator extends JavaJspGenerator {
     } else {
       out.println("public static final boolean _caucho_hasCustomTag = false;");
     }
-
+    
+    out.print("static "); // XXX: this shouldn't be created each tag
     out.println("private final java.util.HashMap<String,java.lang.reflect.Method> _jsp_functionMap = new java.util.HashMap<String,java.lang.reflect.Method>();");
     // jsp/107{0,1}
     out.println("private static com.caucho.jsp.PageManager _jsp_pageManager;");
@@ -469,7 +473,7 @@ public class JavaTagGenerator extends JavaJspGenerator {
     // jsp/1056
     out.println("setJspContext(pageContext);");
 
-    if (hasScripting()) {
+    if (false && hasScripting()) {
       out.println("javax.servlet.http.HttpServletRequest request = (javax.servlet.http.HttpServletRequest) pageContext.getRequest();");
       out.println("javax.servlet.http.HttpServletResponse response = (javax.servlet.http.HttpServletResponse) pageContext.getResponse();");
       out.println("javax.servlet.http.HttpSession session = pageContext.getSession();");
@@ -480,14 +484,17 @@ public class JavaTagGenerator extends JavaJspGenerator {
     out.println("com.caucho.jsp.PageContextWrapper jspContext = pageContext;");
     out.println("javax.el.ELContext _jsp_env = pageContext.getELContext();");
     out.println("javax.servlet.jsp.JspWriter out = pageContext.getOut();");
-    generateTagAttributes(out);
-    if (hasScripting())
-      generatePrologue(out);
+    
+    // generateTagAttributes(out);
+    
+    //if (hasScripting())
+    //  generatePrologue(out);
 
     out.println("try {");
     out.pushDepth();
      
-    if (hasScripting()) {
+    // jsp/10a2
+    if (false && hasScripting()) {
       out.println("TagState _jsp_state = new TagState();");
       // jsp/100h
       out.println("javax.servlet.jsp.tagext.JspTag _jsp_parent_tag");
@@ -511,7 +518,7 @@ public class JavaTagGenerator extends JavaJspGenerator {
       out.println("finally {");
       out.pushDepth();
       
-      generateTagVariablesAtEnd(out);
+      // generateTagVariablesAtEnd(out);
       
       out.println("setJspContext(_jsp_parentContext);");
       out.println("_jsp_pageManager.freePageContextWrapper(pageContext);");
@@ -564,11 +571,11 @@ public class JavaTagGenerator extends JavaJspGenerator {
   /**
    * Prints the _jspService header
    */
-  protected void generateStaticDoTag(JspJavaWriter out, JspNode node)
+  protected void generateDoTagImpl(JspJavaWriter out, JspNode node)
     throws Exception
   {
     out.println();
-    out.println("public static void doTag(javax.servlet.jsp.JspContext _jsp_parentContext,");
+    out.println("public void doTag(javax.servlet.jsp.JspContext _jsp_parentContext,");
     out.println("                         com.caucho.jsp.PageContextWrapper pageContext,");
     out.println("                         javax.servlet.jsp.JspWriter out,");
     out.println("                         javax.servlet.jsp.tagext.JspFragment _jspBody,");
@@ -585,28 +592,36 @@ public class JavaTagGenerator extends JavaJspGenerator {
       out.println("javax.servlet.http.HttpSession session = pageContext.getSession();");
       out.println("javax.servlet.ServletContext application = pageContext.getServletContext();");
       out.println("javax.servlet.ServletConfig config = pageContext.getServletConfig();");
+      out.println("com.caucho.jsp.PageContextWrapper jspContext = pageContext;");
     }
+    
+    /*
+    out.println("if (_jspBody != null)");
+    out.println("  setJspBody(_jspBody);"); // jsp/1025 vs jsp/102h
+    */
     
     out.println("TagState _jsp_state = new TagState();");
     out.println("javax.servlet.jsp.tagext.JspTag _jsp_parent_tag = jsp_parent_tag;");
 
+    generateTagAttributes(out);
+    
     generatePrologue(out);
 
-    out.println("try {");
-    out.pushDepth();
+    //out.println("try {");
+    //out.pushDepth();
     
     node.generate(out);
 
-    out.popDepth();
-    out.println("} finally {");
-    out.pushDepth();
+    //out.popDepth();
+    //out.println("} finally {");
+    //out.pushDepth();
       
     generateTagVariablesAtEnd(out);
       
-    out.println("_jsp_pageManager.freePageContextWrapper(pageContext);");
+    //out.println("_jsp_pageManager.freePageContextWrapper(pageContext);");
       
-    out.popDepth();
-    out.println("}");
+    //out.popDepth();
+    //out.println("}");
 
     out.popDepth();
     out.println("}");
@@ -914,7 +929,14 @@ public class JavaTagGenerator extends JavaJspGenerator {
 
   private String toFieldName(String name)
   {
+    /*n
     if (hasScripting() && ! _reserved.contains(name))
+      return name;
+    else
+      return "_" + name;
+      */
+    
+    if (! _reserved.contains(name))
       return name;
     else
       return "_" + name;

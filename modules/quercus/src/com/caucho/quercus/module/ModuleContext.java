@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -638,9 +638,11 @@ public class ModuleContext
   {
     synchronized (_moduleInfoMap) {
       if (_moduleInfoMap.get(cl.getName()) != null)
-	return;
+        return;
 
-      log.finest("Quercus loading module " + cl.getName());
+      log.finest(getClass().getSimpleName() 
+                 + " loading module " 
+                 + cl.getName());
 
       QuercusModule module = (QuercusModule) cl.newInstance();
 

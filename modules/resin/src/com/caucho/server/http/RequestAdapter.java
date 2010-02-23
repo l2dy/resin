@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -45,6 +45,7 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.Part;
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashMap;
 
 /**
@@ -550,7 +551,7 @@ public class RequestAdapter extends RequestWrapper
   {
   }
   
-  public boolean allowKeepalive()
+  public boolean isKeepaliveAllowed()
   {
     return true;
   }
@@ -589,12 +590,19 @@ public class RequestAdapter extends RequestWrapper
 
     return super.isUserInRole(role);
   }
-  
+
+  @Override
   public boolean isLoginRequested()
   {
     return false;
   }
   
+  @Override
+  public void requestLogin()
+  {
+  }
+  
+  @Override
   public boolean login(boolean isFail)
   {
     return true;
@@ -631,7 +639,7 @@ public class RequestAdapter extends RequestWrapper
   /**
    * @since Servlet 3.0
    */
-  public Iterable<Part> getParts()
+  public Collection<Part> getParts()
     throws IOException, ServletException
   {
     return getRequest().getParts();

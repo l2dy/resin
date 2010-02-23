@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,13 +35,14 @@ import com.caucho.quercus.env.EnvVar;
 import com.caucho.quercus.env.EnvVarImpl;
 import com.caucho.quercus.env.NullThisValue;
 import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.UnsetValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.Var;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.expr.ExprFactory;
-import com.caucho.quercus.expr.RequiredExpr;
+import com.caucho.quercus.expr.ParamRequiredExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.statement.*;
 import com.caucho.util.L10N;
@@ -68,6 +69,8 @@ public class Function extends AbstractFunction {
   protected boolean _hasReturn;
   
   protected String _comment;
+  
+  protected Arg []_closureUseArgs;
 
   Function(Location location,
            String name,
@@ -85,6 +88,7 @@ public class Function extends AbstractFunction {
     _statement = new BlockStatement(location, statements);
 
     setGlobal(info.isPageStatic());
+    setClosure(info.isClosure());
     
     _isStatic = true;
   }
@@ -110,6 +114,7 @@ public class Function extends AbstractFunction {
     _statement = exprFactory.createBlock(location, statements);
 
     setGlobal(info.isPageStatic());
+    setClosure(info.isClosure());
     
     _isStatic = true;
   }
@@ -129,6 +134,16 @@ public class Function extends AbstractFunction {
   public ClassDef getDeclaringClass()
   {
     return _info.getDeclaringClass();
+  }
+  
+  public FunctionInfo getInfo()
+  {
+    return _info;
+  }
+  
+  protected boolean isMethod()
+  {
+    return getDeclaringClassName() != null;
   }
   
   /*
@@ -151,6 +166,22 @@ public class Function extends AbstractFunction {
   public Arg []getArgs()
   {
     return _args;
+  }
+
+  /**
+   * Returns the args.
+   */
+  public Arg []getClosureUseArgs()
+  {
+    return _closureUseArgs;
+  }
+
+  /**
+   * Returns the args.
+   */
+  public void setClosureUseArgs(Arg []useArgs)
+  {
+    _closureUseArgs = useArgs;
   }
 
   public boolean isObjectMethod()
@@ -205,7 +236,7 @@ public class Function extends AbstractFunction {
       if (arg == null)
         values[i] = args[i].eval(env).copy();
       else if (arg.isReference())
-        values[i] = args[i].evalRef(env);
+        values[i] = args[i].evalVar(env);
       else {
         // php/0d04
         values[i] = args[i].eval(env);
@@ -232,7 +263,7 @@ public class Function extends AbstractFunction {
 
   private Value callImpl(Env env, Expr []args, boolean isRef)
   {
-    HashMap<String,EnvVar> map = new HashMap<String,EnvVar>();
+    HashMap<StringValue,EnvVar> map = new HashMap<StringValue,EnvVar>();
 
     Value []values = new Value[args.length];
 
@@ -247,9 +278,9 @@ public class Function extends AbstractFunction {
         values[i] = args[i].eval(env).copy();
       }
       else if (arg.isReference()) {
-        values[i] = args[i].evalRef(env);
+        values[i] = args[i].evalVar(env);
 
-        map.put(arg.getName(), new EnvVarImpl(values[i].toRefVar()));
+        map.put(arg.getName(), new EnvVarImpl(values[i].toLocalVarDeclAsRef()));
       }
       else {
         // php/0d04
@@ -272,20 +303,20 @@ public class Function extends AbstractFunction {
         return env.error("expected default expression");
       else if (arg.isReference())
         map.put(arg.getName(),
-		new EnvVarImpl(defaultExpr.evalRef(env).toVar()));
+                new EnvVarImpl(defaultExpr.evalVar(env).toVar()));
       else {
         map.put(arg.getName(),
-		new EnvVarImpl(defaultExpr.eval(env).copy().toVar()));
+                new EnvVarImpl(defaultExpr.eval(env).copy().toVar()));
       }
     }
 
-    Map<String,EnvVar> oldMap = env.pushEnv(map);
+    Map<StringValue,EnvVar> oldMap = env.pushEnv(map);
     Value []oldArgs = env.setFunctionArgs(values); // php/0476
     Value oldThis;
 
     if (isStatic()) {
       // php/0967
-      oldThis = env.setThis(NullThisValue.NULL);
+      oldThis = env.setThis(env.getCallingClass());
     }
     else
       oldThis = env.getThis();
@@ -293,12 +324,18 @@ public class Function extends AbstractFunction {
     try {
       Value value = _statement.execute(env);
 
-      if (value == null)
+      if (value != null)
+        return value;
+      else if (_info.isReturnsReference())
+        return new Var();
+      else
         return NullValue.NULL;
+      /*
       else if (_isReturnsReference && isRef)
         return value;
       else
         return value.copyReturn();
+        */
     } finally {
       env.restoreFunctionArgs(oldArgs);
       env.popEnv(oldMap);
@@ -306,25 +343,35 @@ public class Function extends AbstractFunction {
     }
   }
 
+  @Override
   public Value call(Env env, Value []args)
   {
-    return callImpl(env, args, false);
+    return callImpl(env, args, false, null, null);
   }
 
+  @Override
   public Value callCopy(Env env, Value []args)
   {
-    return callImpl(env, args, false);
+    return callImpl(env, args, false, null, null).copy();
   }
 
+  @Override
   public Value callRef(Env env, Value []args)
   {
-    return callImpl(env, args, true);
+    return callImpl(env, args, true, null, null);
   }
 
-  private Value callImpl(Env env, Value []args, boolean isRef)
+  public Value callImpl(Env env, Value []args, boolean isRef,
+                        Arg []useParams, Value []useArgs)
   {
-    HashMap<String,EnvVar> map = new HashMap<String,EnvVar>(8);
+    HashMap<StringValue,EnvVar> map = new HashMap<StringValue,EnvVar>(8);
 
+    if (useParams != null) {
+      for (int i = 0; i < useParams.length; i++) {
+        map.put(useParams[i].getName(), new EnvVarImpl(useArgs[i].toVar()));
+      }
+    }
+      
     for (int i = 0; i < args.length; i++) {
       Arg arg = null;
 
@@ -335,17 +382,17 @@ public class Function extends AbstractFunction {
       if (arg == null) {
       }
       else if (arg.isReference()) {
-        map.put(arg.getName(), new EnvVarImpl(args[i].toRefVar()));
+        map.put(arg.getName(), new EnvVarImpl(args[i].toLocalVarDeclAsRef()));
       }
       else {
         // XXX: php/1708, toVar() may be doing another copy()
-        Var var = args[i].copy().toVar();
+        Var var = args[i].toLocalVar();
 
         if (arg.getExpectedClass() != null
-            && arg.getDefault() instanceof RequiredExpr) {
+            && arg.getDefault() instanceof ParamRequiredExpr) {
           env.checkTypeHint(var,
                             arg.getExpectedClass(),
-                            arg.getName(),
+                            arg.getName().toString(),
                             getName());
         }
 	  
@@ -362,38 +409,79 @@ public class Function extends AbstractFunction {
       if (defaultExpr == null)
         return env.error("expected default expression");
       else if (arg.isReference())
-        map.put(arg.getName(), new EnvVarImpl(defaultExpr.evalRef(env).toVar()));
+        map.put(arg.getName(), new EnvVarImpl(defaultExpr.evalVar(env).toVar()));
       else {
-        map.put(arg.getName(), new EnvVarImpl(defaultExpr.eval(env).copy().toVar()));
+        map.put(arg.getName(), new EnvVarImpl(defaultExpr.eval(env).toLocalVar()));
       }
     }
 
-    Map<String,EnvVar> oldMap = env.pushEnv(map);
+    Map<StringValue,EnvVar> oldMap = env.pushEnv(map);
     Value []oldArgs = env.setFunctionArgs(args);
     Value oldThis;
 
-    if (isStatic()) {
+    if (_info.isMethod()) {
+      oldThis = env.getThis();
+    }
+    else {
       // php/0967, php/091i
       oldThis = env.setThis(NullThisValue.NULL);
     }
-    else
-      oldThis = env.getThis();
 
     try {
       Value value = _statement.execute(env);
 
-      if (value == null)
-        return NullValue.NULL;
-      else if (_isReturnsReference && isRef)
+      if (value == null) {
+        if (_isReturnsReference)
+          return new Var();
+        else
+          return NullValue.NULL;
+      }
+      else if (_isReturnsReference)
         return value;
       else
-        return value.copyReturn();
+        return value.toValue().copy();
     } finally {
       env.restoreFunctionArgs(oldArgs);
       env.popEnv(oldMap);
       env.setThis(oldThis);
     }
   }
+  
+  //
+  // method
+  //
+
+  @Override
+  public Value callMethod(Env env, QuercusClass qClass, Value qThis, Value []args)
+  {
+    if (isStatic())
+      qThis = qClass;
+    
+    Value oldThis = env.setThis(qThis);
+    QuercusClass oldClass = env.setCallingClass(qClass);
+    
+    try {
+      return callImpl(env, args, false, null, null);
+    } finally {
+      env.setThis(oldThis);
+      env.setCallingClass(oldClass);
+    }
+  }
+
+  @Override
+  public Value callMethodRef(Env env, QuercusClass qClass, Value qThis, Value []args)
+  {
+    Value oldThis = env.setThis(qThis);
+    QuercusClass oldClass = env.setCallingClass(qClass);
+    
+    try {
+      return callImpl(env, args, true, null, null);
+    } finally {
+      env.setThis(oldThis);
+      env.setCallingClass(oldClass);
+    }
+  }
+
 
   private boolean isVariableArgs()
   {

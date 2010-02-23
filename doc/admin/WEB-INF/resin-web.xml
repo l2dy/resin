@@ -30,8 +30,6 @@
     <resin:if test="${! resin_admin_insecure}">
       <resin:IfSecure/>
     </resin:if>
-
     <resin:IfUserInRole role="resin-admin"/>
   </resin:Allow>
-  
 </web-app>

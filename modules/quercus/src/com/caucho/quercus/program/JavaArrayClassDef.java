@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.program;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusRuntimeException;

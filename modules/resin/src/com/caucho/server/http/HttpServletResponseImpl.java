@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -129,10 +129,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     if (_outputStream != null)
       return _outputStream;
 
-    /*
-    if (_hasWriter)
+    // server/1b08 (tck)
+    if (_writer != null)
       throw new IllegalStateException(L.l("getOutputStream() can't be called after getWriter()."));
-    */
 
     _outputStream = _response.getResponseOutputStream();
     _outputStream.init(_responseStream);
@@ -140,7 +139,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     /*
     // server/10a2
     if (! _hasWriter) {
-      // jsp/0510 vs jsp/1b00
+      // jsp/0510 vs server/1b00
       // _responseStream.setOutputStreamOnly(true);
     }
     */
@@ -160,10 +159,8 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     if (_writer != null)
       return _writer;
 
-    /*
-    if (_hasOutputStream)
+    if (_outputStream != null)
       throw new IllegalStateException(L.l("getWriter() can't be called after getOutputStream()."));
-    */
 
     String encoding = getCharacterEncoding();
 
@@ -288,7 +285,8 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    */
   public void setContentLength(int len)
   {
-    _response.setContentLength(len);
+    if (_outputStream == null && _writer == null)
+      _response.setContentLength(len);
   }
 
   /**
@@ -962,6 +960,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       throw new IllegalStateException(L.l("Can't sendRedirect() after data has committed to the client."));
 
     _responseStream.clearBuffer();
+    
+    // server/10c4
+    // reset();
     resetBuffer();
 
     setStatus(SC_MOVED_TEMPORARILY);
@@ -1011,10 +1012,17 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     else
       setHeader("Content-Type", "text/html; charset=utf-8");
 
+    String msg = "The URL has moved <a href=\"" + path + "\">here</a>";
+    
     // The data is required for some WAP devices that can't handle an
     // empty response.
-    ServletOutputStream out = getOutputStream();
-    out.println("The URL has moved <a href=\"" + path + "\">here</a>");
+    if (_writer != null) {
+      _writer.println(msg);
+    }
+    else {
+      ServletOutputStream out = getOutputStream();
+      out.println(msg);
+    }
     // closeConnection();
 
     _request.saveSession(); // #503
@@ -1281,7 +1289,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
     CookieImpl cookie = new CookieImpl(cookieName, _sessionId);
     cookie.setVersion(manager.getCookieVersion());
-    String domain = manager.getCookieDomain();
+    String domain = webApp.generateCookieDomain(_request);
     if (domain != null)
       cookie.setDomain(domain);
     long maxAge = manager.getCookieMaxAge();
@@ -1293,13 +1301,13 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       cookie.setComment(manager.getComment());
 
     cookie.setPort(manager.getCookiePort());
-    if (manager.getCookieSecure()) {
-      cookie.setSecure(_request.isSecure());
-      /*
-        else if (manager.getCookiePort() == null)
-        cookie.setPort(String.valueOf(_request.getServerPort()));
-      */
-    }
+    
+    if (manager.isSecure()) {
+      // cookie.setSecure(_request.isSecure());
+      
+      // server/12zc (tck)
+      cookie.setSecure(true);
+   }
 
     return cookie;
   }
@@ -1552,7 +1560,6 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
   public int getStatus()
   {
-    // XXX: test
     return _status;
   }
 
@@ -1561,13 +1568,13 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     return _statusMessage;
   }
 
-  public Iterable<String> getHeaders(String name)
+  public Collection<String> getHeaders(String name)
   {
     // XXX: test
     return _response.getHeaders(name);
   }
 
-  public Iterable<String> getHeaderNames()
+  public Collection<String> getHeaderNames()
   {
     // XXX: test
     return _response.getHeaderNames();

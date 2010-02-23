@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -187,6 +187,7 @@ public class XmlTransformTag extends BodyTagSupport implements NameValueTag {
       Source source = getSource(_xslt, xsltSystemId);
 
       Transformer transformer = factory.newTransformer(source);
+      transformer.setOutputProperty("omit-xml-declaration", "yes");
 
       for (int i = 0; i < _paramNames.size(); i++) {
         String name = _paramNames.get(i);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -151,6 +151,11 @@ public class TransactionImpl implements Transaction, AlarmListener {
   boolean isDead()
   {
     return _isDead;
+  }
+  
+  public boolean isActive()
+  {
+    return _status == Status.STATUS_ACTIVE;
   }
 
   /**

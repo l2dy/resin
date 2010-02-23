@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.ejb.cfg;
 
 import com.caucho.util.L10N;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
 import javax.ejb.*;
@@ -48,8 +49,6 @@ public class EjbStatefulBean extends EjbSessionBean {
   public EjbStatefulBean(EjbConfig ejbConfig, String ejbModuleName)
   {
     super(ejbConfig, ejbModuleName);
-
-    setSessionType("Stateful");
   }
 
   /**
@@ -60,8 +59,12 @@ public class EjbStatefulBean extends EjbSessionBean {
 			 Stateful stateful)
   {
     super(ejbConfig, annType, stateful.name());
-
-    setSessionType("Stateful");
+  }
+  
+  @Override
+  public Class<? extends Annotation> getSessionType()
+  {
+    return Stateful.class;
   }
 
   /**

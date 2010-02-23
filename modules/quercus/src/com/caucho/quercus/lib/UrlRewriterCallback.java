@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -68,7 +68,7 @@ public class UrlRewriterCallback extends CallbackFunction {
     OutputBuffer ob = env.getOutputBuffer();
 
     for (; ob != null; ob = ob.getNext()) {
-      Callback callback = ob.getCallback();
+      Callable callback = ob.getCallback();
 
       if (callback instanceof UrlRewriterCallback)
         return (UrlRewriterCallback)callback;

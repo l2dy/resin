@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1602,37 +1602,51 @@ public class JavaJspGenerator extends JspGenerator {
     if (! hasFragment)
       return;
 
-    out.println("public static class _CauchoFragment extends com.caucho.jsp.JspFragmentSupport {");
-    out.pushDepth();
-    out.println("private int _frag_code;");
-    out.println("private TagState _jsp_state;");
-
     out.println();
-    out.println("static _CauchoFragment create(_CauchoFragment frag, int code,");
-    out.println("                              javax.servlet.jsp.JspContext _jsp_parentContext,");
-    out.println("                              com.caucho.jsp.PageContextImpl pageContext,");
-    out.println("                              javax.servlet.jsp.tagext.JspTag parent,");
-    out.println("                              javax.servlet.jsp.tagext.JspFragment jspBody,");
-    out.println("                              TagState _jsp_state,");
-    out.println("                              com.caucho.jsp.PageManager _jsp_pageManager)");
+    out.println("_CauchoFragment createFragment(_CauchoFragment frag, int code,");
+    out.println("                               javax.servlet.jsp.JspContext _jsp_parentContext,");
+    out.println("                               com.caucho.jsp.PageContextImpl pageContext,");
+    out.println("                               javax.servlet.jsp.tagext.JspTag parent,");
+    out.println("                               javax.servlet.jsp.tagext.JspFragment jspBody,");
+    out.println("                               TagState _jsp_state,");
+    out.println("                               com.caucho.jsp.PageManager _jsp_pageManager)");
     out.println("{");
     out.pushDepth();
-    out.println("if (frag == null)");
-    out.println("  frag = new _CauchoFragment();");
+    out.println("if (frag == null) {");
+    out.println("  frag = new _CauchoFragment(code, _jsp_parentContext,");
+    out.println("               pageContext, parent, jspBody, _jsp_state,");
+    out.println("               _jsp_pageManager);");
+    out.println("}");
     out.println();
-    out.println("frag._frag_code = code;");
-    out.println("frag._jsp_parentContext = _jsp_parentContext;");
-    out.println("frag.pageContext = pageContext;");
-    out.println("frag._jsp_env = pageContext.getELContext();");
-    out.println("frag._jsp_parent_tag = parent;");
-    out.println("frag._jspBody = jspBody;");
-    out.println("frag._jsp_state = _jsp_state;");
-    out.println("frag._jsp_pageManager = _jsp_pageManager;");
     out.println();
     out.println("return frag;");
     out.popDepth();
     out.println("}");
     
+    out.println("public class _CauchoFragment extends com.caucho.jsp.JspFragmentSupport {");
+    out.pushDepth();
+    out.println("private int _frag_code;");
+    out.println("private TagState _jsp_state;");
+    
+    out.println("_CauchoFragment(int code,");
+    out.println("                javax.servlet.jsp.JspContext _jsp_parentContext,");
+    out.println("                com.caucho.jsp.PageContextImpl pageContext,");
+    out.println("                javax.servlet.jsp.tagext.JspTag parent,");
+    out.println("                javax.servlet.jsp.tagext.JspFragment jspBody,");
+    out.println("                TagState _jsp_state,");
+    out.println("                com.caucho.jsp.PageManager _jsp_pageManager)");
+    out.println("{");
+    out.pushDepth();
+    out.println("this._frag_code = code;");
+    out.println("this._jsp_parentContext = _jsp_parentContext;");
+    out.println("this.pageContext = pageContext;");
+    out.println("this._jsp_env = pageContext.getELContext();");
+    out.println("this._jsp_parent_tag = parent;");
+    out.println("this._jspBody = jspBody;");
+    out.println("this._jsp_state = _jsp_state;");
+    out.println("this._jsp_pageManager = _jsp_pageManager;");
+    out.popDepth();
+    out.println("}");
       
     for (int i = 0; i < _fragmentList.size(); i++) {
       JspFragmentNode frag = _fragmentList.get(i);
@@ -1640,8 +1654,9 @@ public class JavaJspGenerator extends JspGenerator {
       if (frag.isStatic())
 	continue;
 
-      if (frag.isValueFragment())
-	frag.generateValueMethod(out);
+      if (frag.isValueFragment()) {
+	continue; // frag.generateValueMethod(out);
+      }
       else {
 	out.println();
 	out.println("private void " + frag.getFragmentName() + "(JspWriter out)");
@@ -1688,6 +1703,17 @@ public class JavaJspGenerator extends JspGenerator {
     
     out.popDepth();
     out.println("}");
+    
+    for (int i = 0; i < _fragmentList.size(); i++) {
+      JspFragmentNode frag = _fragmentList.get(i);
+
+      if (frag.isStatic())
+        continue;
+
+      if (frag.isValueFragment()) {
+        frag.generateValueMethod(out);
+      }
+    }
   }
 
   /**
@@ -2176,10 +2202,11 @@ public class JavaJspGenerator extends JspGenerator {
   private void generateTagInjectDecl(JspJavaWriter out, TagInstance tag)
     throws IOException
   {
+    /*
     if (tag.getAnalyzedTag() != null
 	&& tag.getAnalyzedTag().getHasInjection()) {
       out.println("private static com.caucho.config.j2ee.InjectProgram _jsp_inject_" + tag.getId() + ";");
-    }
+    }*/
 
     Iterator<TagInstance> iter = tag.iterator();
     while (iter.hasNext()) {
@@ -2194,13 +2221,13 @@ public class JavaJspGenerator extends JspGenerator {
    */
   private void generateTagInject(JspJavaWriter out, TagInstance tag)
     throws IOException
-  {
+  {/*
     if (tag.getAnalyzedTag() != null
 	&& tag.getAnalyzedTag().getHasInjection()) {
       out.print("_jsp_inject_" + tag.getId() + " = ");
-      out.println("com.caucho.config.j2ee.InjectIntrospector.introspectProgram("
-		  + tag.getTagClass().getName() + ".class, null);");
-    }
+      out.println("com.caucho.config.inject.InjectManager.create().getReference("
+		  + tag.getTagClass().getName() + ".class);");
+    }*/
 
     Iterator<TagInstance> iter = tag.iterator();
     while (iter.hasNext()) {

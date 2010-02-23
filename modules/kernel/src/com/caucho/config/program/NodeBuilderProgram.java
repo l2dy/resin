@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,14 +29,16 @@
 
 package com.caucho.config.program;
 
-import com.caucho.config.*;
-import com.caucho.config.program.ConfigProgram;
+import javax.enterprise.context.spi.CreationalContext;
+
+import org.w3c.dom.Node;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.util.L10N;
 import com.caucho.xml.QElement;
 import com.caucho.xml.QName;
 import com.caucho.xml.QNode;
-
-import org.w3c.dom.Node;
 
 /**
  * Stored configuration program for an attribute.
@@ -64,9 +66,11 @@ public class NodeBuilderProgram extends FlowProgram {
   }
 
   @Override
-  public void inject(Object bean, ConfigContext env)
+  public <T> void inject(T bean, CreationalContext<T> cxt)
     throws ConfigException
   {
+    ConfigContext env = ConfigContext.getCurrent();
+    
     env.configureBean(bean, _node);
   }
 

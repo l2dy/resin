@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -28,8 +28,46 @@
 
 package com.caucho.jsp.java;
 
+import javax.servlet.jsp.JspException;
+import javax.servlet.jsp.PageContext;
+import javax.servlet.jsp.tagext.JspFragment;
+import javax.servlet.jsp.tagext.Tag;
+
 /**
  * Represents the body for a tag file with no scripting.
  */
-abstract public class JspTagFileSupport extends JspTagSupport {
+abstract public class JspTagFileSupport extends JspTagSupport implements Tag {
+  public void setPageContext(PageContext page)
+  {
+  }
+
+  public void setParent(Tag t)
+  {
+  }
+  
+  public Tag getParent()
+  {
+    return null;
+  }
+  
+  @Override
+  public JspFragment getJspBody()
+  {
+    // XXX: temp for jsp/102-
+    return super.getJspBody();
+  }
+
+  public int doStartTag() throws JspException
+  {
+    return SKIP_PAGE;
+  }
+
+  public int doEndTag() throws JspException
+  {
+    return SKIP_PAGE;
+  }
+
+  public void release()
+  {
+  }
 }

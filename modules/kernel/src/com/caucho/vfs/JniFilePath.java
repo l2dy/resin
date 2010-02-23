@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,20 +40,20 @@ public class JniFilePath {
     try {
       Thread thread = Thread.currentThread();
       ClassLoader loader = thread.getContextClassLoader();
-      
+
       Class pathClass
-	= Class.forName("com.caucho.vfs.JniFilePathImpl", false, loader);
+        = Class.forName("com.caucho.vfs.JniFilePathImpl", false, loader);
 
       Method isEnabled = pathClass.getMethod("isEnabled", new Class[0]);
 
       Object result = isEnabled.invoke(null);
 
       if (Boolean.TRUE.equals(result))
-	return (FilesystemPath) pathClass.newInstance();
+        return (FilesystemPath) pathClass.newInstance();
     } catch (ClassNotFoundException e) {
     } catch (Throwable e) {
     }
-    
+
     return null;
   }
 }

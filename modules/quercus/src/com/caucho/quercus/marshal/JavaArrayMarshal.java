@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -64,9 +64,8 @@ public class JavaArrayMarshal extends Marshal
     }
     */
 
-    Class componentType = expectedClass.getComponentType();
+    Class<?> componentType = expectedClass.getComponentType();
     Object array = value.valuesToArray(env, componentType);
-    
     /*
     if (array == null && _isNotNull) {
       env.warning(L.l("null is an unexpected argument, expected {0}", shortName(expectedClass)));

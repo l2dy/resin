@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,15 +32,18 @@ package com.caucho.quercus.lib;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.lang.ref.SoftReference;
 import java.util.Hashtable;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeanManager;
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
 import javax.naming.Context;
@@ -92,6 +95,13 @@ public class ResinModule
   public final static int XA_STATUS_ROLLING_BACK = 9;
 
   private static LruCache<String,SaveState> _saveState;
+  
+  private static WeakHashMap<ClassLoader,SoftReference<BeanManager>> _beanManagerMap
+    = new WeakHashMap<ClassLoader,SoftReference<BeanManager>>();
+  
+  public ResinModule()
+  {
+  }
 
   /**
    * Converts a string into its binary representation, according to the
@@ -118,19 +128,50 @@ public class ResinModule
   /**
    * Returns the matchding webbeans.
    */
-  public static Object java_bean(String name)
+  public Object java_bean(String name)
   {
-    InjectManager beanManager = InjectManager.create();
+    BeanManager beanManager = getBeanManager();
+    
+    if (beanManager == null)
+      return null;
 
     Set<Bean<?>> beans = beanManager.getBeans(name);
 
     if (beans.size() == 0)
       return null;
 
-    Bean bean = beanManager.resolve(beans);
-    CreationalContext env = beanManager.createCreationalContext(bean);
+    Bean<?> bean = beanManager.resolve(beans);
+    CreationalContext<?> env = beanManager.createCreationalContext(bean);
 
     return beanManager.getReference(bean, bean.getBeanClass(), env);
+  }
+  
+  private BeanManager getBeanManager()
+  {
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    
+    SoftReference<BeanManager> beanManagerRef = _beanManagerMap.get(loader);
+
+    BeanManager beanManager;
+    
+    if (beanManagerRef != null)
+      beanManager = beanManagerRef.get();
+    else
+      beanManager = null;
+    
+    if (beanManager == null) {
+      try {
+        beanManager = (BeanManager) new InitialContext().lookup("java:comp/BeanManager");
+        
+        beanManagerRef = new SoftReference<BeanManager>(beanManager);
+        
+        _beanManagerMap.put(loader, beanManagerRef);
+      } catch (Exception e) {
+        log.log(Level.FINER, e.toString(), e);
+      }
+    }
+
+    return beanManager;
   }
 
   /**
@@ -143,7 +184,18 @@ public class ResinModule
    */
   public static Object jndi_lookup(String name)
   {
-    return Jndi.lookup(name);
+    if (! name.startsWith("java:") && ! name.startsWith("/"))
+      name = "java:comp/env/" + name;
+    
+    try {
+      Context ic = new InitialContext();
+      
+      return ic.lookup(name);
+    } catch (NamingException e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
+    return null;
   }
 
 
@@ -359,8 +411,9 @@ public class ResinModule
 
       if (args != null) {
         for (Value v : args) {
-          if (v != null)
+          if (v != null) {
             v.varDump(env, out, 0, new IdentityHashMap<Value,String>());
+          }
 
           out.println();
         }

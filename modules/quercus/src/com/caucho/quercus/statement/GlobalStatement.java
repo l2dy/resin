@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -53,7 +53,7 @@ public class GlobalStatement extends Statement {
   public Value execute(Env env)
   {
     try {
-      env.setValue(_var.getName(), env.getGlobalVar(_var.getName()));
+      env.setRef(_var.getName(), env.getGlobalVar(_var.getName()));
     }
     catch (RuntimeException e) {
       rethrow(e, RuntimeException.class);
@@ -62,4 +62,3 @@ public class GlobalStatement extends Statement {
     return null;
   }
 }
-

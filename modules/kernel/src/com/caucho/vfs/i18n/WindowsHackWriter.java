@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -28,9 +28,10 @@
 
 package com.caucho.vfs.i18n;
 
-import com.caucho.vfs.OutputStreamWithBuffer;
-
 import java.io.IOException;
+
+import com.caucho.util.ByteAppendable;
+import com.caucho.vfs.OutputStreamWithBuffer;
 
 /**
  * Implements an encoding char-to-byte writer for the windows hack
@@ -72,7 +73,7 @@ public class WindowsHackWriter extends EncodingWriter {
    *
    * @param ch the character to write.
    */
-  public void write(OutputStreamWithBuffer os, char ch)
+  public void write(ByteAppendable os, char ch)
     throws IOException
   {
     os.write(ch);

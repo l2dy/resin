@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -136,7 +136,7 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns the appropriate strategy.
    */
-  public static ConfigType getType(Object bean)
+  public static ConfigType<?> getType(Object bean)
   {
     if (bean instanceof CustomBeanConfig)
       return ((CustomBeanConfig) bean).getConfigType();
@@ -149,7 +149,7 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns the appropriate strategy.
    */
-  public static ConfigType getType(Class type)
+  public static <T> ConfigType<T> getType(Class<T> type)
   {
     TypeFactory factory = getFactory(type.getClassLoader());
 
@@ -159,7 +159,7 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns the appropriate strategy.
    */
-  public static ConfigType getType(Type type)
+  public static ConfigType<?> getType(Type type)
   {
     return getType((Class) type);
   }
@@ -167,7 +167,7 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns the appropriate strategy.
    */
-  public static Class loadClass(String pkg, String name)
+  public static Class<?> loadClass(String pkg, String name)
   {
     return getFactory().loadClassImpl(pkg, name);
   }
@@ -185,7 +185,7 @@ public class TypeFactory implements AddLoaderListener
   public static TypeFactory getFactory(ClassLoader loader)
   {
     if (loader == null)
-      loader = ClassLoader.getSystemClassLoader();
+      loader = _systemClassLoader;
 
     TypeFactory factory = _localFactory.getLevel(loader);
 
@@ -397,7 +397,7 @@ public class TypeFactory implements AddLoaderListener
         ClassLoader loader = _loader;
 
         if (loader == null)
-          loader = ClassLoader.getSystemClassLoader();
+          loader = _systemClassLoader;
 
         is = loader.getResourceAsStream(pkg.replace('.', '/') + "/namespace");
 
@@ -721,7 +721,7 @@ public class TypeFactory implements AddLoaderListener
 
     ClassLoader loader = _loader;
     if (_loader == null)
-      loader = ClassLoader.getSystemClassLoader();
+      loader = _systemClassLoader;
 
     for (Map.Entry<String,String> entry : driverMap.entrySet()) {
       String scheme = entry.getKey();
@@ -771,7 +771,7 @@ public class TypeFactory implements AddLoaderListener
       ClassLoader loader = _loader;
 
       if (loader == null)
-        loader = ClassLoader.getSystemClassLoader();
+        loader = _systemClassLoader;
 
       Enumeration<URL> urls
         = loader.getResources("META-INF/caucho/com.caucho.config.uri/"

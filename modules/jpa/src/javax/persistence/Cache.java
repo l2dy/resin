@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,6 +40,7 @@ public interface Cache {
    *
    * @since JPA 2.0
    */
+  @SuppressWarnings("unchecked")
   public boolean contains(Class cl, Object key);
   
   /**
@@ -47,6 +48,7 @@ public interface Cache {
    *
    * @since JPA 2.0
    */
+  @SuppressWarnings("unchecked")
   public void evict(Class cl, Object key);
   
   /**
@@ -54,6 +56,7 @@ public interface Cache {
    *
    * @since JPA 2.0
    */
+  @SuppressWarnings("unchecked")
   public void evict(Class cl);
   
   /**

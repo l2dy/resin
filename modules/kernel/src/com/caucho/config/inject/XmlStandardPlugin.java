@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -109,7 +109,7 @@ public class XmlStandardPlugin implements Extension
       for (int i = 0; i < _pendingBeans.size(); i++) {
         BeansConfig config = _pendingBeans.get(i);
 
-        ArrayList<Class> deployList = config.getDeployList();
+        ArrayList<Class<?>> deployList = config.getDeployList();
 
         if (deployList != null && deployList.size() > 0) {
           _manager.setDeploymentTypes(deployList);

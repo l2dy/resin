@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,7 +40,7 @@ import java.lang.annotation.Target;
 @Target({TYPE})
 @Retention(RUNTIME)
 public @interface DiscriminatorColumn {
-  String name() default "";
+  String name() default "DTYPE";
   DiscriminatorType discriminatorType() default DiscriminatorType.STRING;
   String columnDefinition() default "";
   int length() default 31;

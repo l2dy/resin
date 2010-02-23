@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -161,21 +161,6 @@ public class CauchoResponseWrapper extends AbstractCauchoResponse
   {
     _response.setContentLength(len);
   }
-  
-  public void disable()
-  {
-    _response.disable();
-  }
-  
-  public void enable()
-  {
-    _response.enable();
-  }
-  
-  public boolean isDisabled()
-  {
-    return _response.isDisabled();
-  }
 
   //
   // HttpServletResponse
@@ -317,12 +302,12 @@ public class CauchoResponseWrapper extends AbstractCauchoResponse
     return _response.getHeader(name);
   }
   
-  public Iterable<String> getHeaders(String name)
+  public Collection<String> getHeaders(String name)
   {
     return _response.getHeaders(name);
   }
   
-  public Iterable<String> getHeaderNames()
+  public Collection<String> getHeaderNames()
   {
     return _response.getHeaderNames();
   }

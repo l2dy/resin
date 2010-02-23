@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1012,16 +1012,16 @@ public class CurlModule
       // callback functions
       //
       case CURLOPT_HEADERFUNCTION:
-        curl.setHeaderCallback(env.createCallback(value));
+        curl.setHeaderCallback(value.toCallable(env));
         break;
       case CURLOPT_PASSWDFUNCTION:
-        curl.setPasswordCallback(env.createCallback(value));
+        curl.setPasswordCallback(value.toCallable(env));
         break;
       case CURLOPT_READFUNCTION:
-        curl.setReadCallback(env.createCallback(value));
+        curl.setReadCallback(value.toCallable(env));
         break;
       case CURLOPT_WRITEFUNCTION:
-        curl.setWriteCallback(env.createCallback(value));
+        curl.setWriteCallback(value.toCallable(env));
         break;
 
       default:

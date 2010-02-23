@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -72,6 +72,8 @@ public class InterpretedClassDef extends ClassDef
   protected AbstractFunction _getField;
   protected AbstractFunction _setField;
   protected AbstractFunction _call;
+  protected AbstractFunction _invoke;
+  protected AbstractFunction _toString;
   
   protected int _parseIndex;
   
@@ -172,7 +174,11 @@ public class InterpretedClassDef extends ClassDef
    */
   public String getCompilationName()
   {
-    return getName() + "_" + _parseIndex;
+    String name = getName();
+    name = name.replace("__", "___");
+    name = name.replace("\\", "__");
+    
+    return name + "_" + _parseIndex;
   }
 
   /**
@@ -201,6 +207,12 @@ public class InterpretedClassDef extends ClassDef
     if (_call != null)
       cl.setCall(_call);
     
+    if (_invoke != null)
+      cl.setInvoke(_invoke);
+    
+    if (_toString != null)
+      cl.setToString(_toString);
+
     cl.addInitializer(this);
     
     for (Map.Entry<String,AbstractFunction> entry : _functionMap.entrySet()) {
@@ -256,6 +268,10 @@ public class InterpretedClassDef extends ClassDef
       _setField = fun;
     else if (name.equals("__call"))
       _call = fun;
+    else if (name.equals("__invoke"))
+      _invoke = fun;
+    else if (name.equals("__toString"))
+      _toString = fun;
     else if (name.equalsIgnoreCase(getName()) && _constructor == null)
       _constructor = fun;
   }
@@ -338,12 +354,14 @@ public class InterpretedClassDef extends ClassDef
    */
   public void init(Env env)
   {
+    QuercusClass qClass = env.getClass(getName());
+    
     for (Map.Entry<String,StaticFieldEntry> entry : _staticFieldMap.entrySet()) {
-      String name = getName() + "::" + entry.getKey();
+      String name = entry.getKey();
 
       StaticFieldEntry field = entry.getValue();
       
-      env.setGlobalValue(name.intern(), field.getValue().eval(env).copy());
+      qClass.getStaticFieldVar(env, env.createString(name)).set(field.getValue().eval(env).copy());
     }
   }
 

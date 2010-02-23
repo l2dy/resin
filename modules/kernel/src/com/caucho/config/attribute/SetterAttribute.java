@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -91,6 +91,15 @@ public class SetterAttribute extends Attribute {
   }
   
   /**
+   * Returns true if the setter is marked with @Configurable
+   */
+  @Override
+  public boolean isConfigurable()
+  {
+    return _setter.isAnnotationPresent(Configurable.class);
+  }
+  
+  /**
    * Sets the value of the attribute
    */
   @Override
@@ -117,9 +126,9 @@ public class SetterAttribute extends Attribute {
       _setter.invoke(bean, value);
     } catch (IllegalArgumentException e) {
       throw ConfigException.create(_setter,
-				   L.l("'{0}' is an illegal value.",
-				       value),
-				   e);
+                                   L.l("'{0}' is an illegal value.",
+                                       value),
+                                       e);
     } catch (Exception e) {
       throw ConfigException.create(_setter, e);
     }
@@ -134,11 +143,11 @@ public class SetterAttribute extends Attribute {
   {
     try {
       if (configType != null && _type.isAssignableFrom(configType.getType())) {
-	// ioc/2172
-	return configType.create(parent, name);
+        // ioc/2172
+        return configType.create(parent, name);
       }
       else {
-	return getConfigType().create(parent, name);
+        return getConfigType().create(parent, name);
       }
     } catch (Exception e) {
       throw ConfigException.create(_setter, e);

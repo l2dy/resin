@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -75,5 +75,14 @@ public class ServletContextAttributeEvent extends ServletContextEvent {
   public Object getValue()
   {
     return value;
+  }
+
+  @Override 
+  public String toString()
+  {
+    return (getClass().getName() 
+            + "[name=" + this.name 
+            + ",source=" + getSource() 
+            + "]");
   }
 }

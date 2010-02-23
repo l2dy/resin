@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 package com.caucho.server.http;
 
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.ProtocolDispatchServer;
+import com.caucho.server.dispatch.ProtocolDispatchServer;
 
 /**
  * Handles a compiling request.

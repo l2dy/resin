@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,10 +29,14 @@
 
 package com.caucho.quercus.expr;
 
+import java.io.IOException;
+import java.util.ArrayList;
+
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
+import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.util.L10N;
 
 /**
@@ -58,6 +62,30 @@ public class ClassConstExpr extends Expr {
     _name = name.intern();
   }
   
+  //
+  // function call creation
+  //
+
+  /**
+   * Creates a function call expression
+   */
+  @Override
+  public Expr createCall(QuercusParser parser,
+                         Location location,
+                         ArrayList<Expr> args)
+    throws IOException
+  {
+    /*
+    if (_className.equals(_name))
+      return factory.createClassConstructor(location, _className, _name, args);
+    else
+      return factory.createClassMethodCall(location, _className, _name, args);
+      */
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createClassMethodCall(location, _className, _name, args);
+  }
+  
   /**
    * Evaluates the expression.
    *
@@ -65,6 +93,7 @@ public class ClassConstExpr extends Expr {
    *
    * @return the expression value.
    */
+  @Override
   public Value eval(Env env)
   {
     return env.getClass(_className).getConstant(env, _name);

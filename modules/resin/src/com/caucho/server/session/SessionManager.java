@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -136,10 +136,10 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   // default cookie version
   private int _cookieVersion;
   private String _cookieDomain;
+  private String _cookieDomainRegexp;
   private boolean _isCookieUseContextPath;
   private String _cookiePath;
   private long _cookieMaxAge;
-  private boolean _cookieSecure;
   private int _isCookieHttpOnly;
   private String _cookieComment;
   private String _cookiePort;
@@ -228,6 +228,9 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
       _cookieName = decoder.getSessionCookie();
       _sslCookieName = decoder.getSSLSessionCookie();
+      
+      if (_sslCookieName != null && ! _sslCookieName.equals(_cookieName))
+        _isSecure = true;
     }
 
     String hostName = webApp.getHostName();
@@ -874,7 +877,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   public void setSecure(boolean secure)
   {
     if (! _webApp.isInitializing())
-      throw new IllegalStateException();
+      throw new IllegalStateException(L.l("SessionCookieConfig must be set during initialization"));
 
     _isSecure = secure;
   }
@@ -936,6 +939,15 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookieDomain = domain;
   }
 
+  public String getCookieDomainRegexp() {
+    return _cookieDomainRegexp;
+  }
+
+  public void setCookieDomainRegexp(String regexp)
+  {
+    _cookieDomainRegexp = regexp;
+  }
+
   /**
    * Sets the default session cookie domain.
    */
@@ -965,7 +977,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
    */
   public boolean getCookieSecure()
   {
-    if (_cookieSecure)
+    if (_isSecure)
       return true;
     else
       return ! _cookieName.equals(_sslCookieName);
@@ -974,9 +986,9 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   /**
    * Sets the secure of the session cookie.
    */
-  public void setCookieSecure(boolean secure)
+  public void setCookieSecure(boolean isSecure)
   {
-    _cookieSecure = secure;
+    _isSecure = isSecure;
   }
 
   /**
@@ -1263,7 +1275,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
       return null;
 
     SessionImpl session = _sessions.get(sessionId);
-
+    
     boolean isNew = false;
     boolean killSession = false;
 
@@ -1282,7 +1294,11 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     if (session != null) {
       if (session.load(isNew)) {
         session.addUse();
-        session.setAccess(now);
+
+        if (isCreate) {
+          // TCK only set access on create
+          session.setAccess(now);
+        }
 
         return session;
       }
@@ -1409,8 +1425,8 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     }
     else if (isNew)
       handleCreateListeners(session);
-    else
-      session.setAccess(now);
+    //else
+      //session.setAccess(now);
 
     return session;
   }

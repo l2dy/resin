@@ -173,7 +173,7 @@ public class GoogleQuercusServletImpl extends QuercusServletImpl
       // php/6006
       ws.setNewlineString("\n");
 
-      Quercus quercus = getQuercus();
+      QuercusContext quercus = getQuercus();
       
       env = quercus.createEnv(page, ws, request, response);
       quercus.setServletContext(_servletContext);
@@ -225,8 +225,8 @@ public class GoogleQuercusServletImpl extends QuercusServletImpl
       catch (QuercusLineRuntimeException e) {
         log.log(Level.FINE, e.toString(), e);
 
-    ws.println(e.getMessage());
-    //  return;
+        ws.println(e.getMessage());
+        //  return;
       }
       catch (QuercusValueException e) {
         log.log(Level.FINE, e.toString(), e);
@@ -278,7 +278,7 @@ public class GoogleQuercusServletImpl extends QuercusServletImpl
    * Returns the Quercus instance.
    */
   @Override
-  protected Quercus getQuercus()
+  protected QuercusContext getQuercus()
   {
     synchronized (this) {
       if (_quercus == null)

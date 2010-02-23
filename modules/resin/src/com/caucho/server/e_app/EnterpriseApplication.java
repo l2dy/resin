@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -727,9 +727,12 @@ public class EnterpriseApplication
 
   public String getClientRefs()
   {
+    throw new UnsupportedOperationException(getClass().getName());
+    /*
     EjbContainer ejbContainer = EjbContainer.create();
 
     return ejbContainer.getClientRemoteConfig();
+    */
   }
 
   public String toString()

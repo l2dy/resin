@@ -29,22 +29,45 @@
 
 package com.caucho.server.resin;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.io.OutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.net.BindException;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
+import java.security.Provider;
+import java.security.Security;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Properties;
+import java.util.concurrent.locks.LockSupport;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.management.ObjectName;
+
 import com.caucho.VersionFactory;
-import com.caucho.amber.manager.PersistenceEnvironmentListener;
-import com.caucho.bam.*;
+import com.caucho.bam.Broker;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.functions.FmtFunctions;
-import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.WebBeansAddLoaderListener;
-import com.caucho.config.lib.*;
-import com.caucho.config.program.*;
+import com.caucho.config.lib.ResinConfigLibrary;
+import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
-import com.caucho.hemp.broker.HempBroker;
+import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.jsp.cfg.JspPropertyGroup;
 import com.caucho.license.LicenseCheck;
@@ -52,7 +75,6 @@ import com.caucho.lifecycle.Lifecycle;
 import com.caucho.lifecycle.LifecycleState;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentBean;
-import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.loader.EnvironmentProperties;
@@ -63,47 +85,30 @@ import com.caucho.management.server.ResinMXBean;
 import com.caucho.management.server.ThreadPoolMXBean;
 import com.caucho.naming.Jndi;
 import com.caucho.repository.ModuleRepository;
-import com.caucho.server.admin.TransactionManager;
 import com.caucho.server.admin.Management;
+import com.caucho.server.admin.TransactionManager;
 import com.caucho.server.cache.TempFileManager;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.ClusterPod;
 import com.caucho.server.cluster.ClusterServer;
-import com.caucho.server.cluster.SingleCluster;
 import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.SingleCluster;
 import com.caucho.server.repository.ModuleRepositoryImpl;
-import com.caucho.server.util.*;
+import com.caucho.server.util.JniCauchoSystem;
 import com.caucho.server.webbeans.ResinWebBeansProducer;
 import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
-import com.caucho.util.RandomUtil;
 import com.caucho.util.Shutdown;
 import com.caucho.util.ThreadPool;
 import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.QJniServerSocket;
 import com.caucho.vfs.QServerSocket;
-import com.caucho.vfs.Vfs;
 import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
-
-import javax.annotation.PostConstruct;
-import javax.management.ObjectName;
-import java.io.*;
-import java.lang.reflect.*;
-import java.net.BindException;
-import java.net.InetAddress;
-import java.net.Socket;
-import java.net.SocketException;
-import java.net.SocketTimeoutException;
-import java.security.Provider;
-import java.security.Security;
-import java.util.*;
-import java.util.concurrent.locks.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * The Resin class represents the top-level container for Resin.
@@ -261,13 +266,35 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       log().log(Level.FINER, e.toString(), e);
 
       licenseErrorMessage = e.getMessage();
+    } catch (InvocationTargetException e) {
+      Throwable cause = e.getCause();
+
+      log().log(Level.FINER, cause.toString(), cause);
+
+      if (cause instanceof ConfigException) {
+        licenseErrorMessage = cause.getMessage();
+      }
+      else {
+        String msg = L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n"
+                           + "\n"
+                           + "  See http://www.caucho.com for information on Resin Professional,\n"
+                           + "  including caching, clustering, JNI acceleration, and OpenSSL integration.\n"
+                           + "\n  Exception=" + cause + "\n");
+      }
     } catch (Throwable e) {
       log().log(Level.FINER, e.toString(), e);
+      
+      String causeMsg = "";
+      if (! (e instanceof ClassNotFoundException)) {
+        causeMsg = "\n  Exception=" + e + "\n";
+      }
+      
 
-      String msg = L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n" +
-                         "\n" +
-                         "  See http://www.caucho.com for information on Resin Professional,\n" +
-                         "  including caching, clustering, JNI acceleration, and OpenSSL integration.\n");
+      String msg = L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n"
+                         + "\n"
+                         + "  See http://www.caucho.com for information on Resin Professional,\n"
+                         + "  including caching, clustering, JNI acceleration, and OpenSSL integration.\n"
+                         + causeMsg);
 
       licenseErrorMessage = msg;
     }
@@ -380,7 +407,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       // else
       //  setRootDirectory(Vfs.getPwd());
 
-      Environment.addChildLoaderListener(new PersistenceEnvironmentListener());
+      Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
       Environment.addChildLoaderListener(new WebBeansAddLoaderListener());
       InjectManager webBeans = InjectManager.create();
 
@@ -960,7 +987,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       if (_stage != null)
         _server.setStage(_stage);
 
-      _server.start();
+      // _server.start();
     }
 
     return _server;
@@ -978,6 +1005,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
    * Starts the server.
    */
   public void start()
+    throws Exception
   {
     preConfigureInit();
 
@@ -1028,6 +1056,16 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       */
 
       _server = createServer();
+
+      for (int i = 0; i < _boundPortList.size(); i++) {
+        BoundPort port = _boundPortList.get(i);
+
+        _server.bind(port.getAddress(),
+                     port.getPort(),
+                     port.getServerSocket());
+      }
+
+      _server.start();
 
       Environment.start(getClassLoader());
 
@@ -1563,14 +1601,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     ClusterServer clusterServer = findClusterServer(_serverId);
 
-    for (int i = 0; i < _boundPortList.size(); i++) {
-      BoundPort port = _boundPortList.get(i);
-
-      clusterServer.bind(port.getAddress(),
-                         port.getPort(),
-                         port.getServerSocket());
-    }
-
     start();
   }
 
@@ -1610,13 +1640,13 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   {
 
   }
-  
+
   public void memoryShutdown(String msg)
   {
     _isDumpHeapOnExit = true;
-    
+
     startShutdown(msg);
-    
+
     try {
       Thread.sleep(10 * 60 * 1000L);
     } catch (Exception e) {
@@ -1816,14 +1846,12 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       Thread.sleep(resin.getShutdownWaitMax() + 600000);
       System.exit(0);
     } catch (Throwable e) {
-      boolean isCompile = false;
       Throwable cause;
 
       for (cause = e;
            cause != null && cause.getCause() != null;
            cause = cause.getCause()) {
         if (cause instanceof CompileException) {
-          isCompile = true;
           break;
         }
       }
@@ -1884,50 +1912,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     validatePackage("javax.management.MBeanServer", new String[] { "1.2", "1.5" });
     validatePackage("javax.resource.spi.ResourceAdapter", new String[] {"1.5", "1.4"});
     */
-  }
-
-  /**
-   * Validates a package version.
-   */
-  private static void validatePackage(String className, String []versions)
-    throws ConfigException
-  {
-    Class cl = null;
-
-    try {
-      cl = Class.forName(className);
-    } catch (Throwable e) {
-      throw new ConfigException(L().l("class {0} is not loadable on startup.  Resin requires {0} to be in the classpath on startup.",
-                                      className),
-                                e);
-
-    }
-
-    Package pkg = cl.getPackage();
-
-    if (pkg == null) {
-      log().warning(L().l("package for class {0} is missing.  Resin requires class {0} in the classpath on startup.",
-                        className));
-
-      return;
-    }
-    else if (pkg.getSpecificationVersion() == null) {
-      log().warning(L().l("{0} has no specification version.  Resin {1} requires version {2}.",
-                                    pkg, VersionFactory.getVersion(),
-                                    versions[0]));
-
-      return;
-    }
-
-    for (int i = 0; i < versions.length; i++) {
-      if (versions[i].compareTo(pkg.getSpecificationVersion()) <= 0)
-        return;
-    }
-
-    log().warning(L().l("Specification version {0} of {1} is not compatible with Resin {2}.  Resin {2} requires version {3}.",
-                      pkg.getSpecificationVersion(),
-                      pkg, VersionFactory.getVersion(),
-                      versions[0]));
   }
 
   private static L10N L()

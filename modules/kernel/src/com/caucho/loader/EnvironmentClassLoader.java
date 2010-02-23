@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -45,6 +45,7 @@ import javax.naming.NamingException;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
 import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.Properties;
@@ -536,6 +537,28 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     _pendingScanUrls.add(url);
   }
+  
+  /**
+   * Tells the classloader to scan the root classpath.
+   */
+  public void scanRoot()
+  {
+    super.scanRoot();
+    
+    ClassLoader parent = getParent();
+    if (parent instanceof EnvironmentClassLoader)
+      return;
+    
+    if (parent instanceof URLClassLoader) {    
+      URLClassLoader urlParent = (URLClassLoader) parent;
+
+      for (URL url : urlParent.getURLs()) {
+        _pendingScanUrls.add(url);
+      }
+      
+      return;
+    }
+  }
 
   /**
    * Adds a scan listener.
@@ -668,7 +691,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     ArrayList<URL> urlList = new ArrayList<URL>(_pendingScanUrls);
     _pendingScanUrls.clear();
-
+    
     try {
       if (_scanListeners != null && urlList.size() > 0) {
         try {
@@ -706,6 +729,17 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     ArrayList<EnvironmentListener> listeners = getEnvironmentListeners();
 
     int size = listeners.size();
+    for (int i = 0; listeners != null && i < size; i++) {
+      EnvironmentListener listener = listeners.get(i);
+      
+      if (listener instanceof EnvironmentEnhancerListener) {
+        EnvironmentEnhancerListener enhancerListener
+          = (EnvironmentEnhancerListener) listener;
+        
+        enhancerListener.environmentConfigureEnhancer(this);
+      }
+    }
+
     for (int i = 0; listeners != null && i < size; i++) {
       EnvironmentListener listener = listeners.get(i);
 

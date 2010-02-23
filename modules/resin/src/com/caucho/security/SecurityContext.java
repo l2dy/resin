@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.security;
 
-import com.caucho.server.connection.ServerRequest;
+import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.server.connection.TcpConnection;
 import com.caucho.util.L10N;
 
@@ -112,8 +112,8 @@ public class SecurityContext {
 
     if (provider != null && roleSet != null) {
       for (int i = 0; i < roleSet.length; i++) {
-	if (provider.isUserInRole(roleSet[i]))
-	  return;
+        if (provider.isUserInRole(roleSet[i]))
+          return;
       }
 
       throw new AccessControlException(L.l("permission denied"));
@@ -170,7 +170,7 @@ public class SecurityContext {
    */
   public static SecurityContextProvider getProvider()
   {
-    ServerRequest request = TcpConnection.getCurrentRequest();
+    ProtocolConnection request = TcpConnection.getCurrentRequest();
 
     if (request instanceof SecurityContextProvider)
       return (SecurityContextProvider) request;

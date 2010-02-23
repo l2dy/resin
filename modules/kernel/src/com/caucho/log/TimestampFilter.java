@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -74,8 +74,6 @@ public class TimestampFilter extends StreamImpl {
   
   private String _timestampString;
   private TimestampBase []_timestamp;
-
-  private QDate _calendar = new QDate(true);
 
   private boolean _isNullDelimited;
   
@@ -232,14 +230,16 @@ public class TimestampFilter extends StreamImpl {
       else if (_isRecordBegin) {
 	long start = _stream.getPosition();
 	
-        // _stream.print(_calendar.formatLocal(now, _timestamp));
-	synchronized (_calendar) {
-	  _calendar.setGMTTime(now);
+	QDate localDate = QDate.allocateLocalDate();
+
+	localDate.setGMTTime(now);
 	  
-	  int len = _timestamp.length;
-	  for (int j = 0; j < len; j++)
-	    _timestamp[j].print(_stream, _calendar);
+	int len = _timestamp.length;
+	for (int j = 0; j < len; j++) {
+	  _timestamp[j].print(_stream, localDate);
 	}
+	
+	QDate.freeLocalDate(localDate);
 
 	_timestampLength = (int) (_stream.getPosition() - start);
         _isLineBegin = false;

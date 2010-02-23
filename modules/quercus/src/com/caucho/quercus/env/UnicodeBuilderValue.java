@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -151,9 +151,14 @@ public class UnicodeBuilderValue
 
   public UnicodeBuilderValue(StringBuilderValue v, boolean isCopy)
   {
-    _buffer = new char[v._buffer.length];
-    System.arraycopy(v._buffer, 0, _buffer, 0, v._length);
-    _length = v._length;
+    byte []vBuffer = v.getBuffer();
+    int vOffset = v.getOffset();
+    
+    _buffer = new char[vBuffer.length];
+    
+    System.arraycopy(vBuffer, 0, _buffer, 0, vOffset);
+    
+    _length = vOffset;
   }
 
   /**

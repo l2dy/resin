@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -276,12 +276,12 @@ public class FilterConfigImpl
     }
   }
 
-  public Iterable<String> getServletNameMappings()
+  public Collection<String> getServletNameMappings()
   {
     Set<String> names = _filterManager.getServletNameMappings(_filterName);
 
     if (names == null)
-      return EMPTY;
+      return Collections.EMPTY_SET;
 
     return Collections.unmodifiableSet(names);
   }
@@ -322,12 +322,12 @@ public class FilterConfigImpl
     }
   }
 
-  public Iterable<String> getUrlPatternMappings()
+  public Collection<String> getUrlPatternMappings()
   {
     Set<String> patterns = _filterManager.getUrlPatternMappings(_filterName);
 
     if (patterns == null)
-      return EMPTY;
+      return Collections.EMPTY_SET;
 
     return Collections.unmodifiableSet(patterns);
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,7 +40,7 @@ import java.util.ArrayList;
  */
 public class TldPreload {
   private boolean _isInit;
-  
+
   private String _uri;
   private String _location;
 
@@ -120,7 +120,7 @@ public class TldPreload {
   {
     return _configException;
   }
-  
+
   /**
    * Ignores unknown options.
    */
@@ -144,7 +144,7 @@ public class TldPreload {
       listener.register(app);
     }
   }
-  
+
   public boolean isJsf()
   {
     return false;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,13 +42,16 @@ import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.servlet.ServletContext;
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.security.SecurityContextProvider;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.Connection;
+import com.caucho.server.connection.ProtocolConnection;
+import com.caucho.server.connection.TransportConnection;
 import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.connection.TcpDuplexController;
 import com.caucho.server.connection.TcpDuplexHandler;
@@ -78,7 +81,7 @@ import com.caucho.vfs.WriteStream;
  * request implementations.
  */
 public abstract class AbstractHttpRequest
-  implements SecurityContextProvider
+  implements SecurityContextProvider, ProtocolConnection
 {
   private static final Logger log
     = Logger.getLogger(AbstractHttpRequest.class.getName());
@@ -120,7 +123,7 @@ public abstract class AbstractHttpRequest
 
   protected final Server _server;
 
-  protected final Connection _conn;
+  protected final TransportConnection _conn;
   protected final TcpConnection _tcpConn;
 
   protected final AbstractHttpResponse _response;
@@ -175,7 +178,7 @@ public abstract class AbstractHttpRequest
    *
    * @param server the parent server
    */
-  protected AbstractHttpRequest(Server server, Connection conn)
+  protected AbstractHttpRequest(Server server, TransportConnection conn)
   {
     _server = server;
 
@@ -221,7 +224,7 @@ public abstract class AbstractHttpRequest
   /**
    * Returns the connection.
    */
-  public final Connection getConnection()
+  public final TransportConnection getConnection()
   {
     return _conn;
   }
@@ -242,7 +245,8 @@ public abstract class AbstractHttpRequest
   /**
    * Called when the connection starts
    */
-  public void startConnection()
+  @Override
+  public void onStartConnection()
   {
   }
 
@@ -349,6 +353,17 @@ public abstract class AbstractHttpRequest
       return request.getRequestURI();
     else
       return null;
+  }
+  
+  @Override
+  public String getProtocolRequestURL()
+  {
+    HttpServletRequestImpl request = getRequestFacade();
+
+    if (request != null)
+      return request.getRequestURL().toString();
+    else
+      return null;    
   }
 
   /**
@@ -696,7 +711,7 @@ public abstract class AbstractHttpRequest
    */
   protected void handleConnectionClose()
   {
-    Connection conn = _conn;
+    TransportConnection conn = _conn;
 
     if (conn != null)
       conn.killKeepalive();
@@ -922,6 +937,11 @@ public abstract class AbstractHttpRequest
   public void setCharacterEncoding(String encoding)
     throws UnsupportedEncodingException
   {
+    // server/122k (tck)
+    
+    if (_hasReadStream)
+      return;
+    
     _readEncoding = encoding;
 
     try {
@@ -1442,7 +1462,7 @@ public abstract class AbstractHttpRequest
 
     return invocation.getRequestInvocation(_requestFacade);
   }
-
+  
   /**
    * Handles a comet-style resume.
    *
@@ -1453,16 +1473,27 @@ public abstract class AbstractHttpRequest
   {
     try {
       startInvocation();
-
-      if (! isComet())
+      
+      HttpServletRequestImpl request = getRequestFacade();
+      
+      /*
+      if (! request.isAsyncStarted())
+        return false;
+        */
+      
+      if (request == null)
         return false;
 
-      WebApp webApp = _tcpConn.getAsyncDispatchWebApp();
-      String url = _tcpConn.getAsyncDispatchUrl();
+      AsyncContextImpl asyncContext = request.getAsyncContext();
 
-      // servlet 3.0 spec defaults to suspend
-      _tcpConn.suspend();
-
+      ServletContext webApp = asyncContext.getDispatchContext();
+      String url = asyncContext.getDispatchPath();
+      
+      HttpServletRequest asyncRequest = getRequestFacade();
+      HttpServletResponse asyncResponse = getResponseFacade();
+      
+      // asyncContext.onStart(webApp, asyncRequest, asyncResponse);
+      
       if (url != null) {
         if (webApp == null)
           webApp = getWebApp();
@@ -1487,16 +1518,18 @@ public abstract class AbstractHttpRequest
     } catch (Throwable e) {
       log.log(Level.FINE, e.toString(), e);
 
-      _responseFacade.killCache();
+      if (_responseFacade != null)
+        _responseFacade.killCache();
       killKeepalive();
 
       return false;
     } finally {
       finishInvocation();
 
-      if (! isSuspend())
+      if (! isSuspend()) {
         finishRequest();
-    }
+      }
+   }
 
     if (log.isLoggable(Level.FINE)) {
       log.fine(dbgId() +
@@ -1505,6 +1538,19 @@ public abstract class AbstractHttpRequest
 
     return isSuspend();
   }
+  
+  WebApp getAsyncDispatchWebApp()
+  {
+    // XXX:
+    throw new UnsupportedOperationException();
+  }
+  
+  String getAsyncDispatchUrl()
+  {
+    // XXX:
+    throw new UnsupportedOperationException();
+  }
+
 
   protected void sendRequestError(Throwable e)
     throws IOException
@@ -1559,7 +1605,7 @@ public abstract class AbstractHttpRequest
    */
   public void killKeepalive()
   {
-    Connection conn = _conn;
+    TransportConnection conn = _conn;
 
     if (conn != null)
       conn.killKeepalive();
@@ -1576,18 +1622,18 @@ public abstract class AbstractHttpRequest
    */
   protected boolean isKeepalive()
   {
-    return _conn != null && _conn.isKeepalive();
+    return _conn != null && _conn.isKeepaliveAllocated();
   }
 
-  public boolean isComet()
+  public boolean isCometActive()
   {
-    return _tcpConn != null && _tcpConn.isComet();
+    return _tcpConn != null && _tcpConn.isCometActive();
   }
 
   public boolean isSuspend()
   {
     // return _tcpConn != null && (_tcpConn.isSuspend() || _tcpConn.isDuplex());
-    return _tcpConn != null && (_tcpConn.isSuspend() || _tcpConn.isDuplex());
+    return _tcpConn != null && (_tcpConn.isCometActive() || _tcpConn.isDuplex());
   }
 
   public boolean isDuplex()
@@ -1596,22 +1642,17 @@ public abstract class AbstractHttpRequest
   }
 
   /**
-   * Returns true if keepalives are allowed.
-   *
-   * This method should only be called once, when the response is
-   * deciding whether to send the Connection: close (or 'Q' vs 'X'),
-   * after that, the calling routines should call isKeepalive() to
-   * see what the decision was.
-   *
-   * Otherwise, the browser might see a keepalive when the final decision
-   * is to close the connection.
+   * Returns true if a keepalive has been allocated for the request.
+   * 
+   * The keepalives are preallocated at the start of the request to keep
+   * the connection state machine simple.
    */
-  public boolean allowKeepalive()
+  public boolean isKeepaliveAllowed()
   {
-    Connection conn = _conn;
+    TransportConnection conn = _conn;
 
     if (conn != null)
-      return conn.toKeepalive();
+      return conn.isKeepaliveAllocated();
     else
       return true;
   }
@@ -1643,9 +1684,6 @@ public abstract class AbstractHttpRequest
   protected void startInvocation()
     throws IOException
   {
-    if (_tcpConn != null)
-      _tcpConn.beginActive();
-
     _startTime = Alarm.getCurrentTime();
 
     _response.startInvocation();
@@ -1698,8 +1736,6 @@ public abstract class AbstractHttpRequest
       _httpBuffer = null;
 
       if (_tcpConn != null) {
-        _tcpConn.endActive();
-
         _tcpConn.finishRequest();
       }
 

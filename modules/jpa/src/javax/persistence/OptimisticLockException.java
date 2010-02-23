@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,9 +33,10 @@ package javax.persistence;
  * Thrown by the persistence provider when an
  * optimistic locking conflict occurs.
  */
+@SuppressWarnings("serial")
 public class OptimisticLockException extends PersistenceException
 {
-  Object _entity;
+  private Object entity;
 
   public OptimisticLockException()
   {
@@ -43,7 +44,7 @@ public class OptimisticLockException extends PersistenceException
 
   public OptimisticLockException(Object entity)
   {
-    _entity = entity;
+    this.entity = entity;
   }
 
   public OptimisticLockException(String message)
@@ -63,7 +64,7 @@ public class OptimisticLockException extends PersistenceException
   {
     super(message, cause);
 
-    _entity = entity;
+    this.entity = entity;
   }
 
   public OptimisticLockException(Throwable cause)
@@ -73,6 +74,6 @@ public class OptimisticLockException extends PersistenceException
 
   public Object getEntity()
   {
-    return _entity;
+    return this.entity;
   }
 }

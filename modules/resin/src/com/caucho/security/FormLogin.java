@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,7 +30,6 @@
 package com.caucho.security;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.Unbound;
 import com.caucho.config.Service;
 import com.caucho.server.http.CauchoRequest;
 import com.caucho.server.http.CauchoResponse;
@@ -40,7 +39,6 @@ import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
 import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
@@ -288,7 +286,7 @@ public class FormLogin extends AbstractLogin
         && ((CookieAuthenticator) auth).isCookieSupported(jUseCookieAuth)) {
       CookieAuthenticator cookieAuth = (CookieAuthenticator) auth;
 
-      generateCookie(user, cookieAuth, app, response);
+      generateCookie(user, cookieAuth, app, request, response);
     }
 
     String path = request.getServletPath();
@@ -338,7 +336,7 @@ public class FormLogin extends AbstractLogin
       path = request.getPathInfo();
     else if (request.getPathInfo() != null)
       path = path + request.getPathInfo();
-
+    
     if (path.equals("")) {
       // Forward?
       path = request.getContextPath() + "/";
@@ -395,7 +393,7 @@ public class FormLogin extends AbstractLogin
       response.setHeader("Cache-Control", "no-cache");
     }
 
-    // In case where the authenticator is somethin like https:/
+    // In case where the authenticator is something like https:/
     if (! _loginPage.startsWith("/")) {
       response.sendRedirect(response.encodeRedirectURL(_loginPage));
       return;
@@ -414,6 +412,7 @@ public class FormLogin extends AbstractLogin
   private void generateCookie(Principal user,
                               CookieAuthenticator auth,
                               WebApp webApp,
+                              HttpServletRequest request,
                               HttpServletResponse response)
   {
     if (webApp == null)
@@ -429,7 +428,7 @@ public class FormLogin extends AbstractLogin
 
     cookie.setMaxAge((int) (cookieMaxAge / 1000L));
     cookie.setPath("/");
-    cookie.setDomain(manager.getCookieDomain());
+    cookie.setDomain(webApp.generateCookieDomain(request));
 
     auth.associateCookie(user, value);
 

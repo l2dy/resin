@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,7 @@ import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.servlet.AsyncContext;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
@@ -70,6 +71,7 @@ import com.caucho.util.LineCompileException;
 import com.caucho.util.QDate;
 import com.caucho.vfs.ClientDisconnectException;
 import com.caucho.vfs.Encoding;
+import com.caucho.vfs.Vfs;
 
 /**
  * Represents the final servlet in a filter chain.
@@ -199,6 +201,13 @@ public class ErrorPageManager {
     try {
       response.reset();
     } catch (IllegalStateException e1) {
+    }
+    
+    if (req.isAsyncStarted()) {
+      AsyncContext async = req.getAsyncContext();
+      
+      if (async != null)
+        async.complete();
     }
 
     if (response instanceof HttpServletResponseImpl) {
@@ -598,7 +607,17 @@ public class ErrorPageManager {
       }
 
       response.setContentType("text/html; charset=utf-8");
-      PrintWriter out = response.getWriter();
+      boolean isOutputStreamWrapper = false;
+      PrintWriter out;
+      
+      try {
+        out = response.getWriter();
+      } catch (IllegalStateException e) {
+        log.log(Level.ALL, e.toString(), e);
+        
+        out = Vfs.openWrite(response.getOutputStream()).getPrintWriter();
+        isOutputStreamWrapper = true;
+      }
 
       out.println("<html>");
       if (! response.isCommitted()) {
@@ -647,6 +666,11 @@ public class ErrorPageManager {
 
       if (userAgent != null && userAgent.indexOf("MSIE") >= 0) {
         out.write(MSIE_PADDING, 0, MSIE_PADDING.length);
+      }
+      
+      if (isOutputStreamWrapper) {
+        out.flush();
+        out.close();
       }
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);

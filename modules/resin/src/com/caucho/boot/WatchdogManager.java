@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,49 +29,47 @@
 
 package com.caucho.boot;
 
-import com.caucho.admin.RemoteAdminService;
-import com.caucho.config.Config;
-import com.caucho.config.ConfigException;
-import com.caucho.config.inject.BeanFactory;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.SingletonBean;
-import com.caucho.config.inject.CurrentLiteral;
-import com.caucho.config.lib.ResinConfigLibrary;
-import com.caucho.config.types.RawString;
-import com.caucho.config.types.Period;
-import com.caucho.hemp.broker.HempBroker;
-import com.caucho.lifecycle.Lifecycle;
-import com.caucho.loader.*;
-import com.caucho.log.EnvironmentStream;
-import com.caucho.log.LogConfig;
-import com.caucho.log.RotateStream;
-import com.caucho.security.Authenticator;
-import com.caucho.security.AdminAuthenticator;
-import com.caucho.server.cluster.Cluster;
-import com.caucho.server.cluster.SingleCluster;
-import com.caucho.server.cluster.ClusterServer;
-import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.Port;
-import com.caucho.server.connection.ProtocolDispatchServer;
-import com.caucho.server.dispatch.ServletMapping;
-import com.caucho.server.host.Host;
-import com.caucho.server.host.HostConfig;
-import com.caucho.server.resin.Resin;
-import com.caucho.server.resin.ResinELContext;
-import com.caucho.server.util.*;
-import com.caucho.server.webapp.WebApp;
-import com.caucho.server.webapp.WebAppConfig;
-import com.caucho.util.*;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
-import com.caucho.vfs.WriteStream;
-
-import java.io.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+import com.caucho.admin.RemoteAdminService;
+import com.caucho.config.Config;
+import com.caucho.config.ConfigException;
+import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.CurrentLiteral;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.lib.ResinConfigLibrary;
+import com.caucho.config.types.Period;
+import com.caucho.hemp.broker.HempBroker;
+import com.caucho.jmx.Jmx;
+import com.caucho.lifecycle.Lifecycle;
+import com.caucho.loader.DependencyCheckInterval;
+import com.caucho.loader.DynamicClassLoader;
+import com.caucho.log.EnvironmentStream;
+import com.caucho.log.LogConfig;
+import com.caucho.log.RotateStream;
+import com.caucho.security.AdminAuthenticator;
+import com.caucho.security.Authenticator;
+import com.caucho.server.cluster.Cluster;
+import com.caucho.server.cluster.ClusterServer;
+import com.caucho.server.cluster.Server;
+import com.caucho.server.connection.Port;
+import com.caucho.server.resin.Resin;
+import com.caucho.server.resin.ResinELContext;
+import com.caucho.server.util.JniCauchoSystem;
+import com.caucho.util.Alarm;
+import com.caucho.util.AlarmListener;
+import com.caucho.util.L10N;
+import com.caucho.util.ThreadPool;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Process responsible for watching a backend watchdog.
@@ -94,8 +92,8 @@ class WatchdogManager implements AlarmListener {
   private Server _server;
   private Port _httpPort;
 
-  private HashMap<String,Watchdog> _watchdogMap
-    = new HashMap<String,Watchdog>();
+  private HashMap<String,WatchdogChild> _watchdogMap
+    = new HashMap<String,WatchdogChild>();
 
   WatchdogManager(String []argv)
     throws Exception
@@ -149,7 +147,7 @@ class WatchdogManager implements AlarmListener {
 
     readConfig(_args);
 
-    Watchdog server = null;
+    WatchdogChild server = null;
 
     if (_args.isDynamicServer()) {
       String serverId = _args.getDynamicAddress() + "-"
@@ -180,19 +178,6 @@ class WatchdogManager implements AlarmListener {
     clusterServer.setId("");
     clusterServer.setPort(0);
 
-    _httpPort = clusterServer.createHttp();
-    if (_watchdogPort > 0)
-      _httpPort.setPort(_watchdogPort);
-    else
-      _httpPort.setPort(server.getWatchdogPort());
-
-    _httpPort.setAddress(server.getWatchdogAddress());
-
-    _httpPort.setMinSpareListen(1);
-    _httpPort.setMaxSpareListen(2);
-
-    _httpPort.init();
-
     // clusterServer.addHttp(http);
 
     cluster.addServer(clusterServer);
@@ -200,8 +185,25 @@ class WatchdogManager implements AlarmListener {
     resin.addCluster(cluster);
 
     _server = resin.createServer();
-    _server.bindPorts();
+    
+    thread.setContextClassLoader(_server.getClassLoader());
+    
+    _httpPort = _server.createHttp();
+    if (_watchdogPort > 0)
+      _httpPort.setPort(_watchdogPort);
+    else
+      _httpPort.setPort(server.getWatchdogPort());
 
+    _httpPort.setAddress(server.getWatchdogAddress());
+
+    _httpPort.setAcceptThreadMin(1);
+    _httpPort.setAcceptThreadMax(2);
+
+    _httpPort.init();
+    
+    
+    _server.bindPorts();
+    
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
@@ -214,7 +216,7 @@ class WatchdogManager implements AlarmListener {
         auth = _management.getAdminAuthenticator();
 
       if (auth != null) {
-        BeanFactory factory = webBeans.createBeanFactory(Authenticator.class);
+        BeanFactory<Authenticator> factory = webBeans.createBeanFactory(Authenticator.class);
 
         factory.type(Authenticator.class);
         factory.type(AdminAuthenticator.class);
@@ -248,7 +250,7 @@ class WatchdogManager implements AlarmListener {
       _server.start();
 
       _lifecycle.toActive();
-
+      
       // valid checker
       new Alarm(this).queue(60000);
     } finally {
@@ -309,7 +311,7 @@ class WatchdogManager implements AlarmListener {
       return false;
   }
 
-  Watchdog findServer(String id)
+  WatchdogChild findServer(String id)
   {
     return _watchdogMap.get(id);
   }
@@ -326,12 +328,15 @@ class WatchdogManager implements AlarmListener {
     synchronized (_watchdogMap) {
       ArrayList<String> keys = new ArrayList<String>(_watchdogMap.keySet());
       Collections.sort(keys);
+      
+      sb.append("\nwatchdog:\n");
+      sb.append("  watchdog-pid: " + getWatchdogPid());
 
       for (String key : keys) {
-        Watchdog watchdog = _watchdogMap.get(key);
+        WatchdogChild child = _watchdogMap.get(key);
 
-        sb.append("\n");
-        sb.append("server '" + key + "' : " + watchdog.getState() + "\n");
+        sb.append("\n\n");
+        sb.append("server '" + key + "' : " + child.getState() + "\n");
 
         if (getAdminCookie() == null)
           sb.append("  password: missing\n");
@@ -340,16 +345,16 @@ class WatchdogManager implements AlarmListener {
 
         sb.append("  user: " + System.getProperty("user.name"));
 
-        if (watchdog.getGroupName() != null)
-          sb.append("(" + watchdog.getGroupName() + ")");
+        if (child.getGroupName() != null)
+          sb.append("(" + child.getGroupName() + ")");
 
         sb.append("\n");
 
-        sb.append("  root: " + watchdog.getResinRoot() + "\n");
-        sb.append("  conf: " + watchdog.getResinConf() + "\n");
+        sb.append("  root: " + child.getResinRoot() + "\n");
+        sb.append("  conf: " + child.getResinConf() + "\n");
 
-        if (watchdog.getPid() > 0)
-          sb.append("  pid: " + watchdog.getPid());
+        if (child.getPid() > 0)
+          sb.append("  pid: " + child.getPid());
       }
     }
 
@@ -380,7 +385,7 @@ class WatchdogManager implements AlarmListener {
       if (args.isDynamicServer())
         serverId = args.getDynamicAddress() + "-" + args.getDynamicPort();
 
-      Watchdog watchdog = _watchdogMap.get(serverId);
+      WatchdogChild watchdog = _watchdogMap.get(serverId);
 
       if (watchdog == null)
         throw new ConfigException(L().l("No matching <server> found for -server '{0}' in '{1}'",
@@ -398,7 +403,7 @@ class WatchdogManager implements AlarmListener {
   void stopServer(String serverId)
   {
     synchronized (_watchdogMap) {
-      Watchdog watchdog = _watchdogMap.get(serverId);
+      WatchdogChild watchdog = _watchdogMap.get(serverId);
 
       if (watchdog == null)
         throw new ConfigException(L().l("No matching <server> found for -server '{0}' in {1}",
@@ -417,7 +422,7 @@ class WatchdogManager implements AlarmListener {
   {
     // no synchronization because kill must avoid blocking
 
-    Watchdog watchdog = _watchdogMap.get(serverId);
+    WatchdogChild watchdog = _watchdogMap.get(serverId);
 
     if (watchdog == null)
       throw new ConfigException(L().l("No matching <server> found for -server '{0}' in {1}",
@@ -435,7 +440,7 @@ class WatchdogManager implements AlarmListener {
   void restartServer(String serverId, String []argv)
   {
     synchronized (_watchdogMap) {
-      Watchdog server = _watchdogMap.get(serverId);
+      WatchdogChild server = _watchdogMap.get(serverId);
 
       if (server != null)
         server.stop();
@@ -449,7 +454,7 @@ class WatchdogManager implements AlarmListener {
     return _server != null && _server.isActive();
   }
 
-  private Watchdog readConfig(WatchdogArgs args)
+  private WatchdogChild readConfig(WatchdogArgs args)
     throws Exception
   {
     Config config = new Config();
@@ -504,7 +509,7 @@ class WatchdogManager implements AlarmListener {
         server = resin.findServer(serverId);
     }
 
-    Watchdog watchdog = _watchdogMap.get(server.getId());
+    WatchdogChild watchdog = _watchdogMap.get(server.getId());
 
     if (watchdog != null) {
       if (watchdog.isActive()) {
@@ -518,11 +523,40 @@ class WatchdogManager implements AlarmListener {
         watchdog.close();
     }
 
-    watchdog = new Watchdog(server);
+    watchdog = new WatchdogChild(server);
 
     _watchdogMap.put(server.getId(), watchdog);
 
     return watchdog;
+  }
+  
+  private int getWatchdogPid()
+  {
+    try {
+      MBeanServer server = Jmx.getGlobalMBeanServer();
+      ObjectName objName = new ObjectName("java.lang:type=Runtime");
+      
+      String runtimeName = (String) server.getAttribute(objName, "Name");
+      
+      if (runtimeName == null) {
+        return 0;
+      }
+      
+      int p = runtimeName.indexOf('@');
+      
+      if (p > 0) {
+        int pid = Integer.parseInt(runtimeName.substring(0, p));
+
+        return pid;
+      }
+      
+      return 0;
+    } catch (Exception e) {
+      log().log(Level.FINE, e.toString(), e);
+      
+      return 0;
+    }
+
   }
 
   public void waitForExit()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,10 @@
 
 package com.caucho.quercus.program;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.expr.VarInfo;
+import com.caucho.quercus.env.MethodIntern;
+import com.caucho.quercus.env.StringValue;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -41,21 +43,23 @@ import java.util.HashMap;
  */
 public class FunctionInfo
 {
-  private final Quercus _quercus;
+  private final QuercusContext _quercus;
 
+  private final ClassDef _classDef;
   private final String _name;
   
-  private final HashMap<String,VarInfo> _varMap
-    = new HashMap<String,VarInfo>();
+  private final HashMap<StringValue,VarInfo> _varMap
+    = new HashMap<StringValue,VarInfo>();
 
   private final ArrayList<String> _tempVarList
     = new ArrayList<String>();
 
-  private ClassDef _classDef;
   private Function _fun;
 
   private boolean _hasThis; // if true, override default
   private boolean _isGlobal;
+  private boolean _isClosure;
+  private boolean _isConstructor;
   
   private boolean _isPageMain;
   private boolean _isPageStatic;
@@ -70,9 +74,10 @@ public class FunctionInfo
 
   private boolean _isReadOnly = true;
 
-  public FunctionInfo(Quercus quercus, String name)
+  public FunctionInfo(QuercusContext quercus, ClassDef classDef, String name)
   {
     _quercus = quercus;
+    _classDef = classDef;
     _name = name;
   }
 
@@ -82,10 +87,11 @@ public class FunctionInfo
 
     copy._varMap.putAll(_varMap);
     copy._tempVarList.addAll(_tempVarList);
-    copy._classDef = _classDef;
     copy._fun = _fun;
     copy._hasThis = _hasThis;
     copy._isGlobal = _isGlobal;
+    copy._isClosure = _isClosure;
+    copy._isConstructor = _isConstructor;
     copy._isPageMain = _isPageMain;
     copy._isPageStatic = _isPageStatic;
     copy._isReturnsReference = _isReturnsReference;
@@ -100,13 +106,13 @@ public class FunctionInfo
   
   protected FunctionInfo createCopy()
   {
-    return new FunctionInfo(_quercus, _name);
+    return new FunctionInfo(_quercus, _classDef, _name);
   }
 
   /**
    * Returns the owning quercus.
    */
-  public Quercus getQuercus()
+  public QuercusContext getQuercus()
   {
     return _quercus;
   }
@@ -139,7 +145,23 @@ public class FunctionInfo
   {
     _isGlobal = isGlobal;
   }
-  
+
+  /**
+   * True for a closure.
+   */
+  public void setClosure(boolean isClosure)
+  {
+    _isClosure= isClosure;
+  }
+
+  /**
+   * True for a closure function (top-level script).
+   */
+  public boolean isClosure()
+  {
+    return _isClosure;
+  }
+   
   /*
    * True for a final function.
    */
@@ -190,15 +212,9 @@ public class FunctionInfo
    */
   public boolean hasThis()
   {
-    return _hasThis || (_classDef != null && ! _fun.isStatic());
-  }
-  
-  /**
-   * Sets the owning class.
-   */
-  public void setDeclaringClass(ClassDef classDef)
-  {
-    _classDef = classDef;
+    // php/396z
+    // return _hasThis || (_classDef != null && ! _fun.isStatic());
+    return _hasThis || _classDef != null;
   }
 
   /**
@@ -214,7 +230,31 @@ public class FunctionInfo
    */
   public boolean isMethod()
   {
+    return _classDef != null;
+  }
+
+  /**
+   * True for a method.
+   */
+  public boolean isNonStaticMethod()
+  {
     return _classDef != null && ! _fun.isStatic();
+  }
+  
+  /**
+   * True for a constructor
+   */
+  public boolean isConstructor()
+  {
+    return _isConstructor;
+  }
+  
+  /**
+   * True for a constructor.
+   */
+  public void setConstructor(boolean isConstructor)
+  {
+    _isConstructor = isConstructor;
   }
 
   /**
@@ -329,10 +369,15 @@ public class FunctionInfo
     _isReadOnly = false;
   }
 
+  public VarInfo createVar(String name)
+  {
+    return createVar(MethodIntern.intern(name));
+  }
+  
   /**
    * Returns the variable.
    */
-  public VarInfo createVar(String name)
+  public VarInfo createVar(StringValue name)
   {
     VarInfo var = _varMap.get(name);
 
@@ -345,7 +390,7 @@ public class FunctionInfo
     return var;
   }
   
-  protected VarInfo createVarInfo(String name)
+  protected VarInfo createVarInfo(StringValue name)
   {
     return new VarInfo(name, this);
   }
@@ -378,6 +423,15 @@ public class FunctionInfo
   public int getTempIndex()
   {
     return _tempVarList.size();
+  }
+  
+  public String createTempVar()
+  {
+    String name = "q_temp_" + getTempIndex();
+    
+    _tempVarList.add(name);
+    
+    return name;
   }
 
   public String toString()

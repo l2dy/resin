@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -48,7 +48,4 @@ public @interface OrderColumn {
   boolean insertable() default true;
   boolean updatable() default true;
   String columnDefinition() default "";
-  boolean contiguous() default true;
-  int base() default 0;
-  String table() default "";
 }

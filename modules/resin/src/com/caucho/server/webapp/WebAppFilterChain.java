@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -196,6 +196,14 @@ public class WebAppFilterChain implements CauchoFilterChain {
         }
       }
 
+      // put finish() before access log so the session isn't tied up while
+      // logging
+
+      // needed for things like closing the session
+      if (request instanceof HttpServletRequestImpl)
+        ((HttpServletRequestImpl) request).finishInvocation();
+
+      // server/1ld5
       if (_isTop) {
         ((CauchoResponse) response).close();
 
@@ -206,13 +214,6 @@ public class WebAppFilterChain implements CauchoFilterChain {
           log.log(Level.WARNING, e.toString(), e);
         }
       }
-
-      // put finish() before access log so the session isn't tied up while
-      // logging
-
-      // needed for things like closing the session
-      if (request instanceof HttpServletRequestImpl)
-        ((HttpServletRequestImpl) request).finishInvocation();
 
       /*
       try {

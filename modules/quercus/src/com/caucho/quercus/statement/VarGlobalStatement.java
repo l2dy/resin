@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package com.caucho.quercus.statement;
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.expr.VarVarExpr;
 
@@ -53,9 +54,9 @@ public class VarGlobalStatement extends Statement {
   
   public Value execute(Env env)
   {
-    String name = _varExpr.evalString(env);
+    StringValue name = _varExpr.evalStringValue(env);
     
-    env.setValue(name, env.getGlobalVar(name));
+    env.setRef(name, env.getGlobalVar(name));
 
     return null;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,24 +42,21 @@ import java.util.IdentityHashMap;
 public class CallbackObjectMethod extends Callback {
   private static final L10N L = new L10N(CallbackObjectMethod.class);
   
-  private final ObjectValue _obj;
-  private final AbstractFunction _fun;
+  private final Value _obj;
   
-  private final String _methodName;
+  private final StringValue _methodName;
   private final int _hash;
-  private final char []_name;
   
   public CallbackObjectMethod(Env env,
-                              ObjectValue obj,
-                              AbstractFunction fun,
-                              String methodName)
+                              Value obj,
+                              StringValue methodName)
   {
-    _obj = obj;
-    _fun = fun;
+    // XXX: obj and fun should not be mixed
     
     _methodName = methodName;
-    _hash = MethodMap.hash(methodName);
-    _name = _methodName.toCharArray();
+    _obj = obj;
+    
+    _hash = methodName.hashCodeCaseInsensitive();
   }
 
   /**
@@ -70,10 +67,7 @@ public class CallbackObjectMethod extends Callback {
   @Override
   public Value call(Env env)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length);
+    return _obj.callMethod(env, _methodName, _hash);
   }
 
   /**
@@ -84,12 +78,8 @@ public class CallbackObjectMethod extends Callback {
   @Override
   public Value call(Env env, Value a1)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj,
-                             a1);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length,
-                             a1);
+    return _obj.callMethod(env, _methodName, _hash,
+                           a1);
   }
 
   /**
@@ -100,12 +90,8 @@ public class CallbackObjectMethod extends Callback {
   @Override
   public Value call(Env env, Value a1, Value a2)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj,
-                             a1, a2);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length,
-                             a1, a2);
+    return _obj.callMethod(env, _methodName, _hash,
+                           a1, a2);
   }
 
   /**
@@ -116,12 +102,8 @@ public class CallbackObjectMethod extends Callback {
   @Override
   public Value call(Env env, Value a1, Value a2, Value a3)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj,
-                             a1, a2, a3);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length,
-                             a1, a2, a3);
+    return _obj.callMethod(env, _methodName, _hash,
+                           a1, a2, a3);
   }
 
   /**
@@ -133,12 +115,8 @@ public class CallbackObjectMethod extends Callback {
   public Value call(Env env, Value a1, Value a2, Value a3,
 			     Value a4)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj,
-                             a1, a2, a3, a4);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length,
-                             a1, a2, a3, a4);
+    return _obj.callMethod(env, _methodName, _hash,
+                           a1, a2, a3, a4);
   }
 
   /**
@@ -150,21 +128,14 @@ public class CallbackObjectMethod extends Callback {
   public Value call(Env env, Value a1, Value a2, Value a3,
 		    Value a4, Value a5)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj,
-                             a1, a2, a3, a4, a5);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length,
-                             a1, a2, a3, a4, a5);
+    return _obj.callMethod(env, _methodName, _hash,
+                           a1, a2, a3, a4, a5);
   }
 
   @Override
   public Value call(Env env, Value []args)
   {
-    if (_fun != null)
-      return _fun.callMethod(env, _obj, args);
-    else
-      return _obj.callMethod(env, _hash, _name, _name.length, args);
+    return _obj.callMethod(env, _methodName, _hash, args);
   }
 
   @Override
@@ -181,7 +152,7 @@ public class CallbackObjectMethod extends Callback {
   }
   
   @Override
-  public boolean isValid()
+  public boolean isValid(Env env)
   {
     return true;
   }
@@ -189,13 +160,14 @@ public class CallbackObjectMethod extends Callback {
   @Override
   public String getCallbackName()
   {
-    return _methodName;
+    return _methodName.toString();
   }
 
   @Override
-  public boolean isInternal()
+  public boolean isInternal(Env env)
   {
-    return _fun instanceof JavaInvoker;
+    // return _fun instanceof JavaInvoker;
+    return false;
   }
   
   private Value error(Env env)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,12 @@
 
 package com.caucho.config.program;
 
+import javax.enterprise.context.spi.CreationalContext;
+
 import com.caucho.config.*;
 import com.caucho.config.type.*;
 import com.caucho.config.attribute.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.util.*;
 import com.caucho.xml.*;
 
@@ -81,13 +84,13 @@ public class PropertyValueProgram extends ConfigProgram {
    * Injects the bean with the dependencies
    */
   @Override
-  public void inject(Object bean, ConfigContext env)
+  public <T> void inject(T bean, CreationalContext<T> env)
   {
     try {
       Attribute attr = _attr;
 
       if (attr == null) {
-	ConfigType type = TypeFactory.getType(bean.getClass());
+	ConfigType<?> type = TypeFactory.getType(bean.getClass());
 
 	attr = type.getAttribute(_qName);
       }
@@ -102,11 +105,12 @@ public class PropertyValueProgram extends ConfigProgram {
     }
   }
 
-  public Object configure(ConfigType type, ConfigContext env)
+  @Override
+  public <T> T create(ConfigType<T> type, CreationalContext<T> env)
     throws ConfigException
   {
     // ioc/04d7
     
-    return type.valueOf(_value);
+    return (T) type.valueOf(_value);
   }
 }

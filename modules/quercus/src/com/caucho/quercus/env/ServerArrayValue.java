@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -157,6 +157,16 @@ public class ServerArrayValue extends ArrayValueImpl
   private static final StringValue HTTP_HOST_VU
     = new UnicodeBuilderValue("HTTP_HOST");
   
+  private static final StringValue CONTENT_LENGTH_V
+    = new ConstStringValue("CONTENT_LENGTH");
+  private static final StringValue CONTENT_LENGTH_VU
+    = new UnicodeBuilderValue("CONTENT_LENGTH");
+  
+  private static final StringValue CONTENT_TYPE_V
+    = new ConstStringValue("CONTENT_TYPE");
+  private static final StringValue CONTENT_TYPE_VU
+    = new UnicodeBuilderValue("CONTENT_TYPE");
+  
   private final Env _env;
   
   private boolean _isFilled;
@@ -222,12 +232,12 @@ public class ServerArrayValue extends ArrayValueImpl
   /**
    * Returns the array ref.
    */
-  public Var getRef(Value key)
+  public Var getVar(Value key)
   {
     if (! _isFilled)
       fillMap();
     
-    return super.getRef(key);
+    return super.getVar(key);
   }
   
   /**
@@ -403,6 +413,14 @@ public class ServerArrayValue extends ArrayValueImpl
 
         if (key.equalsIgnoreCase("Host")) {
           super.put(isUnicode ? HTTP_HOST_VU : HTTP_HOST_V,
+                    _env.createString(value));
+        }
+        else if (key.equalsIgnoreCase("Content-Length")) {
+          super.put(isUnicode ? CONTENT_LENGTH_VU : CONTENT_LENGTH_V,
+                    _env.createString(value));
+        }
+        else if (key.equalsIgnoreCase("Content-Type")) {
+          super.put(isUnicode ? CONTENT_TYPE_VU : CONTENT_TYPE_V,
                     _env.createString(value));
         }
         else {

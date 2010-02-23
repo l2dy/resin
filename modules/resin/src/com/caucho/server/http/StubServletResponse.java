@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,7 +37,9 @@ import com.caucho.vfs.PrintWriterImpl;
 import javax.servlet.*;
 import javax.servlet.http.*;
 import java.io.*;
+import java.util.Collection;
 import java.util.Locale;
+import java.util.Collection;
 
 // Is there anything at all useful that could be put here?
 public class StubServletResponse implements CauchoResponse {
@@ -234,12 +236,12 @@ public class StubServletResponse implements CauchoResponse {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  public Iterable<String> getHeaders(String name)
+  public Collection<String> getHeaders(String name)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  public Iterable<String> getHeaderNames()
+  public Collection<String> getHeaderNames()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }

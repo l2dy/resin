@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,19 +29,14 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.ConfigContext;
-import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.scope.ScopeContext;
-import com.caucho.config.scope.ApplicationScope;
-
 import java.io.Closeable;
-import java.lang.annotation.*;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.Set;
+
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.PassivationCapable;
 
 /**
@@ -53,10 +48,10 @@ import javax.enterprise.inject.spi.PassivationCapable;
  * manager.addBean(new SingletonBean(myValue));
  * </pre></code>
  */
-abstract public class AbstractSingletonBean extends BeanWrapper
+abstract public class AbstractSingletonBean<T> extends BeanWrapper<T>
   implements Closeable, AnnotatedBean, PassivationCapable
 {
-  private ManagedBeanImpl _managedBean;
+  private ManagedBeanImpl<T> _managedBean;
 
   private Set<Type> _types;
   private Annotated _annotated;
@@ -67,7 +62,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
 
   private String _passivationId;
 
-  AbstractSingletonBean(ManagedBeanImpl managedBean,
+  AbstractSingletonBean(ManagedBeanImpl<T> managedBean,
                         Set<Type> types,
                         Annotated annotated,
                         Set<Annotation> bindings,
@@ -94,6 +89,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
   // metadata for the bean
   //
 
+  @Override
   public Annotated getAnnotated()
   {
     if (_annotated != null)
@@ -102,14 +98,16 @@ abstract public class AbstractSingletonBean extends BeanWrapper
       return _managedBean.getAnnotated();
   }
 
-  public AnnotatedType getAnnotatedType()
+  @Override
+  public AnnotatedType<T> getAnnotatedType()
   {
-    if (_annotated instanceof AnnotatedType)
-      return (AnnotatedType) _annotated;
+    if (_annotated instanceof AnnotatedType<?>)
+      return (AnnotatedType<T>) _annotated;
     else
       return _managedBean.getAnnotatedType();
   }
 
+  @Override
   public Set<Annotation> getQualifiers()
   {
     if (_bindings != null)
@@ -117,7 +115,8 @@ abstract public class AbstractSingletonBean extends BeanWrapper
     else
       return super.getQualifiers();
   }
-
+  
+  @Override
   public Set<Class<? extends Annotation>> getStereotypes()
   {
     if (_stereotypes != null)
@@ -126,6 +125,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
       return getBean().getStereotypes();
   }
 
+  @Override
   public String getName()
   {
     if (_name != null)
@@ -137,6 +137,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
   /**
    * Return passivation id
    */
+  @Override
   public String getId()
   {
     if (_passivationId == null)
@@ -148,6 +149,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
   /**
    * Returns the bean's scope type.
    */
+  @Override
   public Class<? extends Annotation> getScope()
   {
     if (_scopeType != null)
@@ -159,6 +161,7 @@ abstract public class AbstractSingletonBean extends BeanWrapper
   /**
    * Returns the types that the bean exports for bindings.
    */
+  @Override
   public Set<Type> getTypes()
   {
     if (_types != null)
@@ -168,12 +171,13 @@ abstract public class AbstractSingletonBean extends BeanWrapper
   }
 
   @Override
-  abstract public Object create(CreationalContext env);
+  abstract public T create(CreationalContext<T> env);
 
 
   /**
    * Frees the singleton on environment shutdown
    */
+  @Override
   public void close()
   {
   }

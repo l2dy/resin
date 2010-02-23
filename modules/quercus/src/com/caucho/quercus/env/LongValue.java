@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,16 +39,17 @@ import java.util.IdentityHashMap;
 /**
  * Represents a PHP long value.
  */
+@SuppressWarnings("serial")
 public class LongValue extends NumberValue
 {
-  public static final LongValue MINUS_ONE = new LongValue(-1);
-  public static final LongValue ZERO = new LongValue(0);
-  public static final LongValue ONE = new LongValue(1);
+  public static final LongValue MINUS_ONE;
+  public static final LongValue ZERO;
+  public static final LongValue ONE;
 
   public static final int STATIC_MIN = -1024;
-  public static final int STATIC_MAX = 2048;
+  public static final int STATIC_MAX = 16 * 1024;
 
-  public static final LongValue[]STATIC_VALUES;
+  public static final LongCacheValue[]STATIC_VALUES;
 
   private final long _value;
 
@@ -76,6 +77,7 @@ public class LongValue extends NumberValue
   /**
    * Returns the type.
    */
+  @Override
   public String getType()
   {
     return "integer";
@@ -93,6 +95,7 @@ public class LongValue extends NumberValue
   /**
    * Returns true for a long.
    */
+  @Override
   public boolean isLongConvertible()
   {
     return true;
@@ -194,6 +197,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a boolean.
    */
+  @Override
   public boolean toBoolean()
   {
     return _value != 0;
@@ -202,6 +206,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a long.
    */
+  @Override
   public long toLong()
   {
     return _value;
@@ -210,6 +215,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a double.
    */
+  @Override
   public double toDouble()
   {
     return _value;
@@ -218,6 +224,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a string.
    */
+  @Override
   public String toString()
   {
     return String.valueOf(_value);
@@ -235,6 +242,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a long value
    */
+  @Override
   public LongValue toLongValue()
   {
     return this;
@@ -243,6 +251,7 @@ public class LongValue extends NumberValue
   /**
    * Converts to a key.
    */
+  @Override
   public Value toKey()
   {
     return this;
@@ -259,14 +268,27 @@ public class LongValue extends NumberValue
   /**
    * Converts to a java object.
    */
+  @Override
   public Object toJavaObject()
   {
     return new Long(_value);
   }
+  
+  /*
+  @Override
+  public Value toAutoArray()
+  {
+    if (_value == 0)
+      return new ArrayValueImpl();
+    else
+      return super.toAutoArray();
+  }
+  */
 
   /**
    * Negates the value.
    */
+  @Override
   public Value neg()
   {
     return LongValue.create(- _value);
@@ -275,17 +297,87 @@ public class LongValue extends NumberValue
   /**
    * Negates the value.
    */
+  @Override
   public Value pos()
   {
     return this;
   }
 
   /**
+   * The next integer
+   */
+  @Override
+  public Value addOne()
+  {
+    long newValue = _value + 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
+   * The previous integer
+   */
+  @Override
+  public Value subOne()
+  {
+    long newValue = _value - 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
+   * Pre-increment the following value.
+   */
+  @Override
+  public Value preincr()
+  {
+    long newValue = _value + 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
+   * Pre-increment the following value.
+   */
+  @Override
+  public Value predecr()
+  {
+    long newValue = _value - 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
    * Post-increment the following value.
    */
+  @Override
+  public Value postincr()
+  {
+    long newValue = _value + 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
+   * Post-decrement the following value.
+   */
+  @Override
+  public Value postdecr()
+  {
+    long newValue = _value - 1;
+    
+    return LongValue.create(newValue);
+  }
+
+  /**
+   * Post-increment the following value.
+   */
+  @Override
   public Value increment(int incr)
   {
-    return LongValue.create(_value + incr);
+    long newValue = _value + incr;
+    
+    return LongValue.create(newValue);
   }
 
   /**
@@ -330,6 +422,7 @@ public class LongValue extends NumberValue
   /**
    * Absolute value.
    */
+  @Override
   public Value abs()
   {
     if (_value >= 0)
@@ -341,6 +434,7 @@ public class LongValue extends NumberValue
   /**
    * Returns true for equality
    */
+  @Override
   public boolean eql(Value rValue)
   {
     rValue = rValue.toValue();
@@ -355,6 +449,7 @@ public class LongValue extends NumberValue
   /**
    * Returns true for equality
    */
+  @Override
   public int cmp(Value rValue)
   {
     if (rValue.isBoolean()) {
@@ -396,6 +491,7 @@ public class LongValue extends NumberValue
    * Prints the value.
    * @param env
    */
+  @Override
   public void print(Env env)
   {
     env.print(_value);
@@ -440,6 +536,7 @@ public class LongValue extends NumberValue
   /**
    * Serializes the value.
    */
+  @Override
   public void serialize(Env env, StringBuilder sb)
   {
     sb.append("i:");
@@ -450,6 +547,7 @@ public class LongValue extends NumberValue
   /**
    * Exports the value.
    */
+  @Override
   public void varExport(StringBuilder sb)
   {
     sb.append(_value);
@@ -464,6 +562,7 @@ public class LongValue extends NumberValue
    *
    * @param out the writer to the Java source code.
    */
+  @Override
   public void generate(PrintWriter out)
     throws IOException
   {
@@ -482,6 +581,7 @@ public class LongValue extends NumberValue
   /**
    * Returns the hash code
    */
+  @Override
   public final int hashCode()
   {
     long v = _value;
@@ -492,6 +592,7 @@ public class LongValue extends NumberValue
   /**
    * Compare for equality.
    */
+  @Override
   public boolean equals(Object o)
   {
     if (this == o)
@@ -504,6 +605,7 @@ public class LongValue extends NumberValue
     return _value == value._value;
   }
 
+  @Override
   public void varDumpImpl(Env env,
                           WriteStream out,
                           int depth,
@@ -526,10 +628,26 @@ public class LongValue extends NumberValue
   }
 
   static {
-    STATIC_VALUES = new LongValue[STATIC_MAX - STATIC_MIN + 1];
+    STATIC_VALUES = new LongCacheValue[STATIC_MAX - STATIC_MIN + 1];
+    
+    try {
 
-    for (int i = STATIC_MIN; i <= STATIC_MAX; i++) {
-      STATIC_VALUES[i - STATIC_MIN] = new LongValue(i);
+    for (int i = STATIC_MAX; i >= STATIC_MIN; i--) {
+      LongCacheValue value = new LongCacheValue(i, create(i + 1));
+
+      STATIC_VALUES[i - STATIC_MIN] = value;
+      
+      if (i < STATIC_MAX)
+        STATIC_VALUES[i - STATIC_MIN + 1].setPrev(value);
     }
+    
+    STATIC_VALUES[0].setPrev(create(STATIC_MIN - 1));
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+    
+    ZERO = create(0);
+    ONE = create(1);
+    MINUS_ONE = create(-1);
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,11 +40,7 @@ import javax.servlet.FilterChain;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Set;
-import java.util.Map;
-import java.util.HashSet;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -74,6 +70,10 @@ public class ServletMapper {
   //Servlet 3.0 maps serletName to urlPattern
   private Map<String, Set<String>> _urlPatterns
     = new HashMap<String, Set<String>>();
+
+  //Servlet 3.0 urlPattern–>servletName
+  private Map<String, String> _servletNamesMap
+    = new HashMap<String, String>();
 
   /**
    * Sets the servlet context.
@@ -122,14 +122,19 @@ public class ServletMapper {
   /**
    * Adds a servlet mapping
    */
-  void addUrlMapping(String urlPattern,
+  void addUrlMapping(final String urlPattern,
 		     String servletName,
-		     ServletMapping mapping)
+		     ServletMapping mapping,
+		     boolean ifAbsent)
     throws ServletException
   {
     try {
       boolean isIgnore = false;
-      
+
+      if (mapping.isInFragmentMode()
+         && _servletMap.contains(new FragmentFilter(servletName)))
+        return;
+
       if (servletName == null) {
 	throw new ConfigException(L.l("servlets need a servlet-name."));
       }
@@ -160,7 +165,7 @@ public class ServletMapper {
         _servletMap.addStrictMap(urlPattern, null, mapping);
       }
       else
-        _servletMap.addMap(urlPattern, mapping, isIgnore);
+        _servletMap.addMap(urlPattern, mapping, isIgnore, ifAbsent);
 
       Set<String> patterns = _urlPatterns.get(servletName);
 
@@ -169,6 +174,8 @@ public class ServletMapper {
 
         _urlPatterns.put(servletName, patterns);
       }
+
+      _servletNamesMap.put(urlPattern, servletName);
 
       patterns.add(urlPattern);
 
@@ -186,7 +193,7 @@ public class ServletMapper {
   {
     return _urlPatterns.get(servletName);
   }
-  
+
   /**
    * Sets the default servlet.
    */
@@ -261,68 +268,58 @@ public class ServletMapper {
       }
     }
 
+    MatchResult matchResult = null;
+
     if (servletName == null) {
-      ArrayList<String> welcomeFileList = _welcomeFileList;
-      int size = welcomeFileList.size();
+      matchResult = matchWelcomeFileResource(invocation, vars);
+
+      if (matchResult != null)
+        servletName = matchResult.getServletName();
       
-      for (int i = 0; i < size; i++) {
-        String file = welcomeFileList.get(i);
+      if (matchResult != null && ! contextURI.endsWith("/")
+          && ! (invocation instanceof SubInvocation)) {
+        String contextPath = invocation.getContextPath();
+        
+        return new RedirectFilterChain(contextPath + contextURI + "/");
+      }
 
-        try {
-	  String welcomeURI;
+      if (matchResult != null && invocation instanceof Invocation) {
+        Invocation inv = (Invocation) invocation;
 
-	  if (contextURI.endsWith("/"))
-	    welcomeURI = contextURI + file;
-	  else
-	    welcomeURI = contextURI + '/' + file;
-
-          InputStream is;
-          is = _servletContext.getResourceAsStream(welcomeURI);
-
-          if (is != null)
-            is.close();
-          
-          if (is == null) {
-          }
-          else if (! contextURI.endsWith("/")
-                   && ! (invocation instanceof SubInvocation)) {
-            String contextPath = invocation.getContextPath();
-
-	    return new RedirectFilterChain(contextPath + contextURI + "/");
-          }
-          else {
-	    ServletMapping servletMap = _servletMap.map(welcomeURI, vars);
-
-	    if (servletMap != null)
-	      servletName = servletMap.getServletName();
-
-            if (servletName != null || _defaultServlet != null) {
-              contextURI = welcomeURI;
-              
-              if (invocation instanceof Invocation) {
-                Invocation inv = (Invocation) invocation;
-
-                inv.setContextURI(contextURI);
-                // server/10r9
-                // inv.setRawURI(inv.getRawURI() + file);
-              }
-              break;
-            }
-          }
-        } catch (Exception e) {
-          log.log(Level.WARNING, e.toString(), e);
-        }
+        inv.setContextURI(matchResult.getContextUri());
+        // server/10r9
+        // inv.setRawURI(inv.getRawURI() + file);
       }
     }
 
-    if (servletName == null && contextURI.endsWith("j_security_check")) {
+    if (matchResult == null && contextURI.endsWith("j_security_check")) {
       servletName = "j_security_check";
+    }
+
+    if (servletName == null && matchResult == null) {
+      vars.clear();
+      
+      matchResult = matchWelcomeServlet(invocation, vars);
+
+      if (matchResult != null)
+        servletName = matchResult.getServletName();
+
+      if (servletName != null && ! contextURI.endsWith("/")
+          && ! (invocation instanceof SubInvocation)) {
+        String contextPath = invocation.getContextPath();
+
+        return new RedirectFilterChain(contextPath + contextURI + "/");
+      }
     }
 
     if (servletName == null) {
       servletName = _defaultServlet;
       vars.clear();
-      vars.add(contextURI);
+
+      if (matchResult != null)
+        vars.add(matchResult.getContextUri());
+      else
+        vars.add(contextURI);
 
       addWelcomeFileDependency(invocation);
     }
@@ -389,6 +386,94 @@ public class ServletMapper {
     }
 
     return chain;
+  }
+
+  private MatchResult matchWelcomeFileResource(ServletInvocation invocation,
+                                               ArrayList<String> vars)
+  {
+    String contextURI = invocation.getContextURI();
+
+    String servletName = null;
+
+    ArrayList<String> welcomeFileList = _welcomeFileList;
+    int size = welcomeFileList.size();
+
+    for (int i = 0; i < size; i++) {
+        String file = welcomeFileList.get(i);
+
+        try {
+	  String welcomeURI;
+
+	  if (contextURI.endsWith("/"))
+	    welcomeURI = contextURI + file;
+	  else
+	    welcomeURI = contextURI + '/' + file;
+
+          InputStream is;
+          is = _servletContext.getResourceAsStream(welcomeURI);
+
+          if (is != null) {
+            is.close();
+
+	    ServletMapping servletMap = _servletMap.map(welcomeURI, vars);
+
+	    if (servletMap != null)
+	      servletName = servletMap.getServletName();
+
+            if (servletName != null || _defaultServlet != null) {
+              contextURI = welcomeURI;
+              return new MatchResult(servletName, contextURI);
+            }
+          }
+        } catch (Exception e) {
+          log.log(Level.WARNING, e.toString(), e);
+        }
+      }
+
+    return null;
+  }
+
+  private MatchResult matchWelcomeServlet(ServletInvocation invocation,
+                                     ArrayList<String> vars)
+  {
+    String contextURI = invocation.getContextURI();
+
+    String servletName = null;
+
+    ArrayList<String> welcomeFileList = _welcomeFileList;
+    int size = welcomeFileList.size();
+
+    for (int i = 0; i < size; i++) {
+      String file = welcomeFileList.get(i);
+
+      String welcomeURI;
+
+      if (contextURI.endsWith("/"))
+        welcomeURI = contextURI + file;
+      else
+        welcomeURI = contextURI + '/' + file;
+
+      ServletMapping servletMap = _servletMap.map(welcomeURI, vars, true);
+
+      if (servletMap != null)
+        servletName = servletMap.getServletName();
+
+      if (servletName != null) {
+        contextURI = welcomeURI;
+
+        if (invocation instanceof Invocation) {
+          Invocation inv = (Invocation) invocation;
+
+          inv.setContextURI(contextURI);
+          // server/10r9
+          // inv.setRawURI(inv.getRawURI() + file);
+        }
+
+        return new MatchResult(servletName, contextURI);
+      }
+    }
+
+    return null;
   }
 
   private void addWelcomeFileDependency(ServletInvocation servletInvocation)
@@ -508,6 +593,11 @@ public class ServletMapper {
     return patterns;
   }
 
+  public String getServletName(String pattern)
+  {
+    return _servletNamesMap.get(pattern);
+  }
+
   /**
    * Returns the servlet plugin_ignore patterns.
    */
@@ -543,4 +633,42 @@ public class ServletMapper {
   {
     _servletManager.destroy();
   }
+
+  private class FragmentFilter implements UrlMap.Filter<ServletMapping> {
+    private String _servletName;
+
+    public FragmentFilter(String servletName)
+    {
+      _servletName = servletName;
+    }
+
+    @Override
+    public boolean isMatch(ServletMapping item)
+    {
+      return _servletName.equals(item.getServletName());
+    }
+  }
+
+  private static class MatchResult {
+    String _servletName;
+    String _contextUri;
+
+    private MatchResult(String servletName, String contextUri)
+    {
+      _servletName = servletName;
+      _contextUri = contextUri;
+    }
+
+    public String getServletName()
+    {
+      return _servletName;
+    }
+
+    public String getContextUri()
+    {
+      return _contextUri;
+    }
+  }
 }
+
+

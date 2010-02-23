@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -73,8 +73,6 @@ public class TimestampFormatter extends Formatter {
   
   private String _timestampString;
   private TimestampBase []_timestamp;
-
-  private QDate _calendar = new QDate(true);
 
   /**
    * Create formatter.
@@ -174,14 +172,16 @@ public class TimestampFormatter extends Formatter {
 
     StringBuilder sb = new StringBuilder();
 
-    // _stream.print(_calendar.formatLocal(now, _timestamp));
-    synchronized (_calendar) {
-      _calendar.setGMTTime(now);
+    QDate localDate = QDate.allocateLocalDate();
+
+    localDate.setGMTTime(now);
 	  
-      int len = _timestamp.length;
-      for (int j = 0; j < len; j++)
-	_timestamp[j].format(sb, _calendar, log);
+    int len = _timestamp.length;
+    for (int j = 0; j < len; j++) {
+      _timestamp[j].format(sb, localDate, log);
     }
+    
+    QDate.freeLocalDate(localDate);
 
     sb.append(log.getMessage());
 

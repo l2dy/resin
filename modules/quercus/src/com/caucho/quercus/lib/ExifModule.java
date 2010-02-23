@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -83,9 +83,9 @@ public class ExifModule extends AbstractQuercusModule {
    *  @return either the thumbnail or FALSE
    */
   public static Value exif_thumbnail(Env env, Path file,
-				     @Optional @Reference int width,
-				     @Optional @Reference int height,
-				     @Optional @Reference int imageType)
+				     @Optional int width,
+				     @Optional int height,
+				     @Optional int imageType)
   {
     return BooleanValue.FALSE;
   }

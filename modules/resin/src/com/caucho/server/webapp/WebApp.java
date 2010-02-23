@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -57,18 +57,13 @@ import com.caucho.management.server.HostMXBean;
 import com.caucho.naming.Jndi;
 import com.caucho.rewrite.RewriteFilter;
 import com.caucho.rewrite.DispatchRule;
-import com.caucho.server.repository.Repository;
-import com.caucho.security.Authenticator;
-import com.caucho.security.BasicLogin;
-import com.caucho.security.Login;
-import com.caucho.security.Deny;
 import com.caucho.rewrite.RedirectSecure;
 import com.caucho.rewrite.IfSecure;
 import com.caucho.rewrite.Not;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.ServerRequest;
+import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.deploy.DeployContainer;
 import com.caucho.server.deploy.DeployGenerator;
@@ -80,10 +75,10 @@ import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
-import com.caucho.security.RoleMapManager;
-import com.caucho.server.security.ConstraintManager;
-import com.caucho.server.security.LoginConfig;
-import com.caucho.server.security.SecurityConstraint;
+import com.caucho.security.*;
+import com.caucho.security.Authenticator;
+import com.caucho.security.BasicLogin;
+import com.caucho.server.security.*;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.transaction.TransactionManagerImpl;
@@ -102,16 +97,17 @@ import javax.annotation.PostConstruct;
 import javax.management.ObjectName;
 import javax.naming.NamingException;
 import javax.servlet.*;
-import javax.servlet.annotation.WebServlet;
-import javax.servlet.annotation.WebFilter;
-import javax.servlet.annotation.WebListener;
-import javax.servlet.annotation.WebInitParam;
+import javax.servlet.descriptor.JspConfigDescriptor;
+import javax.servlet.descriptor.TaglibDescriptor;
+import javax.servlet.descriptor.JspPropertyGroupDescriptor;
+import javax.servlet.annotation.*;
 import javax.servlet.http.*;
-import javax.enterprise.inject.spi.InjectionTarget;
-import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.InjectionException;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -123,7 +119,8 @@ import java.net.URL;
 @Configurable
 public class WebApp extends ServletContextImpl
   implements Dependency, EnvironmentBean, SchemaBean, DispatchBuilder,
-             EnvironmentDeployInstance, ScanListener, java.io.Serializable
+             EnvironmentDeployInstance, ScanListener, JspConfigDescriptor,
+             java.io.Serializable
 {
   private static final String DEFAULT_VERSION = "2.5";
 
@@ -184,8 +181,8 @@ public class WebApp extends ServletContextImpl
   private boolean _isCompileContext;
 
   // Any war-generators.
-  private ArrayList<DeployGenerator> _appGenerators
-    = new ArrayList<DeployGenerator>();
+  private ArrayList<DeployGenerator<WebAppController>> _appGenerators
+    = new ArrayList<DeployGenerator<WebAppController>>();
 
   // Any web-app-default for children
   private ArrayList<WebAppConfig> _webAppDefaultList
@@ -334,6 +331,7 @@ public class WebApp extends ServletContextImpl
 
   private final AtomicInteger _requestCount = new AtomicInteger();
   private long _lastRequestTime = Alarm.getCurrentTime();
+  private Pattern _cookieDomainPattern = null;
 
   //
   // statistics
@@ -954,6 +952,17 @@ public class WebApp extends ServletContextImpl
     _servletManager.addServlet(config, _isApplyingWebFragments);
   }
 
+  @Override
+  public <T extends Servlet> T createServlet(Class<T> servletClass)
+    throws ServletException
+  {
+    try {
+      return _beanManager.createTransientObject(servletClass);
+    } catch (InjectionException e) {
+      throw new ServletException(e);
+    }
+  }
+
   public void addServlet(WebServlet webServlet, String servletClassName)
     throws ServletException
   {
@@ -1012,35 +1021,42 @@ public class WebApp extends ServletContextImpl
     return addServlet(servletName, cl.getName(), cl, servlet);
   }
 
+  /**
+   * Adds a new or augments existing registration
+   *
+   * @since 3.0
+   */
   private ServletRegistration.Dynamic addServlet(String servletName,
                                                  String servletClassName,
                                                  Class<? extends Servlet> servletClass,
-                                                 Servlet servlet) {
+                                                 Servlet servlet)
+  {
     if (! isInitializing())
-      throw new IllegalStateException();
+      throw new IllegalStateException(L.l("addServlet may only be called during initialization"));
 
     try {
-      ServletConfigImpl config = createServlet();
-      config.setServletName(servletName);
-      config.setServletClass(servletClassName);
+      ServletConfigImpl config
+        = (ServletConfigImpl) getServletRegistration(servletName);
 
-      if (servlet != null) {
-        CreationalContext context = _beanManager.createCreationalContext(null);
+      if (config == null) {
+        config = createServlet();
 
-        InjectionTarget injectionTarget
-          = _beanManager.createInjectionTarget(servlet.getClass());
-
-        injectionTarget.inject(servlet, context);
-
-        servlet.init(config);
-
-        config.setServlet(servlet);
-      }
-      else if (servletClass != null) {
+        config.setServletName(servletName);
+        config.setServletClass(servletClassName);
         config.setServletClass(servletClass);
-      }
+        config.setServlet(servlet);
 
-      addServlet(config);
+        addServlet(config);
+      } else {
+        if (config.getClassName() == null)
+          config.setServletClass(servletClassName);
+
+        if (config.getServletClass() == null)
+          config.setServletClass(servletClass);
+
+        if (config.getServlet() == null)
+          config.setServlet(servlet);
+      }
 
       return config;
     }
@@ -1062,14 +1078,121 @@ public class WebApp extends ServletContextImpl
     Map<String, ServletConfigImpl> configMap = _servletManager.getServlets();
 
     Map<String, ServletRegistration> result
-      = new HashMap<String, ServletRegistration>();
-
-    for (String key: configMap.keySet())
-      result.put(key, configMap.get(key));
+      = new HashMap<String, ServletRegistration>(configMap);
 
     return Collections.unmodifiableMap(result);
   }
 
+  private void addServletSecurity(Class<? extends Servlet> servletClass,
+                                  ServletSecurity security)
+  {
+    ServletSecurityElement securityElement
+      = new ServletSecurityElement(security);
+
+    _servletManager.addSecurityElement(servletClass, securityElement);
+  }
+
+  private void initSecurityConstraints()
+  {
+    Map<String, ServletConfigImpl> servlets = _servletManager.getServlets();
+
+    for (Map.Entry<String, ServletConfigImpl> entry : servlets.entrySet()) {
+      ServletSecurityElement securityElement
+        = entry.getValue().getSecurityElement();
+
+      if (securityElement == null)
+        continue;
+
+      ServletSecurity.EmptyRoleSemantic rootRoleSemantic
+        = securityElement.getEmptyRoleSemantic();
+
+      final Set<String> patterns = _servletMapper.getUrlPatterns(entry.getKey());
+      final Collection<HttpMethodConstraintElement> constraints
+        = securityElement.getHttpMethodConstraints();
+
+      if (constraints != null) {
+        for (HttpMethodConstraintElement httpMethodConstraintElement : securityElement
+            .getHttpMethodConstraints()) {
+          ServletSecurity.EmptyRoleSemantic emptyRoleSemantic =
+            httpMethodConstraintElement.getEmptyRoleSemantic();
+
+          ServletSecurity.TransportGuarantee transportGuarantee =
+            httpMethodConstraintElement.getTransportGuarantee();
+
+          String[] roles = httpMethodConstraintElement.getRolesAllowed();
+
+          SecurityConstraint constraint = new SecurityConstraint();
+          constraint.setFallthrough(false);
+
+          if (emptyRoleSemantic == ServletSecurity.EmptyRoleSemantic.DENY) {
+            constraint.addConstraint(new PermitEmptyRolesConstraint(false));
+          } else if (roles.length == 0
+                     && transportGuarantee == ServletSecurity.TransportGuarantee.NONE) {
+            constraint.addConstraint(new PermitEmptyRolesConstraint(true));
+          } else {
+            for (String role : roles)
+              constraint.addRoleName(role);
+
+            if (transportGuarantee == ServletSecurity.TransportGuarantee.CONFIDENTIAL)
+              constraint.addConstraint(new TransportConstraint("CONFIDENTIAL"));
+          }
+
+          WebResourceCollection resources = new WebResourceCollection();
+          resources.addHttpMethod(httpMethodConstraintElement.getMethodName());
+
+          for (String pattern : patterns) {
+            resources.addURLPattern(pattern);
+            constraint.addURLPattern(pattern);
+          }
+
+          constraint.addWebResourceCollection(resources);
+
+          _constraintManager.addConstraint(constraint);
+        }
+      }
+
+      ServletSecurity.EmptyRoleSemantic emptyRoleSemantic
+        = securityElement.getEmptyRoleSemantic();
+
+      ServletSecurity.TransportGuarantee transportGuarantee
+        = securityElement.getTransportGuarantee();
+
+      String []roles = securityElement.getRolesAllowed();
+
+      SecurityConstraint constraint = new SecurityConstraint();
+
+      if (emptyRoleSemantic == ServletSecurity.EmptyRoleSemantic.DENY) {
+        constraint.addConstraint(new PermitEmptyRolesConstraint(false));
+      } else if (roles.length == 0
+        && transportGuarantee == ServletSecurity.TransportGuarantee.NONE) {
+        constraint.addConstraint(new PermitEmptyRolesConstraint(true));
+      } else {
+        for (String role : roles)
+          constraint.addRoleName(role);
+
+        if (transportGuarantee
+          == ServletSecurity.TransportGuarantee.CONFIDENTIAL)
+          constraint.addConstraint(new TransportConstraint("CONFIDENTIAL"));
+      }
+
+      for (String pattern : patterns) {
+        constraint.addURLPattern(pattern);
+      }
+
+      _constraintManager.addConstraint(constraint);
+    }
+  }
+
+  @Override
+  public <T extends Filter> T createFilter(Class<T> filterClass)
+    throws ServletException
+  {
+    try {
+      return _beanManager.createTransientObject(filterClass);
+    } catch (InjectionException e) {
+      throw new ServletException(e);
+    }
+  }
 
   public void addFilter(WebFilter webFilter, String filterClassName)
     throws Exception
@@ -1084,18 +1207,19 @@ public class WebApp extends ServletContextImpl
 
     config.setFilterName(filterName);
 
-    if (webFilter.value().length > 0
-        && webFilter.urlPatterns().length == 0
-        && webFilter.servletNames().length == 0) {
+    boolean isMapping = false;
+
+    if (webFilter.value().length > 0) {
       FilterMapping.URLPattern urlPattern = config.createUrlPattern();
       for (String url : webFilter.value())
         urlPattern.addText(url);
 
       urlPattern.init();
+
+      isMapping = true;
     }
-    else if (webFilter.urlPatterns().length > 0
-             && webFilter.value().length == 0
-             && webFilter.servletNames().length == 0) {
+
+    if (webFilter.urlPatterns().length > 0) {
       FilterMapping.URLPattern urlPattern = config.createUrlPattern();
 
       for (String url : webFilter.urlPatterns()) {
@@ -1103,14 +1227,18 @@ public class WebApp extends ServletContextImpl
       }
 
       urlPattern.init();
+
+      isMapping = true;
     }
-    else if (webFilter.servletNames().length > 0
-             && webFilter.value().length == 0
-             && webFilter.urlPatterns().length == 0) {
+
+    if (webFilter.servletNames().length > 0) {
       for (String servletName : webFilter.servletNames())
         config.addServletName(servletName);
+
+      isMapping = true;
     }
-    else {
+
+    if (! isMapping) {
       throw new ConfigException(L.l("Annotation @WebFilter at '{0}' must specify either value, urlPatterns or servletNames", filterClassName));
     }
 
@@ -1152,7 +1280,6 @@ public class WebApp extends ServletContextImpl
                                                Class<? extends Filter> filterClass,
                                                Filter filter)
   {
-
     if (! isInitializing())
       throw new IllegalStateException();
 
@@ -1176,8 +1303,13 @@ public class WebApp extends ServletContextImpl
       return config;
     }
     catch (ClassNotFoundException e) {
+      e.printStackTrace();
       //spec declares no throws so far.
       throw new RuntimeException(e.getMessage(), e);
+    }
+    catch (Exception e) {
+      e.printStackTrace();
+      return null;
     }
   }
 
@@ -1219,6 +1351,9 @@ public class WebApp extends ServletContextImpl
   public ServletMapping createServletMapping()
   {
     ServletMapping servletMapping = new ServletMapping();
+
+    if (_isApplyingWebFragments)
+      servletMapping.setInFragmentMode();
 
     servletMapping.setWebApp(this);
     servletMapping.setServletContext(this);
@@ -1315,6 +1450,21 @@ public class WebApp extends ServletContextImpl
   public FilterRegistration getFilterRegistration(String filterName)
   {
     return _filterManager.getFilter(filterName);
+  }
+
+  /**
+   * Returns filter registrations
+   * @return
+   */
+  @Override
+  public Map<String, ? extends FilterRegistration> getFilterRegistrations()
+  {
+    Map<String, FilterConfigImpl> configMap = _filterManager.getFilters();
+
+    Map<String, FilterRegistration> result
+      = new HashMap<String, FilterRegistration>(configMap);
+
+    return Collections.unmodifiableMap(result);
   }
 
   /**
@@ -1575,7 +1725,7 @@ public class WebApp extends ServletContextImpl
    */
   public void setLoginConfig(LoginConfig loginConfig)
   {
-    _login = loginConfig.getLogin();
+    setLogin(loginConfig.getLogin());
   }
 
   /**
@@ -1707,6 +1857,43 @@ public class WebApp extends ServletContextImpl
 
       add(redirect);
     }
+  }
+
+  @Override
+  public <T extends EventListener> T createListener(Class<T> listenerClass)
+    throws ServletException
+  {
+    try {
+      return _beanManager.createTransientObject(listenerClass);
+    }
+    catch (InjectionException e) {
+      throw new ServletException(e);
+    }
+  }
+
+  @Override
+  public void addListener(String className)
+  {
+    try {
+      Class listenerClass = Class.forName(className, false, getClassLoader());
+
+      addListener(listenerClass);
+    }
+    catch (ClassNotFoundException e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  @Override
+  public void addListener(Class<? extends EventListener> listenerClass)
+  {
+    addListener(_beanManager.createTransientObject(listenerClass));
+  }
+
+  @Override
+  public <T extends EventListener> void addListener(T listener)
+  {
+    addListenerObject(listener, true);
   }
 
   @Configurable
@@ -1924,9 +2111,8 @@ public class WebApp extends ServletContextImpl
   @Configurable
   public void addTaglib(JspTaglib taglib)
   {
-    if (_taglibList == null) {
+    if (_taglibList == null)
       _taglibList = new ArrayList<JspTaglib>();
-    }
 
     _taglibList.add(taglib);
   }
@@ -1937,6 +2123,44 @@ public class WebApp extends ServletContextImpl
   public ArrayList<JspTaglib> getTaglibList()
   {
     return _taglibList;
+  }
+
+  @Override
+  public Collection<TaglibDescriptor> getTaglibs()
+  {
+    ArrayList<TaglibDescriptor> taglibs
+      = new ArrayList<TaglibDescriptor>();
+
+    for (int i = 0; _taglibList != null && i < _taglibList.size(); i++)
+      taglibs.add(_taglibList.get(i));
+
+    JspConfig jspConfig = (JspConfig) _extensions.get("jsp-config");
+
+    if (jspConfig != null) {
+      ArrayList<JspTaglib> taglibList = jspConfig.getTaglibList();
+      for (int i = 0; i < taglibList.size(); i++)
+        taglibs.add(taglibList.get(i));
+    }
+
+    return taglibs;
+  }
+
+  @Override
+  public Collection<JspPropertyGroupDescriptor> getJspPropertyGroups()
+  {
+    JspConfig jspConfig = (JspConfig) _extensions.get("jsp-config");
+
+    Collection<JspPropertyGroupDescriptor> propertyGroups
+      = new ArrayList<JspPropertyGroupDescriptor>();
+
+    if (jspConfig != null) {
+      ArrayList<JspPropertyGroup> groups = jspConfig.getJspPropertyGroupList();
+      for (JspPropertyGroup group : groups) {
+        propertyGroups.add(group);
+      }
+    }
+
+    return propertyGroups;
   }
 
   public JspConfig createJspConfig()
@@ -1950,6 +2174,12 @@ public class WebApp extends ServletContextImpl
   public void addJspConfig(JspConfig config)
   {
     _extensions.put("jsp-config", config);
+  }
+
+  @Override
+  public JspConfigDescriptor getJspConfigDescriptor()
+  {
+    return this;
   }
 
   /**
@@ -2251,7 +2481,7 @@ public class WebApp extends ServletContextImpl
 
   public static ServletRequest getThreadRequest()
   {
-    ServerRequest serverRequest = TcpConnection.getCurrentRequest();
+    ProtocolConnection serverRequest = TcpConnection.getCurrentRequest();
 
     if (serverRequest instanceof ServletRequest)
       return (ServletRequest) serverRequest;
@@ -2328,6 +2558,8 @@ public class WebApp extends ServletContextImpl
 
         setAttribute("caucho.login", _login);
       } catch (Exception e) {
+        e.printStackTrace();
+
         log.log(Level.FINEST, e.toString(), e);
       }
 
@@ -2337,21 +2569,8 @@ public class WebApp extends ServletContextImpl
                             new AnnotationLiteral<Initialized>() {});
       */
 
-      if (! _metadataComplete) {
-        loadWebFragments();
-
-        List<WebAppFragmentConfig> fragments = sortWebFragments();
-
-        _isApplyingWebFragments = true;
-
-        for (WebAppConfig fragment : fragments) {
-          fragment.getBuilderProgram().configure(this);
-        }
-
-        _isApplyingWebFragments = false;
-
-        _classLoader.addScanListener(this);
-      }
+      if (! _metadataComplete)
+        initWebFragments();
 
       WebAppController parent = null;
       if (_controller != null)
@@ -2366,8 +2585,14 @@ public class WebApp extends ServletContextImpl
       }
 
       if (_server != null) {
-        if (getSessionManager() != null)
+        if (getSessionManager() != null) {
           getSessionManager().init();
+
+          if (_sessionManager.getCookieDomainRegexp() != null) {
+            _cookieDomainPattern
+              = Pattern.compile(_sessionManager.getCookieDomainRegexp());
+          }
+        }
       }
 
       _roleMapManager = RoleMapManager.create();
@@ -2382,11 +2607,30 @@ public class WebApp extends ServletContextImpl
         }
       }
 
+      callInitializers();
+
       //Servlet 3.0
       initAnnotated();
     } finally {
       _lifecycle.toInit();
     }
+  }
+
+  public void initWebFragments()
+  {
+    loadWebFragments();
+
+    List<WebAppFragmentConfig> fragments = sortWebFragments();
+
+    _isApplyingWebFragments = true;
+
+    for (WebAppConfig fragment : fragments) {
+      fragment.getBuilderProgram().configure(this);
+    }
+
+    _isApplyingWebFragments = false;
+
+    _classLoader.addScanListener(this);
   }
 
   public boolean isApplyingWebFragments()
@@ -2399,10 +2643,8 @@ public class WebApp extends ServletContextImpl
     return _servletVersion == null || ! _servletVersion.startsWith("3");
   }
 
-  private void loadWebFragments() {
-    if (log.isLoggable(Level.FINER))
-      log.finer(L.l("Loading web-fragments for '{0}'.", this));
-
+  private void loadWebFragments()
+  {
     if (_webFragments == null)
       _webFragments = new ArrayList<WebAppFragmentConfig>();
 
@@ -2412,6 +2654,9 @@ public class WebApp extends ServletContextImpl
 
       Config config = new Config();
       config.setEL(_servletAllowEL);
+
+      if (log.isLoggable(Level.FINER) && fragments.hasMoreElements())
+        log.finer(L.l("{0} loading web-fragments", this));
 
       while (fragments.hasMoreElements()) {
         URL url = fragments.nextElement();
@@ -2595,17 +2840,29 @@ public class WebApp extends ServletContextImpl
     return result;
   }
 
-  public void initAnnotated() throws Exception {
-    List<Class> listeners = new ArrayList<Class>();
+  private void callInitializers()
+    throws Exception
+  {
+    for (ServletContainerInitializer init
+          : _beanManager.loadServices(ServletContainerInitializer.class)) {
+      init.onStartup(null, this);
+    }
+  }
 
-    List<Class> servlets = new ArrayList<Class>();
-    List<Class> filters = new ArrayList<Class>();
+  public void initAnnotated() throws Exception
+  {
+    List<Class<?>> listeners = new ArrayList<Class<?>>();
+
+    List<Class<? extends Servlet>> servlets
+      = new ArrayList<Class<? extends Servlet>>();
+
+    List<Class<?>> filters = new ArrayList<Class<?>>();
 
     List<String> pendingClasses = new ArrayList<String>(_pendingClasses);
     _pendingClasses.clear();
 
     for (String className : pendingClasses) {
-      Class cl = _classLoader.loadClass(className);
+      Class<?> cl = _classLoader.loadClass(className);
 
       if (ServletContextListener.class.isAssignableFrom(cl))
         listeners.add(cl);
@@ -2620,14 +2877,14 @@ public class WebApp extends ServletContextImpl
       else if (HttpSessionAttributeListener.class.isAssignableFrom(cl))
         listeners.add(cl);
       else if (Servlet.class.isAssignableFrom(cl))
-        servlets.add(cl);
+        servlets.add((Class) cl);
       else if (Filter.class.isAssignableFrom(cl))
         filters.add(cl);
     }
 
-    for (Class listenerClass : listeners) {
+    for (Class<?> listenerClass : listeners) {
       WebListener webListener
-        = (WebListener) listenerClass.getAnnotation(WebListener.class);
+        = listenerClass.getAnnotation(WebListener.class);
 
       if (webListener != null) {
         Listener listener = new Listener();
@@ -2637,20 +2894,26 @@ public class WebApp extends ServletContextImpl
       }
     }
 
-    for (Class filterClass : filters) {
+    for (Class<?> filterClass : filters) {
       WebFilter webFilter
-        = (WebFilter) filterClass.getAnnotation(WebFilter.class);
+        = filterClass.getAnnotation(WebFilter.class);
 
       if (webFilter != null)
         addFilter(webFilter, filterClass.getName());
     }
 
-    for (Class servletClass : servlets) {
+    for (Class<? extends Servlet> servletClass : servlets) {
       WebServlet webServlet
-        = (WebServlet) servletClass.getAnnotation(WebServlet.class);
+        = servletClass.getAnnotation(WebServlet.class);
 
       if (webServlet != null)
         addServlet(webServlet, servletClass.getName());
+
+      ServletSecurity servletSecurity
+        = (ServletSecurity) servletClass.getAnnotation(ServletSecurity.class);
+
+      if (servletSecurity != null)
+        addServletSecurity(servletClass, servletSecurity);
     }
   }
 
@@ -2732,6 +2995,8 @@ public class WebApp extends ServletContextImpl
       try {
         _filterManager.init();
         _servletManager.init();
+
+        initSecurityConstraints();
       } catch (Exception e) {
         setConfigException(e);
       }
@@ -3143,7 +3408,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns a dispatcher for the named servlet.
    */
-  public RequestDispatcher getRequestDispatcher(String url)
+  public RequestDispatcherImpl getRequestDispatcher(String url)
   {
     if (url == null)
       throw new IllegalArgumentException(L.l("request dispatcher url can't be null."));
@@ -3583,7 +3848,7 @@ public class WebApp extends ServletContextImpl
    */
   public long getMaxAge(String uri)
   {
-    CacheMapping map = (CacheMapping) _cacheMappingMap.map(uri);
+    CacheMapping map = _cacheMappingMap.map(uri);
 
     if (map != null)
       return map.getMaxAge();
@@ -3596,7 +3861,7 @@ public class WebApp extends ServletContextImpl
    */
   public long getSMaxAge(String uri)
   {
-    CacheMapping map = (CacheMapping) _cacheMappingMap.map(uri);
+    CacheMapping map = _cacheMappingMap.map(uri);
 
     if (map != null)
       return map.getSMaxAge();
@@ -3631,6 +3896,25 @@ public class WebApp extends ServletContextImpl
       return manager.getActiveSessionCount();
     else
       return 0;
+  }
+
+  public String generateCookieDomain(HttpServletRequest request) {
+    String serverName = request.getServerName();
+
+    if (_cookieDomainPattern == null)
+      return _sessionManager.getCookieDomain();
+
+    String domain;
+    Matcher matcher = _cookieDomainPattern.matcher(serverName);
+
+    // XXX: performance?
+    if (matcher.find()) {
+      domain = matcher.group();
+    } else {
+      domain = null;
+    }
+
+    return domain;
   }
 
   void updateStatistics(long time,
@@ -3743,7 +4027,7 @@ public class WebApp extends ServletContextImpl
 
       for (int i = _appGenerators.size() - 1; i >= 0; i--) {
         try {
-          DeployGenerator deploy = _appGenerators.get(i);
+          DeployGenerator<WebAppController> deploy = _appGenerators.get(i);
           _parent.removeWebAppDeploy(deploy);
           deploy.destroy();
         } catch (Throwable e) {
@@ -3833,36 +4117,6 @@ public class WebApp extends ServletContextImpl
   {
     return "WebApp[" + getId() + "]";
   }
-
-  /**
-   * WebBeans callbacks
-   */
-  /*
-  class WebBeansObserver implements Observer<BeanManager> {
-    public boolean notify(BeanManager manager)
-    {
-      // search for servlets
-
-      for (Bean bean : manager.getBeans(Servlet.class, new CurrentLiteral())) {
-        if (bean instanceof CauchoBean) {
-          CauchoBean cBean = (CauchoBean) bean;
-
-          for (Annotation ann : cBean.getAnnotations()) {
-            if (ann.annotationType().equals(WebServlet.class)) {
-              //ServletConfigImpl config
-              //  = new ServletConfigImpl(this, ann, manager.getInstance(bean));
-
-              // _servletManager.addServlet(config);
-
-            }
-          }
-        }
-      }
-
-      return false;
-    }
-  }
-  */
 
   static class FilterChainEntry {
     FilterChain _filterChain;

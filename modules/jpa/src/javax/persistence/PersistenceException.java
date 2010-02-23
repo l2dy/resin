@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package javax.persistence;
 /**
  * Thrown by the persistence provider when a problem occurs.
  */
+@SuppressWarnings("serial")
 public class PersistenceException extends RuntimeException
 {
   public PersistenceException()

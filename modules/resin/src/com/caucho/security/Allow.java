@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,8 @@ import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 
 import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.*;
 import javax.annotation.PostConstruct;
 import javax.servlet.*;
@@ -77,6 +79,7 @@ import javax.servlet.http.*;
 public class Allow extends com.caucho.server.security.SecurityConstraint
 {
   private static final L10N L = new L10N(Allow.class);
+  private static final Logger log = Logger.getLogger(Allow.class.getName());
 
   private ArrayList<Pattern> _patternList
     = new ArrayList<Pattern>();

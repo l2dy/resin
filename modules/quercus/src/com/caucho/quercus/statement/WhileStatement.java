@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -67,6 +67,8 @@ public class WhileStatement extends Statement {
   public Value execute(Env env)
   {
     try {
+      env.setLocation(getLocation());
+      
       while (_test.evalBoolean(env)) {
         env.checkTimeout();
 
@@ -95,6 +97,8 @@ public class WhileStatement extends Statement {
         }
         else
           return value;
+        
+        env.setLocation(getLocation());
       }
     }
     catch (RuntimeException e) {

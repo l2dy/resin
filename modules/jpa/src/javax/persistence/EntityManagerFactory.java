@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,7 +30,9 @@
 package javax.persistence;
 
 import java.util.Map;
-import java.util.Set;
+
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.metamodel.Metamodel;
 
 /**
  * Factory for getting an entity manager.
@@ -44,12 +46,12 @@ public interface EntityManagerFactory {
   /**
    * Create a new EntityManager with the given properties.
    */
+  @SuppressWarnings("unchecked")
   public EntityManager createEntityManager(Map map);
-
-  /**
-   * Close the factory an any resources.
-   */
-  public void close();
+  
+  public CriteriaBuilder getCriteriaBuilder();
+  
+  public Metamodel getMetamodel();
 
   /**
    * Returns true if the factory is open.
@@ -57,18 +59,16 @@ public interface EntityManagerFactory {
   public boolean isOpen();
 
   /**
+   * Close the factory an any resources.
+   */
+  public void close();
+
+  /**
    * Returns the properties and values for the factory
    *
    * @since JPA 2.0
    */
-  public Map getProperties();
-
-  /**
-   * Returns the supported properties
-   *
-   * @since JPA 2.0
-   */
-  public Set<String> getSupportedProperties();
+  public Map<String,Object> getProperties();
 
   /**
    * Returns the entity manager cache
@@ -76,4 +76,11 @@ public interface EntityManagerFactory {
    * @since JPA 2.0
    */
   public Cache getCache();
+  
+  /**
+   * Returns persistence unit utilities.
+   *
+   * @since JPA 2.0
+   */
+  public PersistenceUnitUtil getPersistenceUnitUtil();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -57,9 +57,11 @@ public class StringMarshal extends Marshal {
 
   public Object marshal(Env env, Value value, Class expectedClass)
   {
+
     return value.toJavaString();
   }
 
+  @Override
   public Value unmarshal(Env env, Object value)
   {
     if (value == null)
@@ -72,7 +74,6 @@ public class StringMarshal extends Marshal {
   protected int getMarshalingCostImpl(Value argValue)
   {
     return argValue.toStringMarshalCost();
-
     /*
     if (argValue.isString()) {
       if (argValue.isUnicode())

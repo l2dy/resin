@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,8 @@ package com.caucho.server.http;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -285,8 +287,9 @@ abstract public class AbstractHttpResponse {
     if (value == null)
       throw new NullPointerException();
 
-    if (setSpecial(key, value))
+    if (setSpecial(key, value)) {
       return;
+    }
 
     // server/05e8 (tck)
     // XXX: server/13w0 for _isHeaderWritten because the Expires in caching
@@ -310,7 +313,7 @@ abstract public class AbstractHttpResponse {
   {
     int i = 0;
     boolean hasHeader = false;
-
+    
     ArrayList<String> keys = _headerKeys;
     ArrayList<String> values = _headerValues;
 
@@ -506,14 +509,23 @@ abstract public class AbstractHttpResponse {
     return _headerValues;
   }
 
-  public Iterable<String> getHeaders(String name)
+  public Collection<String> getHeaders(String name)
   {
-    throw new UnsupportedOperationException("unimplemented");
+    ArrayList<String> headers = new ArrayList<String>();
+
+    for (int i = 0; i < _headerKeys.size(); i++) {
+      String key = _headerKeys.get(i);
+
+      if (key.equals(name))
+        headers.add(_headerValues.get(i));
+    }
+
+    return headers;
   }
 
-  public Iterable<String> getHeaderNames()
+  public Collection<String> getHeaderNames()
   {
-    return _headerKeys;
+    return new HashSet<String>(_headerKeys);
   }
 
   public ArrayList<String> getFooterKeys()
@@ -824,10 +836,16 @@ abstract public class AbstractHttpResponse {
       cb.append("; Version=");
       cb.append(version);
 
-      if (cookie.getComment() != null) {
+      if (cookie.getComment() == null) {
+      }
+      else if (isCookie2) {
         cb.append("; Comment=\"");
         cb.append(cookie.getComment());
         cb.append("\"");
+      }
+      else {
+        cb.append("; Comment=");
+        cb.append(cookie.getComment());        
       }
 
       if (cookie instanceof CookieImpl) {

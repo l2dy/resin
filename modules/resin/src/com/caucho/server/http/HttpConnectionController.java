@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,13 +33,13 @@ import java.util.HashMap;
 
 import javax.servlet.ServletRequest;
 
-import com.caucho.server.connection.ConnectionController;
+import com.caucho.server.connection.AsyncController;
 import com.caucho.util.Alarm;
 
 /**
  * Public API to control a comet connection.
  */
-public class HttpConnectionController extends ConnectionController
+public class HttpConnectionController extends AsyncController
 					      /*  implements CometController */
 {
   private HttpServletRequestImpl _request;

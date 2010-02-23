@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package com.caucho.config.type;
 
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.*;
 import com.caucho.config.attribute.*;

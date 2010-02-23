@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,8 +30,8 @@
 package com.caucho.quercus.function;
 
 import com.caucho.quercus.Location;
+import com.caucho.quercus.env.Callback;
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.ObjectValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.Expr;
@@ -43,7 +43,8 @@ import com.caucho.util.L10N;
 /**
  * Represents a function
  */
-abstract public class AbstractFunction {
+@SuppressWarnings("serial")
+abstract public class AbstractFunction extends Callback {
   private static final L10N L = new L10N(AbstractFunction.class);
 
   private static final Arg []NULL_ARGS = new Arg[0];
@@ -55,6 +56,7 @@ abstract public class AbstractFunction {
   protected boolean _isStatic = false;
   protected boolean _isFinal = false;
   protected boolean _isConstructor = false;
+  protected boolean _isClosure = false;
   
   protected Visibility _visibility = Visibility.PUBLIC;
   protected String _declaringClassName;
@@ -79,9 +81,36 @@ abstract public class AbstractFunction {
     return "unknown";
   }
   
+  //
+  // Callback values
+  //
+  
+  @Override
+  public String getCallbackName()
+  {
+    return getName();
+  }
+  
+  @Override
+  public boolean isInternal(Env env)
+  {
+    return false;
+  }
+  
+  @Override
+  public boolean isValid(Env env)
+  {
+    return true;
+  }
+  
   public final String getCompilationName()
   {
-    return getName() + "_" + _parseIndex;
+    String compName = getName() + "_" + _parseIndex;
+    
+    compName = compName.replace("__", "___");
+    compName = compName.replace("\\", "__");
+    
+    return compName;
   }
   
   /*
@@ -169,6 +198,22 @@ abstract public class AbstractFunction {
   public final void setFinal(boolean isFinal)
   {
     _isFinal = isFinal;
+  }
+  
+  /**
+   * Sets true if function is a closure.
+   */
+  public void setClosure(boolean isClosure)
+  {
+    _isClosure= isClosure;
+  }
+  
+  /**
+   * Returns true for a closure.
+   */
+  public boolean isClosure()
+  {
+    return _isClosure;
   }
   
   public boolean isConstructor()
@@ -331,15 +376,40 @@ abstract public class AbstractFunction {
 
     return values;
   }
+  
+  //
+  // Value methods
+  //
+  
+  //
+  // Value predicates
+  //
 
+  /**
+   * Returns true for an object
+   */
+  @Override
+  public boolean isObject()
+  {
+    return true;
+  }
+  
+  @Override
+  public String getType()
+  {
+    return "object";
+  }
+  
   /**
    * Evaluates the function.
    */
+  @Override
   abstract public Value call(Env env, Value []args);
 
   /**
    * Evaluates the function, returning a reference.
    */
+  @Override
   public Value callRef(Env env, Value []args)
   {
     return call(env, args);
@@ -348,50 +418,352 @@ abstract public class AbstractFunction {
   /**
    * Evaluates the function, returning a copy
    */
+  @Override
   public Value callCopy(Env env, Value []args)
   {
     return call(env, args).copyReturn();
   }
+
+  /**
+   * Evaluates the function.
+   */
+  @Override
+  public Value call(Env env)
+  {
+    return call(env, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function with an argument .
+   */
+  @Override
+  public Value call(Env env, Value a1)
+  {
+    return call(env, new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value call(Env env, Value a1, Value a2)
+  {
+    return call(env, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value call(Env env, Value a1, Value a2, Value a3)
+  {
+    return call(env, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value call(Env env, Value a1, Value a2, Value a3, Value a4)
+  {
+    return call(env, new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value call(Env env, Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return call(env, new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates the function.
+   */
+  @Override
+  public Value callRef(Env env)
+  {
+    return callRef(env, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function with an argument .
+   */
+  @Override
+  public Value callRef(Env env, Value a1)
+  {
+    return callRef(env, new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value callRef(Env env, Value a1, Value a2)
+  {
+    return callRef(env, new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value callRef(Env env, Value a1, Value a2, Value a3)
+  {
+    return callRef(env, new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value callRef(Env env, Value a1, Value a2, Value a3, Value a4)
+  {
+    return callRef(env, new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function with arguments
+   */
+  @Override
+  public Value callRef(Env env,
+		       Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return callRef(env, new Value[] { a1, a2, a3, a4, a5 });
+  }
+  
+  //
+  // method calls
+  //
   
   /**
-   * Evaluates the function as a method call.
+   * Evaluates the method call.
    */
-  public Value callMethod(Env env, Value obj, Value []args)
+  public Value callMethod(Env env, 
+                          QuercusClass qClass,
+                          Value qThis,
+                          Value []args)
   {
-    Value oldThis = env.getThis();
+    throw new IllegalStateException(getClass().getName());
+
+    /*
+    Value oldThis = env.setThis(qThis);
+    QuercusClass oldClass = env.setCallingClass(qClass);
 
     try {
-      if (obj != null) {
-        env.setThis(obj);
-
-        /*
-        if (isPublic()) {
-        }
-        else if (isProtected()) {
-          if (oldThis != null
-              && oldThis.isA(getDeclaringClassName())) {
-          }
-          else {
-            errorProtectedAccess(env, oldThis);
-          }
-        }
-        else {
-          //private
-          
-          if (oldThis != null
-              && getDeclaringClassName().equals(oldThis.getClassName())) {
-          }
-          else {
-            errorPrivateAccess(env, oldThis);
-          }
-        }
-	*/
-      }
-
       return call(env, args);
     } finally {
       env.setThis(oldThis);
+      env.setCallingClass(oldClass);
     }
+    */
+  }
+  
+  /**
+   * Evaluates the method call, returning a reference.
+   */
+  public Value callMethodRef(Env env, 
+                             QuercusClass qClass,
+                             Value qThis, 
+                             Value []args)
+  {
+    throw new IllegalStateException(getClass().getName());
+
+    /*
+    Value oldThis = env.setThis(qThis);
+    QuercusClass oldClass = env.setCallingClass(qClass);
+
+    try {
+      return callRef(env, args);
+    } finally {
+      env.setThis(oldThis);
+      env.setCallingClass(oldClass);
+    }
+    */
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis)
+  {
+    return callMethod(env, qClass, qThis, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis)
+  {
+    return callMethodRef(env, qClass, qThis, NULL_ARG_VALUES);
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env, 
+                          QuercusClass qClass,
+                          Value qThis,
+                          Value a1)
+  {
+    return callMethod(env, qClass, qThis, 
+                      new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env, 
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value a1)
+  {
+    return callMethodRef(env, qClass, qThis, 
+                         new Value[] { a1 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env, 
+                          QuercusClass qClass,
+                          Value qThis,
+                          Value a1, Value a2)
+  {
+    return callMethod(env, qClass, qThis, 
+                      new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value a1, Value a2)
+  {
+    return callMethodRef(env, qClass, qThis,
+                         new Value[] { a1, a2 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis,
+			  Value a1, Value a2, Value a3)
+  {
+    return callMethod(env, qClass, qThis, 
+                      new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value a1, Value a2, Value a3)
+  {
+    return callMethodRef(env, qClass, qThis,
+                         new Value[] { a1, a2, a3 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis,
+			  Value a1, Value a2, Value a3, Value a4)
+  {
+    return callMethod(env, qClass, qThis, 
+                      new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env,
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value a1, Value a2, Value a3, Value a4)
+  {
+    return callMethodRef(env, qClass, qThis, 
+                         new Value[] { a1, a2, a3, a4 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis,
+                          Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return callMethod(env, qClass, qThis, 
+                      new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates the function as a method call.
+   */
+  public Value callMethodRef(Env env, 
+                             QuercusClass qClass,
+                             Value qThis,
+                             Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    return callMethodRef(env, qClass, qThis, 
+                         new Value[] { a1, a2, a3, a4, a5 });
+  }
+
+  /**
+   * Evaluates the function.
+   */
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis, 
+                          Expr []exprs)
+  {
+    Value []argValues = new Value[exprs.length];
+    Arg []args = getArgs();
+
+    for (int i = 0; i < exprs.length; i++) {
+      if (i < args.length && args[i].isReference()) {
+        argValues[i] = exprs[i].evalArg(env, true);
+      }
+      else
+        argValues[i] = exprs[i].eval(env);
+    }
+
+    return callMethod(env, qClass, qThis, argValues);
+  }
+
+  /**
+   * Evaluates the function.
+   */
+  public Value callMethodRef(Env env, 
+                             QuercusClass qClass, 
+                             Value qThis, 
+                             Expr []exprs)
+  {
+    Value []argValues = new Value[exprs.length];
+    Arg []args = getArgs();
+
+    for (int i = 0; i < exprs.length; i++) {
+      if (i < args.length && args[i].isReference())
+	argValues[i] = exprs[i].evalArg(env, true);
+      else
+	argValues[i] = exprs[i].eval(env);
+    }
+
+    return callMethodRef(env, qClass, qThis, argValues);
   }
   
   protected Value errorProtectedAccess(Env env, Value oldThis)
@@ -410,302 +782,10 @@ abstract public class AbstractFunction {
                          oldThis != null ? oldThis.getClassName() : null));
   }
   
-  /**
-   * Evaluates the function as a method call, returning a reference.
-   */
-  public Value callMethodRef(Env env, Value obj, Value []args)
+  @Override
+  public String toString()
   {
-    Value oldThis = env.getThis();
-
-    try {
-      env.setThis(obj);
-
-      return callRef(env, args);
-    } finally {
-      env.setThis(oldThis);
-    }
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value call(Env env)
-  {
-    return call(env, NULL_ARG_VALUES);
-  }
-
-  /**
-   * Evaluates the function with an argument .
-   */
-  public Value call(Env env, Value a1)
-  {
-    return call(env, new Value[] { a1 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value call(Env env, Value a1, Value a2)
-  {
-    return call(env, new Value[] { a1, a2 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value call(Env env, Value a1, Value a2, Value a3)
-  {
-    return call(env, new Value[] { a1, a2, a3 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value call(Env env, Value a1, Value a2, Value a3, Value a4)
-  {
-    return call(env, new Value[] { a1, a2, a3, a4 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value call(Env env, Value a1, Value a2, Value a3, Value a4, Value a5)
-  {
-    return call(env, new Value[] { a1, a2, a3, a4, a5 });
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value call(Env env, Expr []exprs)
-  {
-    Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
-
-    for (int i = 0; i < exprs.length; i++) {
-      // quercus/0d19
-      if (i < args.length && args[i].isReference())
-	argValues[i] = exprs[i].evalArg(env, true);
-      else
-	argValues[i] = exprs[i].eval(env);
-    }
-
-    return call(env, argValues);
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value callCopy(Env env, Expr []exprs)
-  {
-    return call(env, exprs).copy();
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value callRef(Env env)
-  {
-    return callRef(env, NULL_ARG_VALUES);
-  }
-
-  /**
-   * Evaluates the function with an argument .
-   */
-  public Value callRef(Env env, Value a1)
-  {
-    return callRef(env, new Value[] { a1 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value callRef(Env env, Value a1, Value a2)
-  {
-    return callRef(env, new Value[] { a1, a2 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value callRef(Env env, Value a1, Value a2, Value a3)
-  {
-    return callRef(env, new Value[] { a1, a2, a3 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value callRef(Env env, Value a1, Value a2, Value a3, Value a4)
-  {
-    return callRef(env, new Value[] { a1, a2, a3, a4 });
-  }
-
-  /**
-   * Evaluates the function with arguments
-   */
-  public Value callRef(Env env,
-		       Value a1, Value a2, Value a3, Value a4, Value a5)
-  {
-    return callRef(env, new Value[] { a1, a2, a3, a4, a5 });
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value callRef(Env env, Expr []exprs)
-  {
-    Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
-
-    for (int i = 0; i < exprs.length; i++) {
-      // quercus/0d19
-      if (i < args.length && args[i].isReference())
-	argValues[i] = exprs[i].evalArg(env, true);
-      else
-	argValues[i] = exprs[i].eval(env);
-    }
-
-    return callRef(env, argValues);
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj)
-  {
-    return callMethod(env, obj, NULL_ARG_VALUES);
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj, Value a1)
-  {
-    return callMethod(env, obj, new Value[] { a1 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj, Value a1, Value a2)
-  {
-    return callMethod(env, obj, new Value[] { a1, a2 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj,
-			  Value a1, Value a2, Value a3)
-  {
-    return callMethod(env, obj, new Value[] { a1, a2, a3 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj,
-			  Value a1, Value a2, Value a3, Value a4)
-  {
-    return callMethod(env, obj, new Value[] { a1, a2, a3, a4 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethod(Env env, Value obj,
-			  Value a1, Value a2, Value a3, Value a4, Value a5)
-  {
-    return callMethod(env, obj, new Value[] { a1, a2, a3, a4, a5 });
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value callMethod(Env env, Value obj, Expr []exprs)
-  {
-    Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
-
-    for (int i = 0; i < exprs.length; i++) {
-      if (i < args.length && args[i].isReference()) {
-	argValues[i] = exprs[i].evalArg(env, true);
-      }
-      else
-	argValues[i] = exprs[i].eval(env);
-    }
-
-    return callMethod(env, obj, argValues);
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj)
-  {
-    return callMethodRef(env, obj, NULL_ARG_VALUES);
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj, Value a1)
-  {
-    return callMethodRef(env, obj, new Value[] { a1 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj, Value a1, Value a2)
-  {
-    return callMethodRef(env, obj, new Value[] { a1, a2 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj,
-			     Value a1, Value a2, Value a3)
-  {
-    return callMethodRef(env, obj, new Value[] { a1, a2, a3 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj,
-			     Value a1, Value a2, Value a3, Value a4)
-  {
-    return callMethodRef(env, obj, new Value[] { a1, a2, a3, a4 });
-  }
-
-  /**
-   * Evaluates the function as a method call.
-   */
-  public Value callMethodRef(Env env, Value obj,
-			     Value a1, Value a2, Value a3, Value a4, Value a5)
-  {
-    return callMethodRef(env, obj, new Value[] { a1, a2, a3, a4, a5 });
-  }
-
-  /**
-   * Evaluates the function.
-   */
-  public Value callMethodRef(Env env, Value obj, Expr []exprs)
-  {
-    Value []argValues = new Value[exprs.length];
-    Arg []args = getArgs();
-
-    for (int i = 0; i < exprs.length; i++) {
-      if (i < args.length && args[i].isReference())
-	argValues[i] = exprs[i].evalArg(env, true);
-      else
-	argValues[i] = exprs[i].eval(env);
-    }
-
-    return callMethodRef(env, obj, argValues);
+    return getClass().getSimpleName() + "[" + getName() + "]";
   }
 }
 

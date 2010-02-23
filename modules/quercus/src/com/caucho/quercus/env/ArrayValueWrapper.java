@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -156,9 +156,9 @@ public class ArrayValueWrapper extends ArrayValue {
    * Sets the array ref.
    */
   @Override
-  public Var putRef()
+  public Var putVar()
   {
-    return _array.putRef();
+    return _array.putVar();
   }
 
   /**
@@ -201,9 +201,9 @@ public class ArrayValueWrapper extends ArrayValue {
    * Returns the array ref.
    */
   @Override
-  public Var getRef(Value index)
+  public Var getVar(Value index)
   {
-    return _array.getRef(index);
+    return _array.getVar(index);
   }
   
   /**

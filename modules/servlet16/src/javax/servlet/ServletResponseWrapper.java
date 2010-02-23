@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -231,41 +231,33 @@ public class ServletResponseWrapper implements ServletResponse {
   }
 
   /**
-   * Disables the response
-   *
    * @since Servlet 3.0
    */
-  public void disable()
+  public boolean isWrapperFor(ServletResponse wrapped)
   {
-    _response.disable();
+    if (_response == wrapped)
+      return true;
+    else if (_response instanceof ServletResponseWrapper)
+      return ((ServletResponseWrapper) _response).isWrapperFor(wrapped);
+    else
+      return false;
   }
 
   /**
-   * Enables the response
-   *
    * @since Servlet 3.0
    */
-  public void enable()
-  {
-    _response.enable();
-  }
-
-  /**
-   * Returns true if the response is disabled
-   *
-   * @since Servlet 3.0
-   */
-  public boolean isDisabled()
-  {
-    return _response.isDisabled();
-  }
-
-  public boolean isWrapperFor(ServletResponse wrapped) {
-    throw new UnsupportedOperationException("unimplemented");
-  }
-
   public boolean isWrapperFor(Class wrappedType)
   {
-    throw new UnsupportedOperationException("unimplemented");
+    if (!ServletResponse.class.isAssignableFrom(wrappedType))
+      throw new IllegalArgumentException(
+        "expected instance of javax.servlet.ServletResponse at `"
+          + wrappedType
+          + "'");
+    else if (wrappedType.isAssignableFrom(_response.getClass()))
+      return true;
+    else if (_response instanceof ServletResponseWrapper)
+      return ((ServletResponseWrapper) _response).isWrapperFor(wrappedType);
+    else
+      return false;
   }
 }

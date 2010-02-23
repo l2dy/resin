@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,12 +31,15 @@ package com.caucho.resin;
 
 import com.caucho.config.*;
 import com.caucho.config.types.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.*;
 import com.caucho.server.cluster.*;
 import com.caucho.server.dispatch.*;
 import com.caucho.server.webapp.*;
 
 import java.util.*;
+
+import javax.enterprise.context.spi.CreationalContext;
 
 /**
  * Abstract base class for bean-like embedding objects.
@@ -57,7 +60,7 @@ abstract class AbstractBeanEmbed
   /**
    * Configures the object
    */
-  protected void configure(Object bean, ConfigContext env)
+  protected <T> void configure(T bean, CreationalContext<T> env)
   {
     for (ConfigProgram program : _propertyList) {
       program.inject(bean, env);

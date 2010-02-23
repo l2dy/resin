@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -48,6 +48,7 @@ import java.net.URL;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -55,8 +56,9 @@ import java.util.Map;
  * Code for marshaling (PHP to Java) and unmarshaling (Java to PHP) arguments.
  */
 public class MarshalFactory {
-  private static final L10N L = new L10N(MarshalFactory.class);
-
+  private static final HashMap<Class<?>,Marshal> _marshalMap
+    = new HashMap<Class<?>,Marshal>();
+  
   protected ModuleContext _moduleContext;
 
   public MarshalFactory(ModuleContext moduleContext)
@@ -64,26 +66,30 @@ public class MarshalFactory {
     _moduleContext = moduleContext;
   }
 
-  public Marshal create(Class argType)
+  public Marshal create(Class<?> argType)
   {
     return create(argType, false);
   }
 
-  public Marshal create(Class argType,
+  public Marshal create(Class<?> argType,
                         boolean isNotNull)
   {
     return create(argType, isNotNull, false);
   }
 
-  public Marshal create(Class argType,
+  public Marshal create(Class<?> argType,
                         boolean isNotNull,
                         boolean isNullAsFalse)
   {
-    final Marshal marshal;
+    Marshal marshal;
+    
+    marshal = _marshalMap.get(argType);
+    
     // optimized cases, new types should be added to JavaMarshal
+    // XXX: put the static classes in _marshalMap
 
-    if (String.class.equals(argType)) {
-      marshal = StringMarshal.MARSHAL;
+    if (marshal != null) {
+      
     }
     else if (boolean.class.equals(argType)) {
       marshal = BooleanMarshal.MARSHAL;
@@ -147,9 +153,6 @@ public class MarshalFactory {
     }
     else if (Path.class.equals(argType)) {
       marshal = PathMarshal.MARSHAL;
-    }
-    else if (Callback.class.equals(argType)) {
-      marshal = CallbackMarshal.MARSHAL;
     }
     else if (StringValue.class.equals(argType)) {
       marshal = StringValueMarshal.MARSHAL;
@@ -278,6 +281,27 @@ public class MarshalFactory {
   public Marshal createValuePassThru()
   {
     return ValueMarshal.MARSHAL_PASS_THRU;
+  }
+  
+  public Marshal createExpectString()
+  {
+    return ExpectMarshal.MARSHAL_EXPECT_STRING;
+  }
+  
+  public Marshal createExpectNumeric()
+  {
+    return ExpectMarshal.MARSHAL_EXPECT_NUMERIC;
+  }
+  
+  public Marshal createExpectBoolean()
+  {
+    return ExpectMarshal.MARSHAL_EXPECT_BOOLEAN;
+  }
+  
+  static {
+    _marshalMap.put(String.class, StringMarshal.MARSHAL);
+    _marshalMap.put(Callable.class, CallableMarshal.MARSHAL);
+    _marshalMap.put(Class.class, ClassMarshal.MARSHAL);
   }
 }
 

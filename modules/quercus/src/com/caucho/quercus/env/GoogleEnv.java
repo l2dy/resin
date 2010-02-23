@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -90,7 +90,7 @@ import java.util.logging.Logger;
 public class GoogleEnv extends Env {
   private int _timeoutCount;
   
-  public GoogleEnv(Quercus quercus,
+  public GoogleEnv(QuercusContext quercus,
 		   QuercusPage page,
 		   WriteStream out,
 		   HttpServletRequest request,
@@ -99,7 +99,7 @@ public class GoogleEnv extends Env {
     super(quercus, page, out, request, response);
   }
 
-  public GoogleEnv(Quercus quercus)
+  public GoogleEnv(QuercusContext quercus)
   {
     super(quercus);
   }

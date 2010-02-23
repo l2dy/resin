@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,7 +32,7 @@ package com.caucho.quercus.env;
 /**
  * Represents an field-get argument which might be a call to a reference.
  */
-public class ArgGetFieldValue extends Value {
+public class ArgGetFieldValue extends ArgValue {
   private final Env _env;
   private final Value _obj;
   private final StringValue _name;
@@ -68,10 +68,10 @@ public class ArgGetFieldValue extends Value {
    * Converts to a reference variable.
    */
   @Override
-  public Var toRefVar()
+  public Var toLocalVarDeclAsRef()
   {
     // php/3d2t
-    return _obj.getFieldRef(_env, _name).toRefVar();
+    return _obj.toAutoObject(_env).getFieldVar(_env, _name).toLocalVarDeclAsRef();
   }
 
   /**
@@ -87,7 +87,7 @@ public class ArgGetFieldValue extends Value {
    * Converts to a read-only function argument.
    */
   @Override
-  public Value toArgValueReadOnly()
+  public Value toLocalValueReadOnly()
   {
     return toValue();
   }
@@ -96,7 +96,7 @@ public class ArgGetFieldValue extends Value {
    * Converts to a function argument.
    */
   @Override
-  public Value toArgValue()
+  public Value toLocalValue()
   {
     return toValue();
   }
@@ -105,9 +105,30 @@ public class ArgGetFieldValue extends Value {
    * Converts to a reference variable.
    */
   @Override
+  public Value toLocalRef()
+  {
+    return _obj.getField(_env, _name);
+  }
+  
+  @Override
+  public Value toAutoArray()
+  {
+    return _obj.toAutoObject(_env).getFieldVar(_env, _name).toAutoArray();
+  }
+  
+  @Override
+  public Value toAutoObject(Env env)
+  {
+    return _obj.toAutoObject(env).getFieldVar(env, _name).toAutoObject(env);
+  }
+
+  /**
+   * Converts to a reference variable.
+   */
+  @Override
   public Value toRefValue()
   {
-    return _obj.getFieldRef(_env, _name);
+    return _obj.getFieldVar(_env, _name);
   }
 
   /**
@@ -122,19 +143,19 @@ public class ArgGetFieldValue extends Value {
    * Converts to a reference variable.
    */
   @Override
-  public Var getRef(Value index)
+  public Var getVar(Value index)
   {
-    return _obj.getFieldArray(_env, _name).getRef(index);
+    return _obj.getFieldArray(_env, _name).getVar(index);
   }
 
   /**
    * Converts to a reference variable.
    */
   @Override
-  public Var getFieldRef(Env env, StringValue name)
+  public Var getFieldVar(Env env, StringValue name)
   {
     // php/3d2q
-    return _obj.getFieldObject(_env, _name).getFieldRef(_env, name);
+    return _obj.getFieldObject(_env, _name).getFieldVar(_env, name);
   }
 
   public StringValue toStringValue()

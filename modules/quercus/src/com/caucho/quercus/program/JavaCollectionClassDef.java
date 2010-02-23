@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -52,7 +52,7 @@ public class JavaCollectionClassDef extends JavaClassDef {
     if (! _isInit)
       init();
 
-    return new JavaCollectionAdapter(env, (Collection) obj, this);
+    return new JavaCollectionAdapter((Collection) obj, this);
   }
 }
 

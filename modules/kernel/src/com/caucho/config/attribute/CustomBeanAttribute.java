@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,9 +32,12 @@ package com.caucho.config.attribute;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 
+import javax.enterprise.context.spi.CreationalContext;
+
 import com.caucho.config.*;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.cfg.BeanConfig;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.type.*;
 import com.caucho.config.types.AnnotationConfig;
 import com.caucho.config.types.CustomBeanConfig;
@@ -178,15 +181,17 @@ public class CustomBeanAttribute extends Attribute {
       _arg = arg;
     }
 
-    public void inject(Object bean, ConfigContext env)
+    @Override
+    public <T> void inject(T bean, CreationalContext<T> env)
     {
       throw new UnsupportedOperationException(getClass().getName());
     }
 
-    public Object configure(ConfigType type, ConfigContext env)
+    @Override
+    public <T> T create(ConfigType<T> type, CreationalContext<T> env)
       throws ConfigException
     {
-      return type.valueOf(_arg);
+      return (T) type.valueOf(_arg);
     }
   }
 }

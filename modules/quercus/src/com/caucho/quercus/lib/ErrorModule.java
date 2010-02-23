@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,10 +32,10 @@ package com.caucho.quercus.lib;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.env.*;
 import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.FunctionExpr;
-import com.caucho.quercus.expr.IncludeExpr;
-import com.caucho.quercus.expr.IncludeOnceExpr;
-import com.caucho.quercus.expr.MethodCallExpr;
+import com.caucho.quercus.expr.CallExpr;
+import com.caucho.quercus.expr.FunIncludeExpr;
+import com.caucho.quercus.expr.FunIncludeOnceExpr;
+import com.caucho.quercus.expr.ObjectMethodExpr;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.quercus.module.IniDefinitions;
 import com.caucho.quercus.module.IniDefinition;
@@ -225,6 +225,9 @@ public class ErrorModule extends AbstractQuercusModule {
                && name.equals("eval")) {
         addInterpreted(env, result, depth++);
       }
+      else if (className.equals("com.caucho.quercus.expr.CallExpr")) {
+        addInterpreted(env, result, depth++);
+      }
       else if (className.equals("com.caucho.quercus.env.Env")
                && name.equals("close")) {
         return result;
@@ -275,8 +278,8 @@ public class ErrorModule extends AbstractQuercusModule {
   {
     Expr expr = env.peekCall(i);
 
-    if (expr instanceof FunctionExpr) {
-      FunctionExpr callExpr = (FunctionExpr) expr;
+    if (expr instanceof CallExpr) {
+      CallExpr callExpr = (CallExpr) expr;
 
       String functionName = callExpr.getName();
       if ("debug_backtrace".equals(functionName))
@@ -305,8 +308,8 @@ public class ErrorModule extends AbstractQuercusModule {
       
       call.put(ARGS, args);
     }
-    else if (expr instanceof MethodCallExpr) {
-      MethodCallExpr callExpr = (MethodCallExpr) expr;
+    else if (expr instanceof ObjectMethodExpr) {
+      ObjectMethodExpr callExpr = (ObjectMethodExpr) expr;
 
       ArrayValue call = new ArrayValueImpl();
       result.put(call);
@@ -328,7 +331,7 @@ public class ErrorModule extends AbstractQuercusModule {
 
       call.put(ARGS, new ArrayValueImpl());
     }
-    else if (expr instanceof IncludeExpr) {
+    else if (expr instanceof FunIncludeExpr) {
       ArrayValue call = new ArrayValueImpl();
       result.put(call);
       
@@ -339,8 +342,8 @@ public class ErrorModule extends AbstractQuercusModule {
 
       call.put(FUNCTION, env.createString("include"));
     }
-    else if (expr instanceof IncludeOnceExpr) {
-      boolean isRequire = ((IncludeOnceExpr) expr).isRequire();
+    else if (expr instanceof FunIncludeOnceExpr) {
+      boolean isRequire = ((FunIncludeOnceExpr) expr).isRequire();
       
       ArrayValue call = new ArrayValueImpl();
       result.put(call);
@@ -365,7 +368,7 @@ public class ErrorModule extends AbstractQuercusModule {
   // into a function as the arguments. IF no values
   // were passed this method returns an empty array.
 
-  private static ArrayValueImpl evalArgsArray(Env env, FunctionExpr callExpr)
+  private static ArrayValueImpl evalArgsArray(Env env, CallExpr callExpr)
   {
     ArrayValueImpl args = new ArrayValueImpl();
 
@@ -373,7 +376,7 @@ public class ErrorModule extends AbstractQuercusModule {
 
     if (argsValues != null) {
       for (int index=0; index < argsValues.length; index++) {
-        Value ref = argsValues[index].toRefVar();
+        Value ref = argsValues[index].toLocalVarDeclAsRef();
         args.put(ref);
       }
     }
@@ -538,7 +541,7 @@ public class ErrorModule extends AbstractQuercusModule {
    * @param code errorMask error level
    */
   public static boolean set_error_handler(Env env,
-					  Callback fun,
+					  Callable fun,
 					  @Optional("E_ALL") int errorMask)
   {
     env.setErrorHandler(errorMask, fun);
@@ -553,7 +556,7 @@ public class ErrorModule extends AbstractQuercusModule {
    * @param fun the exception handler
    */
   public static Value set_exception_handler(Env env,
-					    Callback fun)
+                                            Callable fun)
   {
     return env.setExceptionHandler(fun);
   }

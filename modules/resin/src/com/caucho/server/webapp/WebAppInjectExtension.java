@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -132,7 +132,7 @@ public class WebAppInjectExtension implements Extension
 
 	  _webApp.addServletMapping(mapping);
 
-	  event.veto();
+	  // event.veto();
 	}
 	else if (annType.isAnnotationPresent(ProxyType.class)) {
 	  ProxyType proxyType

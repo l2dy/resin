@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,7 +37,7 @@ import com.caucho.quercus.env.Value;
 /**
  * Converts to a long
  */
-public class ToLongExpr extends UnaryExpr {
+public class ToLongExpr extends AbstractUnaryExpr {
   public ToLongExpr(Location location, Expr expr)
   {
     super(location, expr);

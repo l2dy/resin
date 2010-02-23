@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import com.caucho.jmx.Jmx;
 import java.lang.management.ManagementFactory;
 import com.caucho.lifecycle.StartLifecycleException;
 import com.caucho.log.EnvironmentStream;
+import com.caucho.log.LogManagerImpl;
 import com.caucho.naming.Jndi;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.vfs.*;
@@ -58,6 +59,8 @@ public class Environment {
 
   private static ArrayList<ClassLoaderListener> _globalLoaderListeners
     = new ArrayList<ClassLoaderListener>();
+
+  private static boolean _isInitComplete;
   
   // private static EnvironmentClassLoader _envSystemClassLoader;
 
@@ -810,6 +813,16 @@ public class Environment {
   }
 
   /**
+   * @return
+   */
+  public static boolean isLoggingInitialized()
+  {
+    String logManager = System.getProperty("java.util.logging.manager");
+    
+    return _isInitComplete && LogManagerImpl.class.getName().equals(logManager);
+  }
+
+  /**
    * Initializes the environment
    */
   public static synchronized void initializeEnvironment()
@@ -825,6 +838,9 @@ public class Environment {
     ClassLoader oldLoader = thread.getContextClassLoader();
     try {
       thread.setContextClassLoader(systemLoader);
+      
+      if ("1.6.".compareTo(System.getProperty("java.runtime.version")) > 0)
+        throw new ConfigException("Resin requires JDK 1.6 or later");
 
       // #2281
       // PolicyImpl.init();
@@ -929,6 +945,8 @@ public class Environment {
       e.printStackTrace();
     } finally {
       thread.setContextClassLoader(oldLoader);
+      
+      _isInitComplete = true;
     }
   }
 

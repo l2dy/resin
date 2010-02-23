@@ -11,7 +11,44 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.3 - snapshot">
+<s2 title="4.0.4 - snapshot">
+<ul>
+<li>jni: improved error messages</li>
+<li>hessian: custom deserializer (#3632, rep by era)</li>
+<li>configure: check for cp -u (#3888, rep by Kaminsky, Leonid)</li>
+<li>configure: standardize default resin root, conf, and log directories</li>
+<li>web-app: web-app deploy with archive-and root-directory was not propery set (#3887, #3873, rep by chiefgeen)</li>
+<li>cdi: @ServiceType (@HessianService) was removing the bean from CDI (#3852, rep by Scott Hernandez)</li>
+<li>javac: external javac was busy-looping on the output causing heavy load (#3847, rep by mocospace)</li>
+<li>session: persistent sessions were not properly timed out (#3872, rep by chiefgeek)</li>
+<li>jpa 2.0: add com.caucho.env.jpa.DisabledPersistenceProvider (#3760, rep by Georg Busch Bech)</li>
+<li>jpa 2.0: api and CanDI integration</li>
+<li>ioc: issues with circular references (#3886, rep by Hontvari Jozsef)</li>
+<li>ioc: issues with CDI "diamond" creation (#3863, rep by Wesley Wu)</li>
+<li>jsp: TeamCity JSP related fixes (#3115)</li>
+<li>(2010-02-10) proxy-cache: missing write Lock on cache deallocation (#3885, rep by KovIS)</li>
+<li>logging: Logger.getHandlers() must return empty array instead of null (#3882, rep by Knut Forkalsrud)</li>
+<li>load-balance: setting of isSecure was not properly cleared (rep by Matt Pangaro)</li>
+<li>boot: check for Java 1.6 or later before start (#3862, rep by Tom Howard)</li>
+<li>ejb: MessageDriven updated to understand ConnectionFactoryJndiName</li>
+<li>mod_caucho: backup needs to hash the entire cookie for the new clustering (#3877)</li>
+<li>quercus: remove java_bean and java_lookup Resin dependencies (rep by domdom)</li>
+<li>junit: add com.caucho.junit.ResinJUnitRunner for junit</li>
+<li>embed: add com.caucho.resin.ResinContext for non-server embedding, e.g. testing.</li>
+<li>javaee: refactor @PersistenceContext, @PersistenceUnit, @Resource (#3708, rep by Wesley)</li>
+<li>deploy: git-expand needs to setLastModified of created files to consistent time (#3839, rep by Matt Pangaro)</li>
+<li>watchdog: "status" returns watchdog-pid (#3768, rep by cyttesen)</li>
+<li>watchdog: "status" queries Resin using HMTP/BAM for pid (#3768, rep by cyttesen)</li>
+<li>watchdog: jvm-args are first in command-line to help 'ps' control (#3759, rep by Nathan Bardsley)</li>
+<li>javac: use file.encoding as default encoding (#3719, rep by Shinomiya Nobuaki)</li>
+<li>ejb: update EJBException serialization (#3779, rep by C Yttesen)</li>
+<li>config: ${cluster} regression failure (#3842, rep by Jamie Novak)</li>
+<li>database-pool: connection timing issues with multiple request (#3837, #3779, rep by Bryant Harris)</li>
+</ul>
+</s2>
+
+
+<s2 title="4.0.3 - Jan 4, 2010">
 <ul>
 <li>mod_caucho: post/ack cleanup</li>
 <li>hessian: allow custom URL connector with HessianProxy</li>

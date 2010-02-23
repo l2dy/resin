@@ -880,6 +880,23 @@ cse_read_string(stream_t *s, char *buf, int length)
  * JVM owns it.
  */
 static int
+decode_backup(char *tail)
+{
+  int hash = 37;
+  int ch;
+
+  while ((ch = *tail++) != 0) {
+    hash = 65521 * hash + ch;
+  }
+
+  return hash & 0x7fffffff;
+}
+
+/**
+ * Decodes the first 3 characters of the session to see which
+ * JVM owns it.
+ */
+static int
 decode(char code)
 {
   if ('a' <= code && code <= 'z')
@@ -910,7 +927,7 @@ cse_session_from_string(char *source, char *cookie, int *backup)
     if (match[len] == '=')
       len++;
 
-    *backup = decode(match[len + 1]);
+    *backup = decode_backup(&match[len]);
     
     return decode(match[len]);
   }
@@ -1366,6 +1383,8 @@ select_host(cluster_t *cluster, time_t now)
   int i;
   int best_srun;
   int best_cost = 0x7fffffff;
+  cluster_srun_t *cluster_srun;
+  srun_t *srun;
   
   size = cluster->srun_size;  
   if (size < 1)
@@ -1392,12 +1411,24 @@ select_host(cluster_t *cluster, time_t now)
   }
   
   cluster->round_robin_index = round_robin;
+
+  /* if round-robin server is failing, choose one randomly */
+  for (i = 0; i < size; i++) {
+    cluster_srun = &cluster->srun_list[round_robin];
+    srun = cluster_srun->srun;
+
+    if (! srun->is_fail)
+      break;
+
+    round_robin = (rand() & 0x7fffffff) % size;
+  }
+
   best_srun = round_robin;
 
   for (i = 0; i < size; i++) {
     int index = (i + round_robin) % size;
-    cluster_srun_t *cluster_srun = &cluster->srun_list[index];
-    srun_t *srun = cluster_srun->srun;
+    cluster_srun = &cluster->srun_list[index];
+    srun = cluster_srun->srun;
     /* int tail; */
     int cost;
 
@@ -1512,6 +1543,10 @@ open_session_host(stream_t *s, cluster_t *cluster,
   if (size > 0) {
     session_index = session_index % size;
     backup_index = backup_index % size;
+
+    if (backup_index == session_index) {
+      backup_index = (backup_index + 1) % size;
+    }
   }
 
   for (host = 0; host < size; host++) {

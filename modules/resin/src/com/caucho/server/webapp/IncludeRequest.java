@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -86,11 +86,12 @@ public class IncludeRequest extends CauchoRequestWrapper {
     super(request);
 
     _response = new IncludeResponse(this, response);
+    setResponse(_response);
 
     _invocation = invocation;
   }
 
-  IncludeResponse getResponse()
+  public IncludeResponse getResponse()
   {
     return _response;
   }

@@ -214,10 +214,6 @@ r_http-transport = element http {
   & (r_url-pattern | r_url-regexp)
 }
 
-r_interface = 
-  attribute interface { string }
-  | element interface { string }
-
 r_jdbc-store = element jdbc-store {
   (attribute data-source { r_jndi }
    | element data-source { r_jndi })
@@ -359,7 +355,13 @@ r_jsp-property-group = element jsp-property-group {
 
   element include-prelude { j2ee_path }*,
 
-  element include-coda { j2ee_path }*
+  element include-coda { j2ee_path }*,
+
+  element default-content-type { j2ee_string }?,
+
+  element buffer { j2ee_string }?,
+
+  element error-on-undeclared-namespace { j2ee_boolean }?
 }
 
 r_lazy-init =
@@ -408,6 +410,10 @@ r_http-method-Values =
 r_http-method =
   attribute http-method { r_http-method-Values }
   | element http-method { r_http-method-Values }
+
+r_http-method-omission =
+  attribute http-method-omission { r_http-method-Values }
+  | element http-method-omission { r_http-method-Values }
 
 r_ip-constraint =
   (attribute ip-constraint { string }
@@ -924,8 +930,11 @@ r_session-config = element session-config {
   & (attribute cookie-append-server-index { r_boolean-Type }
      | element cookie-append-server-index { r_boolean-Type })?
 
-  & (attribute cookie-domain { string }
-     | element cookie-domain { string })?
+  & ((attribute cookie-domain { string }
+      | element cookie-domain { string })
+     |
+     (attribute cookie-domain-regexp { string }
+      | element cookie-domain-regexp { string }))?
 
   & (attribute cookie-length { r_int }
      | element cookie-length { r_int })?
@@ -1301,7 +1310,8 @@ r_web-resource-collection = element web-resource-collection {
 
   r_url-pattern*,
 
-  r_http-method*
+  (r_http-method*
+   | r_http-method-omission*)
 }
 
 r_web-service = element web-service {

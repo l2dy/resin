@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import com.caucho.config.annotation.StartupType;
 import com.caucho.config.inject.AnnotatedElementImpl;
 import com.caucho.config.inject.AnnotatedTypeImpl;
 import com.caucho.config.inject.AnnotatedMethodImpl;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ProducesBean;
@@ -78,7 +79,7 @@ public class CustomBeanConfig {
   private InjectManager _beanManager;
 
   private Class _class;
-  private AnnotatedTypeImpl _annotatedType;
+  private AnnotatedTypeImpl<?> _annotatedType;
   private Bean _bean;
   private ConfigType _configType;
 
@@ -115,7 +116,7 @@ public class CustomBeanConfig {
     // clearAnnotations(_annotatedType, DeploymentType.class);
     _annotatedType.addAnnotation(ConfiguredLiteral.create());
 
-    for (AnnotatedMethod method : _annotatedType.getMethods()) {
+    for (AnnotatedMethod<?> method : _annotatedType.getMethods()) {
       // ioc/0614
 
       AnnotatedMethodImpl methodImpl = (AnnotatedMethodImpl) method;
@@ -513,12 +514,12 @@ public class CustomBeanConfig {
     return getClass().getSimpleName() + "[" + _class.getSimpleName() + "]";
   }
 
-  class BeanArg extends Arg {
+  class BeanArg<T> extends Arg<T> {
     private String _loc;
-    private Constructor _ctor;
+    private Constructor<T> _ctor;
     private Type _type;
     private Set<Annotation> _bindings;
-    private Bean _bean;
+    private Bean<T> _bean;
 
     BeanArg(String loc, Type type, Set<Annotation> bindings)
     {
@@ -539,7 +540,7 @@ public class CustomBeanConfig {
       }
     }
 
-    public Object eval(ConfigContext env)
+    public Object eval(CreationalContext<T> env)
     {
       if (_bean == null)
         bind();
@@ -550,19 +551,23 @@ public class CustomBeanConfig {
     }
   }
 
-  static class ProgramArg extends Arg {
-    private ConfigType _type;
+  static class ProgramArg<T> extends Arg<T> {
+    private ConfigType<T> _type;
     private ConfigProgram _program;
 
-    ProgramArg(ConfigType type, ConfigProgram program)
+    ProgramArg(ConfigType<T> type, ConfigProgram program)
     {
       _type = type;
       _program = program;
     }
 
-    public Object eval(ConfigContext env)
+    public Object eval(CreationalContext<T> creationalContext)
     {
-      return _program.configure(_type, env);
+      // ConfigContext env = ConfigContext.create();
+      
+      // env.setCreationalContext(creationalContext);
+      
+      return _program.create(_type, creationalContext);
     }
   }
 }

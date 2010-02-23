@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,22 +29,25 @@
 
 package javax.servlet;
 
+import java.util.Collection;
 import java.util.Set;
 
 public interface ServletRegistration
-  extends Registration
-{
+  extends Registration {
   public Set<String> addMapping(String... urlPatterns);
 
-  public Iterable<String> getMappings();
+  public Collection<String> getMappings();
 
   public String getRunAsRole();
 
   interface Dynamic
-    extends ServletRegistration, Registration.Dynamic
-  {
+    extends ServletRegistration, Registration.Dynamic {
     public void setLoadOnStartup(int loadOnStartup);
+
+    public Set<String> setServletSecurity(ServletSecurityElement securityElement);
+
     public void setMultipartConfig(MultipartConfigElement multipartConfig);
+
     public void setRunAsRole(String roleName);
   }
 }

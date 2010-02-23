@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,15 +42,23 @@ public class ThisExpr extends AbstractVarExpr {
 
   protected final InterpretedClassDef _quercusClass;
   
-  public ThisExpr(Location location, InterpretedClassDef quercusClass)
-  {
-    super(location);
-    _quercusClass = quercusClass;
-  }
-  
   public ThisExpr(InterpretedClassDef quercusClass)
   {
     _quercusClass = quercusClass;
+  }
+
+  public InterpretedClassDef getQuercusClass()
+  {
+    return _quercusClass;
+  }
+  /**
+   * Creates a field ref
+   */
+  @Override
+  public Expr createFieldGet(ExprFactory factory,
+                             StringValue name)
+  {
+    return factory.createThisField(this, name);
   }
 
   /**
@@ -58,20 +66,9 @@ public class ThisExpr extends AbstractVarExpr {
    */
   @Override
   public Expr createFieldGet(ExprFactory factory,
-                             Location location,
-                             StringValue name)
-  {
-    return new ThisFieldExpr(_quercusClass, name);
-  }
-
-  /**
-   * Creates a field ref
-   */
-  public Expr createFieldGet(ExprFactory factory,
-                             Location location,
                              Expr name)
   {
-    return new ThisFieldVarGetExpr(location, name);
+    return factory.createThisField(this, name);
   }
   
   /**
@@ -94,7 +91,7 @@ public class ThisExpr extends AbstractVarExpr {
    * @return the expression value.
    */
   @Override
-    public Value evalArg(Env env, boolean isTop)
+  public Value evalArg(Env env, boolean isTop)
   {
     return env.getThis();
   }
@@ -106,9 +103,10 @@ public class ThisExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public Value evalRef(Env env)
+  @Override
+  public Var evalVar(Env env)
   {
-    return env.getThis();
+    return env.getThis().toVar();
   }
   
   /**
@@ -118,9 +116,27 @@ public class ThisExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public void evalAssign(Env env, Value value)
+  @Override
+  public Value evalAssignValue(Env env, Value value)
   {
     env.error(getLocation(), "can't assign $this");
+    
+    return value;
+  }
+  
+  /**
+   * Evaluates the expression.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  @Override
+  public Value evalAssignRef(Env env, Value value)
+  {
+    env.error(getLocation(), "can't assign $this");
+    
+    return value;
   }
   
   /**

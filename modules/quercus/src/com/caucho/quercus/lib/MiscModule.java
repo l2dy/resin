@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.NotNull;
@@ -185,7 +185,7 @@ public class MiscModule extends AbstractQuercusModule {
       if (log.isLoggable(Level.FINER))
         log.finer("quercus eval: [[" + code + "]]");
 
-      Quercus quercus = env.getQuercus();
+      QuercusContext quercus = env.getQuercus();
 
       QuercusProgram program = quercus.parseCode(code);
 
@@ -505,6 +505,9 @@ public class MiscModule extends AbstractQuercusModule {
   {
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, false);
+      
+      if (segments == null)
+        return BooleanValue.FALSE;
 
       StringValue bb = env.createBinaryBuilder();
 
@@ -524,8 +527,14 @@ public class MiscModule extends AbstractQuercusModule {
    */
   public Value unpack(Env env, String format, StringValue s)
   {
+    if (format == null)
+      return NullValue.NULL;
+    
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, true);
+      
+      if (segments == null)
+        return BooleanValue.FALSE;
 
       ArrayValue array = new ArrayValueImpl();
 
@@ -1046,8 +1055,8 @@ public class MiscModule extends AbstractQuercusModule {
   }
 
   private static ArrayList<PackSegment> parsePackFormat(Env env,
-                                                                                    String format,
-                                                                                    boolean hasName)
+                                                        String format,
+                                                        boolean hasName)
   {
     ArrayList<PackSegment> segments = new ArrayList<PackSegment>();
 
@@ -1161,6 +1170,9 @@ public class MiscModule extends AbstractQuercusModule {
       case '@':
         segments.add(new PositionPackSegment(name, count));
         break;
+      default:
+        env.warning(L.l("invalid format '{0}'", String.valueOf(ch)));
+        return null;
       }
     }
 

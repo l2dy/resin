@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,7 @@ import javax.enterprise.inject.spi.InjectionPoint;
 
 import com.caucho.amber.cfg.*;
 import com.caucho.config.inject.*;
+import com.caucho.env.jpa.ConfigPersistenceUnit;
 
 /**
  * The Entity manager webbeans component
@@ -48,7 +49,7 @@ import com.caucho.config.inject.*;
 public class EntityManagerFactoryComponent extends AbstractBean {
   private final AmberContainer _amber;
   private final PersistenceProvider _provider;
-  private final PersistenceUnitConfig _unit;
+  private final ConfigPersistenceUnit _unit;
   private final String _unitName;
   private EntityManagerFactory _factory;
 
@@ -57,7 +58,7 @@ public class EntityManagerFactoryComponent extends AbstractBean {
   public EntityManagerFactoryComponent(InjectManager beanManager,
 				       AmberContainer amber,
                                        PersistenceProvider provider,
-				       PersistenceUnitConfig unit)
+				       ConfigPersistenceUnit unit)
   {
     super(beanManager);
     

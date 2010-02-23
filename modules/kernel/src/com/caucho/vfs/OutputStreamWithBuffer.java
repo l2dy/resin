@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,10 +32,14 @@ package com.caucho.vfs;
 import java.io.IOException;
 import java.io.OutputStream;
 
+import com.caucho.util.ByteAppendable;
+
 /**
  * An OutputStream with an accessible buffer.
  */
-abstract public class OutputStreamWithBuffer extends OutputStream {
+abstract public class OutputStreamWithBuffer extends OutputStream 
+  implements ByteAppendable {
+
   /**
    * Returns the stream's buffer.
    */

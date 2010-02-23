@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.StringBuilderValue;
 import com.caucho.quercus.env.UnicodeValueImpl;
 import com.caucho.quercus.env.Value;
+import com.caucho.quercus.parser.QuercusParser;
 
 /**
  * Represents a PHP constant expression.
@@ -58,6 +59,111 @@ public class ConstExpr extends Expr {
   public String getVar()
   {
     return _var;
+  }
+  
+  //
+  // expression creation
+  //
+   
+  /**
+   * Creates a class field Foo::bar
+   */
+  @Override
+  public Expr createClassConst(QuercusParser parser, String name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    String className = _var;
+    String specialClassName = getSpecialClassName();
+
+    if ("self".equals(specialClassName)) {
+      className = parser.getSelfClassName();
+      
+      return factory.createClassConst(className, name);
+    }
+    else if ("parent".equals(specialClassName)) {
+      className = parser.getParentClassName();
+      
+      return factory.createClassConst(className, name);
+    }
+    else if ("static".equals(specialClassName)) {
+      return factory.createClassVirtualConst(name);
+    }
+    else {
+      return factory.createClassConst(className, name);
+    }
+  }
+  
+  /**
+   * Creates a class field Foo::$bar
+   */
+  @Override
+  public Expr createClassField(QuercusParser parser, String name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    String className = _var;
+    String specialClassName = getSpecialClassName();
+
+    if ("self".equals(specialClassName)) {
+      className = parser.getSelfClassName();
+      
+      return factory.createClassField(className, name);
+    }
+    else if ("parent".equals(specialClassName)) {
+      className = parser.getParentClassName();
+      
+      return factory.createClassField(className, name);
+    }
+    else if ("static".equals(specialClassName)) {
+      return factory.createClassVirtualField(name);
+    }
+    else {
+      return factory.createClassField(className, name);
+    }
+  }
+  
+  /**
+   * Creates a class field Foo::${bar}
+   */
+  @Override
+  public Expr createClassField(QuercusParser parser, Expr name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    String className = _var;
+    String specialClassName = getSpecialClassName();
+
+    if ("self".equals(specialClassName)) {
+      className = parser.getSelfClassName();
+      
+      return factory.createClassField(className, name);
+    }
+    else if ("parent".equals(specialClassName)) {
+      className = parser.getParentClassName();
+      
+      return factory.createClassField(className, name);
+    }
+    else if ("static".equals(specialClassName)) {
+      return factory.createClassVirtualField(name);
+    }
+    else {
+      return factory.createClassField(className, name);
+    }
+  }
+  
+  private String getSpecialClassName()
+  {
+    String className = _var;
+    
+    int ns = className.lastIndexOf('\\');
+    
+    if (ns >= 0) {
+      return className.substring(ns + 1);
+    }
+    else {
+      return className;
+    }
   }
 
   /**

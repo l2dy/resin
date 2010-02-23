@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,10 +36,12 @@ import com.caucho.bam.Broker;
 import com.caucho.bam.SimpleActorClient;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.GlobalCache;
+import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.git.GitRepository;
@@ -63,14 +65,15 @@ import com.caucho.security.AdminAuthenticator;
 import com.caucho.server.admin.Management;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cache.TempFileManager;
+import com.caucho.server.connection.AbstractProtocol;
 import com.caucho.server.connection.AbstractSelectManager;
 import com.caucho.server.connection.Port;
-import com.caucho.server.connection.ProtocolDispatchServer;
 import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationMatcher;
+import com.caucho.server.dispatch.ProtocolDispatchServer;
 import com.caucho.server.distcache.DistributedCacheManager;
 import com.caucho.server.distcache.FileCacheManager;
 import com.caucho.server.distcache.PersistentStoreConfig;
@@ -84,6 +87,7 @@ import com.caucho.server.host.HostConfig;
 import com.caucho.server.host.HostContainer;
 import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
+import com.caucho.server.http.HttpProtocol;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.repository.Repository;
 import com.caucho.server.repository.FileRepository;
@@ -165,26 +169,12 @@ public class Server extends ProtocolDispatchServer
 
   private boolean _isDevelopmentModeErrorPage;
 
-  // <server> configuration compat
-  private int _acceptListenBacklog = 100;
-
-  private int _acceptThreadMin = 4;
-  private int _acceptThreadMax = 8;
-
-  private int _connectionMax = 1024 * 1024;
-
-  // default is in Port
-  private int _keepaliveMax = -1;
-
-  private long _keepaliveConnectionTimeMax = 10 * 60 * 1000L;
-
-  private boolean _keepaliveSelectEnable = true;
-  private int _keepaliveSelectMax = -1;
-  private long _keepaliveSelectThreadTimeout = 1000;
-
+  // <server> configuration
+  
+  private ClusterPort _clusterPort;
+  private final ArrayList<Port> _ports = new ArrayList<Port>();
+  
   private Management _management;
-
-  private long _suspendTimeMax = 600000L;
 
   private long _memoryFreeMin = 1024 * 1024;
   private long _permGenFreeMin = 1024 * 1024;
@@ -195,6 +185,9 @@ public class Server extends ProtocolDispatchServer
   private int _threadExecutorTaskMax = -1;
   private int _threadIdleMin = -1;
   private int _threadIdleMax = -1;
+  
+  private ContainerProgram _portDefaults
+    = new ContainerProgram();
 
   // <cluster> configuration
 
@@ -271,16 +264,17 @@ public class Server extends ProtocolDispatchServer
 
         _serverIdLocal.set(_selfServer.getId());
         
+        _lifecycle = new Lifecycle(log, toString(), Level.INFO);
+        
         preInit();
       } finally {
         thread.setContextClassLoader(oldLoader);
       }
-    } catch (Throwable e) {
+    } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
 
-      _configException = e;
-    } finally {
-      _lifecycle = new Lifecycle(log, toString(), Level.INFO);
+      // exceptions here must throw to the top because they're non-recoverable
+      throw ConfigException.create(e);
     }
   }
   
@@ -303,7 +297,14 @@ public class Server extends ProtocolDispatchServer
     _brokerManager.addBroker("resin.caucho", _broker);
 
     _serverLinkManager = new ServerAuthManager(this);
-    // Config.setProperty("server", new ServerVar(server), _classLoader);
+    
+    Config.setProperty("server", new ServerVar(_selfServer), _classLoader);
+    Config.setProperty("cluster", new ClusterVar(), _classLoader);
+    
+    _clusterPort = new ClusterPort(_selfServer.getAddress(),
+                                   _selfServer.getPort());
+    
+    _ports.add(_clusterPort);
 
     _selfServer.getServerProgram().configure(this);
   }
@@ -668,84 +669,10 @@ public class Server extends ProtocolDispatchServer
 
     return _adminAuth;
   }
-
+  
   //
-  // Configuration from <server>
+  // <cluster>
   //
-
-  /**
-   * Sets the socket's listen property
-   */
-  public void setAcceptListenBacklog(int backlog)
-  {
-    _acceptListenBacklog = backlog;
-  }
-
-  /**
-   * Gets the socket's listen property
-   */
-  public int getAcceptListenBacklog()
-  {
-    return _acceptListenBacklog;
-  }
-
-  /**
-   * Sets the minimum spare listen.
-   */
-  public void setAcceptThreadMin(int minSpare)
-    throws ConfigException
-  {
-    if (minSpare < 1)
-      throw new ConfigException(L.l("accept-thread-max must be at least 1."));
-
-    _acceptThreadMin = minSpare;
-  }
-
-  /**
-   * Gets the minimum spare listen.
-   */
-  public int getAcceptThreadMin()
-  {
-    return _acceptThreadMin;
-  }
-
-  /**
-   * Sets the maximum spare listen.
-   */
-  public void setAcceptThreadMax(int maxSpare)
-    throws ConfigException
-  {
-    if (maxSpare < 1)
-      throw new ConfigException(L.l("accept-thread-max must be at least 1."));
-
-    _acceptThreadMax = maxSpare;
-  }
-
-  /**
-   * Sets the maximum spare listen.
-   */
-  public int getAcceptThreadMax()
-  {
-    return _acceptThreadMax;
-  }
-
-  /**
-   * Sets the maximum connections per port
-   */
-  public void setConnectionMax(int max)
-  {
-    _connectionMax = max;
-  }
-
-  /**
-   * Returns the port-based connection max.
-   *
-   * @return the connection max.
-   */
-  public int getConnectionMax()
-  {
-    return _connectionMax;
-  }
 
   /**
    * Development mode error pages.
@@ -923,96 +850,6 @@ public class Server extends ProtocolDispatchServer
     return _permGenFreeMin;
   }
 
-  /**
-   * Sets the maximum keepalive
-   */
-  public void setKeepaliveMax(int max)
-  {
-    _keepaliveMax = max;
-  }
-
-  /**
-   * Returns the thread-based keepalive max.
-   *
-   * @return the keepalive max.
-   */
-  public int getKeepaliveMax()
-  {
-    return _keepaliveMax;
-  }
-
-  /**
-   * Sets the keepalive timeout
-   */
-  public void setKeepaliveTimeout(Period period)
-  {
-    _selfServer.setKeepaliveTimeout(period);
-  }
-
-  /**
-   * Sets the keepalive timeout
-   */
-  public long getKeepaliveTimeout()
-  {
-    return _selfServer.getKeepaliveTimeout();
-  }
-
-  /**
-   * Sets the keepalive connection timeout
-   */
-  public void setKeepaliveConnectionTimeMax(Period period)
-  {
-    _keepaliveConnectionTimeMax = period.getPeriod();
-  }
-
-  /**
-   * Sets the keepalive timeout
-   */
-  public long getKeepaliveConnectionTimeMax()
-  {
-    return _keepaliveConnectionTimeMax;
-  }
-
-  /**
-   * Sets the select-based keepalive timeout
-   */
-  public void setKeepaliveSelectEnable(boolean enable)
-  {
-    _keepaliveSelectEnable = enable;
-  }
-
-  /**
-   * Sets the select-based keepalive timeout
-   */
-  public void setKeepaliveSelectMax(int max)
-  {
-    _keepaliveSelectMax = max;
-  }
-
-  /**
-   * Gets the select-based keepalive timeout
-   */
-  public boolean isKeepaliveSelectEnable()
-  {
-    return _keepaliveSelectEnable;
-  }
-
-  /**
-   * Sets the select-based keepalive timeout
-   */
-  public void setKeepaliveSelectThreadTimeout(Period period)
-  {
-    _keepaliveSelectThreadTimeout = period.getPeriod();
-  }
-
-  /**
-   * Sets the select-based keepalive timeout
-   */
-  public long getKeepaliveSelectThreadTimeout()
-  {
-    return _keepaliveSelectThreadTimeout;
-  }
-
   public Management createManagement()
   {
     if (_management == null && _resin != null) {
@@ -1040,43 +877,11 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * Sets the suspend timeout
-   */
-  public void setSuspendTimeMax(Period period)
-  {
-    _suspendTimeMax = period.getPeriod();
-  }
-
-  /**
-   * Sets the suspend timeout
-   */
-  public long getSuspendTimeMax()
-  {
-    return _suspendTimeMax;
-  }
-
-  /**
    * Gets the max wait time for a shutdown.
    */
   public long getShutdownWaitMax()
   {
     return _shutdownWaitMax;
-  }
-
-  /**
-   * Sets the default read/write timeout for the request sockets.
-   */
-  public void setSocketTimeout(Period period)
-  {
-    _selfServer.setSocketTimeout(period);
-  }
-
-  /**
-   * Gets the read timeout for the request sockets.
-   */
-  public long getSocketTimeout()
-  {
-    return _selfServer.getSocketTimeout();
   }
 
   /**
@@ -1113,6 +918,78 @@ public class Server extends ProtocolDispatchServer
   public void setThreadIdleMax(int max)
   {
     _threadIdleMax = max;
+  }
+  
+  //
+  // <server> port configuration
+  //
+  
+  public ClusterPort createClusterPort()
+  {
+   return _clusterPort;
+  }
+  
+  public Port createHttp()
+    throws ConfigException
+  {
+    Port port = new Port();
+    
+    applyPortDefaults(port);
+
+    HttpProtocol protocol = new HttpProtocol();
+    port.setProtocol(protocol);
+
+    _ports.add(port);
+
+    return port;
+  }
+
+  public Port createProtocol()
+  {
+    ProtocolPortConfig port = new ProtocolPortConfig();
+
+    _ports.add(port);
+
+    return port;
+  }
+
+  public void addProtocolPort(Port port)
+  {
+    try {
+      if (! _ports.contains(port))
+        _ports.add(port);
+    
+      if (_lifecycle.isAfterStarting()) {
+        // server/1e00
+        port.bind();
+        port.start();
+      }
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  public void add(ProtocolPort protocolPort)
+  {
+    Port port = new Port();
+
+    AbstractProtocol protocol = protocolPort.getProtocol();
+    port.setProtocol(protocol);
+
+    applyPortDefaults(port);
+
+    protocolPort.getConfigProgram().configure(port);
+
+    addProtocolPort(port);
+  }
+
+  private void applyPortDefaults(Port port)
+  {
+    ConfigProgram program = _selfServer.getPortDefaults();
+    
+    program.configure(port);
+    
+    _portDefaults.configure(port);
   }
 
   //
@@ -1215,6 +1092,14 @@ public class Server extends ProtocolDispatchServer
   public int getUrlLengthMax()
   {
     return _urlLengthMax;
+  }
+
+  /**
+   * Adds a port-default
+   */
+  public void addPortDefault(ConfigProgram program)
+  {
+    _portDefaults.addProgram(program);
   }
 
   /**
@@ -1738,7 +1623,7 @@ public class Server extends ProtocolDispatchServer
    */
   public Collection<Port> getPorts()
   {
-    return Collections.unmodifiableList(_selfServer.getPorts());
+    return Collections.unmodifiableList(_ports);
   }
 
   /**
@@ -1855,9 +1740,10 @@ public class Server extends ProtocolDispatchServer
 
     threadPool.setExecutorTaskMax(_threadExecutorTaskMax);
 
+    /*
     if (_keepaliveSelectEnable) {
       try {
-        Class cl = Class.forName("com.caucho.server.connection.JniSelectManager");
+        Class<?> cl = Class.forName("com.caucho.server.connection.JniSelectManager");
         Method method = cl.getMethod("create", new Class[0]);
 
         initSelectManager((AbstractSelectManager) method.invoke(null, null));
@@ -1874,6 +1760,7 @@ public class Server extends ProtocolDispatchServer
           getSelectManager().setSelectMax(_keepaliveSelectMax);
       }
     }
+    */
   }
 
   /**
@@ -1931,8 +1818,8 @@ public class Server extends ProtocolDispatchServer
             serverType = "server";
 
           log.info(serverType + "     = "
-                   + _selfServer.getClusterPort().getAddress()
-                   + ":" + _selfServer.getClusterPort().getPort()
+                   + _selfServer.getAddress()
+                   + ":" + _selfServer.getPort()
                    + " (" + getCluster().getId()
                    + ":" + getServerId() + ")");
         }
@@ -1947,6 +1834,8 @@ public class Server extends ProtocolDispatchServer
       _lifecycle.toStarting();
 
       startClusterNetwork();
+      
+      startImpl();
 
       if (_resin != null && _resin.getManagement() != null)
         _resin.getManagement().start(this);
@@ -2022,6 +1911,10 @@ public class Server extends ProtocolDispatchServer
     }
   }
 
+  protected void startImpl()
+  {  
+  }
+  
   /**
    * Display activated modules
    */
@@ -2035,6 +1928,7 @@ public class Server extends ProtocolDispatchServer
     // server/2l32
     // getAdminAuthenticator();
 
+    /*
     AbstractSelectManager selectManager = getSelectManager();
 
     if (! _keepaliveSelectEnable
@@ -2042,6 +1936,7 @@ public class Server extends ProtocolDispatchServer
         || ! selectManager.start()) {
       initSelectManager(null);
     }
+    */
 
     startClusterPort();
 
@@ -2082,11 +1977,10 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      Port port = _selfServer.getClusterPort();
+      Port port = _clusterPort;
 
       if (port != null && port.getPort() != 0) {
         log.info("");
-        port.setServer(this);
         port.bind();
         port.start();
         log.info("");
@@ -2095,8 +1989,33 @@ public class Server extends ProtocolDispatchServer
       thread.setContextClassLoader(oldLoader);
     }
   }
+  
+  public void bind(String address, int port, QServerSocket ss)
+  throws Exception
+  {
+    if ("null".equals(address))
+      address = null;
 
-  /**
+    for (int i = 0; i < _ports.size(); i++) {
+      Port serverPort = _ports.get(i);
+
+      if (port != serverPort.getPort())
+        continue;
+
+      if ((address == null) != (serverPort.getAddress() == null))
+        continue;
+      else if (address == null || address.equals(serverPort.getAddress())) {
+        serverPort.bind(ss);
+
+        return;
+      }
+    }
+
+    throw new IllegalStateException(L.l("No matching port for {0}:{1}",
+                                        address, port));
+  }
+
+  /**   
    * Notifications to cluster servers that we've started
    */
   protected void notifyClusterStart()
@@ -2117,16 +2036,14 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      ArrayList<Port> ports = _selfServer.getPorts();
+      ArrayList<Port> ports = _ports;
       if (ports.size() > 0
-          && (ports.get(0) != _selfServer.getClusterPort()
+          && (ports.get(0) != _clusterPort
               || ports.size() > 1)) {
         log.info("");
 
         for (int i = 0; i < ports.size(); i++) {
           Port port = ports.get(i);
-
-          port.setServer(this);
 
           port.bind();
         }
@@ -2149,11 +2066,10 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      ArrayList<Port> ports = _selfServer.getPorts();
+      ArrayList<Port> ports = _ports;
       for (int i = 0; i < ports.size(); i++) {
         Port port = ports.get(i);
 
-        port.setServer(this);
         port.start();
       }
     } finally {
@@ -2170,8 +2086,6 @@ public class Server extends ProtocolDispatchServer
       return;
 
     try {
-      long now = Alarm.getCurrentTime();
-
       if (isModified()) {
         // XXX: message slightly wrong
         String msg = L.l("Resin restarting due to configuration change");
@@ -2181,7 +2095,7 @@ public class Server extends ProtocolDispatchServer
       }
 
       try {
-        ArrayList<Port> ports = _selfServer.getPorts();
+        ArrayList<Port> ports = _ports;
 
         for (int i = 0; i < ports.size(); i++) {
           Port port = ports.get(i);
@@ -2295,25 +2209,25 @@ public class Server extends ProtocolDispatchServer
       uriMatcher = null;
 
     InvocationMatcher matcher = new InvocationMatcher() {
-        public boolean isMatch(Invocation invocation)
-        {
-          if (hostMatcher != null) {
-            hostMatcher.reset(invocation.getHost());
-            if (! hostMatcher.find()) {
-              return false;
-            }
+      public boolean isMatch(Invocation invocation)
+      {
+        if (hostMatcher != null) {
+          hostMatcher.reset(invocation.getHost());
+          if (! hostMatcher.find()) {
+            return false;
           }
-
-          if (uriMatcher != null) {
-            uriMatcher.reset(invocation.getURI());
-            if (! uriMatcher.find()) {
-              return false;
-            }
-          }
-
-          return true;
         }
-      };
+
+        if (uriMatcher != null) {
+          uriMatcher.reset(invocation.getURI());
+          if (! uriMatcher.find()) {
+            return false;
+          }
+        }
+
+        return true;
+      }
+    };
 
     invalidateMatchingInvocations(matcher);
   }
@@ -2441,12 +2355,12 @@ public class Server extends ProtocolDispatchServer
       if (getSelectManager() != null)
         getSelectManager().stop();
 
-      ArrayList<Port> ports = _selfServer.getPorts();
+      ArrayList<Port> ports = _ports;
       for (int i = 0; i < ports.size(); i++) {
         Port port = ports.get(i);
 
         try {
-          if (port != _selfServer.getClusterPort())
+          if (port != _clusterPort)
             port.close();
         } catch (Throwable e) {
           log.log(Level.WARNING, e.toString(), e);
@@ -2468,8 +2382,8 @@ public class Server extends ProtocolDispatchServer
       }
 
       try {
-        if (_selfServer.getClusterPort() != null)
-          _selfServer.getClusterPort().close();
+        if (_clusterPort != null)
+          _clusterPort.close();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }
@@ -2578,6 +2492,138 @@ public class Server extends ProtocolDispatchServer
     return (getClass().getSimpleName()
             + "[id=" + getServerId()
             + ",cluster=" + _selfServer.getCluster().getId() + "]");
+  }
+
+  /**
+   * EL variables
+   */
+  public class ClusterVar {
+    /**
+     * Returns the resin.id
+     */
+    public String getId()
+    {
+      return getCluster().getId();
+    }
+
+    /**
+     * Returns the root directory.
+     *
+     * @return root directory
+     */
+    public Path getRoot()
+    {
+      return getRootDirectory();
+    }
+
+    /**
+     * Returns the root directory.
+     *
+     * @return root directory
+     */
+    public Path getRootDir()
+    {
+      return getRootDirectory();
+    }
+
+    /**
+     * Returns the root directory.
+     *
+     * @return root directory
+     */
+    public Path getRootDirectory()
+    {
+      return Server.this.getRootDirectory();
+    }
+  }
+
+  public class ServerVar {
+    private final ClusterServer _server;
+
+    public ServerVar(ClusterServer server)
+    {
+      _server = server;
+    }
+
+    public String getId()
+    {
+      return _server.getId();
+    }
+
+    private int getPort(Port port)
+    {
+      if (port == null)
+        return 0;
+
+      return port.getPort();
+    }
+
+    private String getAddress(Port port)
+    {
+      if (port == null)
+        return null;
+
+      String address = port.getAddress();
+
+      if (address == null || address.length() == 0)
+        address = "INADDR_ANY";
+
+      return address;
+    }
+
+    private Port getFirstPort(String protocol, boolean isSSL)
+    {
+      if (_ports == null)
+        return null;
+
+      for (Port port : _ports) {
+        if (protocol.equals(port.getProtocolName()) && (port.isSSL() == isSSL))
+          return port;
+      }
+
+      return null;
+    }
+
+    public String getAddress()
+    {
+      return _selfServer.getAddress();
+    }
+
+    public int getPort()
+    {
+      return _selfServer.getPort();
+    }
+
+    public String getHttpAddress()
+    {
+      return getAddress(getFirstPort("http", false));
+    }
+
+    public int getHttpPort()
+    {
+      return getPort(getFirstPort("http", false));
+    }
+
+
+    public String getHttpsAddress()
+    {
+      return getAddress(getFirstPort("http", true));
+    }
+
+    public int getHttpsPort()
+    {
+      return getPort(getFirstPort("http", true));
+    }
+
+    /**
+     * @deprecated backwards compat.
+     */
+    public Path getRoot()
+    {
+      Resin resin =  Resin.getLocal();
+
+      return resin == null ? Vfs.getPwd() : resin.getRootDirectory();
+    }
   }
 
   public static class SelectManagerCompat {

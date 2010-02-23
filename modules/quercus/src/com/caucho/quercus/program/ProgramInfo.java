@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.program;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.expr.VarInfo;
 
 import java.util.ArrayList;
@@ -41,10 +41,10 @@ import java.util.HashMap;
  */
 public class ProgramInfo
 {
-  private final Quercus _quercus;
+  private final QuercusContext _quercus;
   private boolean _hasNonPublicMethods;
   
-  public ProgramInfo(Quercus quercus)
+  public ProgramInfo(QuercusContext quercus)
   {
     _quercus = quercus;
   }
@@ -52,7 +52,7 @@ public class ProgramInfo
   /**
    * Returns the owning quercus.
    */
-  public Quercus getPhp()
+  public QuercusContext getPhp()
   {
     return _quercus;
   }

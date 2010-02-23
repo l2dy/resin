@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -173,7 +173,7 @@ public class TransactionManagerImpl implements TransactionManager,
    * Returns the transaction for the current thread.
    */
   @Override
-  public Transaction getTransaction()
+  public TransactionImpl getTransaction()
   {
     TransactionImpl trans = _threadTransaction.get();
 

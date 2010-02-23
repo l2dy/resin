@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,8 @@ package com.caucho.server.dispatch;
 
 import com.caucho.config.*;
 import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.ConfigContext;
+import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.annotation.DisableConfig;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
@@ -50,6 +52,7 @@ import com.caucho.servlet.comet.CometServlet;
 import com.caucho.util.*;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.faces.*;
@@ -70,6 +73,8 @@ import java.util.logging.Logger;
 public class ServletConfigImpl
   implements ServletConfig, ServletRegistration.Dynamic, AlarmListener
 {
+  public enum FRAGMENT_MODE {IN_FRAGMENT, IN_WEBXML};
+
   static L10N L = new L10N(ServletConfigImpl.class);
   protected static final Logger log
     = Logger.getLogger(ServletConfigImpl.class.getName());
@@ -125,11 +130,18 @@ public class ServletConfigImpl
 
   private Principal _runAs;
 
+  private FRAGMENT_MODE _fragmentMode = FRAGMENT_MODE.IN_WEBXML;
+
   /**
    * Creates a new servlet configuration object.
    */
   public ServletConfigImpl()
   {
+  }
+
+  public ServletConfigImpl(FRAGMENT_MODE fragmentMode)
+  {
+    _fragmentMode = fragmentMode;
   }
 
   /**
@@ -198,12 +210,32 @@ public class ServletConfigImpl
     return true;
   }
 
+  public Set<String> setServletSecurity(ServletSecurityElement securityElement)
+  {
+    _servletManager.addSecurityElement(getServletClass(), securityElement);
+    
+    return new HashSet<String>();
+  }
+
+  public ServletSecurityElement getSecurityElement()
+  {
+    // server/10ds - servlets are allowed to be lazy loaded. It's not an
+    // error in this case for a class not found.
+    try {
+      return _servletManager.getSecurityElement(getServletClass());
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+      
+      return null;
+    }
+  }
+
   public void setMultipartConfig(MultipartConfigElement multipartConfig)
   {
     if (multipartConfig == null)
       throw new IllegalArgumentException();
 
-    if (!_webApp.isInitializing())
+    if (! _webApp.isInitializing())
       throw new IllegalStateException();
 
     _multipartConfigElement = multipartConfig;
@@ -226,14 +258,32 @@ public class ServletConfigImpl
     return _multipartConfigElement;
   }
 
+  /**
+   * Maps or exists if any of the patterns in urlPatterns already map to a
+   * different servlet 
+   * @param urlPatterns
+   * @return a Set of patterns previously mapped to a different servlet
+   */
   public Set<String> addMapping(String... urlPatterns)
   {
     if (! _webApp.isInitializing())
       throw new IllegalStateException();
 
     try {
+      Set<String> result = new HashSet<String>();
+
+      for (String urlPattern : urlPatterns) {
+        String servletName = _servletMapper.getServletName(urlPattern);
+
+        if (! _servletName.equals(servletName) && servletName != null)
+          result.add(urlPattern);
+      }
+
+      if (result.size() > 0)
+        return result;
 
       ServletMapping mapping = _webApp.createServletMapping();
+      mapping.setIfAbsent(true);
 
       mapping.setServletName(getServletName());
 
@@ -243,20 +293,18 @@ public class ServletConfigImpl
 
       _webApp.addServletMapping(mapping);
 
-      Set<String> patterns = _servletMapper.getUrlPatterns(_servletName);
-
-      return Collections.unmodifiableSet(new HashSet<String>(patterns));
+      return Collections.unmodifiableSet(result);
     }
     catch (ServletException e) {
       throw new RuntimeException(e.getMessage(), e);
     }
   }
 
-  public Iterable<String> getMappings()
+  public Collection<String> getMappings()
   {
     Set<String> patterns = _servletMapper.getUrlPatterns(_servletName);
 
-    return Collections.unmodifiableSet(new HashSet<String>(patterns));
+    return Collections.unmodifiableSet(new LinkedHashSet<String>(patterns));
   }
 
   public Set<String> setInitParameters(Map<String, String> initParameters)
@@ -345,7 +393,7 @@ public class ServletConfigImpl
     _servletClassName = servletClassName;
 
     // JSF is special
-    if ("javax.faces.webapp.FacesServlet".equals(_servletClassName)) {
+    if (isFacesServlet()) {
       // ioc/0566
 
       if (_loadOnStartup < 0)
@@ -357,6 +405,11 @@ public class ServletConfigImpl
 
     InjectManager beanManager = InjectManager.create();
     beanManager.addConfiguredBean(servletClassName);
+  }
+  
+  private boolean isFacesServlet()
+  {
+    return "javax.faces.webapp.FacesServlet".equals(_servletClassName);
   }
 
   @DisableConfig
@@ -722,6 +775,16 @@ public class ServletConfigImpl
     }
   }
 
+  public void setInFragmentMode()
+  {
+    _fragmentMode = FRAGMENT_MODE.IN_FRAGMENT;
+  }
+
+  public boolean isInFragmentMode()
+  {
+    return _fragmentMode == FRAGMENT_MODE.IN_FRAGMENT;
+  }
+
   /**
    * Returns the servlet.
    */
@@ -730,7 +793,8 @@ public class ServletConfigImpl
     return _servlet;
   }
 
-  public void merge(ServletConfigImpl config) {
+  public void merge(ServletConfigImpl config) 
+  {
     if (_loadOnStartup == Integer.MIN_VALUE)
       _loadOnStartup = config._loadOnStartup;
 
@@ -1049,17 +1113,25 @@ public class ServletConfigImpl
     // server/102e
     if (_servlet != null && ! isNew)
       return _servlet;
-    else if (_singletonServlet != null)
+    else if (_singletonServlet != null) {
+      // server/1p19
+      _servlet = _singletonServlet;
+
+      _singletonServlet.init(this);
+
       return _singletonServlet;
+    }
 
     Object servlet = null;
 
     if (Alarm.getCurrentTime() < _nextInitTime)
       throw _initException;
 
+    /*
     if ("javax.faces.webapp.FacesServlet".equals(_servletClassName)) {
       addFacesResolvers();
     }
+    */
 
     try {
       synchronized (this) {
@@ -1109,6 +1181,7 @@ public class ServletConfigImpl
     }
   }
 
+  /*
   private void addFacesResolvers()
   {
     ApplicationFactory appFactory = (ApplicationFactory)
@@ -1124,6 +1197,7 @@ public class ServletConfigImpl
       }
     }
   }
+  */
 
   Servlet createProtocolServlet()
     throws ServletException
@@ -1157,11 +1231,13 @@ public class ServletConfigImpl
     throws Exception
   {
     if (_bean != null) {
-      ConfigContext env = ConfigContext.create();
+      // XXX: need to ask manager?
+      CreationalContext env = CreationalContextImpl.create();
+      
       return _bean.create(env);
     }
 
-    Class servletClass = getServletClass();
+    Class<?> servletClass = getServletClass();
 
     Object servlet;
     if (_jspFile != null) {
@@ -1177,7 +1253,8 @@ public class ServletConfigImpl
 
       _comp = inject.createInjectionTarget(servletClass);
 
-      ConfigContext env = ConfigContext.create();
+      CreationalContext env = CreationalContextImpl.create();
+      
       // server/1b40
       servlet = _comp.produce(env);
       _comp.inject(servlet, env);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -64,7 +64,7 @@ import javax.servlet.http.HttpServletResponse;
  * Handles a new request from an HTTP connection.
  */
 public class HttpRequest extends AbstractHttpRequest
-  implements TcpServerRequest
+  implements ProtocolConnection
 {
   private static final Logger log
     = Logger.getLogger(HttpRequest.class.getName());
@@ -128,7 +128,7 @@ public class HttpRequest extends AbstractHttpRequest
    *
    * @param server the owning server.
    */
-  public HttpRequest(Server server, Connection conn)
+  public HttpRequest(Server server, TransportConnection conn)
   {
     super(server, conn);
 
@@ -619,7 +619,7 @@ public class HttpRequest extends AbstractHttpRequest
       X509Certificate []certs = socket.getClientCertificates();
       if (certs != null && certs.length > 0) {
         request.setAttribute("javax.servlet.request.X509Certificate",
-                             certs[0]);
+                             certs); //spec mandates array
         request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
                              certs[0].getSubjectDN());
       }
@@ -1229,7 +1229,7 @@ public class HttpRequest extends AbstractHttpRequest
     return context;
   }
 
-  public final void protocolCloseEvent()
+  public final void onCloseConnection()
   {
   }
 

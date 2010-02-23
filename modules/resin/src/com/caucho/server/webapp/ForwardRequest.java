@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -84,6 +84,7 @@ public class ForwardRequest extends CauchoRequestWrapper {
     super(request);
 
     _response = new ForwardResponse(this, response);
+    setResponse(_response);
 
     _invocation = invocation;
   }
@@ -110,7 +111,7 @@ public class ForwardRequest extends CauchoRequestWrapper {
       _response.finishRequest();
   }
 
-  ForwardResponse getResponse()
+  public ForwardResponse getResponse()
   {
     return _response;
   }

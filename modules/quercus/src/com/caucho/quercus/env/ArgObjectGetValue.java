@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -58,10 +58,10 @@ public class ArgObjectGetValue extends Value {
    * Converts to a ref var.
    */
   @Override
-  public Var toRefVar()
+  public Var toLocalVarDeclAsRef()
   {
     // quercus/3d2t
-    return _obj.getRef(_index).toRefVar();
+    return _obj.getVar(_index).toLocalVarDeclAsRef();
   }
 
   /**

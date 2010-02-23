@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -28,7 +28,6 @@
 
 package com.caucho.ejb.session;
 
-import com.caucho.ejb.AbstractEJBObject;
 import com.caucho.ejb.protocol.ObjectSkeletonWrapper;
 import com.caucho.ejb.server.AbstractServer;
 
@@ -41,7 +40,7 @@ import javax.ejb.*;
 /**
  * Abstract base class for a stateful session object
  */
-abstract public class StatefulObject extends AbstractEJBObject
+abstract public class StatefulObject
   implements Serializable
 {
   private String _primaryKey;
@@ -57,13 +56,12 @@ abstract public class StatefulObject extends AbstractEJBObject
   /**
    * Returns the server which owns this bean.
    */
-  @Override
   public AbstractServer __caucho_getServer()
   {
     return getStatefulServer();
   }
 
-  public abstract StatefulServer getStatefulServer();
+  public abstract StatefulManager getStatefulServer();
 
   public String __caucho_getId()
   {
@@ -86,57 +84,13 @@ abstract public class StatefulObject extends AbstractEJBObject
   }
 
   /**
-   * Returns the EJBHome
-   */
-  public EJBHome getEJBHome()
-  {
-    return getServer().getEJBHome();
-  }
-
-  /**
-   * Returns the EJBLocalHome
-   */
-  public EJBLocalHome getEJBLocalHome()
-  {
-    return getServer().getEJBLocalHome();
-  }
-
-  /**
-   * Returns the handle.
-   */
-  public Handle getHandle()
-  {
-    return getServer().getHandleEncoder().createHandle(__caucho_getId());
-  }
-
-  /**
-   * Returns true if the two objects are identical.
-   */
-  public boolean isIdentical(EJBObject obj) throws RemoteException
-  {
-    return getHandle().equals(obj.getHandle());
-  }
-
-  /**
-   * Returns true if the two objects are identical.
-   */
-  public boolean isIdentical(EJBLocalObject obj)
-  {
-    return this == obj;
-  }
-
-  public void remove()
-    throws javax.ejb.RemoveException
-  {
-  }
-
-  /**
    * Serialize the HomeSkeletonWrapper in place of this object.
    *
    * @return the matching skeleton wrapper.
    */
   public Object writeReplace() throws ObjectStreamException
   {
-    return new ObjectSkeletonWrapper(getHandle());
+    throw new UnsupportedOperationException(getClass().getName());
+    // return new ObjectSkeletonWrapper(getHandle());
   }
 }

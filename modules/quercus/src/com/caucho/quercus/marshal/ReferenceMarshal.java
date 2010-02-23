@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,6 +51,12 @@ public class ReferenceMarshal extends Marshal
   {
     // quercus/0d1k
     return expr.evalRef(env);
+  }
+
+  @Override
+  public Object marshal(Env env, Value value, Class argClass)
+  {
+    return value.toLocalVarDeclAsRef();
   }
 
   public Value unmarshal(Env env, Object value)

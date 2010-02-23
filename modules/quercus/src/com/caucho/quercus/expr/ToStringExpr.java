@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,7 +38,7 @@ import com.caucho.quercus.env.Value;
 /**
  * Converts to an string
  */
-public class ToStringExpr extends UnaryExpr {
+public class ToStringExpr extends AbstractUnaryExpr {
   public ToStringExpr(Location location, Expr expr)
   {
     super(location, expr);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,10 +29,15 @@
 
 package com.caucho.quercus.expr;
 
+import java.io.IOException;
+import java.util.ArrayList;
+
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Var;
+import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.program.InterpretedClassDef;
 import com.caucho.util.L10N;
 
@@ -42,25 +47,13 @@ import com.caucho.util.L10N;
 public class ThisFieldExpr extends AbstractVarExpr {
   private static final L10N L = new L10N(ThisFieldExpr.class);
 
-  protected final InterpretedClassDef _quercusClass;
+  protected final ThisExpr _qThis;
   
   protected final StringValue _name;
 
-  public ThisFieldExpr(Location location,
-		       InterpretedClassDef quercusClass,
-		       StringValue name)
+  public ThisFieldExpr(ThisExpr qThis, StringValue name)
   {
-    super(location);
-    _quercusClass = quercusClass;
-    
-    _name = name;
-  }
-
-  public ThisFieldExpr(InterpretedClassDef quercusClass,
-		       StringValue name)
-  {
-    _quercusClass = quercusClass;
-    
+    _qThis = qThis;
     _name = name;
   }
 
@@ -68,6 +61,24 @@ public class ThisFieldExpr extends AbstractVarExpr {
   {
     return env.error(getLocation(),
                      "Cannot use '$this' when not in object context.");
+  }
+  
+  //
+  // function call creation
+  //
+
+  /**
+   * Creates a function call expression
+   */
+  @Override
+  public Expr createCall(QuercusParser parser,
+                         Location location,
+                         ArrayList<Expr> args)
+    throws IOException
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createThisMethod(location, _qThis, _name.toString(), args);
   }
 
   /**
@@ -111,14 +122,18 @@ public class ThisFieldExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public Value evalRef(Env env)
+  @Override
+  public Var evalVar(Env env)
   {
     Value obj = env.getThis();
 
-    if (obj.isNull())
-      return cannotUseThisError(env);
+    if (obj.isNull()) {
+      cannotUseThisError(env);
+      
+      return new Var();
+    }
     
-    return obj.getThisFieldRef(env, _name);
+    return obj.getThisFieldVar(env, _name);
   }
   
   /**
@@ -146,7 +161,8 @@ public class ThisFieldExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public void evalAssign(Env env, Value value)
+  @Override
+  public Value evalAssignValue(Env env, Value value)
   {
     Value obj = env.getThis();
 
@@ -154,22 +170,45 @@ public class ThisFieldExpr extends AbstractVarExpr {
       cannotUseThisError(env);
     
     obj.putThisField(env, _name, value);
+    
+    return value;
   }
   
   /**
-   * Evaluates as an array index assign ($a[index] = value).
+   * Evaluates the expression.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
    */
-  public void evalArrayAssign(Env env, Value index, Value value)
+  @Override
+  public Value evalAssignRef(Env env, Value value)
   {
     Value obj = env.getThis();
 
     if (obj.isNull())
       cannotUseThisError(env);
     
-    Value field = obj.getThisField(env, _name);
-    Value result = field.append(index, value);
+    obj.putThisField(env, _name, value);
     
-    obj.putThisField(env, _name, result);
+    return value;
+  }
+  
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   */
+  @Override
+  public Value evalArrayAssign(Env env, Value index, Value value)
+  {
+    Value obj = env.getThis();
+
+    if (obj.isNull())
+      cannotUseThisError(env);
+    
+    Value fieldVar = obj.getThisFieldVar(env, _name);
+
+    // php/03mm
+    return fieldVar.put(index, value);
   }
 
   /**

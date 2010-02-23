@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,10 +47,10 @@ import java.util.logging.Logger;
 import javax.annotation.PostConstruct;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
 import com.caucho.management.server.PortMXBean;
@@ -91,9 +91,12 @@ public class Port extends TaskWorker
     = new FreeList<TcpConnection>(32);
 
   // The owning server
-  private ProtocolDispatchServer _server;
+  // private ProtocolDispatchServer _server;
 
   private ThreadPool _threadPool = ThreadPool.getThreadPool();
+
+  private ClassLoader _classLoader
+    = Thread.currentThread().getContextClassLoader();
 
   // The id
   private String _serverId = "";
@@ -106,6 +109,8 @@ public class Port extends TaskWorker
   // URL for debugging
   private String _url;
 
+  private String _debugId;
+
   // The protocol
   private Protocol _protocol;
 
@@ -117,25 +122,26 @@ public class Port extends TaskWorker
 
   private InetAddress _socketAddress;
 
-  private int _idleThreadMin = DEFAULT;
-  private int _idleThreadMax = DEFAULT;
+  private int _idleThreadMin = 2;
+  private int _idleThreadMax = 8;
 
-  private int _acceptListenBacklog = DEFAULT;
+  private int _acceptListenBacklog = 100;
 
-  private int _connectionMax = DEFAULT;
+  private int _connectionMax = 1024 * 1024;
 
-  private int _keepaliveMax = DEFAULT;
+  private int _keepaliveMax = -1;
 
-  private long _keepaliveTimeMax = DEFAULT;
-  private long _keepaliveTimeout = DEFAULT;
-  private long _keepaliveSelectThreadTimeout = DEFAULT;
+  private long _keepaliveTimeMax = 10 * 60 * 1000L;
+  private long _keepaliveTimeout = 120 * 1000L;
+  private boolean _isKeepaliveSelectEnable = true;
+  private long _keepaliveSelectThreadTimeout = 1000;
   private int _minSpareConnection = 16;
 
   // default timeout
-  private long _socketTimeout = DEFAULT;
+  private long _socketTimeout = 120 * 1000L;
 
   private long _suspendReaperTimeout = 60000L;
-  private long _suspendTimeMax = DEFAULT;
+  private long _suspendTimeMax = 600 * 1000L;
   // after for 120s start checking for EOF on comet requests
   private long _suspendCloseTimeMax = 120 * 1000L;
 
@@ -154,6 +160,7 @@ public class Port extends TaskWorker
 
   // the selection manager
   private AbstractSelectManager _selectManager;
+  private boolean _isSelectManagerEnabled;
 
   // active set of all connections
   private Set<TcpConnection> _activeConnectionSet
@@ -183,7 +190,7 @@ public class Port extends TaskWorker
   private volatile long _lifetimeWriteBytes;
 
   // total keepalive
-  private AtomicInteger _keepaliveCount = new AtomicInteger();
+  private AtomicInteger _keepaliveAllocateCount = new AtomicInteger();
   // thread-based
   private AtomicInteger _keepaliveThreadCount = new AtomicInteger();
   // True if the port has been bound
@@ -195,106 +202,29 @@ public class Port extends TaskWorker
 
   public Port()
   {
-  }
-
-  public Port(ClusterServer server)
-  {
-  }
-
-  /**
-   * Sets the containing server.
-   */
-  public void setParent(ProtocolDispatchServer parent)
-  {
-    setServer(parent);
-  }
-
-  /**
-   * Sets the server.
-   */
-  public void setServer(ProtocolDispatchServer protocolServer)
-  {
-    _server = protocolServer;
-
-    if (_protocol != null)
-      _protocol.setServer(protocolServer);
-
-    if (protocolServer instanceof Server) {
-      Server server = (Server) protocolServer;
-
-      if (_idleThreadMax == DEFAULT)
-        _idleThreadMax = server.getAcceptThreadMax();
-
-      if (_idleThreadMin == DEFAULT)
-        _idleThreadMin = server.getAcceptThreadMin();
-
-      if (_acceptListenBacklog == DEFAULT)
-        _acceptListenBacklog = server.getAcceptListenBacklog();
-
-      if (_connectionMax == DEFAULT)
-        _connectionMax = server.getConnectionMax();
-
-      if (_keepaliveMax == DEFAULT)
-        _keepaliveMax = server.getKeepaliveMax();
-
-      if (_keepaliveTimeMax == DEFAULT)
-        _keepaliveTimeMax = server.getKeepaliveConnectionTimeMax();
-
-      if (_keepaliveTimeout == DEFAULT)
-        _keepaliveTimeout = server.getKeepaliveTimeout();
-
-      if (_keepaliveSelectThreadTimeout == DEFAULT) {
-        _keepaliveSelectThreadTimeout
-          = server.getKeepaliveSelectThreadTimeout();
-      }
-
-      if (_suspendTimeMax == DEFAULT)
-        _suspendTimeMax = server.getSuspendTimeMax();
-
-      if (_socketTimeout == DEFAULT)
-        _socketTimeout = server.getSocketTimeout();
+    if ("64".equals(System.getProperty("sun.arch.data.model"))) {
+      // on 64-bit machines we can use more threads before parking in nio
+      _keepaliveSelectThreadTimeout = 60000;
     }
-  }
-
-  /**
-   * Gets the server.
-   */
-  public ProtocolDispatchServer getServer()
-  {
-    return _server;
   }
 
   /**
    * Sets the id.
    */
+  // exists only for QA regressions
+  @Deprecated
   public void setId(String id)
   {
-    _serverId = id;
   }
 
-  /**
-   * Sets the server id.
-   */
-  public void setServerId(String id)
+  public String getDebugId()
   {
-    _serverId = id;
+    return _debugId;
   }
 
-  /**
-   * Gets the server id.
-   */
-  public String getServerId()
+  public ClassLoader getClassLoader()
   {
-    return _serverId;
-  }
-
-  public void setType(Class<?> cl)
-  {
-    setClass(cl);
-  }
-
-  public void setClass(Class<?> cl)
-  {
+    return _classLoader;
   }
 
   public PortMXBean getAdmin()
@@ -314,11 +244,14 @@ public class Port extends TaskWorker
     */
 
     _protocol = protocol;
-    _protocol.setServer(_server);
+
+    // protocol.setPort(this);
+    // _protocol.setServer(_server);
   }
 
   /**
-   * Set protocol.
+   * Returns the protocol handler responsible for generating protocol-specific
+   * ProtocolConnections.
    */
   public Protocol getProtocol()
   {
@@ -339,6 +272,7 @@ public class Port extends TaskWorker
   /**
    * Sets the address
    */
+  @Configurable
   public void setAddress(String address)
     throws UnknownHostException
   {
@@ -346,8 +280,17 @@ public class Port extends TaskWorker
       address = null;
 
     _address = address;
+
     if (address != null)
       _socketAddress = InetAddress.getByName(address);
+  }
+
+  /**
+   * Gets the IP address
+   */
+  public String getAddress()
+  {
+    return _address;
   }
 
   /**
@@ -360,16 +303,9 @@ public class Port extends TaskWorker
   }
 
   /**
-   * Gets the IP address
-   */
-  public String getAddress()
-  {
-    return _address;
-  }
-
-  /**
    * Sets the port.
    */
+  @Configurable
   public void setPort(int port)
   {
     _port = port;
@@ -397,6 +333,7 @@ public class Port extends TaskWorker
   /**
    * Sets the virtual host for IP-based virtual host.
    */
+  @Configurable
   public void setVirtualHost(String host)
   {
     _virtualHost = host;
@@ -421,6 +358,7 @@ public class Port extends TaskWorker
   /**
    * Sets the SSL factory
    */
+  @Configurable
   public SSLFactory createOpenssl()
     throws ConfigException
   {
@@ -478,6 +416,7 @@ public class Port extends TaskWorker
   /**
    * Sets true for secure
    */
+  @Configurable
   public void setSecure(boolean isSecure)
   {
     _isSecure = isSecure;
@@ -506,6 +445,7 @@ public class Port extends TaskWorker
   /**
    * Sets the minimum spare listen.
    */
+  @Configurable
   public void setAcceptThreadMin(int minSpare)
     throws ConfigException
   {
@@ -526,6 +466,7 @@ public class Port extends TaskWorker
   /**
    * Sets the minimum spare listen.
    */
+  @Configurable
   public void setAcceptThreadMax(int maxSpare)
     throws ConfigException
   {
@@ -546,6 +487,7 @@ public class Port extends TaskWorker
   /**
    * Sets the operating system listen backlog
    */
+  @Configurable
   public void setAcceptListenBacklog(int listen)
     throws ConfigException
   {
@@ -566,6 +508,7 @@ public class Port extends TaskWorker
   /**
    * Sets the connection max.
    */
+  @Configurable
   public void setConnectionMax(int max)
   {
     _connectionMax = max;
@@ -582,14 +525,17 @@ public class Port extends TaskWorker
   /**
    * Returns true for ignore-client-disconnect.
    */
+  /*
   public boolean isIgnoreClientDisconnect()
   {
     return _server.isIgnoreClientDisconnect();
   }
+  */
 
   /**
    * Sets the read/write timeout for the accepted sockets.
    */
+  @Configurable
   public void setSocketTimeout(Period period)
   {
     _socketTimeout = period.getPeriod();
@@ -600,10 +546,12 @@ public class Port extends TaskWorker
    *
    * @deprecated
    */
+  /*
   public void setReadTimeout(Period period)
   {
     setSocketTimeout(period);
   }
+  */
 
   /**
    * Gets the read timeout for the accepted sockets.
@@ -624,6 +572,7 @@ public class Port extends TaskWorker
   /**
    * Sets the tcp-no-delay property
    */
+  @Configurable
   public void setTcpNoDelay(boolean tcpNoDelay)
   {
     _tcpNoDelay = tcpNoDelay;
@@ -632,6 +581,7 @@ public class Port extends TaskWorker
   /**
    * Configures the throttle.
    */
+  @Configurable
   public void setThrottleConcurrentMax(int max)
   {
     Throttle throttle = createThrottle();
@@ -656,9 +606,11 @@ public class Port extends TaskWorker
    *
    * @deprecated
    */
+  /*
   public void setWriteTimeout(Period period)
   {
   }
+  */
 
   private Throttle createThrottle()
   {
@@ -681,108 +633,24 @@ public class Port extends TaskWorker
   /**
    * Sets the minimum spare listen.
    */
+  /*
   public void setMinSpareListen(int minSpare)
     throws ConfigException
   {
     setAcceptThreadMin(minSpare);
   }
+  */
 
   /**
    * Sets the maximum spare listen.
    */
+  /*
   public void setMaxSpareListen(int maxSpare)
     throws ConfigException
   {
     setAcceptThreadMax(maxSpare);
   }
-
-  //
-  // statistics
-  //
-
-  /**
-   * Returns the number of connections
-   */
-  public int getConnectionCount()
-  {
-    return _activeConnectionCount.get();
-  }
-
-  /**
-   * Returns the number of comet connections.
-   */
-  public int getCometIdleCount()
-  {
-    return _suspendConnectionSet.size();
-  }
-
-  /**
-   * Returns the number of duplex connections.
-   */
-  public int getDuplexCount()
-  {
-    return 0;
-  }
-
-  void addLifetimeRequestCount()
-  {
-    _lifetimeRequestCount++;
-  }
-
-  public long getLifetimeRequestCount()
-  {
-    return _lifetimeRequestCount;
-  }
-
-  void addLifetimeKeepaliveCount()
-  {
-    _lifetimeKeepaliveCount++;
-  }
-
-  public long getLifetimeKeepaliveCount()
-  {
-    return _lifetimeKeepaliveCount;
-  }
-
-  void addLifetimeClientDisconnectCount()
-  {
-    _lifetimeClientDisconnectCount++;
-  }
-
-  public long getLifetimeClientDisconnectCount()
-  {
-    return _lifetimeClientDisconnectCount;
-  }
-
-  void addLifetimeRequestTime(long time)
-  {
-    _lifetimeRequestTime += time;
-  }
-
-  public long getLifetimeRequestTime()
-  {
-    return _lifetimeRequestTime;
-  }
-
-  void addLifetimeReadBytes(long time)
-  {
-    _lifetimeReadBytes += time;
-  }
-
-  public long getLifetimeReadBytes()
-  {
-    return _lifetimeReadBytes;
-  }
-
-  void addLifetimeWriteBytes(long time)
-  {
-    _lifetimeWriteBytes += time;
-  }
-
-  public long getLifetimeWriteBytes()
-  {
-    return _lifetimeWriteBytes;
-  }
+  */
 
   /**
    * Sets the keepalive max.
@@ -839,9 +707,34 @@ public class Port extends TaskWorker
     return _keepaliveTimeout;
   }
 
+  public boolean isKeepaliveSelectEnabled()
+  {
+    return _isSelectManagerEnabled;
+  }
+
+  public void setKeepaliveSelectEnabled(boolean isKeepaliveSelect)
+  {
+    _isSelectManagerEnabled = isKeepaliveSelect;
+  }
+
+  public void setKeepaliveSelectEnable(boolean isKeepaliveSelect)
+  {
+    setKeepaliveSelectEnabled(isKeepaliveSelect);
+  }
+  
+  public void setKeepaliveSelectMax(int max)
+  {
+    
+  }
+
   public long getKeepaliveSelectThreadTimeout()
   {
     return _keepaliveSelectThreadTimeout;
+  }
+
+  public void setKeepaliveSelectThreadTimeout(Period period)
+  {
+    _keepaliveSelectThreadTimeout = period.getPeriod();
   }
 
   public long getBlockingTimeoutForSelect()
@@ -905,7 +798,7 @@ public class Port extends TaskWorker
    */
   public int getKeepaliveCount()
   {
-    return _keepaliveCount.get();
+    return _keepaliveAllocateCount.get();
   }
 
   public Lifecycle getLifecycleState()
@@ -968,9 +861,10 @@ public class Port extends TaskWorker
   /**
    * Returns the accept pool.
    */
+  /*
   public int getFreeKeepalive()
   {
-    int freeKeepalive = _keepaliveMax - _keepaliveCount.get();
+    int freeKeepalive = _keepaliveMax - _keepaliveAllocateCount.get();
     int freeConnections = (_connectionMax - _activeConnectionCount.get()
                            - _minSpareConnection);
     int freeSelect = _server.getFreeSelectKeepalive();
@@ -980,14 +874,17 @@ public class Port extends TaskWorker
     else
       return freeSelect < freeConnections ? freeSelect : freeConnections;
   }
+  */
 
   /**
    * Returns true if the port matches the server id.
    */
+  /*
   public boolean matchesServerId(String serverId)
   {
     return getServerId().equals("*") || getServerId().equals(serverId);
   }
+  */
 
   /**
    * Initializes the port.
@@ -1021,6 +918,8 @@ public class Port extends TaskWorker
     }
 
     _url = url.toString();
+
+    _debugId = _url;
   }
 
   /**
@@ -1127,16 +1026,23 @@ public class Port extends TaskWorker
 
     _serverSocket.setConnectionSocketTimeout((int) getSocketTimeout());
 
-    if (_serverSocket.isJNI() && _server.isSelectManagerEnabled()) {
-      _selectManager = _server.getSelectManager();
+    if (_serverSocket.isJNI()) {
+      Server server = Server.getCurrent();
 
+      if (server != null)
+        _selectManager = server.getSelectManager();
+
+      /*
       if (_selectManager == null) {
         throw new IllegalStateException(L.l("Cannot load select manager"));
       }
+      */
     }
 
+    /*
     if (_keepaliveMax < 0)
       _keepaliveMax = _server.getKeepaliveMax();
+    */
 
     if (_keepaliveMax < 0 && _selectManager != null)
       _keepaliveMax = _selectManager.getSelectMax();
@@ -1207,11 +1113,7 @@ public class Port extends TaskWorker
 
     boolean isValid = false;
     try {
-
-      assert(_server != null);
-
-      if (_server instanceof EnvironmentBean)
-        Environment.addEnvironmentListener(this, ((EnvironmentBean) _server).getClassLoader());
+      Environment.addEnvironmentListener(this);
 
       bind();
       postBind();
@@ -1366,6 +1268,7 @@ public class Port extends TaskWorker
   void startConnection(TcpConnection conn)
   {
     _startThreadCount.decrementAndGet();
+
     wake();
   }
 
@@ -1383,89 +1286,43 @@ public class Port extends TaskWorker
   void threadEnd(TcpConnection conn)
   {
     _threadCount.decrementAndGet();
+
     wake();
   }
 
   /**
-   * Returns true if the keepalive is allowed
+   * Allocates a keepalive for the connection.
+   *
+   * @param connectionStartTime - when the connection's accept occurred.
    */
-  public boolean allowKeepalive(long acceptStartTime)
+  boolean isKeepaliveAllowed(long connectionStartTime)
   {
     if (! _lifecycle.isActive())
       return false;
-    else if (acceptStartTime + _keepaliveTimeMax < Alarm.getCurrentTime())
+    else if (connectionStartTime + _keepaliveTimeMax < Alarm.getCurrentTime())
       return false;
-    else if (_keepaliveMax <= _keepaliveCount.get())
-      return false;
-    else if (_connectionMax
-             <= _activeConnectionCount.get() + _minSpareConnection)
+    else if (_keepaliveMax <= _keepaliveAllocateCount.get())
       return false;
     else
       return true;
   }
 
   /**
-   * Marks a keepalive as starting running.  Called only from TcpConnection.
+   * Marks the keepalive allocation as starting.
+   * Only called from ConnectionState.
    */
-  boolean keepaliveBegin(TcpConnection conn, long acceptStartTime)
+  void keepaliveAllocate()
   {
-    if (! _lifecycle.isActive())
-      return false;
-    else if (_connectionMax
-             <= _activeConnectionCount.get() + _minSpareConnection) {
-      log.warning(conn + " failed keepalive, active-connections="
-                  + _activeConnectionCount.get());
-
-      return false;
-    }
-    else if (false &&
-             acceptStartTime + _keepaliveTimeMax < Alarm.getCurrentTime()) {
-      // #2262 - skip this check to avoid confusing the load balancer
-      // the keepalive check is in allowKeepalive
-      log.warning(conn + " failed keepalive, delay=" + (Alarm.getCurrentTime() - acceptStartTime));
-
-      return false;
-    }
-    else if (false && _keepaliveMax <= _keepaliveCount.get()) {
-      // #2262 - skip this check to avoid confusing the load balancer
-      // the keepalive check is in allowKeepalive
-      log.warning(conn + " failed keepalive, keepalive-max " + _keepaliveCount);
-
-      return false;
-    }
-
-    _keepaliveCount.incrementAndGet();
-
-    return true;
+    _keepaliveAllocateCount.incrementAndGet();
   }
 
   /**
-   * Marks the keepalive as ending. Called only from TcpConnection.
+   * Marks the keepalive allocation as ending.
+   * Only called from ConnectionState.
    */
-  void keepaliveEnd(TcpConnection conn)
+  void keepaliveFree()
   {
-    long count = _keepaliveCount.decrementAndGet();
-
-    if (count < 0) {
-      log.warning(conn + " internal error: negative keepalive count " + count);
-      Thread.dumpStack();
-    }
-  }
-
-  /**
-   * Starts a keepalive thread.
-   */
-  void keepaliveThreadBegin()
-  {
-    _keepaliveThreadCount.incrementAndGet();
-  }
-
-  /**
-   * Ends a keepalive thread.
-   */
-  void keepaliveThreadEnd()
-  {
-    _keepaliveThreadCount.decrementAndGet();
+    _keepaliveAllocateCount.decrementAndGet();
   }
 
   /**
@@ -1483,9 +1340,9 @@ public class Port extends TaskWorker
 
     long timeout = getKeepaliveTimeout();
 
-    boolean isSelectManager = getServer().isSelectManagerEnabled();
+    // boolean isSelectManager = getServer().isSelectManagerEnabled();
 
-    if (isSelectManager) {
+    if (_isSelectManagerEnabled) {
       timeout = getBlockingTimeoutForSelect();
     }
 
@@ -1497,7 +1354,7 @@ public class Port extends TaskWorker
 
     // server/2l02
 
-    keepaliveThreadBegin();
+    _keepaliveThreadCount.incrementAndGet();
 
     try {
       boolean result = is.fillWithTimeout(timeout);
@@ -1506,13 +1363,13 @@ public class Port extends TaskWorker
     } catch (IOException e) {
       if (isClosed()) {
         log.log(Level.FINEST, e.toString(), e);
-        
+
         return false;
       }
-      
-      throw e; 
+
+      throw e;
     } finally {
-      keepaliveThreadEnd();
+      _keepaliveThreadCount.decrementAndGet();
     }
   }
 
@@ -1521,28 +1378,24 @@ public class Port extends TaskWorker
    *
    * @return true if the connection was added to the suspend list
    */
-  void suspend(TcpConnection conn)
+  void cometSuspend(TcpConnection conn)
   {
-    if (conn.isWake()) {
-      conn.toResume();
-
+    if (conn.isWakeRequested()) {
+      conn.toCometResume();
+      
       _threadPool.schedule(conn.getResumeTask());
     }
-    else if (conn.isComet()) {
-      conn.toSuspend();
-
-      _suspendConnectionSet.add(conn);
-    }
     else {
-      throw new IllegalStateException(L.l("{0} suspend is not allowed because the connection is not an asynchronous connection",
-                                          conn));
+      _suspendConnectionSet.add(conn);
+
+      // XXX: wake
     }
   }
 
   /**
    * Remove from suspend list.
    */
-  boolean detach(TcpConnection conn)
+  boolean cometDetach(TcpConnection conn)
   {
     return _suspendConnectionSet.remove(conn);
   }
@@ -1550,11 +1403,11 @@ public class Port extends TaskWorker
   /**
    * Resumes the controller (for comet-style ajax)
    */
-  boolean resume(TcpConnection conn)
+  boolean cometResume(TcpConnection conn)
   {
     if (_suspendConnectionSet.remove(conn)) {
-      conn.toResume();
-
+      conn.toCometResume();
+      
       _threadPool.schedule(conn.getResumeTask());
 
       return true;
@@ -1563,12 +1416,108 @@ public class Port extends TaskWorker
       return false;
   }
 
+  void duplexKeepaliveBegin()
+  {
+  }
+
+  void duplexKeepaliveEnd()
+  {
+  }
+
   /**
    * Returns true if the port is closed.
    */
   public boolean isClosed()
   {
     return _lifecycle.isAfterActive();
+  }
+
+  //
+  // statistics
+  //
+
+  /**
+   * Returns the number of connections
+   */
+  public int getConnectionCount()
+  {
+    return _activeConnectionCount.get();
+  }
+
+  /**
+   * Returns the number of comet connections.
+   */
+  public int getCometIdleCount()
+  {
+    return _suspendConnectionSet.size();
+  }
+
+  /**
+   * Returns the number of duplex connections.
+   */
+  public int getDuplexCount()
+  {
+    return 0;
+  }
+
+  void addLifetimeRequestCount()
+  {
+    _lifetimeRequestCount++;
+  }
+
+  public long getLifetimeRequestCount()
+  {
+    return _lifetimeRequestCount;
+  }
+
+  void addLifetimeKeepaliveCount()
+  {
+    _lifetimeKeepaliveCount++;
+  }
+
+  public long getLifetimeKeepaliveCount()
+  {
+    return _lifetimeKeepaliveCount;
+  }
+
+  void addLifetimeClientDisconnectCount()
+  {
+    _lifetimeClientDisconnectCount++;
+  }
+
+  public long getLifetimeClientDisconnectCount()
+  {
+    return _lifetimeClientDisconnectCount;
+  }
+
+  void addLifetimeRequestTime(long time)
+  {
+    _lifetimeRequestTime += time;
+  }
+
+  public long getLifetimeRequestTime()
+  {
+    return _lifetimeRequestTime;
+  }
+
+  void addLifetimeReadBytes(long time)
+  {
+    _lifetimeReadBytes += time;
+  }
+
+  public long getLifetimeReadBytes()
+  {
+    return _lifetimeReadBytes;
+  }
+
+  void addLifetimeWriteBytes(long time)
+  {
+    _lifetimeWriteBytes += time;
+  }
+
+  public long getLifetimeWriteBytes()
+  {
+    return _lifetimeWriteBytes;
   }
 
   /**
@@ -1603,16 +1552,15 @@ public class Port extends TaskWorker
           && _activeConnectionCount.get() <= _connectionMax) {
         startConn = _idleConn.allocate();
 
-        if (startConn == null || startConn.isDestroyed()) {
+        if (startConn != null) {
+          startConn.toInit(); // change to the init/ready state
+        }
+        else {
           int connId = _connectionCount.incrementAndGet();
           QSocket socket = _serverSocket.createSocket();
           startConn = new TcpConnection(connId, this, socket);
         }
 
-        startConn.toInit(); // change to the init/ready state
-      }
-
-      if (startConn != null) {
         _startThreadCount.incrementAndGet();
         _activeConnectionCount.incrementAndGet();
         _activeConnectionSet.add(startConn);
@@ -1659,12 +1607,10 @@ public class Port extends TaskWorker
   /**
    * Frees the connection to the idle pool.
    *
-   * Called only from TcpConnection
+   * only called from ConnectionState
    */
   void free(TcpConnection conn)
   {
-    assert(conn.isClosed());
-    
     closeConnection(conn);
 
     _idleConn.free(conn);
@@ -1673,12 +1619,10 @@ public class Port extends TaskWorker
   /**
    * Destroys the connection.
    *
-   * Called only from TcpConnection
+   * only called from ConnectionState
    */
   void destroy(TcpConnection conn)
   {
-    assert(conn.isDestroyed());
-      
     closeConnection(conn);
   }
 
@@ -1688,9 +1632,8 @@ public class Port extends TaskWorker
   private void closeConnection(TcpConnection conn)
   {
     _activeConnectionSet.remove(conn);
-    _suspendConnectionSet.remove(conn);
     _activeConnectionCount.decrementAndGet();
-    
+
     // wake the start thread
     wake();
   }
@@ -1723,10 +1666,12 @@ public class Port extends TaskWorker
     _selectManager = null;
     AbstractSelectManager selectManager = null;
 
+    /*
     if (_server != null) {
       selectManager = _server.getSelectManager();
       _server.initSelectManager(null);
     }
+    */
 
     InetAddress localAddress = null;
     int localPort = 0;
@@ -1764,7 +1709,12 @@ public class Port extends TaskWorker
     }
 
     for (TcpConnection conn : activeSet) {
-      conn.destroy();
+      try {
+        conn.destroy();
+      }
+      catch (Exception e) {
+        log.log(Level.FINEST, e.toString(), e);
+      }
     }
 
     // wake the start thread
@@ -1850,13 +1800,16 @@ public class Port extends TaskWorker
 
         for (int i = _suspendSet.size() - 1; i >= 0; i--) {
           TcpConnection conn = _suspendSet.get(i);
-
-          if (conn.getIdleStartTime() + _suspendTimeMax < now) {
+          
+          if (conn.getIdleExpireTime() < now) {
             _timeoutSet.add(conn);
+            continue;
           }
 
+          long idleStartTime = conn.getIdleStartTime();
+
           // check periodically for end of file
-          if (conn.getIdleStartTime() + _suspendCloseTimeMax < now
+          if (idleStartTime + _suspendCloseTimeMax < now
               && conn.isReadEof()) {
             _completeSet.add(conn);
           }
@@ -1868,7 +1821,7 @@ public class Port extends TaskWorker
           if (log.isLoggable(Level.FINE))
             log.fine(this + " suspend idle timeout " + conn);
 
-          conn.toTimeout();
+          conn.toCometTimeout();
         }
 
         for (int i = _completeSet.size() - 1; i >= 0; i--) {
@@ -1877,7 +1830,7 @@ public class Port extends TaskWorker
           if (log.isLoggable(Level.FINE))
             log.fine(this + " async end-of-file " + conn);
 
-          ConnectionController async = conn.getController();
+          AsyncController async = conn.getAsyncController();
 
           if (async != null)
             async.complete();

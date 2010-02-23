@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,15 @@
 
 package com.caucho.config.program;
 
-import com.caucho.config.*;
-import com.caucho.config.scope.DependentScope;
-import com.caucho.config.type.*;
-import com.caucho.xml.QName;
+import javax.enterprise.context.spi.CreationalContext;
 
 /**
  * A saved program for creating a constructor argument
  */
-public abstract class Arg {
+public abstract class Arg<T> {
   public void bind()
   {
   }
     
-  abstract public Object eval(ConfigContext env);
+  abstract public Object eval(CreationalContext<T> env);
 }

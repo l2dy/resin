@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -57,8 +57,8 @@ import com.caucho.hessian.io.HessianDebugInputStream;
 import com.caucho.hmtp.HmtpReader;
 import com.caucho.hmtp.HmtpWriter;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.Connection;
-import com.caucho.server.connection.ServerRequest;
+import com.caucho.server.connection.TransportConnection;
+import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.http.AbstractHttpRequest;
 import com.caucho.server.http.AbstractResponseStream;
@@ -145,7 +145,7 @@ import com.caucho.vfs.WriteStream;
  *
  */
 public class HmuxRequest extends AbstractHttpRequest
-  implements ServerRequest
+  implements ProtocolConnection
 {
   private static final Logger log
     = Logger.getLogger(HmuxRequest.class.getName());
@@ -272,7 +272,7 @@ public class HmuxRequest extends AbstractHttpRequest
   private ErrorPageManager _errorManager = new ErrorPageManager(null);
 
   public HmuxRequest(Server server,
-                     Connection conn,
+                     TransportConnection conn,
                      HmuxProtocol protocol)
   {
     super(server, conn);
@@ -433,7 +433,8 @@ public class HmuxRequest extends AbstractHttpRequest
     try {
       _hasRequest = false;
 
-      if (! scanHeaders()) {
+      if (! scanHeaders() || ! _conn.isPortActive()) {
+        _hasRequest = false;
         killKeepalive();
         return false;
       }
@@ -915,11 +916,12 @@ public class HmuxRequest extends AbstractHttpRequest
         boolean isUnidir = code == HMUX_TO_UNIDIR_HMTP;
 
         ServerLinkService linkService
-          = new ServerLinkService(_linkStream,
-                                  _server.getAdminBroker(),
-                                  _server.getServerLinkManager(),
-                                  getRemoteAddr(),
-                                  isUnidir);
+          = new HmuxLinkService(_linkStream,
+                                _server.getAdminBroker(),
+                                _server.getServerLinkManager(),
+                                getRemoteAddr(),
+                                isUnidir,
+                                _server);
 
         _brokerStream = linkService.getBrokerStream();
 
@@ -1007,7 +1009,7 @@ public class HmuxRequest extends AbstractHttpRequest
       return; // XXX:
     }
     else {
-      if (result == HMUX_QUIT && ! allowKeepalive())
+      if (result == HMUX_QUIT && ! isKeepaliveAllowed())
         result = HMUX_EXIT;
 
       if (result == HMUX_QUIT) {
@@ -1615,7 +1617,7 @@ public class HmuxRequest extends AbstractHttpRequest
   /**
    * Close when the socket closes.
    */
-  public void protocolCloseEvent()
+  public void onCloseConnection()
   {
     ActorStream brokerStream = _brokerStream;
     _brokerStream = null;
@@ -1897,7 +1899,7 @@ public class HmuxRequest extends AbstractHttpRequest
         _pendingData = 0;
       }
 
-      boolean keepalive = _request.allowKeepalive();
+      boolean keepalive = _request.isKeepaliveAllowed();
 
       if (! _isClientClosed) {
         if (log.isLoggable(Level.FINE)) {

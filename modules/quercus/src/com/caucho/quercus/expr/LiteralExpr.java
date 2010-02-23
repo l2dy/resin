@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,15 +41,9 @@ import com.caucho.quercus.env.Value;
 public class LiteralExpr extends Expr {
   private final Value _value;
 
-  protected LiteralExpr(Location location, Value value)
-  {
-    super(location);
-    _value = value;
-  }
-
   public LiteralExpr(Value value)
   {
-    this(Location.UNKNOWN, value);// acceptable, for compiled code
+    _value = value;
   }
 
   protected Value getValue()
@@ -60,6 +54,7 @@ public class LiteralExpr extends Expr {
   /**
    * Returns true for a literal expression.
    */
+  @Override
   public boolean isLiteral()
   {
     return true;
@@ -68,6 +63,7 @@ public class LiteralExpr extends Expr {
   /**
    * Returns true if a static true value.
    */
+  @Override
   public boolean isTrue()
   {
     if (_value == BooleanValue.TRUE)
@@ -81,6 +77,7 @@ public class LiteralExpr extends Expr {
   /**
    * Returns true if a static true value.
    */
+  @Override
   public boolean isFalse()
   {
     if (_value == BooleanValue.FALSE)
@@ -106,9 +103,9 @@ public class LiteralExpr extends Expr {
   {
     return _value.isDoubleConvertible();
   }
-  
+
   /*
-   * 
+   *
    */
   public boolean isBoolean()
   {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,6 +36,7 @@ import com.caucho.quercus.statement.Statement;
 import com.caucho.util.L10N;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.logging.Logger;
 
 /**
@@ -161,6 +162,66 @@ abstract public class Expr {
     return true;
   }
 
+  /**
+   * Returns true if the expression evaluates to a boolean.
+   */
+  public boolean isBoolean()
+  {
+    return false;
+  }
+
+  /**
+   * Returns true if the expression evaluates to a long.
+   */
+  public boolean isLong()
+  {
+    return false;
+  }
+
+  /**
+   * Returns true if the expression evaluates to a double.
+   */
+  public boolean isDouble()
+  {
+    return false;
+  }
+
+  /**
+   * Returns true if the expression evaluates to a number.
+   */
+  public boolean isNumber()
+  {
+    return isLong() || isDouble();
+  }
+
+  /**
+   * Returns true if the expression evaluates to a string.
+   */
+  public boolean isString()
+  {
+    return false;
+  }
+
+  /**
+   * Returns true if the expression evaluates to an array.
+   */
+  public boolean isArray()
+  {
+    return false;
+  }
+  
+  /**
+   * Returns true if the expression is a var/left-hand-side.
+   */
+  public boolean isVar()
+  {
+    return false;
+  }
+  
+  //
+  // expression creation functions
+  //
+
   public Expr createAssign(QuercusParser parser, Expr value)
     throws IOException
   {
@@ -171,6 +232,17 @@ abstract public class Expr {
       throw parser.error(msg);
     else
       throw new IOException(msg);
+  }
+  
+  /**
+   * Creates an assignment using this value as the right hand side.
+   */
+  public Expr createAssignFrom(QuercusParser parser,
+                               AbstractVarExpr leftHandSide)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createAssign(leftHandSide, this);
   }
 
   /**
@@ -241,21 +313,57 @@ abstract public class Expr {
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
-                             Location location,
                              StringValue name)
   {
-    return factory.createFieldGet(location, this, name);
+    return factory.createFieldGet(this, name);
   }
 
   /**
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
-                             Location location,
                              Expr name)
   {
-    return factory.createFieldVarGet(location, this, name);
+    return factory.createFieldVarGet(this, name);
   }
+  
+  //
+  // class field refs $class::$bar
+  //
+  
+  /**
+   * Creates a class field $class::foo
+   */
+  public Expr createClassConst(QuercusParser parser, String name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createClassConst(this, name);
+  }
+  
+  /**
+   * Creates a class field $class::$foo
+   */
+  public Expr createClassField(QuercusParser parser, String name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createClassField(this, name);
+  }
+  
+  /**
+   * Creates a class field $class::${foo}
+   */
+  public Expr createClassField(QuercusParser parser, Expr name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createClassField(this, name);
+  }
+  
+  //
+  // unary operations
+  //
 
   /**
    * Creates a assignment
@@ -276,54 +384,27 @@ abstract public class Expr {
     throw new IOException(L.l("{0} is an illegal value to isset",
                               this));
   }
+  
+  //
+  // function call creation
+  //
 
   /**
-   * Returns true if the expression evaluates to a boolean.
+   * Creates a function call expression
    */
-  public boolean isBoolean()
+  public Expr createCall(QuercusParser parser,
+                         Location location,
+                         ArrayList<Expr> args)
+    throws IOException
   {
-    return false;
+    ExprFactory factory = parser.getExprFactory();
+    
+    return factory.createVarFunction(location, this, args);
   }
-
-  /**
-   * Returns true if the expression evaluates to a long.
-   */
-  public boolean isLong()
-  {
-    return false;
-  }
-
-  /**
-   * Returns true if the expression evaluates to a double.
-   */
-  public boolean isDouble()
-  {
-    return false;
-  }
-
-  /**
-   * Returns true if the expression evaluates to a number.
-   */
-  public boolean isNumber()
-  {
-    return isLong() || isDouble();
-  }
-
-  /**
-   * Returns true if the expression evaluates to a string.
-   */
-  public boolean isString()
-  {
-    return false;
-  }
-
-  /**
-   * Returns true if the expression evaluates to an array.
-   */
-  public boolean isArray()
-  {
-    return false;
-  }
+  
+  //
+  // evaluation
+  //
 
   /**
    * Evaluates the expression as a constant.
@@ -356,13 +437,79 @@ abstract public class Expr {
   }
 
   /**
-   * Evaluates the expression.
+   * Evaluates the expression, returning a Value, never a Var.
    *
    * @param env the calling environment.
    *
    * @return the expression value.
    */
   abstract public Value eval(Env env);
+
+  /**
+   * Evaluates the expression, always returning a variable.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  public Var evalVar(Env env)
+  {
+    return eval(env).toVar();
+  }
+
+  /**
+   * Evaluates the expression, returning a Value.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  public Value evalValue(Env env)
+  {
+    return eval(env);
+  }
+
+  /**
+   * Evaluates the expression, returning a Var for variables, and a Value
+   * for values.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  public Value evalRef(Env env)
+  {
+    return eval(env);
+  }
+
+  /**
+   * Evaluates the expression as a copy.
+   * 
+   * The default is not to copy because the absence of copying is more
+   * testable.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  public Value evalCopy(Env env)
+  {
+    return eval(env);
+  }
+
+  /**
+   * Evaluates the expression as a function argument where it is unknown
+   * if the value will be used as a reference.
+   *
+   * @param env the calling environment.
+   * @param isTail true for the top expression
+   *
+   * @return the expression value.
+   */
+  public Value evalArg(Env env, boolean isTop)
+  {
+    return eval(env);
+  }
   
   /**
    * Evaluates the expression.
@@ -375,7 +522,6 @@ abstract public class Expr {
   {
     return eval(env);
   }
-  
 
   /**
    * Evaluates the expression, with the object expected to be modified,
@@ -415,47 +561,19 @@ abstract public class Expr {
   }
 
   /**
-   * Evaluates the expression as a reference.
-   *
-   * @param env the calling environment.
-   *
-   * @return the expression value.
+   * Evaluates an assignment. The value must not be a Var.
    */
-  public Value evalRef(Env env)
+  public Value evalAssignValue(Env env, Value value)
   {
-    return eval(env);
+    throw new RuntimeException(L.l("{0} is an invalid left-hand side of an assignment.",
+                                   this));
   }
 
   /**
-   * Evaluates the expression as a copy
-   *
-   * @param env the calling environment.
-   *
-   * @return the expression value.
+   * Evaluates an assignment. If the value is a Var, it replaces the
+   * current Var.
    */
-  public Value evalCopy(Env env)
-  {
-    return eval(env);
-  }
-
-  /**
-   * Evaluates the expression as a function argument where it is unknown
-   * if the value is a reference.
-   *
-   * @param env the calling environment.
-   * @param isTail true for the top expression
-   *
-   * @return the expression value.
-   */
-  public Value evalArg(Env env, boolean isTop)
-  {
-    return eval(env);
-  }
-
-  /**
-   * Needed to handle list.
-   */
-  public void evalAssign(Env env, Value value)
+  public Value evalAssignRef(Env env, Value value)
   {
     throw new RuntimeException(L.l("{0} is an invalid left-hand side of an assignment.",
                                    this));
@@ -463,12 +581,13 @@ abstract public class Expr {
 
   /**
    * Evaluates as an array index assign ($a[index] = value).
+   * @return what was assigned
    */
-  public void evalArrayAssign(Env env, Value index, Value value)
+  public Value evalArrayAssign(Env env, Value index, Value value)
   {
-    Value array = evalArray(env);
+    Value var = evalVar(env);
 
-    array.put(index, value);
+    return var.put(index, value);
   }
 
   /**
@@ -476,7 +595,7 @@ abstract public class Expr {
    */
   public Value evalPostIncrement(Env env, int incr)
   {
-    Value value = evalRef(env);
+    Value value = evalVar(env);
 
     return value.postincr(incr);
   }
@@ -486,7 +605,7 @@ abstract public class Expr {
    */
   public Value evalPreIncrement(Env env, int incr)
   {
-    Value value = evalRef(env);
+    Value value = evalVar(env);
 
     return value.preincr(incr);
   }
@@ -584,6 +703,20 @@ abstract public class Expr {
     Value array = evalDirty(env);
 
     array.remove(index);
+  }
+  
+  /**
+   * Evaluates arguments
+   */
+  public static Value []evalArgs(Env env, Expr []exprs)
+  {
+    Value []args = new Value[exprs.length];
+    
+    for (int i = 0; i < args.length; i++) {
+      args[i] = exprs[i].evalArg(env, true);
+    }
+    
+    return args;
   }
 
   /**

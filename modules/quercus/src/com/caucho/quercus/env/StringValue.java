@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,25 +29,33 @@
 
 package com.caucho.quercus.env;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.Reader;
+import java.io.UnsupportedEncodingException;
+import java.util.IdentityHashMap;
+import java.util.zip.CRC32;
+
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.lib.file.BinaryInput;
 import com.caucho.quercus.lib.i18n.Decoder;
 import com.caucho.quercus.marshal.Marshal;
+import com.caucho.util.ByteAppendable;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.WriteStream;
-
-import java.io.*;
-import java.util.IdentityHashMap;
-import java.util.zip.CRC32;
 
 /**
  * Represents a Quercus string value.
  */
 abstract public class StringValue
   extends Value
-  implements CharSequence
+  implements CharSequence, ByteAppendable
 {
   public static final StringValue EMPTY = new ConstStringValue("");
 
@@ -818,13 +826,24 @@ abstract public class StringValue
   }
 
   /**
+   * Converts to an array if null.
+   */
+  public Value toAutoArray()
+  {
+    if (length() == 0)
+      return new ArrayValueImpl();
+    else
+      return this;
+  }
+
+  /**
    * Converts to a Java object.
    */
   public Object toJavaObject()
   {
     return toString();
   }
-
+  
   /**
    * Takes the values of this array, unmarshalls them to objects of type
    * <i>elementType</i>, and puts them in a java array.
@@ -869,16 +888,38 @@ abstract public class StringValue
       return null;
     }
   }
-
+  
   /**
-   * Converts to an array if null.
+   * Converts to a callable object
    */
-  public Value toAutoArray()
+  @Override
+  public Callable toCallable(Env env)
   {
-    if (length() == 0)
-      return new ArrayValueImpl();
-    else
-      return this;
+    // php/1h0o
+    if (isEmpty())
+      return super.toCallable(env);
+
+    String s = toString();
+
+    int p = s.indexOf("::");
+
+    if (p < 0)
+      return new CallbackFunction(env, s);
+    else {
+      String className = s.substring(0, p);
+      String methodName = s.substring(p + 2);
+
+      QuercusClass cl = env.findClass(className);
+
+      if (cl == null) {
+        env.warning(L.l("can't find class {0}",
+                        className));
+        
+        return super.toCallable(env);
+      }
+
+      return new CallbackClassMethod(cl, env.createString(methodName));
+    }
   }
 
   /**
@@ -886,6 +927,7 @@ abstract public class StringValue
    * string update ($a[0] = 'A').  Creates an array automatically if
    * necessary.
    */
+  @Override
   public Value append(Value index, Value value)
   {
     if (length() == 0)
@@ -2348,6 +2390,23 @@ abstract public class StringValue
   }
 
   //
+  // ByteAppendable methods
+  //
+  
+  public void write(int value)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
+   * Appends buffer to the ByteAppendable.
+   */
+  public void write(byte[] buffer, int offset, int len)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  //
   // java.lang.Object methods
   //
 
@@ -2362,6 +2421,27 @@ abstract public class StringValue
 
     for (int i = 0; i < length; i++) {
       hash = 65521 * hash + charAt(i);
+    }
+
+    return hash;
+  }
+  
+  /**
+   * Returns the case-insensitive hash code
+   */
+  public int hashCodeCaseInsensitive()
+  {
+    int hash = 37;
+
+    int length = length();
+
+    for (int i = length - 1; i >= 0; i--) {
+      int ch = charAt(i);
+      
+      if ('A' <= ch && ch <= 'Z')
+        ch = ch + 'a' - 'A';
+      
+      hash = 65521 * hash + ch;
     }
 
     return hash;
@@ -2393,6 +2473,48 @@ abstract public class StringValue
         return false;
     }
 
+    return true;
+  }
+
+  /**
+   * Test for equality
+   */
+  public boolean equalsIgnoreCase(Object o)
+  {
+    if (this == o)
+      return true;
+    else if (! (o instanceof StringValue))
+      return false;
+
+    StringValue s = (StringValue) o;
+
+    if (s.isUnicode() != isUnicode())
+      return false;
+
+    int aLength = length();
+    int bLength = s.length();
+
+    if (aLength != bLength)
+      return false;
+    
+    for (int i = aLength - 1; i >= 0; i--) {
+      int chA = charAt(i);
+      int chB = s.charAt(i);
+
+      if (chA == chB) {
+      }
+      else {
+        if ('A' <= chA && chA <= 'Z')
+          chA += 'a' - 'A';
+        
+        if ('A' <= chB && chB <= 'Z')
+          chB += 'a' - 'A';
+
+        if (chA != chB)
+          return false;
+      }
+    }
+    
     return true;
   }
 

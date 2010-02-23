@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,6 +40,9 @@ import java.io.IOException;
 public interface AsyncListener
   extends EventListener
 {
+  public void onStartAsync(AsyncEvent event)
+    throws IOException;
+  
   public void onComplete(AsyncEvent event)
     throws IOException;
 
@@ -47,8 +50,5 @@ public interface AsyncListener
     throws IOException;
 
   public void onError(AsyncEvent event)
-    throws IOException;
-
-  public void onStartAsync(AsyncEvent event)
     throws IOException;
 }

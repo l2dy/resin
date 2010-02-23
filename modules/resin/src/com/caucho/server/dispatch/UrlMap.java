@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -84,6 +84,19 @@ public class UrlMap<E> {
     _bestShort = bestShort;
   }
 
+  boolean contains(Filter<E> filter)
+  {
+    for (int i = _regexps.size() - 1; i >= 0; i--) {
+      RegexpEntry<E> regexp = _regexps.get(i);
+
+      if (filter.isMatch(regexp.getValue())) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   int size()
   {
     return _regexps.size();
@@ -92,13 +105,22 @@ public class UrlMap<E> {
   public void addMap(String pattern, E value, boolean isIgnore)
     throws PatternSyntaxException
   {
-    addMap(pattern, null, value, isIgnore);
+    addMap(pattern, null, value, isIgnore, false);
   }
 
   public void addMap(String pattern, E value)
     throws PatternSyntaxException
   {
-    addMap(pattern, null, value, false);
+    addMap(pattern, null, value, false, false);
+  }
+
+  public void addMap(String pattern, 
+                     E value,
+                     boolean isIgnore,
+                     boolean ifAbsent)
+    throws PatternSyntaxException
+  {
+    addMap(pattern, null, value, isIgnore, ifAbsent);
   }
 
   /**
@@ -107,37 +129,44 @@ public class UrlMap<E> {
    * @param pattern servlet2.2 url-pattern
    * @param value object stored as the value
    */
-  public void addMap(String pattern, String flags, E value,
-                     boolean isIgnore)
+  public void addMap(String pattern,
+                     String flags, 
+                     E value,
+                     boolean isIgnore,
+                     boolean ifAbsent)
     throws PatternSyntaxException
   {
+    boolean startsWithSlash = pattern.charAt(0) == '/';
+
     if (pattern.length() == 0
-        || pattern.length() == 1 && pattern.charAt(0) == '/') {
-      addRegexp(-1, "", flags, value, true, isIgnore);
+        || pattern.length() == 1 && startsWithSlash) {
+      addRegexp(-1, "", flags, value, true, isIgnore, ifAbsent);
       return;
     }
 
     else if (pattern.equals("/*")) {
-      addRegexp(1, "/*", "", flags, value, true, isIgnore);
+      addRegexp(1, "/*", flags, value, true, isIgnore, ifAbsent);
       return;
     }
 
     int length = pattern.length();
     boolean isExact = true;
 
-    if (pattern.charAt(0) != '/' && pattern.charAt(0) != '*') {
+    if (! startsWithSlash && pattern.charAt(0) != '*') {
       pattern = "/" + pattern;
       length++;
     }
 
     int prefixLength = -1;
     boolean isShort = false;
+    boolean hasWildcard = false;
     CharBuffer cb = new CharBuffer();
     cb.append("^");
     for (int i = 0; i < length; i++) {
       char ch = pattern.charAt(i);
 
       if (ch == '*' && i + 1 == length && i > 0) {
+        hasWildcard = true;
         isExact = false;
 
         if (pattern.charAt(i - 1) == '/') {
@@ -154,6 +183,7 @@ public class UrlMap<E> {
           prefixLength = 1;
       }
       else if (ch == '*') {
+        hasWildcard = true;
         isExact = false;
         cb.append(".*");
         if (prefixLength < 0)
@@ -188,7 +218,7 @@ public class UrlMap<E> {
       cb.insert(0, '^');
 
     addRegexp(prefixLength, pattern, cb.close(), flags, value,
-              isShort, isIgnore);
+              isShort, isIgnore, ifAbsent, ! hasWildcard);
   }
 
   public static String urlPatternToRegexpPattern(String pattern)
@@ -256,9 +286,11 @@ public class UrlMap<E> {
                            E value)
     throws PatternSyntaxException, ServletException
   {
+    boolean ifAbsent = false;
+    
     if (pattern.length() == 0
         || pattern.length() == 1 && pattern.charAt(0) == '/') {
-      addRegexp(-1, "^.*$", flags, value, true, false);
+      addRegexp(-1, "^.*$", flags, value, true, false, ifAbsent);
       return;
     }
 
@@ -309,19 +341,25 @@ public class UrlMap<E> {
     cb.append("$");
 
     addRegexp(prefixLength, pattern, cb.close(), flags, value,
-              isShort, false);
+              isShort, false, ifAbsent, false);
   }
 
   public void addRegexp(String regexp, String flags, E value)
     throws PatternSyntaxException
   {
-    addRegexp(0, regexp, flags, value, false, false);
+    addRegexp(0, regexp, flags, value, false, false, false);
   }
 
   public void addRegexp(String regexp, E value)
     throws PatternSyntaxException
   {
-    addRegexp(0, regexp, null, value, false, false);
+    addRegexp(0, regexp, null, value, false, false, false);
+  }
+
+  public void addRegexpIfAbsent(String regexp, E value)
+    throws PatternSyntaxException
+  {
+    addRegexp(0, regexp, null, value, false, false, true);
   }
 
   /**
@@ -333,9 +371,13 @@ public class UrlMap<E> {
    * @param value the value for matching the pattern
    * @param isShort if true, this regexp expects to be shorter than others
    */
-  public void addRegexp(int prefixLength, String regexp,
-                        String flags, E value,
-                        boolean isShort, boolean isIgnore)
+  public void addRegexp(int prefixLength, 
+                        String regexp,
+                        String flags,
+                        E value,
+                        boolean isShort, 
+                        boolean isIgnore,
+                        boolean ifAbsent)
     throws PatternSyntaxException
   {
     RegexpEntry<E> entry
@@ -344,9 +386,21 @@ public class UrlMap<E> {
     for (int i = 0; i < _regexps.size(); i++) {
       RegexpEntry<E> re = _regexps.get(i);
 
+      /*
       if (re.equals(entry)) {
         _regexps.remove(i);
         break;
+      }
+      */
+      if (re.equals(entry)) {
+        if (ifAbsent) {
+          // server/1p1b - registration does not overwrite
+          return;
+        }
+        else {
+          _regexps.remove(i);
+          break;
+        }
       }
     }
 
@@ -368,18 +422,26 @@ public class UrlMap<E> {
    */
   public void addRegexp(int prefixLength, String pattern,
                         String regexp, String flags,
-                        E value, boolean isShort, boolean isIgnore)
+                        E value, boolean isShort,
+                        boolean isIgnore,
+                        boolean ifAbsent,
+                        boolean isSimple)
     throws PatternSyntaxException
   {
     RegexpEntry<E> entry
       = new RegexpEntry<E>(prefixLength, pattern, regexp, flags, value,
-                           isIgnore);
+                           isIgnore, isSimple);
 
     for (int i = _regexps.size() - 1; i >= 0; i--) {
       RegexpEntry<E> re = _regexps.get(i);
 
       if (re.equals(entry)) {
-        _regexps.remove(i);
+        if (ifAbsent) {
+          return;
+        }
+        else {
+          _regexps.remove(i);
+        }
       }
     }
 
@@ -402,6 +464,10 @@ public class UrlMap<E> {
     return map(uri, null);
   }
 
+  public E map(String uri, ArrayList<String> vars)
+  {
+    return map(uri, vars, false);
+  }
   /**
    * Finds the best match for the uri.  In the case of a servlet dispatch,
    * match is servletPath and replacement is pathInfo.
@@ -411,7 +477,7 @@ public class UrlMap<E> {
    *
    * @return matching object
    */
-  public E map(String uri, ArrayList<String> vars)
+  public E map(String uri, ArrayList<String> vars, boolean isWelcome)
   {
     E best = null;
 
@@ -424,6 +490,9 @@ public class UrlMap<E> {
 
     for (int i = 0; i < _regexps.size(); i++) {
       RegexpEntry<E> entry = _regexps.get(i);
+
+      if (isWelcome && ! entry.isSimple())
+        continue;
 
       if (entry.isIgnore()) // plugin-match and plugin-ignore
         continue;
@@ -447,7 +516,10 @@ public class UrlMap<E> {
         if (vars != null) {
           vars.clear();
 
-          vars.add(uri.substring(0, end));
+          if ("/*".equals(entry.getPattern()))
+            vars.add("");
+          else
+            vars.add(uri.substring(0, end));
 
           for (int j = 1; j <= matcher.groupCount(); j++)
             vars.add(matcher.group(j));
@@ -496,16 +568,17 @@ public class UrlMap<E> {
     int _prefixLength;
     boolean _shortMatch;
     boolean _isIgnore; // plugin_match or plugin-ignore
+    boolean _isSimple; //simple when does not start with a / and contains no *
 
     RegexpEntry(int prefixLength, String pattern, String flags, E value)
       throws PatternSyntaxException
     {
-      this(prefixLength, pattern, pattern, flags, value, false);
+      this(prefixLength, pattern, pattern, flags, value, false, false);
     }
 
     RegexpEntry(int prefixLength, String urlPattern,
                 String pattern, String flags, E value,
-                boolean isIgnore)
+                boolean isIgnore, boolean isSimple)
       throws PatternSyntaxException
     {
       _urlPattern = urlPattern;
@@ -520,6 +593,7 @@ public class UrlMap<E> {
       _regexp = Pattern.compile(pattern, _flags);
       _value = value;
       _isIgnore = isIgnore;
+      _isSimple = isSimple;
     }
 
     boolean isIgnore()
@@ -545,6 +619,16 @@ public class UrlMap<E> {
     String getPattern()
     {
       return _pattern;
+    }
+
+    E getValue()
+    {
+      return _value;
+    }
+
+    boolean isSimple()
+    {
+      return _isSimple;
     }
 
     public int hashCode()
@@ -581,5 +665,9 @@ public class UrlMap<E> {
       else
         return super.toString();
     }
+  }
+
+  public interface Filter<X> {
+    public boolean isMatch(X item);
   }
 }

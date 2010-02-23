@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,19 +31,27 @@ package javax.servlet;
 
 public class HttpMethodConstraintElement extends HttpConstraintElement {
 
+  private String _methodName;
+
   public HttpMethodConstraintElement(String methodName)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    super();
+    
+    _methodName = methodName;
   }
 
   public HttpMethodConstraintElement(String methodName,
                                      HttpConstraintElement constraint)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    super(constraint.getEmptyRoleSemantic(),
+          constraint.getTransportGuarantee(),
+          constraint.getRolesAllowed());
+
+    _methodName = methodName;
   }
 
   public String getMethodName()
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return _methodName;
   }
 }

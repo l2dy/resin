@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,80 +29,56 @@
 
 package com.caucho.ejb.gen;
 
-import com.caucho.config.gen.*;
-import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
-
-import javax.ejb.*;
 import java.io.IOException;
 import java.util.ArrayList;
+
+import com.caucho.config.gen.ApiClass;
+import com.caucho.config.gen.View;
+import com.caucho.java.JavaWriter;
+import javax.ejb.Stateful;
 
 /**
  * Generates the skeleton for a stateful bean.
  */
 public class StatefulGenerator extends SessionGenerator {
-  private static final L10N L = new L10N(StatefulGenerator.class);
-
   public StatefulGenerator(String ejbName, ApiClass ejbClass,
-			   ApiClass localHome,
-			   ArrayList<ApiClass> localApi,
-			   ApiClass remoteHome,
-			   ArrayList<ApiClass> remoteApi)
-  {
-    super(ejbName, ejbClass,
-	  localHome, localApi,
-	  remoteHome, remoteApi);
+                           ArrayList<ApiClass> localApi,
+                           ArrayList<ApiClass> remoteApi) {
+    super(ejbName, ejbClass, localApi, remoteApi, Stateful.class
+        .getSimpleName());
   }
 
-  public boolean isStateless()
-  {
+  public boolean isStateless() {
     return false;
   }
 
   @Override
-  protected View createLocalView(ApiClass api)
-  {
-    return new StatefulLocalView(this, api);
+  protected View createLocalView(ApiClass api) {
+    return new StatefulView(this, api);
   }
 
   @Override
-  protected View createLocalHomeView(ApiClass api)
-  {
-    return new StatefulLocalHomeView(this, api);
-  }
-
-  @Override
-  protected View createRemoteHomeView(ApiClass api)
-  {
-    return new StatefulRemoteHomeView(this, api);
-  }
-
-  @Override
-  protected View createRemoteView(ApiClass api)
-  {
-    return new StatefulRemoteView(this, api);
+  protected View createRemoteView(ApiClass api) {
+    return new StatefulView(this, api);
   }
 
   /**
    * Scans for the @Local interfaces
    */
   @Override
-  protected ArrayList<ApiClass> introspectLocalDefault()
-  {
+  protected ArrayList<ApiClass> introspectLocalDefault() {
     ArrayList<ApiClass> apiClass = new ArrayList<ApiClass>();
 
     apiClass.add(getBeanClass());
 
     return apiClass;
   }
-  
+
   /**
    * Generates the stateful session bean
    */
   @Override
-  public void generate(JavaWriter out)
-    throws IOException
-  {
+  public void generate(JavaWriter out) throws IOException {
     generateTopComment(out);
 
     out.println();
@@ -115,7 +91,7 @@ public class StatefulGenerator extends SessionGenerator {
     out.println();
     out.println("import javax.ejb.*;");
     out.println("import javax.transaction.*;");
-    
+
     out.println();
     out.println("public class " + getClassName());
     out.println("  extends StatefulContext");
@@ -123,10 +99,10 @@ public class StatefulGenerator extends SessionGenerator {
     out.pushDepth();
 
     out.println();
-    out.println("public " + getClassName() + "(StatefulServer server)");
+    out.println("public " + getClassName() + "(StatefulManager server)");
     out.println("{");
     out.pushDepth();
-    
+
     out.println("super(server);");
 
     for (View view : getViews()) {
@@ -137,11 +113,13 @@ public class StatefulGenerator extends SessionGenerator {
     out.println("}");
 
     out.println();
-    out.println("public " + getClassName() + "(" + getClassName() + " context)");
+    out
+        .println("public " + getClassName() + "(" + getClassName()
+            + " context)");
     out.println("{");
     out.pushDepth();
-    
-    out.println("super(context.getStatefulServer());");
+
+    out.println("super(context.getStatefulManager());");
 
     generateContextObjectConstructor(out);
 
@@ -156,20 +134,18 @@ public class StatefulGenerator extends SessionGenerator {
     generateViews(out);
 
     generateDependency(out);
-    
+
     out.popDepth();
     out.println("}");
   }
 
-  protected void generateCreateProvider(JavaWriter out)
-    throws IOException
-  {
+  protected void generateCreateProvider(JavaWriter out) throws IOException {
     out.println();
     out.println("@Override");
     out.println("public StatefulProvider getProvider(Class api)");
     out.println("{");
     out.pushDepth();
-    
+
     for (View view : getViews()) {
       StatefulView sView = (StatefulView) view;
 
@@ -187,14 +163,12 @@ public class StatefulGenerator extends SessionGenerator {
    * Creates any additional code in the constructor
    */
   public void generateContextObjectConstructor(JavaWriter out)
-    throws IOException
-  {
+      throws IOException {
     for (View view : getViews()) {
       view.generateContextObjectConstructor(out);
     }
   }
 
-  protected void generateContext(JavaWriter out)
-  {
+  protected void generateContext(JavaWriter out) {
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,17 +39,18 @@ import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.InjectionPoint;
 
 import com.caucho.config.inject.*;
+import com.caucho.env.jpa.EntityManagerJtaProxy;
 
 /**
  * The @PersistenceContext webbeans component
  */
 public class PersistenceContextComponent extends AbstractBean {
-  private final EntityManagerTransactionProxy _proxy;
+  private final EntityManagerJtaProxy _proxy;
 
   private HashSet<Type> _types = new HashSet<Type>();
   
   public PersistenceContextComponent(String name,
-				     EntityManagerTransactionProxy proxy)
+				     EntityManagerJtaProxy proxy)
   {
     super(InjectManager.create());
     

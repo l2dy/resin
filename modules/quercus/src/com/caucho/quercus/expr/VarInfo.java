@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,8 @@
 
 package com.caucho.quercus.expr;
 
+import com.caucho.quercus.env.MethodIntern;
+import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.program.FunctionInfo;
 
 /**
@@ -37,18 +39,18 @@ import com.caucho.quercus.program.FunctionInfo;
 public class VarInfo {
   private final FunctionInfo _function;
 
-  private final String _name;
+  private final StringValue _name;
   
-  public VarInfo(String name, FunctionInfo function)
+  public VarInfo(StringValue name, FunctionInfo function)
   {
-    _name = name.intern();
+    _name = name;
     _function = function;
   }
 
   /**
    * Returns the variable name.
    */
-  public String getName()
+  public StringValue getName()
   {
     return _name;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.ejb.message;
 
-import com.caucho.ejb.AbstractContext;
+import com.caucho.ejb.server.AbstractContext;
 import com.caucho.ejb.server.AbstractServer;
 import com.caucho.transaction.*;
 import com.caucho.util.L10N;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,7 @@ import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.Var;
 
 /**
  * Represents a PHP array reference expression.
@@ -112,7 +113,7 @@ public class ArrayGetExpr extends AbstractVarExpr {
     Value array = _expr.evalArray(env);
     Value index = _index.eval(env);
 
-    return array.getArray(index);
+    return array.getRef(index);
   }
 
   /**
@@ -167,11 +168,14 @@ public class ArrayGetExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public Value evalRef(Env env)
+  @Override
+  public Var evalVar(Env env)
   {
-    Value value = _expr.evalArray(env);
+    Value value = _expr.evalVar(env);
+    
+    value = value.toAutoArray();
 
-    return value.getRef(_index.eval(env));
+    return value.getVar(_index.eval(env));
   }
 
   /**
@@ -181,11 +185,31 @@ public class ArrayGetExpr extends AbstractVarExpr {
    *
    * @return the expression value.
    */
-  public void evalAssign(Env env, Value value)
+  @Override
+  public Value evalAssignValue(Env env, Value value)
   {
-    _expr.evalArrayAssign(env, _index.eval(env), value);
+    // php/03mk
+    Value array = _expr.evalRef(env).toAutoArray();
+
+    return array.put(_index.eval(env), value);
   }
-  
+
+  /**
+   * Evaluates the expression.
+   *
+   * @param env the calling environment.
+   *
+   * @return the expression value.
+   */
+  @Override
+  public Value evalAssignRef(Env env, Value value)
+  {
+    // php/03mk
+    Value array = _expr.evalRef(env).toAutoArray();
+    
+    return array.put(_index.eval(env), value);
+  }
+ 
   /**
    * Evaluates the expression as an isset().
    */

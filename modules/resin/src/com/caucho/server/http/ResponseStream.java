@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -723,6 +723,10 @@ abstract public class ResponseStream extends ToByteResponseStream {
         || res.isDisableCache()) {
       return;
     }
+    
+    // server/13de
+    if (_cacheInvocation != null)
+      return;
 
     AbstractCacheFilterChain cacheInvocation = res.getCacheInvocation();
 

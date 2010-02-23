@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,7 +33,7 @@ import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.expr.ClassConstExpr;
 import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.StringLiteralExpr;
+import com.caucho.quercus.expr.LiteralStringExpr;
 import com.caucho.quercus.module.ModuleContext;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.program.ClassDef;
@@ -54,7 +54,7 @@ import java.util.logging.Logger;
 /**
  * Represents a Quercus runtime class.
  */
-public class QuercusClass {
+public class QuercusClass extends NullValue {
   private static final L10N L = new L10N(QuercusClass.class);
   private static final Logger log
     = Logger.getLogger(QuercusClass.class.getName());
@@ -80,6 +80,8 @@ public class QuercusClass {
   private AbstractFunction _fieldSet;
   
   private AbstractFunction _call;
+  private AbstractFunction _invoke;
+  private AbstractFunction _toString;
 
   private ArrayDelegate _arrayDelegate;
   private TraversableDelegate _traversableDelegate;
@@ -91,6 +93,7 @@ public class QuercusClass {
   private final HashMap<String,Expr> _constMap;
   private final LinkedHashMap<StringValue,ClassField> _fieldMap;
   private final HashMap<String,ArrayList<StaticField>> _staticFieldExprMap;
+  private final HashMap<StringValue,StringValue> _staticFieldNameMap;
 
   private final HashSet<String> _instanceofSet;
 
@@ -117,9 +120,16 @@ public class QuercusClass {
     _initializers = new ArrayList<InstanceInitializer>();
   
     _fieldMap = new LinkedHashMap<StringValue,ClassField>();
-    _methodMap = new MethodMap<AbstractFunction>();
+    _methodMap = new MethodMap<AbstractFunction>(this, null);
     _constMap = new HashMap<String,Expr>();
+    
     _staticFieldExprMap = new LinkedHashMap<String,ArrayList<StaticField>>();
+    
+    _staticFieldNameMap = new LinkedHashMap<StringValue,StringValue>();
+    
+    if (parent != null) {
+      _staticFieldNameMap.putAll(parent._staticFieldNameMap);
+    }
 
     JavaClassDef javaClassDef = null;
 
@@ -132,7 +142,7 @@ public class QuercusClass {
       AbstractFunction cons = cls.getConstructor();
       
       if (cons != null) {
-        addMethod(cls.getName(), cons);
+        addMethod(new StringBuilderValue(cls.getName()), cons);
       }
     }
 
@@ -142,7 +152,7 @@ public class QuercusClass {
       classDefList = new ClassDef[parent._classDefList.length + 1];
 
       System.arraycopy(parent._classDefList, 0, classDefList, 1,
-		       parent._classDefList.length);
+                       parent._classDefList.length);
 
       classDefList[0] = classDef;
     }
@@ -190,8 +200,8 @@ public class QuercusClass {
     // php/093n
     if (_constructor != null
         && ! _constructor.getName().equals("__construct")) {
-      addMethodIfNotExist("__construct", _constructor);
-      addMethodIfNotExist(_className, _constructor);
+      addMethodIfNotExist(new StringBuilderValue("__construct"), _constructor);
+      addMethodIfNotExist(new StringBuilderValue(_className), _constructor);
     }
 
     if (_destructor == null && parent != null)
@@ -257,6 +267,8 @@ public class QuercusClass {
     _fieldSet = cacheClass._fieldSet;
   
     _call = cacheClass._call;
+    _invoke = cacheClass._invoke;
+    _toString = cacheClass._toString;
 
     _arrayDelegate = cacheClass._arrayDelegate;
     _traversableDelegate = cacheClass._traversableDelegate;
@@ -268,6 +280,7 @@ public class QuercusClass {
     _methodMap = cacheClass._methodMap;
     _constMap = cacheClass._constMap;
     _staticFieldExprMap = cacheClass._staticFieldExprMap;
+    _staticFieldNameMap = cacheClass._staticFieldNameMap;
     _instanceofSet = cacheClass._instanceofSet;
   }
 
@@ -392,10 +405,10 @@ public class QuercusClass {
       _isModified = true;
       
       if (_cacheRef != null) {
-	QuercusClass cacheClass = _cacheRef.get();
+        QuercusClass cacheClass = _cacheRef.get();
 
-	if (cacheClass != null)
-	  cacheClass.setModified();
+        if (cacheClass != null)
+          cacheClass.setModified();
       }
     }
   }
@@ -407,7 +420,7 @@ public class QuercusClass {
   {
     if (log.isLoggable(Level.FINEST))
       log.log(Level.FINEST, L.l("{0} adding array delegate {1}",
-				this,  delegate));
+                                this,  delegate));
 
     _arrayDelegate = delegate;
   }
@@ -427,7 +440,7 @@ public class QuercusClass {
   {
     if (log.isLoggable(Level.FINEST))
       log.log(Level.FINEST, L.l("{0} setting traversable delegate {1}",
-				this,  delegate));
+                                this,  delegate));
 
     _traversableDelegate = delegate;
   }
@@ -447,7 +460,7 @@ public class QuercusClass {
   {
     if (log.isLoggable(Level.FINEST))
       log.log(Level.FINEST, L.l("{0} setting count delegate {1}",
-				this,  delegate));
+                                this,  delegate));
 
     _countDelegate = delegate;
   }
@@ -509,6 +522,38 @@ public class QuercusClass {
   }
 
   /**
+   * Sets the __invoke
+   */
+  public void setInvoke(AbstractFunction fun)
+  {
+    _invoke = fun;
+  }
+
+  /**
+   * Gets the __invoke
+   */
+  public AbstractFunction getInvoke()
+  {
+    return _invoke;
+  }
+
+  /**
+   * Sets the __toString
+   */
+  public void setToString(AbstractFunction fun)
+  {
+    _toString = fun;
+  }
+
+  /**
+   * Gets the __toString
+   */
+  public AbstractFunction getToString()
+  {
+    return _toString;
+  }
+
+  /**
    * Adds an initializer
    */
   public void addInitializer(InstanceInitializer init)
@@ -565,16 +610,24 @@ public class QuercusClass {
    */
   public void addMethod(String name, AbstractFunction fun)
   {
+    addMethod(new StringBuilderValue(name), fun);
+  }
+ 
+  /**
+   * Adds a method.
+   */
+  public void addMethod(StringValue name, AbstractFunction fun)
+  {
     if (fun == null)
       throw new NullPointerException(L.l("'{0}' is a null function", name));
     
     //php/09j9
     // XXX: this is a hack to get Zend Framework running, the better fix is
     // to initialize all interface classes before any concrete classes
-    AbstractFunction existingFun = _methodMap.get(name);
+    AbstractFunction existingFun = _methodMap.getRaw(name);
     
     if (existingFun == null || ! fun.isAbstract())
-      _methodMap.put(name, fun);
+      _methodMap.put(name.toString(), fun);
     else if (! existingFun.isAbstract() && fun.isAbstract())
       Env.getInstance().error(L.l("cannot make non-abstract function {0}:{1}() abstract",
                                   getName(), name));
@@ -583,7 +636,7 @@ public class QuercusClass {
   /*
    * Adds a method if it does not exist.
    */
-  public void addMethodIfNotExist(String name, AbstractFunction fun)
+  public void addMethodIfNotExist(StringValue name, AbstractFunction fun)
   {
     if (fun == null)
       throw new NullPointerException(L.l("'{0}' is a null function", name));
@@ -591,10 +644,10 @@ public class QuercusClass {
     //php/09j9
     // XXX: this is a hack to get Zend Framework running, the better fix is
     // to initialize all interface classes before any concrete classes
-    AbstractFunction existingFun = _methodMap.get(name);
+    AbstractFunction existingFun = _methodMap.getRaw(name);
 
     if (existingFun == null && ! fun.isAbstract())
-      _methodMap.put(name, fun);
+      _methodMap.put(name.toString(), fun);
   }
 
   /**
@@ -611,23 +664,20 @@ public class QuercusClass {
     }
     
     fieldList.add(new StaticField(name, value));
+    _staticFieldNameMap.put(new ConstStringValue(name),
+                            new ConstStringValue(className + "::" + name));
   }
 
   /**
    * Returns the static field names.
    */
-  public ArrayList<String> getStaticFieldNames()
+  public ArrayList<StringValue> getStaticFieldNames()
   {
-    ArrayList<String> names = new ArrayList<String>();
+    ArrayList<StringValue> names = new ArrayList<StringValue>();
 
     if (_staticFieldExprMap != null) {
-      for (Map.Entry<String,ArrayList<StaticField>> entry
-           : _staticFieldExprMap.entrySet()) {
-        ArrayList<StaticField> fieldList = entry.getValue();
-        
-        for (StaticField field : fieldList) {
-          names.add(field.getName());
-        }
+      for (StringValue fieldName : _staticFieldNameMap.keySet()) {
+        names.add(fieldName);
       }
     }
 
@@ -686,7 +736,7 @@ public class QuercusClass {
       return;
 
     for (Map.Entry<String,ArrayList<StaticField>> map
-	   : _staticFieldExprMap.entrySet()) {
+          : _staticFieldExprMap.entrySet()) {
       if (env.isInitializedClass(map.getKey()))
         continue;
       
@@ -700,50 +750,60 @@ public class QuercusClass {
         else
           val = expr.eval(env);
 
-	String fullName = _className + "::" + field._name;
-	
-        env.setGlobalValue(fullName, val);
+        StringValue fullName = env.createStringBuilder();
+        fullName.append(_className);
+        fullName.append("::");
+        fullName.append(field._name);
+        
+        env.setStaticRef(fullName, val);
       }
       
       env.addInitializedClass(map.getKey());
     }
   }
 
-  public Var getStaticField(Env env, String name)
+  public Value getStaticFieldValue(Env env, StringValue name)
   {
-    Var var = getStaticFieldRec(env, name);
-
-    if (var != null)
-      return var;
-
-    /*
-    String fullName = _className + "::" + name;
+    StringValue staticName = _staticFieldNameMap.get(name);
+    
+    if (staticName == null) {
+      env.error(L.l("{0}::${1} is an undeclared static field",
+                    _className, name));
       
-    EnvVar envVar = env.getGlobalEnvVar(fullName);
-      
-    return envVar.getRef();
-    */
-
-    return null;
+      return NullValue.NULL;
+    }
+    
+    return env.getStaticValue(staticName);
   }
 
-  protected Var getStaticFieldRec(Env env, String name)
+  public Var getStaticFieldVar(Env env, StringValue name)
   {
-    String fullName = _className + "::" + name;
+    StringValue staticName = _staticFieldNameMap.get(name);
+    
+    if (staticName == null) {
+      env.error(L.l("{0}::${1} is an undeclared static field",
+                    _className, name));
       
-    EnvVar envVar = env.getGlobalRaw(fullName);
-
-    if (envVar != null)
-      return envVar.getRef();
+      throw new IllegalStateException();
+    }
     
-    QuercusClass parent = getParent();
-    
-    if (parent != null)
-      return parent.getStaticFieldRec(env, name);
-    else
-      return null;
+    return env.getStaticVar(staticName);
   }
-  
+
+  public Value setStaticFieldRef(Env env, StringValue name, Value value)
+  {
+    StringValue staticName = _staticFieldNameMap.get(name);
+    
+    if (staticName == null) {
+      env.error(L.l("{0}::{1} is an unknown static field",
+                    _className, name));
+      
+      throw new IllegalStateException();
+    }
+    
+    return env.setStaticRef(staticName, value);
+  }
+    
   //
   // Constructors
   //
@@ -867,13 +927,12 @@ public class QuercusClass {
       AbstractFunction fun = findConstructor();
 
       if (fun != null)
-        fun.callMethod(env, objectValue, args);
+        fun.callMethod(env, this, objectValue, args);
       else {
         //  if expr
       }
 
       return objectValue;
-
     } finally {
       env.setCallingClass(oldCallingClass);
     }
@@ -993,7 +1052,7 @@ public class QuercusClass {
         return UnsetValue.UNSET;
       
       try {
-        return _fieldGet.callMethod(env, qThis, name);
+        return _fieldGet.callMethod(env, this, qThis, name);
       } finally {
         env.popFieldGet();
       }
@@ -1008,20 +1067,7 @@ public class QuercusClass {
   public void setField(Env env, Value qThis, StringValue name, Value value)
   {
     if (_fieldSet != null)
-      _fieldSet.callMethod(env, qThis, name, value);
-  }
-
-  /**
-   * Finds the matching function.
-   */
-  public AbstractFunction findFunction(String name)
-  {
-    char []key = name.toCharArray();
-    int hash = MethodMap.hash(key, key.length);
-
-    AbstractFunction fun = _methodMap.get(hash, key, key.length);
-
-    return fun;
+      _fieldSet.callMethod(env, this, qThis, name, value);
   }
 
   /**
@@ -1035,496 +1081,372 @@ public class QuercusClass {
   /**
    * Finds the matching function.
    */
-  public final AbstractFunction getFunction(String name)
+  public final AbstractFunction getFunction(StringValue methodName)
   {
-    return _methodMap.get(name);
+    return _methodMap.get(methodName, methodName.hashCodeCaseInsensitive());
+  }
+
+
+  /**
+   * Finds the matching function.
+   */
+  @Override
+  public final AbstractFunction findFunction(String methodName)
+  {
+    return _methodMap.getRaw(new StringBuilderValue(methodName));
   }
 
   /**
    * Finds the matching function.
    */
-  public final AbstractFunction getFunction(int hash, char []name, int nameLen)
+  public final AbstractFunction findFunction(StringValue methodName)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    return _methodMap.getRaw(methodName);
+  }
+
+  /**
+   * Finds the matching function.
+   */
+  public final AbstractFunction getFunction(StringValue methodName, int hash)
+  {
+    return _methodMap.get(methodName, methodName.hashCode());
+
+    /*
+    AbstractFunction fun = _methodMap.get(methodName, hash);
     
     if (fun != null)
       return fun;
     else if (_className.equalsIgnoreCase(toMethod(name, nameLen))
-	     && _parent != null) {
+             && _parent != null) {
       // php/093j
       return _parent.getFunction(_parent.getName());
     }
     else {
       throw new QuercusRuntimeException(L.l("{0}::{1} is an unknown method",
-					getName(), toMethod(name, nameLen)));
+                                            getName(), toMethod(name, nameLen)));
     }
+    */
   }
 
   /**
    * calls the function.
    */
   public Value callMethod(Env env,
-                          Value thisValue,
-                          int hash, char []name, int nameLength,
-                          Expr []args)
-  {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLength);
-    
-    if (fun != null)
-      return fun.callMethod(env, thisValue, args);
-    else if (getCall() != null) {
-      Expr []newArgs = new Expr[args.length + 1];
-      newArgs[0] = new StringLiteralExpr(toMethod(name, nameLength));
-      System.arraycopy(args, 0, newArgs, 1, args.length);
-      
-      return getCall().callMethod(env, thisValue, newArgs);
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}",
-                           getName(), toMethod(name, nameLength)));
-  }
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env,
-                          Value thisValue,
-                          StringValue methodName,
-                          Expr []args)
-  {
-    AbstractFunction fun = _methodMap.get(methodName.toString());
-    
-    if (fun != null)
-      return fun.callMethod(env, thisValue, args);
-    else if (getCall() != null) {
-      Expr []newArgs = new Expr[args.length + 1];
-      newArgs[0] = new StringLiteralExpr(methodName.toString());
-      System.arraycopy(args, 0, newArgs, 1, args.length);
-      
-      return getCall().callMethod(env, thisValue, newArgs);
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}",
-                           getName(), methodName));
-  }
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env,
-                          Value thisValue,
-                          int hash, char []name, int nameLen,
+                          Value qThis,
+                          StringValue methodName, int hash,
                           Value []args)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethod(env, thisValue, args);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl(args));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env,
-                          Value thisValue,
-                          StringValue name,
-
-                          Value []args)
+    return fun.callMethod(env, this, qThis, args);
+  }
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value []args)
   {
-    AbstractFunction fun = _methodMap.get(name.toString());
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, args);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  name,
-                                  new ArrayValueImpl(args));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), name));
-  }  
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      args);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethod(Env env, Value thisValue,
-                          int hash, char []name, int nameLen)
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
 
-    if (fun != null)
-      return fun.callMethod(env, thisValue);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl());
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    AbstractFunction fun = _methodMap.get(methodName, hash);
+
+    return fun.callMethod(env, this, qThis);
   }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env, Value thisValue,
-			  int hash, char []name, int nameLen,
-			  Value a1)
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, a1);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl()
-                                  .append(a1));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive());
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethod(Env env, Value thisValue,
-                          int hash, char []name, int nameLen,
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash,
+                          Value a1)
+  {
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1);
+  }  
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value a1)
+  {
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      a1);
+  }
+
+  /**
+   * calls the function.
+   */
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash,
                           Value a1, Value a2)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, a1, a2);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl()
-                                  .append(a1)
-                                  .append(a2));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env, Value thisValue, 
-                          int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3)
-  {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, a1, a2, a3);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl()
-                                  .append(a1)
-                                  .append(a2)
-                                  .append(a3));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env, Value thisValue, 
-                          int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3, Value a4)
-  {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, a1, a2, a3, a4);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl()
-                                  .append(a1)
-                                  .append(a2)
-                                  .append(a3)
-                                  .append(a4));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethod(Env env, Value thisValue,
-                          int hash, char []name, int nameLen,
-			  Value a1, Value a2, Value a3, Value a4, Value a5)
-  {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
-
-    if (fun != null)
-      return fun.callMethod(env, thisValue, a1, a2, a3, a4, a5);
-    else if (getCall() != null) {
-      return getCall().callMethod(env,
-                                  thisValue,
-                                  env.createString(name, nameLen),
-                                  new ArrayValueImpl()
-                                  .append(a1)
-                                  .append(a2)
-                                  .append(a3)
-                                  .append(a4)
-                                  .append(a5));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
-                             Expr []args)
-  {
-    AbstractFunction fun = getFunction(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
     
-    return fun.callMethodRef(env, thisValue, args);
-  }  
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-  /**
-   * calls the function.
-   */
-  public Value callMethodRef(Env env,
-			     Value thisValue,
-			     StringValue methodName,
-			     Expr []args)
+    return fun.callMethod(env, this, qThis, a1, a2);
+  }  
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value a1, Value a2)
   {
-    AbstractFunction fun = _methodMap.get(methodName.toString());
-    
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, args);
-    else if (getCall() != null) {
-      Expr []newArgs = new Expr[args.length + 1];
-      newArgs[0] = new StringLiteralExpr(methodName.toString());
-      System.arraycopy(args, 0, newArgs, 1, args.length);
-      
-      return getCall().callMethodRef(env, thisValue, newArgs);
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}",
-                           getName(), methodName));
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      a1, a2);
   }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3)
+  {
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3);
+  }  
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value a1, Value a2, Value a3)
+  {
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      a1, a2, a3);
+  }
+
+  /**
+   * calls the function.
+   */
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4)
+  {
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3, a4);
+  }  
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value a1, Value a2, Value a3, Value a4)
+  {
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      a1, a2, a3, a4);
+  }
+
+  /**
+   * calls the function.
+   */
+  public Value callMethod(Env env, Value qThis,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4, Value a5)
+  {
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
+
+    return fun.callMethod(env, this, qThis, a1, a2, a3, a4, a5);
+  }  
+  
+  public final Value callMethod(Env env, Value qThis, StringValue methodName,
+                                Value a1, Value a2, Value a3, Value a4,
+                                Value a5)
+  {
+    return callMethod(env, qThis, 
+                      methodName, methodName.hashCodeCaseInsensitive(),
+                      a1, a2, a3, a4, a5);
+  }
+
+  /**
+   * calls the function.
+   */
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value []args)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, args);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl(args));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis, args);
   }  
-
-  /**
-   * calls the function.
-   */
-  public Value callMethodRef(Env env, Value thisValue,
-                             StringValue name,
-                             Value []args)
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value []args)
   {
-    AbstractFunction fun = _methodMap.get(name.toString());
-
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, args);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     name,
-                                     new ArrayValueImpl(args));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), name));
-  }  
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         args);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen)
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl());
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis);
   }  
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive());
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value a1)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, a1);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl()
-                                     .append(a1));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis, a1);
   }  
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value a1)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         a1);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value a1, Value a2)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, a1, a2);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl()
-                                     .append(a1)
-                                     .append(a2));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis, a1, a2);
   }  
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value a1, Value a2)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         a1, a2);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value a1, Value a2, Value a3)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, a1, a2, a3);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl()
-                                     .append(a1)
-                                     .append(a2)
-                                     .append(a3));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis, a1, a2, a3);
   }  
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value a1, Value a2, Value a3)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         a1, a2, a3);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value a1, Value a2, Value a3, Value a4)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, a1, a2, a3, a4);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl()
-                                     .append(a1)
-                                     .append(a2)
-                                     .append(a3)
-                                     .append(a4));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis,
+                             a1, a2, a3, a4);
   }  
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value a1, Value a2, Value a3, Value a4)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         a1, a2, a3, a4);
+  }
 
   /**
    * calls the function.
    */
-  public Value callMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  public Value callMethodRef(Env env, Value qThis,
+                             StringValue methodName, int hash,
                              Value a1, Value a2, Value a3, Value a4, Value a5)
   {
-    AbstractFunction fun = _methodMap.get(hash, name, nameLen);
+    if (qThis.isNull())
+      qThis = this;
+    
+    AbstractFunction fun = _methodMap.get(methodName, hash);
 
-    if (fun != null)
-      return fun.callMethodRef(env, thisValue, a1, a2, a3, a4, a5);
-    else if (getCall() != null) {
-      return getCall().callMethodRef(env,
-                                     thisValue,
-                                     env.createString(name, nameLen),
-                                     new ArrayValueImpl()
-                                     .append(a1)
-                                     .append(a2)
-                                     .append(a3)
-                                     .append(a4)
-                                     .append(a5));
-    }
-    else
-      return env.error(L.l("Call to undefined method {0}::{1}()",
-                           getName(), toMethod(name, nameLen)));
+    return fun.callMethodRef(env, this, qThis,
+                             a1, a2, a3, a4, a5);
+  }
+  
+  public final Value callMethodRef(Env env, Value qThis, StringValue methodName,
+                                   Value a1, Value a2, Value a3, Value a4,
+                                   Value a5)
+  {
+    return callMethodRef(env, qThis, 
+                         methodName, methodName.hashCodeCaseInsensitive(),
+                         a1, a2, a3, a4, a5);
   }
   
   //
@@ -1534,23 +1456,8 @@ public class QuercusClass {
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env,
-                                Value thisValue,
-                                int hash, char []name, int nameLength,
-                                Expr []args)
-  {
-    QuercusClass oldClass = env.setCallingClass(this);
-    try {
-      return callMethod(env, thisValue, hash, name, nameLength, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
-  }
-
-  /**
-   * calls the function.
-   */
-  public Value callStaticMethod(Env env,
+  /*
+  private Value callStaticMethod(Env env,
                                 Value thisValue,
                                 StringValue methodName,
                                 Expr []args)
@@ -1562,307 +1469,170 @@ public class QuercusClass {
     } finally {
       env.setCallingClass(oldClass);
     }
-  }
+  }*/
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env,
-                                Value thisValue,
-                                int hash, char []name, int nameLen,
-                                Value []args)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value []args)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash, args);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env,
-                                Value thisValue,
-                                StringValue name,
-                                Value []args)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, name, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env, Value thisValue,
-                                int hash, char []name, int nameLen)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash,
+                      a1);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env, Value thisValue,
-                                int hash, char []name, int nameLen,
-                                Value a1)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen,
-                        a1);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash,
+                      a1, a2);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env, Value thisValue,
-                                int hash, char []name, int nameLen,
-                                Value a1, Value a2)
-  {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen,
-                        a1, a2);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callStaticMethod(Env env, Value thisValue, 
-                                int hash, char []name, int nameLen,
+  @Override
+  public Value callMethod(Env env,
+                                StringValue methodName, int hash,
                                 Value a1, Value a2, Value a3)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen,
-                        a1, a2, a3);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash,
+                      a1, a2, a3);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env, Value thisValue, 
-                                int hash, char []name, int nameLen,
-                                Value a1, Value a2, Value a3, Value a4)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen,
-                        a1, a2, a3, a4);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash,
+                      a1, a2, a3, a4);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethod(Env env, Value thisValue,
-                                int hash, char []name, int nameLen,
-                                Value a1, Value a2, Value a3, Value a4,
-                                Value a5)
+  @Override
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
+                          Value a1, Value a2, Value a3, Value a4,
+                          Value a5)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethod(env, thisValue, hash, name, nameLen,
-                        a1, a2, a3, a4, a5);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethod(env, this, methodName, hash,
+                      a1, a2, a3, a4, a5);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
-                             Expr []args)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value []args)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash, args);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env,
-                                   Value thisValue,
-                                   StringValue methodName,
-                                   Expr []args)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, methodName, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
-  }
-
-  /**
-   * calls the function.
-   */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen,
-                                   Value []args)
-  {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   StringValue name,
-                                   Value []args)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, name, args);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash,
+                         a1);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2)  
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash,
+                         a1, a2);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen,
-                                   Value a1)
-  {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen,
-                           a1);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen,
-                                   Value a1, Value a2)
-  {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen,
-                           a1, a2);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
-  }  
-
-  /**
-   * calls the function.
-   */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                             int hash, char []name, int nameLen,
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
                              Value a1, Value a2, Value a3)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen,
-                           a1, a2, a3);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash,
+                         a1, a2, a3);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen,
-                                   Value a1, Value a2, Value a3, Value a4)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2, Value a3, Value a4)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen,
-                           a1, a2, a3, a4);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash,
+                         a1, a2, a3, a4);
   }  
 
   /**
    * calls the function.
    */
-  public Value callStaticMethodRef(Env env, Value thisValue,
-                                   int hash, char []name, int nameLen,
-                                   Value a1, Value a2, Value a3, Value a4,
-                                   Value a5)
+  @Override
+  public Value callMethodRef(Env env,
+                             StringValue methodName, int hash,
+                             Value a1, Value a2, Value a3, Value a4,
+                             Value a5)
   {
-    QuercusClass oldClass = env.setCallingClass(this);
-    
-    try {
-      return callMethodRef(env, thisValue, hash, name, nameLen,
-                           a1, a2, a3, a4, a5);
-    } finally {
-      env.setCallingClass(oldClass);
-    }
+    return callMethodRef(env, this, methodName, hash,
+                         a1, a2, a3, a4, a5);
   }  
 
   private String toMethod(char []key, int keyLength)
@@ -1895,7 +1665,7 @@ public class QuercusClass {
       return fun;
     else {
       throw new QuercusRuntimeException(L.l("{0}::{1} is an unknown method",
-					getName(), name));
+                                            getName(), name));
     }
   }
 
@@ -1910,7 +1680,7 @@ public class QuercusClass {
       return expr.eval(env);
 
     throw new QuercusRuntimeException(L.l("{0}::{1} is an unknown constant",
-					getName(), name));
+                                          getName(), name));
   }
   
   /**
@@ -1927,6 +1697,31 @@ public class QuercusClass {
   public final HashMap<String, Expr> getConstantMap()
   {
     return _constMap;
+  }
+  
+  //
+  // Value methods
+  //
+  
+  @Override
+  public boolean isNull()
+  {
+    return false;
+  }
+
+  /**
+   * Returns the value's class name.
+   */
+  @Override
+  public String getClassName()
+  {
+    return getName();
+  }
+  
+  @Override
+  public QuercusClass getQuercusClass()
+  {
+    return this;
   }
 
   public int hashCode()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,9 +39,11 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.logging.LogManager;
 
+import javax.enterprise.context.spi.CreationalContext;
+
 import com.caucho.config.Config;
-import com.caucho.config.ConfigContext;
 import com.caucho.config.ConfigException;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.types.RawString;
 import com.caucho.lifecycle.Lifecycle;
@@ -104,6 +106,9 @@ public class ResinEmbed
 
   private final ArrayList<WebAppEmbed> _webAppList
     = new ArrayList<WebAppEmbed>();
+  
+  private final ArrayList<PortEmbed> _portList
+    = new ArrayList<PortEmbed>();
 
   private Lifecycle _lifecycle = new Lifecycle();
   private boolean _isConfig;
@@ -142,11 +147,18 @@ public class ResinEmbed
    */
   public void addPort(PortEmbed port)
   {
+    _portList.add(port);
+    
+    if (_server != null)
+      port.bindTo(_server);
+    
+    /*
     // server/1e00
     if (_clusterServer == null)
       initConfig(_configFile);
     
-    port.bindTo(_clusterServer);
+    // XXX: port.bindTo(_clusterServer);
+     */
   }
 
   /**
@@ -252,8 +264,7 @@ public class ResinEmbed
 
       initConfig(_configFile);
 
-      _resin.start();
-      _server = _resin.getServer();
+      _server = _resin.createServer();
 
       thread.setContextClassLoader(_server.getClassLoader());
 
@@ -262,6 +273,10 @@ public class ResinEmbed
 
       for (BeanEmbed beanEmbed : _beanList) {
         beanEmbed.configure();
+      }
+      
+      for (PortEmbed port : _portList) {
+        port.bindTo(_server);
       }
 
       HostConfig hostConfig = new HostConfig();
@@ -283,6 +298,8 @@ public class ResinEmbed
 
         _host.addWebApp(config);
       }
+      
+      _server.start();
     } catch (Exception e) {
       throw ConfigException.create(e);
     } finally {
@@ -644,7 +661,7 @@ public class ResinEmbed
      * Configures the object.
      */
     @Override
-    public void inject(Object bean, ConfigContext env)
+    public <T> void inject(T bean, CreationalContext<T> env)
       throws ConfigException
     {
       _config.configure((WebApp) bean);

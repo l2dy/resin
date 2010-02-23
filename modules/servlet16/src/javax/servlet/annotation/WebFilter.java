@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,7 +47,6 @@ import javax.servlet.DispatcherType;
 @Documented  
 public @interface WebFilter {
   public boolean asyncSupported() default false;
-  public long asyncTimeout() default 60000L;
   
   public String description() default "";
   public DispatcherType []dispatcherTypes() default DispatcherType.REQUEST;
@@ -55,7 +54,8 @@ public @interface WebFilter {
 
   public String filterName() default "";
   
-  public String icon() default "";
+  public String smallIcon() default "";
+  public String largeIcon() default "";
   public WebInitParam[] initParams() default {};
   
   public String []servletNames() default {};

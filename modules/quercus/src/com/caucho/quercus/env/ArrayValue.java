@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.marshal.Marshal;
 import com.caucho.quercus.marshal.MarshalFactory;
 import com.caucho.vfs.WriteStream;
@@ -55,7 +56,7 @@ abstract public class ArrayValue extends Value {
 
   public static final StringValue ARRAY = new ConstStringValue("Array");
 
-  protected Entry _current;
+  private Entry _current;
 
   protected ArrayValue()
   {
@@ -176,12 +177,31 @@ abstract public class ArrayValue extends Value {
   }
 
   /**
+   * Converts to an array if null.
+   */
+  @Override
+  public Value toAutoArray()
+  {
+    return this;
+  }
+
+  /**
    * Converts to a java object.
    */
   @Override
   public Object toJavaObject()
   {
     return this;
+  }
+  
+  protected Entry getCurrent()
+  {
+    return _current;
+  }
+  
+  protected void setCurrent(Entry entry)
+  {
+    _current = entry;
   }
 
   //
@@ -323,12 +343,181 @@ abstract public class ArrayValue extends Value {
 
     for (Entry entry = getHead(); entry != null; entry = entry._next) {
       map.put(entry.getKey().toJavaObject(),
-                  entry.getValue().toJavaObject());
+              entry.getValue().toJavaObject());
     }
 
     return map;
   }
 
+  @Override
+  public boolean isCallable(Env env)
+  {
+    Value obj = get(LongValue.ZERO);
+    Value nameV = get(LongValue.ONE);
+
+    if (! nameV.isString()) {
+      return false;
+    }
+
+    String name = nameV.toString();
+
+    if (obj.isObject()) {
+      int p = name.indexOf("::");
+
+      // php/09lf
+      if (p > 0) {
+        String clsName = name.substring(0, p);
+        name = name.substring(p + 2);
+
+        QuercusClass cls = env.findClass(clsName);
+
+        if (cls == null) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+    else {
+      QuercusClass cl = env.findClass(obj.toString());
+
+      if (cl == null) {
+        return false;
+      }
+
+      return true;
+    }
+  }
+  /**
+   * Converts to a callable object.
+   */
+  @Override
+  public Callable toCallable(Env env)
+  {
+    Value obj = get(LongValue.ZERO);
+    Value nameV = get(LongValue.ONE);
+
+    if (! nameV.isString()) {
+      env.warning(L.l("'{0}' ({1}) is an unknown callback name",
+                      nameV, nameV.getClass().getSimpleName()));
+    
+      return super.toCallable(env);
+    }
+
+    String name = nameV.toString();
+
+    if (obj.isObject()) {
+      AbstractFunction fun;
+
+      int p = name.indexOf("::");
+
+      // php/09lf
+      if (p > 0) {
+        String clsName = name.substring(0, p);
+        name = name.substring(p + 2);
+
+        QuercusClass cls = env.findClass(clsName);
+
+        if (cls == null) {
+          env.warning(L.l("Callback: '{0}' is not a valid callback class for {1}",
+                          clsName, name));
+
+          return super.toCallable(env);
+        }
+        
+        return new CallbackClassMethod(cls, env.createString(name), obj);
+      }
+
+      return new CallbackObjectMethod(env, obj, env.createString(name));
+    }
+    else {
+      QuercusClass cl = env.findClass(obj.toString());
+
+      if (cl == null) {
+        env.warning(L.l("Callback: '{0}' is not a valid callback string for {1}",
+                        obj.toString(), obj));
+
+        return super.toCallable(env);
+      }
+
+      return new CallbackObjectMethod(env, cl, env.createString(name));
+    }
+  }
+  
+  public final Value callCallback(Env env, Callable callback, Value key)
+  {
+    Value result;
+    Value value = getRaw(key);
+    
+    if (value instanceof Var) {
+      value = new ArgRef((Var) value);
+
+      result = call(env, value);
+    }
+    else {
+      Value aVar = new Var(value);
+
+      result = callback.call(env, aVar);
+
+      Value aNew = aVar.toValue();
+      
+      if (aNew != value)
+        put(key, aNew);
+    }
+
+    return result;
+  }
+  
+  public final Value callCallback(Env env, Callable callback, Value key,
+                                  Value a2)
+  {
+    Value result;
+    Value value = getRaw(key);
+    
+    if (value instanceof Var) {
+      value = new ArgRef((Var) value);
+
+      result = callback.call(env, value, a2);
+    }
+    else {
+      Value aVar = new Var(value);
+
+      result = callback.call(env, aVar, a2);
+
+      Value aNew = aVar.toValue();
+      
+      if (aNew != value)
+        put(key, aNew);
+    }
+
+    return result;
+  }
+  
+  public final Value callCallback(Env env, Callable callback, Value key,
+                                  Value a2, Value a3)
+  {
+    Value result;
+    Value value = getRaw(key);
+    
+    if (value instanceof Var) {
+      value = new ArgRef((Var) value);
+
+      result = callback.call(env, value, a2, a3);
+    }
+    else {
+      Value aVar = new Var(value);
+
+      result = callback.call(env, aVar, a2, a3);
+
+      Value aNew = aVar.toValue();
+      
+      if (aNew != value)
+        put(key, aNew);
+    }
+
+    return result;
+  }
+  
   /**
    * Returns true for an array.
    */
@@ -352,7 +541,13 @@ abstract public class ArrayValue extends Value {
    */
   @Override
   abstract public Value copy();
-  
+
+  @Override
+  public Value toLocalRef()
+  {
+    return copy();
+  }
+
   /**
    * Copy for serialization
    */
@@ -494,6 +689,21 @@ abstract public class ArrayValue extends Value {
 
     return value;
   }
+  
+
+  /**
+   * Adds a new value.
+   */
+  public final void put(StringValue keyBinary,
+                        StringValue keyUnicode,
+                        Value value,
+                        boolean isUnicode)
+  {
+    if (isUnicode)
+      append(keyUnicode, value);
+    else
+      append(keyBinary, value);
+  }
 
   /**
    * Add
@@ -585,7 +795,7 @@ abstract public class ArrayValue extends Value {
    * Sets the array ref.
    */
   @Override
-  abstract public Var putRef();
+  abstract public Var putVar();
 
   /**
    * Creatse a tail index.
@@ -670,7 +880,7 @@ abstract public class ArrayValue extends Value {
     // php/0d40
     return value != null && value.isset();
   }
-  
+
   /**
    * Returns true if the key exists in the array.
    */
@@ -678,7 +888,7 @@ abstract public class ArrayValue extends Value {
   public boolean keyExists(Value key)
   {
     Value value = get(key);
-    
+
     // php/173m
     return value != UnsetValue.UNSET;
   }
@@ -693,7 +903,7 @@ abstract public class ArrayValue extends Value {
    * Returns the array ref.
    */
   @Override
-  abstract public Var getRef(Value index);
+  abstract public Var getVar(Value index);
 
   /**
    * Returns an iterator of the entries.
@@ -1348,15 +1558,15 @@ abstract public class ArrayValue extends Value {
   public static final class Entry
     implements Map.Entry<Value,Value>, Serializable
   {
-    final Value _key;
+    private final Value _key;
 
-    Value _value;
-    Var _var;
+    private Value _value;
+    // Var _var;
 
     Entry _prev;
-    Entry _next;
+    private Entry _next;
 
-    Entry _nextHash;
+    private Entry _nextHash;
 
     public Entry(Value key)
     {
@@ -1374,25 +1584,55 @@ abstract public class ArrayValue extends Value {
     {
       _key = entry._key;
 
+      /*
       if (entry._var != null)
         _var = entry._var;
       else
         _value = entry._value.copyArrayItem();
+      */
+      _value = entry._value.copyArrayItem();
     }
 
-    public Entry getNext()
+    public final Entry getNext()
     {
       return _next;
+    }
+    
+    public final void setNext(final Entry next)
+    {
+      _next = next;
+    }
+
+    public final Entry getPrev()
+    {
+      return _prev;
+    }
+    
+    public final void setPrev(final Entry prev)
+    {
+      _prev = prev;
+    }
+    
+    public final Entry getNextHash()
+    {
+      return _nextHash;
+    }
+    
+    public final void setNextHash(Entry next)
+    {
+      _nextHash = next;
     }
 
     public Value getRawValue()
     {
-      return _var != null ? _var : _value;
+      // return _var != null ? _var : _value;
+      return _value;
     }
 
     public Value getValue()
     {
-      return _var != null ? _var.toValue() : _value;
+      // return _var != null ? _var.toValue() : _value;
+      return _value.toValue();
     }
 
     public Value getKey()
@@ -1404,9 +1644,19 @@ abstract public class ArrayValue extends Value {
     {
       // The value may be a var
       // XXX: need test
-      return _var != null ? _var.toValue() : _value;
+      // return _var != null ? _var.toValue() : _value;
+
+      return _value.toValue();
     }
 
+    public Var toVar()
+    {
+      Var var = _value.toVar();
+      _value = var;
+
+      return var;
+    }
+    
     /**
      * Argument used/declared as a ref.
      */
@@ -1414,6 +1664,12 @@ abstract public class ArrayValue extends Value {
     {
       // php/376a
 
+      Var var = _value.toVar();
+      _value = var;
+
+      return var;
+
+      /*
       if (_var != null)
         return _var;
       else {
@@ -1421,14 +1677,16 @@ abstract public class ArrayValue extends Value {
 
         return _var;
       }
+      */
     }
-
     /**
      * Converts to an argument value.
      */
     public Value toArgValue()
     {
-      return _var != null ? _var.toValue() : _value;
+      // return _var != null ? _var.toValue() : _value;
+
+      return _value.toValue();
     }
 
     public Value setValue(Value value)
@@ -1436,7 +1694,7 @@ abstract public class ArrayValue extends Value {
       Value oldValue = _value;
 
       _value = value;
-      _var = null;
+      // _var = null;
 
       return oldValue;
     }
@@ -1445,12 +1703,21 @@ abstract public class ArrayValue extends Value {
     {
       Value oldValue = _value;
 
+      // XXX: make OO
+      /*
       if (value instanceof Var)
         _var = (Var) value;
       else if (_var != null)
         _var.set(value);
       else
         _value = value;
+      */
+
+      if (value instanceof Var)
+        _value = (Var) value;
+      else {
+        _value = _value.set(value);
+      }
 
       return oldValue;
     }
@@ -1460,10 +1727,19 @@ abstract public class ArrayValue extends Value {
      */
     public Value toRef()
     {
+      /*
       if (_var == null)
         _var = new Var(_value);
 
-      return new RefVar(_var);
+        return new RefVar(_var);
+
+      */
+
+      Var var = _value.toVar();
+
+      _value = var;
+
+      return new ArgRef(var);
     }
 
     /**
@@ -1471,18 +1747,36 @@ abstract public class ArrayValue extends Value {
      */
     public Value toArgRef()
     {
+      Var var = _value.toVar();
+
+      _value = var;
+
+      return new ArgRef(var);
+
+      /*
       if (_var == null)
         _var = new Var(_value);
 
       return new RefVar(_var);
+      */
     }
 
     public Value toArg()
     {
+      Var var = _value.toVar();
+
+      _value = var;
+
+      // php/0d14
+      return var;
+      // return new RefVar(var);
+
+      /*
       if (_var == null)
         _var = new Var(_value);
 
       return _var;
+      */
     }
 
     public void varDumpImpl(Env env,

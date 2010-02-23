@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -683,7 +683,7 @@ public class PDOStatement
         int i = 0;
 
         for (Value key : argsArray.keySet())
-          ctorArgs[i++] = argsArray.getRef(key);
+          ctorArgs[i++] = argsArray.getVar(key);
       }
       else
         return fetchBoth();

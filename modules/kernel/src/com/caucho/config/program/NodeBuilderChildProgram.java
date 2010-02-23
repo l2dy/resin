@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,11 @@
 
 package com.caucho.config.program;
 
+import javax.enterprise.context.spi.CreationalContext;
+
 import com.caucho.config.*;
 import com.caucho.config.type.*;
+import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.util.L10N;
 import com.caucho.xml.*;
@@ -68,17 +71,27 @@ public class NodeBuilderChildProgram extends FlowProgram {
   }
 
   @Override
-  public void inject(Object bean, ConfigContext env)
+  public <T> void inject(T bean, CreationalContext<T> cxt)
     throws ConfigException
   {
-    env.configureAttribute(bean, _node);
+    ConfigContext env = ConfigContext.create();
+    
+    CreationalContext<?> oldCxt = env.setCreationalContext(cxt);
+    
+    try {
+      env.configureAttribute(bean, _node);
+    } finally {
+      env.setCreationalContext(oldCxt);
+    }
   }
 
   @Override
-  public Object configure(ConfigType type, ConfigContext env)
+  public <T> T create(ConfigType<T> type, CreationalContext<T> cxt)
     throws ConfigException
   {
-    return env.create(_node, type);
+    ConfigContext env = ConfigContext.create();
+    
+    return (T) env.create(_node, type);
   }
 
   public String toString()

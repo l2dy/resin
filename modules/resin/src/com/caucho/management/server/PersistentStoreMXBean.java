@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,16 @@ public interface PersistentStoreMXBean extends ManagedObjectMXBean {
    * Returns the store type.
    */
   public String getStoreType();
+  
+  /**
+   * Returns the total current mnodes
+   */
+  public long getMnodeCount();
+  
+  /**
+   * Returns the total current data objects
+   */
+  public long getDataCount();
   
   /**
    * Returns the total current objects

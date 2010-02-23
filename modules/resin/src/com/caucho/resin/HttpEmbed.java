@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.resin;
 
 import com.caucho.config.ConfigException;
 import com.caucho.server.cluster.ClusterServer;
+import com.caucho.server.cluster.Server;
 import com.caucho.server.connection.Port;
 
 /**
@@ -83,13 +84,19 @@ public class HttpEmbed extends PortEmbed
   /**
    * Binds the port to the server
    */
-  public void bindTo(ClusterServer server)
+  public void bindTo(Server server)
   {
     try {
       _port = server.createHttp();
 
       _port.setPort(getPort());
       _port.setAddress(getAddress());
+      
+      _port.init();
+      
+      server.addProtocolPort(_port);
+      
+      // server.addPort(_port);
     } catch (Exception e) {
       throw ConfigException.create(e);
     }

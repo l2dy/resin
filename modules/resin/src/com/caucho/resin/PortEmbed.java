@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -79,5 +79,5 @@ abstract public class PortEmbed
   /**
    * Binds the port to the server
    */
-  abstract public void bindTo(ClusterServer server);
+  abstract public void bindTo(Server server);
 }

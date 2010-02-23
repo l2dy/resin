@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,6 +35,7 @@ package javax.persistence;
  * This exception will not cause the transaction, if one
  * is active, to be marked for roll back.
  */
+@SuppressWarnings("serial")
 public class NoResultException extends PersistenceException
 {
   public NoResultException()

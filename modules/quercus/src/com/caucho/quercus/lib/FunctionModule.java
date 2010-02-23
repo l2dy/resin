@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.Quercus;
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.VariableArguments;
@@ -57,7 +57,7 @@ public class FunctionModule extends AbstractQuercusModule {
    * Calls a user function
    */
   public static Value call_user_func(Env env,
-                                     Callback function,
+                                     Callable function,
                                      Value []args)
   {
     return function.call(env, args).copyReturn();
@@ -67,7 +67,7 @@ public class FunctionModule extends AbstractQuercusModule {
    * Calls a user function
    */
   public static Value call_user_func_array(Env env,
-                                           Callback function,
+                                           Callable function,
                                            Value arg)
   {
     if (function == null) {
@@ -189,8 +189,8 @@ public class FunctionModule extends AbstractQuercusModule {
    * Registers a shutdown function.
    */
   public static Value register_shutdown_function(Env env,
-						 Callback fun,
-						 Value []args)
+                                                 Callable fun,
+                                                 Value []args)
   {
     env.addShutdown(fun, args);
 

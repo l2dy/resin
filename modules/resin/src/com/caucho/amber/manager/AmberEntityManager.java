@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,13 @@ package com.caucho.amber.manager;
 import com.caucho.util.L10N;
 
 import javax.persistence.EntityManager;
+import javax.persistence.LockModeType;
+import javax.persistence.TypedQuery;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
+import javax.persistence.metamodel.Metamodel;
+
+import java.util.Map;
 import java.util.logging.Logger;
 
 /**

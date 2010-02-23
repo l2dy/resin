@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,7 +51,7 @@ public class JavaConstructor extends JavaInvoker {
    * @param method the introspected method.
    */
   public JavaConstructor(ModuleContext moduleContext,
-			             Constructor cons)
+                         Constructor cons)
   {    
     super(moduleContext,
 	  getName(cons),
@@ -70,7 +70,7 @@ public class JavaConstructor extends JavaInvoker {
     return getName();
   }
 
-  private static String getName(Constructor cons)
+  private static String getName(Constructor<?> cons)
   {
     String name;
 
@@ -79,7 +79,7 @@ public class JavaConstructor extends JavaInvoker {
     if (nameAnn != null)
       name = nameAnn.value();
     else {
-      Class cl = cons.getDeclaringClass();
+      Class<?> cl = cons.getDeclaringClass();
       Name clNameAnn =  (Name) cl.getAnnotation(Name.class);
 
       if (clNameAnn != null)

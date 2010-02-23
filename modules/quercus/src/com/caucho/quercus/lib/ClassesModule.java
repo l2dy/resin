@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -57,21 +57,17 @@ public class ClassesModule extends AbstractQuercusModule {
    * Calls an object method.
    */
   public static Value call_user_method(Env env,
-                                       String name,
+                                       StringValue name,
                                        Value obj,
                                        Value []args)
   {
     if (obj.isObject()) {
-      AbstractFunction fun = obj.findFunction(name);
-      
-      return fun.callMethod(env, obj, args).copyReturn();
+      return obj.callMethod(env, name, args);
     }
     else {
       QuercusClass cls = env.findClass(obj.toString());
       
-      AbstractFunction fun = cls.findFunction(name);
-      
-      return fun.call(env, args).copyReturn();
+      return cls.callMethod(env, env.getThis(), name, name.hashCode(), args).copyReturn();
     }
   }
 
@@ -79,7 +75,7 @@ public class ClassesModule extends AbstractQuercusModule {
    * Calls a object method with arguments in an array.
    */
   public static Value call_user_method_array(Env env,
-                                             String methodName,
+                                             StringValue methodName,
                                              Value obj,
                                              ArrayValue params)
   {
@@ -129,15 +125,14 @@ public class ClassesModule extends AbstractQuercusModule {
   @ReturnNullAsFalse
   public String get_called_class(Env env)
   {
-    QuercusClass cls = env.getCallingClass();
+    Value qThis = env.getThis();
     
-    if (cls == null) {
-      env.warning("called from outside class scope");
-      
+    if (qThis == null || qThis.getQuercusClass() == null) {
+      env.warning("get_called_class was not called from a class method");
       return null;
     }
     
-    return cls.getName();
+    return qThis.getQuercusClass().getName();
   }
 
   /**
@@ -334,9 +329,19 @@ public class ClassesModule extends AbstractQuercusModule {
    * @param obj the object to test
    * @param methodName the name of the method
    */
-  public static boolean method_exists(Value obj, String methodName)
+  public static boolean method_exists(Env env, 
+                                      Value obj, 
+                                      StringValue methodName)
   {
-    return obj.findFunction(methodName.intern()) != null;
+    QuercusClass qClass = obj.getQuercusClass();
+
+    if (qClass == null)
+      qClass = env.findClass(obj.toString());
+    
+    if (qClass != null)
+      return qClass.findFunction(methodName) != null;
+    else
+      return false;
   }
   
   /**

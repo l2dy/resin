@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -66,6 +66,7 @@ public class FileServlet extends GenericServlet {
   private QDate _calendar = new QDate();
   private boolean _isCaseInsensitive;
   private boolean _isEnableRange = true;
+  private boolean _isGenerateSession;
   private String _characterEncoding;
 
   public FileServlet()
@@ -87,6 +88,14 @@ public class FileServlet extends GenericServlet {
   public void setEnableRange(boolean isEnable)
   {
     _isEnableRange = isEnable;
+  }
+  
+  /**
+   * Flag to generate sessions on requests.
+   */
+  public void setGenerateSession(boolean isGenerateSession)
+  {
+    _isGenerateSession = isGenerateSession;
   }
 
   /**
@@ -252,6 +261,9 @@ public class FileServlet extends GenericServlet {
     }
 
     cache.update();
+    
+    if (_isGenerateSession)
+      req.getSession(true);
 
     if (cache.isDirectory()) {
       if (_dir != null)
@@ -412,7 +424,7 @@ public class FileServlet extends GenericServlet {
         last = 10 * last + ch - '0';
         hasLast = true;
       }
-      
+
       // #3766 - browser errors in range
       if (off < length && ch != ' ' && ch != ',')
         return false;

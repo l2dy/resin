@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -108,13 +108,13 @@ public class CompiledObjectValue extends ObjectValue
    * Returns the array ref.
    */
   @Override
-  public Var getFieldRef(Env env, StringValue key)
+  public Var getFieldVar(Env env, StringValue key)
   {
     if (_fields.length > 0) {
       int index = _quercusClass.findFieldIndex(key);
 
       if (index >= 0) {
-	Var var = _fields[index].toRefVar();
+	Var var = _fields[index].toLocalVarDeclAsRef();
 	
 	_fields[index] = var;
 
@@ -125,7 +125,7 @@ public class CompiledObjectValue extends ObjectValue
     if (_object == null)
       _object = new ObjectExtValue(_quercusClass);
     
-    return _object.getFieldRef(env, key);
+    return _object.getFieldVar(env, key);
   }
 
   /**
@@ -138,7 +138,7 @@ public class CompiledObjectValue extends ObjectValue
       int index = _quercusClass.findFieldIndex(key);
 
       if (index >= 0) {
-	Var var = _fields[index].toRefVar();
+	Var var = _fields[index].toLocalVarDeclAsRef();
 	
 	_fields[index] = var;
 
@@ -162,7 +162,7 @@ public class CompiledObjectValue extends ObjectValue
       int index = _quercusClass.findFieldIndex(key);
 
       if (index >= 0) {
-	Var var = _fields[index].toRefVar();
+	Var var = _fields[index].toLocalVarDeclAsRef();
 	
 	_fields[index] = var;
 
@@ -274,14 +274,7 @@ public class CompiledObjectValue extends ObjectValue
   /**
    * Evaluates a method.
    */
-  public Value callMethod(Env env, String methodName, Expr []args)
-  {
-    return _quercusClass.getFunction(methodName).callMethod(env, this, args);
-  }
-
-  /**
-   * Evaluates a method.
-   */
+  /*
   public Value callMethod(Env env, String methodName, Value []args)
   {
     AbstractFunction fun = _quercusClass.findFunction(methodName);
@@ -292,136 +285,166 @@ public class CompiledObjectValue extends ObjectValue
       return env.error(L.l("Call to undefined method {0}::{1}()",
                            _quercusClass.getName(), methodName));
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName, Value a0)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this, a0);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName,
                           Value a0, Value a1)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this, a0, a1);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName,
                           Value a0, Value a1, Value a2)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this,
                                                             a0, a1, a2);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName,
                           Value a0, Value a1, Value a2, Value a3)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this,
                                                             a0, a1, a2, a3);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethod(Env env, String methodName,
                           Value a0, Value a1, Value a2, Value a3, Value a4)
   {
     return _quercusClass.getFunction(methodName).callMethod(env, this,
                                                             a0, a1, a2, a3, a4);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName, Expr []args)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this, args);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName, Value []args)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this, args);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName, Value a0)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this, a0);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName,
                              Value a0, Value a1)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this, a0, a1);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName,
                              Value a0, Value a1, Value a2)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this,
                                                      a0, a1, a2);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName,
                              Value a0, Value a1, Value a2, Value a3)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this,
                                                      a0, a1, a2, a3);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   public Value callMethodRef(Env env, String methodName,
                              Value a0, Value a1, Value a2, Value a3, Value a4)
   {
     return _quercusClass.getFunction(methodName).callMethodRef(env, this,
                                                      a0, a1, a2, a3, a4);
   }
+  */
 
   /**
    * Evaluates a method.
    */
+  /*
   @Override
   public Value callClassMethod(Env env, AbstractFunction fun, Value []args)
   {
@@ -435,6 +458,7 @@ public class CompiledObjectValue extends ObjectValue
       env.setThis(oldThis);
     }
   }
+  */
 
   /**
    * Returns the value for the variable, creating an object if the var
@@ -543,6 +567,7 @@ public class CompiledObjectValue extends ObjectValue
    * Converts to a string.
    * @param env
    */
+  /*
   @Override
   public StringValue toString(Env env)
   {
@@ -553,6 +578,7 @@ public class CompiledObjectValue extends ObjectValue
     else
       return env.createUnicodeBuilder().append(_quercusClass.getName()).append("[]");
   }
+  */
 
   /**
    * Converts to a string.

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -72,11 +72,12 @@ public interface CauchoRequest extends HttpServletRequest {
   public boolean isSuspend(); // XXX: isComplete()?
   public boolean isComet();
   public boolean isDuplex();
-  public boolean allowKeepalive();
+  public boolean isKeepaliveAllowed();
   public boolean isClientDisconnect();
   public void clientDisconnect();
 
   public boolean isLoginRequested();
+  public void requestLogin();
   public boolean login(boolean isFail);
 
   // public HashMap<String,String> setRoleMap(HashMap<String,String> roleMap);

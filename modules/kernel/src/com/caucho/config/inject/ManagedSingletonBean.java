@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,6 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.ConfigContext;
 import com.caucho.config.scope.ScopeContext;
 import com.caucho.config.scope.ApplicationScope;
 import com.caucho.config.program.ConfigProgram;
@@ -53,12 +52,12 @@ import javax.enterprise.inject.spi.InjectionTarget;
  * manager.addBean(new SingletonBean(myValue));
  * </pre></code>
  */
-public class ManagedSingletonBean extends AbstractSingletonBean
+public class ManagedSingletonBean<T> extends AbstractSingletonBean<T>
   implements Closeable
 {
   private ConfigProgram _init;
 
-  ManagedSingletonBean(ManagedBeanImpl managedBean,
+  ManagedSingletonBean(ManagedBeanImpl<T> managedBean,
                        Set<Type> types,
                        Annotated annotated,
                        Set<Annotation> qualifiers,
@@ -74,21 +73,18 @@ public class ManagedSingletonBean extends AbstractSingletonBean
   }
 
   @Override
-  public Object create(CreationalContext cxt)
+  public T create(CreationalContext<T> cxt)
   {
-    InjectionTarget target
-      = ((ManagedBeanImpl) getBean()).getInjectionTarget();
+    InjectionTarget<T> target
+      = ((ManagedBeanImpl<T>) getBean()).getInjectionTarget();
 
-    ConfigContext env = (ConfigContext) cxt;
+    T value = target.produce(cxt);
 
-    Object value = target.produce(env);
-
-    env.push(value);
-
-    target.inject(value, env);
+    cxt.push(value);
+    target.inject(value, cxt);
 
     if (_init != null)
-      _init.inject(value, (ConfigContext) env);
+      _init.inject(value, cxt);
 
     target.postConstruct(value);
 

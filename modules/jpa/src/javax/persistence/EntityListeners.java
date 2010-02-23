@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,5 +39,6 @@ import java.lang.annotation.Target;
  */
 @Target(ElementType.TYPE) @Retention(RetentionPolicy.RUNTIME)
 public @interface EntityListeners {
+  @SuppressWarnings("unchecked")
   Class []value();
 }

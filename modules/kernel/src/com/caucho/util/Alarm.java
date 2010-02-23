@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -58,8 +58,8 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
 
   private static volatile long _currentTime;
   private static volatile boolean _isCurrentTimeUsed;
-
-  private static int _concurrentAlarmThrottle = 5;
+  private static volatile boolean _isFastTimeRequested;
+  private static volatile boolean _isSlowTime;
 
   private static Alarm []_heap = new Alarm[256];
   private static int _heapTop;
@@ -96,7 +96,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   {
     _name = name;
 
-    Environment.addClassLoaderListener(this);
+    addEnvironmentListener();
   }
 
   /**
@@ -197,10 +197,20 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   {
     // test avoids extra writes on multicore machines
     if (! _isCurrentTimeUsed) {
-      if (_alarmThread != null)
-        _isCurrentTimeUsed = true;
-      else
+      if (_testTime > 0)
+        return _testTime;
+      
+      if (_alarmThread == null)
         return System.currentTimeMillis();
+      
+      _isFastTimeRequested = true;
+      
+      if (_isSlowTime) {
+        return System.currentTimeMillis();
+      }
+      else {
+        _isCurrentTimeUsed = true;
+      }
     }
 
     return _currentTime;
@@ -336,6 +346,14 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   }
 
   /**
+   * Registers the alarm with the environment listener for auto-close
+   */
+  protected void addEnvironmentListener()
+  {
+    // Environment.addClassLoaderListener(this);
+  }
+
+  /**
    * Queue the alarm for wakeup.
    *
    * @param delta time in milliseconds to wake
@@ -455,7 +473,6 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
    */
   public void close()
   {
-
     dequeue();
 
     // server/16a{0,1}
@@ -679,37 +696,39 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
 
     public void run()
     {
-      long sleepTime = MIN;
+      int idleCount = 0;
 
       while (true) {
         try {
-          boolean isCurrentTimeUsed = _isCurrentTimeUsed;
-          _isCurrentTimeUsed = false;
-
-          if (isCurrentTimeUsed) {
-            sleepTime = sleepTime / 2;
-            if (sleepTime < MIN)
-              sleepTime = MIN;
-          }
-          else {
-            sleepTime = sleepTime + 1;
-
-            if (MAX < sleepTime)
-              sleepTime = MAX;
-          }
-
           if (_testTime > 0) {
             _currentTime = _testTime;
 
             LockSupport.park();
+            
+            continue;
+          }
+          
+          long now = System.currentTimeMillis();
+            
+          _currentTime = now;
+            
+          boolean isCurrentTimeUsed = _isCurrentTimeUsed;
+          _isCurrentTimeUsed = false;
+          
+          if (isCurrentTimeUsed) {
+            _isSlowTime = false;
           }
           else {
-            long now = System.currentTimeMillis();
+            idleCount++;
 
-            _currentTime = now;
-
-            LockSupport.parkNanos(sleepTime * 1000000L);
+            if (idleCount == 10) {
+              _isSlowTime = true;
+            }
           }
+
+          long sleepTime = _isSlowTime ? 1000L : 5L;
+              
+          LockSupport.parkNanos(sleepTime * 1000000L);
         } catch (Throwable e) {
         }
       }

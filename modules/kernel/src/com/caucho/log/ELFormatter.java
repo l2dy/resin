@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -61,6 +61,10 @@ public class ELFormatter extends MessageFormatter {
 
   private String _format;
   private Expr _expr;
+  
+  public ELFormatter()
+  {
+  }
 
   public void setFormat(RawString format)
   {
@@ -144,7 +148,7 @@ public class ELFormatter extends MessageFormatter {
       else if ("request".equals(property)) {
 	env.setPropertyResolved(true);
 	
-        return ThreadRequestFactory.getCurrentRequest();
+        return ThreadRequestFactory.getCurrentHttpRequest();
       }
       else if ("cookie".equals(property)) {
 	env.setPropertyResolved(true);
@@ -163,9 +167,7 @@ public class ELFormatter extends MessageFormatter {
       else if ("session".equals(property)) {
 	env.setPropertyResolved(true);
 
-	Object request = ThreadRequestFactory.getCurrentRequest();
-
-	HttpServletRequest req = ThreadRequestFactory.getCurrentHttpRequest();
+        HttpServletRequest req = ThreadRequestFactory.getCurrentHttpRequest();
         
 	if (req != null) {
 	  HttpSession session = req.getSession(false);

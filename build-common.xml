@@ -1,4 +1,4 @@
-<project basedir="." xmlns:ivy="antlib:org.apache.ivy.ant">
+<project basedir="." xmlns:artifact="antlib:org.apache.maven.artifact.ant">
   <property environment="env"/>
 
   <property file="local.properties"/>
@@ -8,7 +8,7 @@
   -->
   <property name="resindir" location="."/>
   <property name="prodir" location="${basedir}/../pro"/>
-  
+
   <property name="install" location="${basedir}/"/>
   <property name="resin.install" location="${resindir}/"/>
 
@@ -17,22 +17,22 @@
 
   <property name="artifacts" location="${basedir}/artifacts"/>
   <property name="resin.artifacts" location="${resindir}/artifacts"/>
-  
+
   <property name="src" location="${basedir}/src"/>
   <property name="ext" location="${resindir}/modules/ext"/>
-  <property name="ivy.lib" location="${resindir}/ivy-lib"/>
+  <property name="maven.lib" location="${resindir}/maven-lib"/>
   <property name="doc" location="${resindir}/doc"/>
 
   <property name="build" location="${install}/build"/>
-  
+
   <property name="lib" location="${install}/lib"/>
   <property name="resin.lib" location="${resin.install}/lib"/>
 
   <property name="resin.http" value="8080"/>
   <property name="resin.https" value="8443"/>
-  
+
   <property name="clientlib" location="${install}/clientlib"/>
-  
+
   <property name="dist" location="${install}/dist"/>
   <property name="resin.dist" location="${resin.install}/dist"/>
 
@@ -57,9 +57,19 @@
 
   <property name="shell" value="bash"/>
 
+  <property name="debian.stability" value="unstable"/>
+
   <target name="update">
-    <mkdir dir="${ivy.lib}"/>
-    <ivy:retrieve pattern="${ivy.lib}/[artifact]-[revision].[ext]"/>
+    <!-- <mkdir dir="${maven.lib}"/>-->
+    <artifact:dependencies filesetId="dependency.classpath">
+      <pom file="maven.xml"/>
+    </artifact:dependencies>
+
+    <mkdir dir="${maven.lib}"/>
+    <copy todir="${maven.lib}">
+      <fileset refid="dependency.classpath"/>
+      <mapper type="flatten"/>
+    </copy>
   </target>
 
   <target name="tstamp">
@@ -102,7 +112,7 @@
     <mkdir dir="${build}/webapps"/>
     <mkdir dir="${build}/ext-webapp-lib"/>
     <mkdir dir="${build}/plugins"/>
-    <mkdir dir="${ivy.lib}"/>
+    <mkdir dir="${maven.lib}"/>
 
     <condition property="unix">
       <os family="unix"/>
@@ -172,7 +182,6 @@
            memoryMaximumSize="${javac.memoryMaximumSize}">
       <classpath>
         <dirset dir="${resin.modules}">
-           <exclude name="servlet15/**"/>
            <include name="*/classes"/>
         </dirset>
         <dirset dir="${modules}">
@@ -181,7 +190,7 @@
         <fileset dir="${ext}">
           <include name="**/*.jar"/>
         </fileset>
-        <fileset dir="${ivy.lib}">
+        <fileset dir="${maven.lib}">
           <include name="**/*.jar"/>
         </fileset>
       </classpath>
@@ -232,7 +241,7 @@
     </copy>
 
     <copy tofile="${artifact.build}/META-INF/maven/caucho.com/pom.xml"
-	  file="${artifact.maven}/pom.xml"
+          file="${artifact.maven}/pom.xml"
           preservelastmodified="true"
           overwrite="true">
         <filterset>
@@ -253,7 +262,6 @@
            memoryMaximumSize="${javac.memoryMaximumSize}">
       <classpath>
         <dirset dir="${modules}">
-          <exclude name="servlet15/**"/>
           <include name="*/classes"/>
        </dirset>
         <fileset dir="${artifacts}/${artifact.name}">
@@ -262,7 +270,7 @@
         <fileset dir="${ext}">
           <include name="**/*.jar"/>
         </fileset>
-        <fileset dir="${ivy.lib}">
+        <fileset dir="${maven.lib}">
           <include name="**/*.jar"/>
         </fileset>
       </classpath>
@@ -347,7 +355,6 @@
         <classpath>
           <pathelement location="${java.home}/../lib/tools.jar"/>
           <dirset dir="${modules}">
-            <exclude name="servlet15/**"/>
             <include name="*/classes"/>
           </dirset>
           <fileset dir="${modules}/ext">
@@ -491,56 +498,6 @@
       </fileset>
     </jar>
 
-    <!--
-       - javaee-15.jar
-      -->
-    <jar destfile="${dist}/${dist.name}/compat/javaee-15.jar">
-      <fileset dir="${resin.modules}/ejb/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jca/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jcache/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jms/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jpa/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/servlet15/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-
-      <!--
-      <fileset dir="${resin.modules}/jsf/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      -->
-      
-      <fileset dir="${resin.modules}/jstl/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jta/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/jws/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-      
-      <fileset dir="${resin.modules}/webbeans/classes">
-        <exclude name="**/.*"/>
-      </fileset>
-    </jar>
 
     <!--
        - resin.jar
@@ -562,6 +519,10 @@
       <fileset dir="${resin.modules}/quercus/classes">
         <exclude name="**/.*"/>
       </fileset>
+      
+      <fileset dir="${resin.modules}/junit/classes">
+        <exclude name="**/.*"/>
+      </fileset>
     </jar>
   </target>
 
@@ -579,12 +540,10 @@
     </antcall>
     -->
 
-    <!-- 4.0.2
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
       <param name="artifacts" value="${resin.artifacts}"/>
     </antcall>
-    -->
     
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
@@ -628,6 +587,9 @@
         <exclude name="**/lib/jace.jar"/>
         <exclude name="**/*.o"/>
         <exclude name="**/*.so"/>
+        <exclude name="**/*.jnilib"/>
+        <exclude name="**/*.pdf"/>
+        <exclude name="**/*.graffle"/>
         <exclude name="**/*.lo"/>
         <exclude name="**/*.svnignore"/>
         <exclude name="**/*.svn"/>
@@ -657,7 +619,7 @@
         <include name="modules/ext/jsr173_1.0_api.jar"/>
         <include name="modules/ext/webservices-api.jar"/>
         <include name="modules/ext/webservices-extra-api.jar"/>
-        <include name="ivy-lib"/>
+        <include name="maven-lib"/>
         <include name="win32/**"/>
         <include name="win64/**"/>
         <include name="bin/**"/>
@@ -777,6 +739,9 @@
       <exclude name="**/Makefile"/>
       <exclude name="**/*.o"/>
       <exclude name="**/*.so"/>
+      <exclude name="**/*.jnilib"/>
+      <exclude name="**/*.pdf"/>
+      <exclude name="**/*.graffle"/>
       <exclude name="**/*.lo"/>
       <exclude name="**/*.svnignore"/>
       <exclude name="**/*.svn"/>
@@ -831,6 +796,9 @@
       <exclude name="**/*.lo"/>
       <exclude name="**/*.o"/>
       <exclude name="**/*.so"/>
+      <exclude name="**/*.jnilib"/>
+      <exclude name="**/*.pdf"/>
+      <exclude name="**/*.graffle"/>
     </patternset>
 
     <delete file="${dist}/${shortproduct}-${version}.zip"/>
@@ -1141,11 +1109,9 @@
     </antcall>
     -->
 
-    <!-- xxx 4.0.2
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
     </antcall>
-    -->
     
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
@@ -1237,15 +1203,10 @@
         <include name="configure"/>
       </fileset>
     </chmod>
-    
+
     <exec dir="${libexec}" executable="/bin/sh">
       <arg value="configure"/>
       <arg value="--prefix=${libexec}"/>
-      <!--
-      <arg value="-with-resin-root=dist-debian/var/www"/>
-      <arg value="-with-resin-init-d=dist-debian/etc/init.d/resin"/>
-      <arg value="-with-resin-conf=${libexec}/etc/resin"/>
-      -->
     </exec>
     
     <exec dir="${libexec}" executable="make">
@@ -1255,10 +1216,8 @@
       <arg value="install"/>
     </exec>
   </target>
-<!--  
+
   <target name="debian" depends="compile,resin.dist.jar,debian-libexec,debian-perm">
-    -->
-  <target name="debian" depends="compile,resin.dist.jar,debian-libexec">
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
     </exec>
@@ -1382,7 +1341,7 @@
       </fileset>
     </copy>
 
-    <exec executable="uname" outputproperty="architecture">
+    <exec executable="uname" outputproperty="debian.architecture">
       <arg value="-m"/>
  
       <redirector>
@@ -1399,7 +1358,7 @@
           tofile="dist-debian/DEBIAN/control">
       <filterset>
         <filter token="VERSION" value="${version}"/>
-        <filter token="ARCHITECTURE" value="${architecture}"/>
+        <filter token="ARCHITECTURE" value="${debian.architecture}"/>
       </filterset>
     </copy>
 
@@ -1411,15 +1370,36 @@
 
     <chmod perm="755" file="dist-debian/DEBIAN/postinst"/>
 
+    <copy file="${install}/debian/prerm"
+          tofile="dist-debian/DEBIAN/prerm"/>
+
+    <chmod perm="755" file="dist-debian/DEBIAN/prerm"/>
+
     <exec executable="${basedir}/debian-perm"/>
+
+    <delete dir="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
+            failonerror="false"/>
+
+    <mkdir dir="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
         
     <exec executable="dpkg">
       <arg value="-b"/>
       <arg value="dist-debian"/>
-      <arg value="${dist}/${shortproduct}_${version}-${architecture}.deb"/>
+      <arg value="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
+    </exec>
+
+    <exec executable="dpkg-scanpackages"
+          dir="/tmp/debian"
+          output="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"
+          logError="true">
+      <arg value="dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
+    </exec>
+
+    <exec executable="gzip">
+      <arg value="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"/>
     </exec>
   </target>
-  
+
   <target name="debian-src" depends="init">
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
@@ -1491,6 +1471,11 @@
       </fileset>
     </delete>
     <delete>
+      <fileset dir="${lib}">
+        <include name="**/*.jar"/>
+      </fileset>
+    </delete>
+    <delete>
       <fileset dir=".">
         <include name="**/*.class"/>
       </fileset>
@@ -1500,7 +1485,7 @@
   <target name="distclean" depends="init, clean, win32clean">
     <delete dir="${install}/conf"/>
     <delete dir="${lib}"/>
-    <delete dir="${ivy.lib}"/>
+    <delete dir="${maven.lib}"/>
     <delete dir="${clientlib}"/>
     <delete dir="${install}/unix"/>
 

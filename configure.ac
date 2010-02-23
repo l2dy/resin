@@ -42,7 +42,7 @@ resin_root=${withval}
 ])
 
 if test -z "$resin_root"; then
-  resin_root="${resin_home}"
+  resin_root="/var/www"
 fi
 
 AC_SUBST(resin_root)
@@ -59,7 +59,7 @@ resin_conf=${withval}
 ])
 
 if test -z "$resin_conf"; then
-  resin_conf="${resin_root}/conf"
+  resin_conf="/etc/resin"
 fi
 
 #
@@ -74,7 +74,7 @@ resin_log=${withval}
 ])
 
 if test -z "$resin_log"; then
-  resin_log="${resin_root}/log"
+  resin_log="/var/log/resin"
 fi
 
 if test -d "/etc/init.d/rc.d"; then
@@ -101,14 +101,10 @@ AC_SUBST(resin_pro)
 #
 # --with-java-home
 #
-JAVA_EXE=java
-
 AC_ARG_WITH(java-home,
 [  --with-java-home=DIR  java home
 ], [
 JAVA_HOME=${withval}
-
-JAVA_EXE="$JAVA_HOME/bin/java"
 ])
 
 if test -z "$JAVA_HOME"; then
@@ -150,6 +146,10 @@ if test ! -d "$JAVA_HOME"; then
 fi
 
 AC_SUBST(JAVA_HOME)
+
+JAVA_EXE="$JAVA_HOME/bin/java"
+
+AC_SUBST(JAVA_EXE)
 
 #
 # libtool stuff
@@ -584,6 +584,25 @@ if test -z "${LD_SHLIB}"; then
 fi
 
 #
+# Java 1.6 check
+#
+
+echo -n "checking if ${JAVA_EXE} is Java 1.6... "
+
+tmpname="/tmp/java$$.out"
+	       	
+$JAVA_EXE -version 2> $tmpname
+
+grep "1\.6" $tmpname 1> /dev/null
+if test "$?" != "0"; then
+  echo "no"
+  java_version=`cat $tmpname`
+  AC_MSG_ERROR([Java 1.6 required. ${JAVA_EXE} returned: ${java_version}])
+fi
+
+echo "yes"
+
+#
 # 64bit heuristics
 #
 echo -n "checking if Java is 64-bit... "
@@ -733,6 +752,10 @@ if test -z "${LD_SHLIB}"; then
    	fi
         ;;
 
+    *freebsd*)
+        CFLAGS="$CFLAGS -fPIC"
+        ;;
+
     *aix*)
 	if test -z "$is_gcc"; then
 	   CFLAGS_SHLIB="-bexpall"
@@ -804,6 +827,23 @@ if test -z "${LD_SHLIB}"; then
   fi
 fi
 
+#
+# Check if cp accepts -u
+#
+CP=`which cp`
+echo -n "checking if $CP accepts -u... "
+
+touch /tmp/cp.test.$$.src
+$CP -u /tmp/cp.test.$$.src /tmp/cp.test.$$.dest
+if test $? = "0"; then
+  CP_U_FLAG=-u
+  AC_SUBST(CP_U_FLAG)
+  echo "yes"
+else
+  echo "no"
+fi
+rm -f /tmp/cp.test.$$.src /tmp/cp.test.$$.dest
+
 #if test -z "${LD_SHLIB}"; then
 #  AC_MSG_ERROR([Can't determine compilation flags.]);
 #fi
@@ -860,7 +900,7 @@ case "$target_os" in
 	PROXY_LIBS='-lnsl -lsocket -lthread'
 	;;
 
-  *freebsd*5*)
+  *freebsd*)
 	PROXY_LIBS='-lpthread'
         jni_os=freebsd        
         
@@ -883,11 +923,6 @@ case "$target_os" in
 		echo "Using -lpthread as default"
 		;;
 	esac	
-	;;
-
-  *freebsd*)
-	PROXY_LIBS='-lc_r'
-        jni_os=freebsd
 	;;
 
   *darwin*)
@@ -974,7 +1009,11 @@ elif test -r "$JAVA_HOME/include/jni.h"; then
   echo "checking for JNI in $JAVA_HOME/include ... found"
 else
   JNI=""
-  AC_MSG_WARN([Can't find JNI directory ${JAVA_HOME}/include/$jni_os])
+  AC_MSG_ERROR([
+
+  *** Can't find JNI directory in JAVA_HOME=${JAVA_HOME}
+  *** JNI is expected in ${JAVA_HOME}/include/$jni_os
+])
 fi
 
 if test -r "$JNI_INCLUDE_DIR/jvmti.h"; then
@@ -982,9 +1021,9 @@ if test -r "$JNI_INCLUDE_DIR/jvmti.h"; then
   
   CFLAGS="$CFLAGS -DHAS_JVMTI"
 else
-  AC_MSG_WARN([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
+  AC_MSG_ERROR([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
 fi
-	
+
 if test -n "$JNI"; then
   plugins="$plugins resin_os"
 else
@@ -1300,33 +1339,39 @@ fi
 
 echo ""
 
-if test -n "$epoll"; then
-  echo "  + epoll() for keepalives"
-elif test -n "$poll"; then
-  echo "  + poll() for keepalives"
-else
-  echo "  + select() for keepalives"
-fi
-
-if test -n "$OPENSSL_INCLUDE"; then
-  echo "  + ${openssl_version}"
-  echo "      OpenSSL include: ${OPENSSL_INCLUDE}"
-  echo "      OpenSSL lib: ${OPENSSL_LIB}"
-  echo "      OpenSSL libraries: ${SSL_LIBS}"
-else
-  echo "  + not using OpenSSL"
-fi
-
-echo ""
-echo "  JAVA_HOME: ${JAVA_HOME}"
-
-if test -n "$b64_jni"; then
-  echo "    + 64-bit JNI in ${JNI_INCLUDE}"
+if test -z "JNI"; then
+  echo "  *** No JNI has been found in JAVA_HOME=${JAVA_HOME}"
+  echo "  *** JNI libraries cannot be compiled"
 else  
-  echo "    + 32-bit JNI in ${JNI_INCLUDE}"
-fi
 
-echo "      JNI CFLAGS: ${CFLAGS}"
+  echo "  JAVA_HOME: ${JAVA_HOME}"
+  echo ""
+
+  if test -n "$b64_jni"; then
+    echo "    + 64-bit JNI in ${JNI_INCLUDE}"
+  else  
+    echo "    + 32-bit JNI in ${JNI_INCLUDE}"
+  fi
+
+  echo "    + JNI CFLAGS: ${CFLAGS}"
+
+  if test -n "$epoll"; then
+    echo "    + epoll() for keepalives"
+  elif test -n "$poll"; then
+    echo "    + poll() for keepalives"
+  else
+    echo "    + select() for keepalives"
+  fi
+
+  if test -n "$OPENSSL_INCLUDE"; then
+    echo "    + ${openssl_version}"
+    echo "        OpenSSL include: ${OPENSSL_INCLUDE}"
+    echo "        OpenSSL lib: ${OPENSSL_LIB}"
+    echo "        OpenSSL libraries: ${SSL_LIBS}"
+  else
+    echo "    + not using OpenSSL"
+  fi
+fi
 
 if test -n "${apache}"; then
   echo ""

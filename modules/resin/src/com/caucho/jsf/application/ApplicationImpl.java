@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -121,11 +121,11 @@ public class ApplicationImpl
   private HashMap<String, Class> _converterIdMap
     = new HashMap<String, Class>();
 
-  private HashMap<Class, String> _converterClassNameMap
-    = new HashMap<Class, String>();
+  private HashMap<Class<?>, String> _converterClassNameMap
+    = new HashMap<Class<?>, String>();
 
-  private HashMap<Class, Class> _converterClassMap
-    = new HashMap<Class, Class>();
+  private HashMap<Class<?>, Class<?>> _converterClassMap
+    = new HashMap<Class<?>, Class<?>>();
 
   private String _defaultRenderKitId = "HTML_BASIC";
 
@@ -875,7 +875,7 @@ public class ApplicationImpl
     return findConverter(type.getSuperclass());
   }
 
-  public Iterator<Class> getConverterTypes()
+  public Iterator getConverterTypes()
   {
     return _converterClassMap.keySet().iterator();
   }

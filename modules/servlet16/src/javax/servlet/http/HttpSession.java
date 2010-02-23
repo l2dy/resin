@@ -75,7 +75,8 @@ public interface HttpSession {
    */
   public long getCreationTime();
   /**
-   * Returns the time when the session was last accessed.
+   * Returns the time of last request associated with a session
+   * before the current request
    */
   public long getLastAccessedTime();
   /**
@@ -99,7 +100,7 @@ public interface HttpSession {
   /**
    * Returns an enumeration of all the attribute names.
    */
-  public Enumeration getAttributeNames();
+  public Enumeration<String> getAttributeNames();
   /**
    * Sets an attribute value.  Because servlets are multithreaded,
    * setting HttpSession attributes will generally need synchronization.

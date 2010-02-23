@@ -30,6 +30,7 @@
 package com.caucho.quercus.lib.spl;
 
 import com.caucho.quercus.QuercusException;
+import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.TraversableDelegate;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
@@ -75,6 +76,7 @@ public class IteratorDelegate implements TraversableDelegate
   {
     protected final Env _env;
     protected final ObjectValue _obj;
+    protected final QuercusClass _qClass;
 
     private final AbstractFunction _nextFun;
     private final AbstractFunction _currentFun;
@@ -86,30 +88,31 @@ public class IteratorDelegate implements TraversableDelegate
     public AbstractIteratorImpl(Env env, ObjectValue obj)
     {
       _env = env;
+      _qClass = obj.getQuercusClass();
       _obj = obj;
 
       if (! obj.isA("iterator"))
-	throw new IllegalStateException(L.l("'{0}' is an invalid iterator",
-					    obj));
+        throw new IllegalStateException(L.l("'{0}' is an invalid iterator",
+                                            obj));
+      _currentFun = _qClass.getFunction(env.createString("current"));
+      _keyFun = _qClass.getFunction(env.createString("key"));
+      _nextFun = _qClass.getFunction(env.createString("next"));
+      _rewindFun = _qClass.getFunction(env.createString("rewind"));
+      _validFun = _qClass.getFunction(env.createString("valid"));
 
-      _currentFun = _obj.findFunction("current");
-      _keyFun = _obj.findFunction("key");
-      _nextFun = _obj.findFunction("next");
-      _rewindFun = _obj.findFunction("rewind");
-      _validFun = _obj.findFunction("valid");
-
-      _rewindFun.callMethod(_env, _obj);
+      _rewindFun.callMethod(_env, _qClass, _obj);
+      
       _needNext = false;
     }
 
     public boolean hasNext()
     {
       if (_needNext)
-        _nextFun.callMethod(_env, _obj);
+        _nextFun.callMethod(_env, _qClass, _obj);
 
       _needNext = true;
 
-      return _validFun.callMethod(_env, _obj).toBoolean();
+      return _validFun.callMethod(_env, _qClass, _obj).toBoolean();
     }
 
     public T next()
@@ -121,12 +124,12 @@ public class IteratorDelegate implements TraversableDelegate
 
     protected Value getCurrentKey()
     {
-      return _keyFun.callMethod(_env, _obj);
+      return _keyFun.callMethod(_env, _qClass, _obj);
     }
 
     protected Value getCurrentValue()
     {
-      return _currentFun.callMethod(_env, _obj);
+      return _currentFun.callMethod(_env, _qClass, _obj);
     }
 
     public void remove()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,7 +39,7 @@ import java.net.InetAddress;
  * A Connection based on streams.  Stream connection is primarily used
  * for testing.
  */
-public class StreamConnection extends Connection {
+public class StreamConnection extends AbstractTransportConnection {
   private int _id = 1;
   private InetAddress _localAddress;
   private int _localPort;
@@ -71,6 +71,11 @@ public class StreamConnection extends Connection {
   public int getLocalPort()
   {
     return _localPort;
+  }
+
+  public boolean isPortActive()
+  {
+    return true;
   }
 
   public InetAddress getRemoteAddress()
@@ -116,16 +121,18 @@ public class StreamConnection extends Connection {
   }
 
   @Override
-  public boolean isKeepalive()
+  public boolean isKeepaliveAllocated()
   {
     return _isKeepalive;
   }
 
+  /*
   @Override
   public boolean toKeepalive()
   {
     return _isKeepalive;
   }
+  */
 
   @Override
   public void killKeepalive()
@@ -146,5 +153,28 @@ public class StreamConnection extends Connection {
   public void setRemoteAddress(InetAddress addr)
   {
     _remoteAddress = addr;
+  }
+
+  @Override
+  public AsyncController toComet(CometHandler handler)
+  {
+    StreamAsyncController asyncController
+      = new StreamAsyncController(handler);
+
+    return asyncController;
+  }
+
+  class StreamAsyncController extends AsyncController {
+    private CometHandler _handler;
+
+    StreamAsyncController(CometHandler handler)
+    {
+      _handler = handler;
+    }
+
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[]";
+    }
   }
 }

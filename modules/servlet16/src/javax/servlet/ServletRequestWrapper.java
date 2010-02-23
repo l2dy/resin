@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -177,7 +177,7 @@ public class ServletRequestWrapper implements ServletRequest {
    * Returns the parameter map request parameters.  By default, returns
    * the underlying request's map.
    */
-  public Map getParameterMap()
+  public Map<String,String[]> getParameterMap()
   {
     return _request.getParameterMap();
   }
@@ -206,7 +206,7 @@ public class ServletRequestWrapper implements ServletRequest {
    * }
    * </pre></code>
    */
-  public Enumeration getParameterNames()
+  public Enumeration<String> getParameterNames()
   {
     return _request.getParameterNames();
   }
@@ -275,7 +275,7 @@ public class ServletRequestWrapper implements ServletRequest {
   /**
    * Returns an enumeration of all locales acceptable by the client.
    */
-  public Enumeration getLocales()
+  public Enumeration<Locale> getLocales()
   {
     return _request.getLocales();
   }
@@ -309,7 +309,7 @@ public class ServletRequestWrapper implements ServletRequest {
   /**
    * Enumerates all attribute names in the request.
    */
-  public Enumeration getAttributeNames()
+  public Enumeration<String> getAttributeNames()
   {
     return _request.getAttributeNames();
   }
@@ -350,6 +350,7 @@ public class ServletRequestWrapper implements ServletRequest {
   /**
    * Returns the real path.
    */
+  @SuppressWarnings("deprecation")
   public String getRealPath(String uri)
   {
     return _request.getRealPath(uri);
@@ -370,32 +371,11 @@ public class ServletRequestWrapper implements ServletRequest {
   }
 
   /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
-   */
-  public void addAsyncListener(AsyncListener listener)
-  {
-    _request.addAsyncListener(listener);
-  }
-
-  /**
-   * Adds an async listener for this request
-   *
-   * @since Servlet 3.0
-   */
-  public void addAsyncListener(AsyncListener listener,
-			       ServletRequest request,
-			       ServletResponse response)
-  {
-    _request.addAsyncListener(listener, request, response);
-  }
-
-  /**
    * Returns the async context for the request
    *
    * @since Servlet 3.0
    */
+  @Override
   public AsyncContext getAsyncContext()
   {
     return _request.getAsyncContext();
@@ -406,6 +386,7 @@ public class ServletRequestWrapper implements ServletRequest {
    *
    * @since Servlet 3.0
    */
+  @Override
   public boolean isAsyncStarted()
   {
     return _request.isAsyncStarted();
@@ -416,6 +397,7 @@ public class ServletRequestWrapper implements ServletRequest {
    *
    * @since Servlet 3.0
    */
+  @Override
   public boolean isAsyncSupported()
   {
     return _request.isAsyncSupported();
@@ -426,6 +408,7 @@ public class ServletRequestWrapper implements ServletRequest {
    *
    * @since Servlet 3.0
    */
+  @Override
   public AsyncContext startAsync()
     throws IllegalStateException
   {
@@ -437,6 +420,7 @@ public class ServletRequestWrapper implements ServletRequest {
    *
    * @since Servlet 3.0
    */
+  @Override
   public AsyncContext startAsync(ServletRequest servletRequest,
                                  ServletResponse servletResponse)
     throws IllegalStateException
@@ -445,28 +429,43 @@ public class ServletRequestWrapper implements ServletRequest {
   }
 
   /**
-   *
-   * @param wrapped
-   * @return
+   * Returns the dispatcherType (request, include, etc) for the current
+   * request.
    */
-  public boolean isWrapperFor(ServletRequest wrapped) {
-    throw new UnsupportedOperationException("unimplemented");
+  @Override
+  public DispatcherType getDispatcherType() 
+  {
+    return _request.getDispatcherType();
   }
 
   /**
-   * @param wrappedType
-   * @return
+   * @since Servlet 3.0
+   */
+  public boolean isWrapperFor(ServletRequest wrapped)
+  {
+    if (_request == wrapped)
+      return true;
+    else if (_request instanceof ServletRequestWrapper)
+      return ((ServletRequestWrapper) _request).isWrapperFor(wrapped);
+    else
+      return false;
+  }
+
+  /**
+   * @since Servlet 3.0
    */
   public boolean isWrapperFor(Class wrappedType)
   {
-    throw new UnsupportedOperationException("unimplemented");
-  }
-
-  /**
-   * 
-   * @return
-   */
-  public DispatcherType getDispatcherType() {
-    return _request.getDispatcherType();
+    if (!ServletRequest.class.isAssignableFrom(wrappedType))
+      throw new IllegalArgumentException(
+        "expected instance of javax.servlet.ServletRequest at `"
+          + wrappedType
+          + "'");
+    else if (wrappedType.isAssignableFrom(_request.getClass()))
+      return true;
+    else if (_request instanceof ServletRequestWrapper)
+      return ((ServletRequestWrapper) _request).isWrapperFor(wrappedType);
+    else
+      return false;
   }
 }

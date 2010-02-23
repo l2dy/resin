@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2008 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -172,7 +172,13 @@ abstract public class JavaInvoker
           boolean isPassThru = false;
 
           boolean isNotNull = false;
+          
+          boolean isExpectString = false;
+          boolean isExpectNumeric = false;
+          boolean isExpectBoolean = false;
 
+          Class<?> argType = _param[i + envOffset];
+          
           for (Annotation ann : _paramAnn[i + envOffset]) {
             if (Optional.class.isAssignableFrom(ann.annotationType())) {
               _minArgumentLength--;
@@ -181,40 +187,67 @@ abstract public class JavaInvoker
 
               if (opt.value().equals(Optional.NOT_SET))
                 _defaultExprs[i] = exprFactory.createDefault();
-              else if (opt.value().equals(""))
-                _defaultExprs[i] = QuercusParser.parseDefault("''");
-              else
-                _defaultExprs[i] = QuercusParser.parseDefault(opt.value());
+              else if (opt.value().equals("")) {
+                _defaultExprs[i] = exprFactory.createLiteral(StringValue.EMPTY);
+              }
+              else {
+                _defaultExprs[i] = QuercusParser.parseDefault(exprFactory, opt.value());
+              }
             } else if (Reference.class.isAssignableFrom(ann.annotationType())) {
+              if (! Value.class.equals(argType)
+                  && ! Var.class.equals(argType)) {
+                throw new QuercusException(L.l("reference must be Value or Var for {0}",
+                                               _name));
+              }
+              
               isReference = true;
             } else if (PassThru.class.isAssignableFrom(ann.annotationType())) {
+              if (! Value.class.equals(argType)) {
+                throw new QuercusException(L.l("pass thru must be Value for {0}",
+                                               _name));
+              }
+              
               isPassThru = true;
             } else if (NotNull.class.isAssignableFrom(ann.annotationType())) {
               isNotNull = true;
+            } else if (Expect.class.isAssignableFrom(ann.annotationType())) {
+              if (! Value.class.equals(argType)) {
+                throw new QuercusException(L.l("Expect type must be Value for {0}",
+                                               _name));
+              }
+              
+              Expect.Type type = ((Expect) ann).type();
+              
+              if (type == Expect.Type.STRING) {
+                isExpectString = true;
+              }
+              else if (type == Expect.Type.NUMERIC) {
+                isExpectNumeric = true;
+              }
+              else if (type == Expect.Type.BOOLEAN) {
+                isExpectBoolean = true;
+              }
             }
           }
-
-          Class argType = _param[i + envOffset];
 
           if (isReference) {
             _marshalArgs[i] = marshalFactory.createReference();
-
-            if (! Value.class.equals(argType)
-                && ! Var.class.equals(argType)) {
-              throw new QuercusException(L.l("reference must be Value or Var for {0}",
-                                             _name));
-            }
           }
           else if (isPassThru) {
             _marshalArgs[i] = marshalFactory.createValuePassThru();
-
-            if (! Value.class.equals(argType)) {
-              throw new QuercusException(L.l("pass thru must be Value for {0}",
-                                             _name));
-            }
           }
-          else
+          else if (isExpectString) {
+            _marshalArgs[i] = marshalFactory.createExpectString();
+          }
+          else if (isExpectNumeric) {
+            _marshalArgs[i] = marshalFactory.createExpectNumeric();
+          }
+          else if (isExpectBoolean) {
+            _marshalArgs[i] = marshalFactory.createExpectBoolean();
+          }
+          else {
             _marshalArgs[i] = marshalFactory.create(argType, isNotNull);
+          }
         }
 
         _unmarshalReturn = marshalFactory.create(_retType,
@@ -370,7 +403,7 @@ abstract public class JavaInvoker
   /**
    * Returns the marshal arguments.
    */
-  protected Marshal []getMarshalArgs()
+  public Marshal []getMarshalArgs()
   {
     if (! _isInit)
       init();
@@ -417,7 +450,7 @@ abstract public class JavaInvoker
       if (i < _marshalArgs.length)
         arg = _marshalArgs[i];
       else if (_isRestReference) {
-        values[i] = args[i].evalRef(env);
+        values[i] = args[i].evalVar(env);
         continue;
       }
       else {
@@ -534,6 +567,7 @@ abstract public class JavaInvoker
     return cost;
   }
 
+  /*
   public Value callMethod(Env env, Value qThis, Expr []exprs)
   {
     if (! _isInit)
@@ -599,13 +633,19 @@ abstract public class JavaInvoker
 
     return _unmarshalReturn.unmarshal(env, result);
   }
+  */
 
+  @Override
   public Value call(Env env, Value []args)
   {
-    return callMethod(env, null, args);
+    return callMethod(env, (QuercusClass) null, (Value) null, args);
   }
 
-  public Value callMethod(Env env, Value qThis, Value []args)
+  @Override
+  public Value callMethod(Env env,
+                          QuercusClass qClass,
+                          Value qThis,
+                          Value []args)
   {
     if (! _isInit)
       init();
@@ -628,16 +668,16 @@ abstract public class JavaInvoker
     else if (! isStatic() && ! isConstructor()) {
       obj = qThis != null ? qThis.toJavaObject() : null;
     }
-
+    
     String warnMessage = null;
-    for (int i = 0; i < _marshalArgs.length; i++) {
+    for (int i = 0; i < _marshalArgs.length; i++) {      
       if (i < args.length && args[i] != null)
         javaArgs[k] = _marshalArgs[i].marshal(env, args[i], _param[k]);
       else if (_defaultExprs[i] != null) {
         javaArgs[k] = _marshalArgs[i].marshal(env,
                                               _defaultExprs[i],
                                               _param[k]);
-      } else {        
+      } else {
         warnMessage = L.l("function '{0}' has {1} required arguments, but only {2} were provided",
                            _name, _minArgumentLength, args.length);
 
@@ -653,10 +693,10 @@ abstract public class JavaInvoker
 
       k++;
     }
-    
+
     if (warnMessage != null)
       env.warning(warnMessage);
-    
+
     if (_hasRestArgs) {
       Value []rest;
 
@@ -668,8 +708,9 @@ abstract public class JavaInvoker
         rest = new Value[restLen];
 
         for (int i = _marshalArgs.length; i < args.length; i++) {
-          if (_isRestReference)
-            rest[i - _marshalArgs.length] = args[i];
+          if (_isRestReference) {
+            rest[i - _marshalArgs.length] = args[i].toLocalVarDeclAsRef();
+          }
           else
             rest[i - _marshalArgs.length] = args[i].toValue();
         }
