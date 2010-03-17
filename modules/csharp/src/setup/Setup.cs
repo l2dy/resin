@@ -28,31 +28,50 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.IO;
-using Microsoft.Win32;
-using System.Windows.Forms;
-using System.Text;
-using System.ServiceProcess;
-using System.Diagnostics;
+using System.Configuration.Install;
 using System.DirectoryServices;
+using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.ServiceProcess;
+using System.Text;
+using System.Windows.Forms;
+using Microsoft.Win32;
+using System.Diagnostics;
 
 namespace Caucho
 {
   public class Setup
   {
-    private static String REG_SERVICES = "SYSTEM\\CurrentControlSet\\Services";
+    static EventLog log = new EventLog();
+
+    static Setup()
+    {
+      ((System.ComponentModel.ISupportInitialize)(log)).BeginInit();
+      log.Log = "Application";
+      log.Source = "caucho/Setup.cs";
+    }
+
+    public static String REG_SERVICES = "SYSTEM\\CurrentControlSet\\Services";
 
     private String _resinHome;
     private String _apacheHome;
     private Resin _resin;
-    private Dictionary<String, Resin> _resinMap = new Dictionary<String, Resin>();
+    public Resin Resin
+    {
+      get { return _resin; }
+      set
+      {
+        if (_resin != null)
+          throw new ApplicationException();
+        _resin = value;
+      }
+    }
+    private List<Resin> _resinList = new List<Resin>();
+    private List<ResinService> _resinServices = new List<ResinService>();
+    private List<String> _users = null;
 
-    private Apache _apache;
-    private List<Apache> _apacheCollection;
-
-    private String _iisScripts;
     private ArrayList _apacheHomeSet;
-    
+
     public String ResinHome
     {
       get { return _resinHome; }
@@ -70,517 +89,369 @@ namespace Caucho
       get { return _apacheHomeSet; }
     }
 
-    public String IISScripts
-    {
-      get { return _iisScripts; }
-    }
-
     public Setup()
     {
       String path = System.Reflection.Assembly.GetExecutingAssembly().Location;
       this.ResinHome = Util.GetResinHome(null, path);
 
       this._apacheHomeSet = new DirSet();
+
+      FindResinServices();
+      FindResin();
+
       Apache.FindApache(_apacheHomeSet);
-
-      _iisScripts = FindIIS();
     }
 
-    public void SelectResin(String home)
+    public void FindResin()
     {
-      Resin resin = _resinMap[home];
-
-      if (resin == null) {
-        resin = new Resin(home);
-
-        _resinMap.Add(home, resin);
-      }
-
-      _resin = resin;
-    }
-
-    public void FindResinServices()
-    {
-
-    }
-
-    public bool IsValidResinHome(String dir)
-    {
-      return File.Exists(dir + "\\win32\\isapi_srun.dll");
-    }
-
-    public bool IsValidApacheHome(String dir)
-    {
-      return File.Exists(dir + "\\conf\\httpd.conf");
-    }
-
-
-    public String GetApacheVersion(String apacheHome)
-    {
-      Process process = new Process();
-
-      if (File.Exists(apacheHome + "\\bin\\apache.exe"))
-        process.StartInfo.FileName = apacheHome + "\\bin\\apache.exe";
-      else if (File.Exists(apacheHome + "\\bin\\httpd.exe"))
-        process.StartInfo.FileName = apacheHome + "\\bin\\httpd.exe";
-      else
-        throw new ApplicationException(String.Format("Can not find apache.exe or httpd.exe in {0}\\bin", apacheHome));
-
-      process.StartInfo.RedirectStandardError = true;
-      process.StartInfo.RedirectStandardOutput = true;
-      process.StartInfo.Arguments = "-v";
-      process.StartInfo.UseShellExecute = false;
-
-      StringBuilder error = new StringBuilder();
-      String version = null;
-      String versionString = null;
-
-      process.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
-      {
-        if (e.Data != null)
-          error.Append(e.Data).Append('\n');
-      };
-      process.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
-      {
-        if (e.Data == null)
-          return;
-
-        String test = e.Data.ToLower();
-        if (test.IndexOf("version") != -1) {
-          versionString = e.Data;
-
-          if (test.IndexOf("2.2") != -1)
-            version = "2.2";
-          else if (test.IndexOf("2.0") != -1)
-            version = "2.0";
-        }
-      };
-
-      process.Start();
-
-      process.BeginOutputReadLine();
-      process.BeginErrorReadLine();
-
-      process.WaitForExit();
-
-      process.CancelErrorRead();
-      process.CancelOutputRead();
-
-      process.Close();
-
-      if (version != null)
-        return version;
-
-      if (error.Length > 0)
-        throw new ApplicationException("Unable to determine version of Apache due to error: " + error.ToString());
-      else if (version != null)
-        throw new ApplicationException("Unsupported Apache Version: " + versionString);
-      else
-        throw new ApplicationException("Unable to determine version of Apache");
-    }
-
-    public ConfigureInfo SetupApache(String resinHome, String apacheHome)
-    {
-
-      ConfigureInfo configureInfo = new ConfigureInfo();
-
-      String apacheVersion = GetApacheVersion(apacheHome);
-
-      String httpdConfData = null;
-
-      String httpdConfFile = apacheHome + "\\conf\\httpd.conf";
-      StreamReader httpdConfFileReader = null;
-      try {
-        httpdConfFileReader = new StreamReader(httpdConfFile);
-        httpdConfData = httpdConfFileReader.ReadToEnd();
-      }
-      catch (Exception e) {
-        throw e;
-      }
-      finally {
-        if (httpdConfFileReader != null)
-          httpdConfFileReader.Close();
-      }
-
-      StringReader httpdConfReader = new StringReader(httpdConfData);
-
-      int lineCounter = 0;
-      int lastLoadModuleLine = 0;
-      int loadModCauchoLine = -1;
-      int ifModuleCaucho = -1;
-      String line;
-      while ((line = httpdConfReader.ReadLine()) != null) {
-        if (line.IndexOf("LoadModule") != -1) {
-          lastLoadModuleLine = lineCounter;
-
-          if ((line.IndexOf("mod_caucho.dll") != -1) &&
-              !IsCommentedOut(line)) {
-            loadModCauchoLine = lineCounter;
+      DriveInfo[] drives = DriveInfo.GetDrives();
+      foreach (DriveInfo drive in drives) {
+        if (DriveType.Fixed != drive.DriveType && DriveType.Ram != drive.DriveType)
+          continue;
+        DirectoryInfo root = drive.RootDirectory;
+        DirectoryInfo[] directories = root.GetDirectories();
+        foreach (DirectoryInfo directory in directories) {
+          if (directory.Name.StartsWith("resin", StringComparison.CurrentCultureIgnoreCase)
+            && Util.IsResinHome(directory.FullName)) {
+            Resin resin = new Resin(Util.Canonicalize(directory.FullName));
+            if (!HasResin(resin))
+              AddResin(resin);
+          } else if (directory.Name.Contains("appservers")) {
+            DirectoryInfo[] appserverDirectories = directory.GetDirectories();
+            foreach (DirectoryInfo appserverDir in appserverDirectories) {
+              if (Util.IsResinHome(appserverDir.FullName)) {
+                String home = Util.Canonicalize(appserverDir.FullName);
+                Resin resin = new Resin(home);
+                if (!HasResin(resin))
+                  AddResin(resin);
+              }
+            }
           }
         }
-
-        if (line.IndexOf("<IfModule") != -1 &&
-            line.IndexOf("mod_caucho.c") != -1 &&
-            !IsCommentedOut(line)) {
-          ifModuleCaucho = lineCounter;
-        }
-
-        lineCounter++;
-      }
-      httpdConfReader.Close();
-
-      if (ifModuleCaucho == -1 || loadModCauchoLine == -1) {
-
-        configureInfo.BackUpFile = BackupHttpConf(httpdConfFile);
-
-        httpdConfReader = new StringReader(httpdConfData);
-        StringWriter buffer = new StringWriter();
-        lineCounter = 0;
-        //
-        while ((line = httpdConfReader.ReadLine()) != null) {
-          buffer.WriteLine(line);
-
-          if (lineCounter == lastLoadModuleLine &&
-              loadModCauchoLine == -1) {
-            buffer.WriteLine(String.Format("LoadModule caucho_module \"{0}/win32/{1}/mod_caucho.dll\"", resinHome.Replace('\\', '/'), "apache-" + apacheVersion));
-          }
-
-          lineCounter++;
-        }
-
-        if (ifModuleCaucho == -1) {
-          buffer.WriteLine("<IfModule mod_caucho.c>");
-          buffer.WriteLine("  ResinConfigServer localhost 6800");
-          buffer.WriteLine("  CauchoStatus yes");
-          buffer.WriteLine("</IfModule>");
-        }
-
-        buffer.Flush();
-
-        StreamWriter httpdConfWriter = null;
-
-        try {
-          httpdConfWriter = new StreamWriter(httpdConfFile);
-          httpdConfWriter.Write(buffer.ToString());
-          httpdConfWriter.Flush();
-        }
-        catch (Exception e) {
-          throw e;
-        }
-        finally {
-          if (httpdConfWriter != null)
-            httpdConfWriter.Close();
-        }
-
-        configureInfo.Status = ConfigureInfo.SETUP_OK;
-      } else {
-        configureInfo.Status = ConfigureInfo.SETUP_ALREADY;
       }
 
-      return configureInfo;
-    }
+      String currentResin = Util.GetCurrentResinFromRegistry();
+      if (currentResin != null) {
+        currentResin = Util.Canonicalize(currentResin);
+        Resin resin = new Resin(currentResin);
 
-    public String FindApacheServiceName(String apacheHome)
-    {
-      String apacheHomeLower = apacheHome.ToLower();
-      String result = null;
-      RegistryKey services = Registry.LocalMachine.OpenSubKey(REG_SERVICES);
+        Resin = resin;
+
+        if (!HasResin(resin))
+          AddResin(resin);
+      }
+
+      RegistryKey services = Registry.LocalMachine.OpenSubKey(Setup.REG_SERVICES);
       foreach (String name in services.GetSubKeyNames()) {
-        Console.WriteLine("Service: " + name);
         RegistryKey key = services.OpenSubKey(name);
-        String imagePath = (String)key.GetValue("ImagePath");
-        if (imagePath != null && !"".Equals(imagePath)) {
-          imagePath = imagePath.ToLower();
-          if (imagePath.IndexOf(apacheHomeLower) != -1) {
-            result = name;
-            break;
+        Object imagePathObj = key.GetValue("ImagePath");
+        if (imagePathObj == null && !"".Equals(imagePathObj))
+          continue;
+
+        String imagePath = (String)imagePathObj;
+        String lowerCaseImagePath = imagePath.ToLower();
+
+        if (imagePath.IndexOf("resin.exe") != -1) {
+          ResinArgs resinArgs = new ResinArgs(imagePath);
+          Resin resin = null;
+          if (resinArgs.Home != null) {
+            resin = new Resin(resinArgs.Home);
+          } else if (resinArgs.Exe != null) {
+            String exe = resinArgs.Exe;
+            String home = exe.Substring(0, exe.Length - 10);
+            if (Util.IsResinHome(home))
+              resin = new Resin(home);
           }
+
+          if (resin != null && !HasResin(resin))
+            AddResin(resin);
         }
+
         key.Close();
       }
 
       services.Close();
-      return result;
+
+      String path = Util.Canonicalize(System.Reflection.Assembly.GetExecutingAssembly().Location);
+      while (path.LastIndexOf('\\') > 0) {
+        path = path.Substring(0, path.LastIndexOf('\\'));
+        if (Util.IsResinHome(path)) {
+          Resin resin = new Resin(path);
+          if (Resin == null) {
+            Resin = resin;
+          }
+
+          if (!HasResin(resin)) {
+            AddResin(resin);
+          }
+
+          break;
+        };
+      }
     }
 
-    public String BackupHttpConf(String httpdConfFile)
+    public void FindResinServices()
     {
-      String backUpFile = httpdConfFile + ".bak";
+      RegistryKey services = Registry.LocalMachine.OpenSubKey(Setup.REG_SERVICES);
+      foreach (String name in services.GetSubKeyNames()) {
+        RegistryKey key = services.OpenSubKey(name);
+        Object imagePathObj = key.GetValue("ImagePath");
+        if (imagePathObj == null && !"".Equals(imagePathObj))
+          continue;
 
-      bool backedUp = false;
-      int i = 0;
-      do {
-        if (!File.Exists(backUpFile)) {
-          File.Copy(httpdConfFile, backUpFile);
-          backedUp = true;
-        } else {
-          backUpFile = httpdConfFile + ".bak-" + i++;
-        }
-      } while (!backedUp && i < 100);
+        String imagePath = (String)imagePathObj;
+        String lowerCaseImagePath = imagePath.ToLower();
 
-      if (!backedUp)
-        throw new ApplicationException("Can not make back up copy of the file");
+        if ((imagePath.IndexOf("resin.exe") > 0 || imagePath.IndexOf("httpd.exe") > 0) && imagePath.IndexOf("-service") > 0) {
+          ResinArgs resinArgs = new ResinArgs(imagePath);
 
-      return backUpFile;
-    }
-
-    public ConfigureInfo RemoveApache(String apacheHome)
-    {
-
-      ConfigureInfo configInfo = new ConfigureInfo();
-
-      String httpdConfFile = apacheHome + "\\conf\\httpd.conf";
-
-      StreamReader httpdConfReader = null;
-      StringWriter buffer = new StringWriter();
-      bool resinRemoved = false;
-      try {
-
-        httpdConfReader = new StreamReader(httpdConfFile);
-        String line = null;
-        bool inCauchoIfModule = false;
-        while ((line = httpdConfReader.ReadLine()) != null) {
-          if (line.IndexOf("LoadModule") != -1 &&
-              line.IndexOf("mod_caucho.dll") != -1 &&
-              !IsCommentedOut(line)) {
-            resinRemoved = true;
-          } else if (line.IndexOf("IfModule") != -1 &&
-                     line.IndexOf("mod_caucho.c") != -1 &&
-                     !IsCommentedOut(line)) {
-            inCauchoIfModule = true;
-            resinRemoved = true;
-          } else if (inCauchoIfModule &&
-                     line.IndexOf("/IfModule") != -1) {
-            inCauchoIfModule = false;
-          } else if (inCauchoIfModule) {
+          ResinService resin = null;
+          if (resinArgs.Home != null) {
+            resin = new ResinService();
+            resin.Home = resinArgs.Home;
+          } else if (resinArgs.Exe != null) {
+            String exe = resinArgs.Exe;
+            String home = exe.Substring(0, exe.Length - 10);
+            if (Util.IsResinHome(home)) {
+              resin = new ResinService();
+              resin.Home = home;
+            }
           } else {
-            buffer.WriteLine(line);
+            continue;
           }
+
+          resin.Exe = resinArgs.Exe;
+
+          if (resin == null)
+            continue;
+
+          resin.Name = name;
+          resin.Server = resinArgs.Server;
+          resin.DynamicServer = resinArgs.DynamicServer;
+          resin.Root = resinArgs.Root;
+          resin.Log = resinArgs.Log;
+          resin.User = resinArgs.User;
+          resin.JavaHome = resinArgs.JavaHome;
+          if (resinArgs.JmxPort != null && !"".Equals(resinArgs.JmxPort))
+            resin.JmxPort = int.Parse(resinArgs.JmxPort);
+
+          if (resinArgs.DebugPort != null && !"".Equals(resinArgs.DebugPort))
+            resin.DebugPort = int.Parse(resinArgs.DebugPort);
+
+          if (resinArgs.WatchDogPort != null && !"".Equals(resinArgs.WatchDogPort))
+            resin.WatchdogPort = int.Parse(resinArgs.WatchDogPort);
+
+          resin.IsPreview = resinArgs.IsPreview;
+
+          resin.ExtraParams = resinArgs.ResinArguments;
+
+          AddResinService(resin);
         }
 
-        buffer.Flush();
-      }
-      catch (Exception e) {
-        throw e;
-      }
-      finally {
-        if (httpdConfReader != null)
-          httpdConfReader.Close();
+        key.Close();
       }
 
-      if (!resinRemoved) {
-        configInfo.Status = ConfigureInfo.REMOVED_ALREADY;
-
-        return configInfo;
-      }
-
-      configInfo.BackUpFile = BackupHttpConf(httpdConfFile);
-      StreamWriter httpdConfWriter = null;
-      try {
-        httpdConfWriter = new StreamWriter(httpdConfFile);
-        httpdConfWriter.Write(buffer.ToString());
-        httpdConfWriter.Flush();
-      }
-      catch (Exception e) {
-        throw e;
-      }
-      finally {
-        if (httpdConfWriter != null)
-          httpdConfWriter.Close();
-      }
-
-      configInfo.Status = ConfigureInfo.REMOVED_OK;
-
-      return configInfo;
+      services.Close();
     }
 
-    public ConfigureInfo SetupIIS(String resinHome, String iisScripts)
+    public ResinConf GetResinConf(String conf)
     {
-      ConfigureInfo configInfo = new ConfigureInfo();
-
-      DirectoryEntry filters = new DirectoryEntry("IIS://localhost/W3SVC/Filters");
-      DirectoryEntry resinFilter = null;
-
-      foreach (DirectoryEntry entry in filters.Children) {
-        if ("Resin".Equals(entry.Name)) {
-          resinFilter = entry;
-        }
-      }
-
-      if (resinFilter == null)
-        resinFilter = filters.Children.Add("Resin", "IIsFilter");
-
-      resinFilter.Properties["FilterEnabled"][0] = true;
-      resinFilter.Properties["FilterState"][0] = 4;
-      resinFilter.Properties["KeyType"][0] = "IIsFilter";
-      resinFilter.Properties["FilterPath"][0] = iisScripts + "\\isapi_srun.dll";
-      resinFilter.Properties["FilterDescription"][0] = "isapi_srun Extension";
-
-      PropertyValueCollection filterOrder = (PropertyValueCollection)filters.Properties["FilterLoadOrder"];
-      String val = (String)filterOrder[0];
-
-      if (!val.Contains("Resin,"))
-        filterOrder[0] = "Resin," + val;
-
-      resinFilter.CommitChanges();
-      resinFilter.Close();
-      filters.CommitChanges();
-      filters.Close();
-
-      try {
-        CopyIsapiFilter(resinHome, iisScripts);
-        configInfo.Status = ConfigureInfo.SETUP_OK;
-      }
-      catch (Exception e) {
-        configInfo.Status = ConfigureInfo.ISAPI_IO_ERROR;
-        configInfo.Exception = e;
-      }
-
-      return configInfo;
+      return new ResinConf(conf);
     }
 
-    public void CopyIsapiFilter(String resinHome, String iisScripts)
+    public bool HasResin(Resin resin)
     {
-      String filterPath = iisScripts + "\\isapi_srun.dll";
-      if (File.Exists(filterPath))
-        File.Delete(filterPath);
-
-      File.Copy(resinHome + "\\win32\\isapi_srun.dll", filterPath);
+      return _resinList.Contains(resin);
     }
 
-    public void RemoveIsapiFilter(String iisScripts)
+    public void AddResin(Resin resin)
     {
-      String filterPath = iisScripts + "\\isapi_srun.dll";
-      File.Delete(filterPath);
+      _resinList.Add(resin);
     }
 
-    public void StopIIS()
+    public IList GetResinList()
     {
-      ServiceController sc = new ServiceController("W3SVC");
-
-      if (sc.Status == ServiceControllerStatus.Running) {
-        sc.Stop();
-        sc.WaitForStatus(ServiceControllerStatus.Stopped);
-      }
-
-      sc.Close();
+      IList result = new List<Resin>(_resinList);
+      return result;
     }
 
-    public ConfigureInfo RemoveIIS(String iisScripts)
+    public Resin SelectResin(String home)
     {
-      ConfigureInfo configInfo = new ConfigureInfo();
+      home = Util.Canonicalize(home);
 
-      DirectoryEntry filters = new DirectoryEntry("IIS://localhost/W3SVC/Filters");
-      DirectoryEntry resinFilter = null;
+      Resin result = null;
 
-      foreach (DirectoryEntry entry in filters.Children) {
-        if ("Resin".Equals(entry.Name)) {
-          resinFilter = entry;
-        }
+      foreach (Resin resin in _resinList) {
+        if (home.Equals(resin.Home))
+          result = resin;
       }
 
-      bool resinFound = false;
-      if (resinFilter != null) {
-        filters.Children.Remove(resinFilter);
-        resinFound = true;
-      }
-
-      PropertyValueCollection filterOrder = (PropertyValueCollection)filters.Properties["FilterLoadOrder"];
-      String val = (String)filterOrder[0];
-
-      int index = val.IndexOf("Resin,");
-
-      if (index != -1) {
-        String newVal = val.Substring(0, index) + val.Substring(index + 6, val.Length - 6 - index);
-        filterOrder[0] = newVal;
-        resinFound = true;
-      }
-
-      filters.CommitChanges();
-      filters.Close();
-
-      try {
-        String filterPath = iisScripts + "\\isapi_srun.dll";
-        if (File.Exists(filterPath))
-          File.Delete(filterPath);
-
-        if (resinFound)
-          configInfo.Status = ConfigureInfo.REMOVED_OK;
-        else
-          configInfo.Status = ConfigureInfo.REMOVED_ALREADY;
-      }
-      catch (Exception e) {
-        configInfo.Status = ConfigureInfo.ISAPI_IO_ERROR;
-        configInfo.Exception = e;
-      }
-
-      return configInfo;
-    }
-
-    private String FindIIS()
-    {
-      String result = null;
-
-      DirectoryEntry entry = null;
-      try {
-        entry = new DirectoryEntry("IIS://localhost/W3SVC/1/ROOT/scripts");
-
-        if (entry.Properties != null) {
-          Object val = entry.Properties["Path"];
-          if (val != null && (val is PropertyValueCollection)) {
-            PropertyValueCollection collection = (PropertyValueCollection)val;
-            IEnumerator enumerator = collection.GetEnumerator();
-
-            if (enumerator.MoveNext())
-              result = (String)enumerator.Current;
-          }
-        }
-      }
-      catch (Exception e) {
-        Console.Out.WriteLine(e.ToString());
-      }
-      finally {
-        if (entry != null)
-          entry.Close();
+      if (result == null) {
+        result = new Resin(home);
+        AddResin(result);
       }
 
       return result;
     }
 
-    public void RestartIIS()
+    public bool HasResinService(ResinService service)
     {
-      RestartService("W3SVC");
+      return _resinServices.Contains(service);
     }
 
-    public void RestartService(String serviceName)
+    public void AddResinService(ResinService service)
     {
-      ServiceController sc = new ServiceController(serviceName);
+      _resinServices.Add(service);
+    }
 
-      if (sc.Status == ServiceControllerStatus.Running) {
-        sc.Stop();
-        sc.WaitForStatus(ServiceControllerStatus.Stopped);
+    public IList<ResinService> GetResinServices(Resin resin)
+    {
+      IList<ResinService> result = new List<ResinService>();
+      foreach (ResinService resinService in _resinServices) {
+        if (resin.Home.Equals(resinService.Home))
+          result.Add(resinService);
       }
 
-      sc.Start();
-      sc.WaitForStatus(ServiceControllerStatus.Running);
-
-      sc.Close();
+      return result;
     }
 
-    private static bool IsCommentedOut(String line)
+    public void ResetResinServices()
     {
-      foreach (char c in line) {
-        switch (c) {
-          case ' ': break;
-          case '\t': break;
-          case '#': return true;
-          default: return false;
+      _resinServices.Clear();
+      FindResinServices();
+    }
+
+    public IList<ResinService> GetResinServices()
+    {
+      return _resinServices;
+    }
+
+    public String GetResinConfFile(Resin resin)
+    {
+      if (File.Exists(resin.Home + @"\conf\resin.xml"))
+        return @"conf\resin.xml";
+      else if (File.Exists(resin.Home + @"\conf\resin.conf"))
+        return @"conf\resin.conf";
+      else
+        return null;
+    }
+
+    public List<String> GetUsers()
+    {
+      if (_users == null) {
+        List<String> users = new List<String>();
+        users.Add("Local Service");
+        DirectoryEntry groupEntry = new DirectoryEntry("WinNT://.");
+        groupEntry.Children.SchemaFilter.Add("User");
+        IEnumerator e = groupEntry.Children.GetEnumerator();
+        while (e.MoveNext()) {
+          String name = ((DirectoryEntry)e.Current).Name;
+          if (!"Guest".Equals(name))
+            users.Add(name);
         }
+
+        _users = users;
       }
 
-      return false;
+      return _users;
     }
 
+    public void InstallService(ResinService resinService, bool isNew)
+    {
+      if (isNew) {
+        Installer installer = InitInstaller(resinService);
+        Hashtable installState = new Hashtable();
+        installer.Install(installState);
+        StoreState(installState, resinService.Name);
+      }
+
+      RegistryKey system = Registry.LocalMachine.OpenSubKey("System");
+      RegistryKey currentControlSet = system.OpenSubKey("CurrentControlSet");
+      RegistryKey servicesKey = currentControlSet.OpenSubKey("Services");
+      RegistryKey serviceKey = servicesKey.OpenSubKey(resinService.Name, true);
+      String imagePath = (String)serviceKey.GetValue("ImagePath");
+      if (imagePath.Contains(".exe\""))
+        imagePath = imagePath.Substring(0, imagePath.IndexOf(".exe\"") + 5);
+      else if (imagePath.Contains(".exe"))
+        imagePath = imagePath.Substring(0, imagePath.IndexOf(".exe\"") + 4);
+
+      StringBuilder builder = new StringBuilder(imagePath);
+      builder.Append(' ').Append(resinService.GetServiceArgs());
+
+      serviceKey.SetValue("ImagePath", builder.ToString());
+    }
+
+    public void UninstallService(ResinService resinService)
+    {
+      Hashtable state = LoadState(resinService.Name);
+
+      Installer installer = InitInstaller(resinService);
+
+      installer.Uninstall(state);
+    }
+
+    private Installer InitInstaller(ResinService resinService)
+    {
+      TransactedInstaller txInst = new TransactedInstaller();
+      txInst.Context = new InstallContext(null, new String[] { });
+      txInst.Context.Parameters["assemblypath"] = resinService.Exe;
+
+      ServiceProcessInstaller spInst = new ServiceProcessInstaller();
+      if (resinService.User != null) {
+        spInst.Username = resinService.User;
+        spInst.Password = resinService.Password;
+        spInst.Account = ServiceAccount.User;
+      } else {
+        spInst.Account = ServiceAccount.LocalSystem;
+      }
+
+      txInst.Installers.Add(spInst);
+
+      ServiceInstaller srvInst = new ServiceInstaller();
+      srvInst.ServiceName = resinService.Name;
+      srvInst.DisplayName = resinService.Name;
+      srvInst.StartType = ServiceStartMode.Automatic;
+
+      txInst.Installers.Add(srvInst);
+
+      return txInst;
+    }
+
+    private String GetStateDirectory()
+    {
+      String dir = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData) + @"\Caucho\services";
+      return dir;
+    }
+
+    private void StoreState(Hashtable state, String serviceName)
+    {
+      String dir = GetStateDirectory();
+      DirectoryInfo info;
+      if ((info = Directory.CreateDirectory(dir)) != null && info.Exists) {
+        String file = dir + @"\" + serviceName + ".srv";
+
+        FileStream fs = new FileStream(file, FileMode.Create, FileAccess.Write);
+        BinaryFormatter serializer = new BinaryFormatter();
+        serializer.Serialize(fs, state);
+        fs.Flush();
+        fs.Close();
+      }
+    }
+
+    private Hashtable LoadState(String serviceName)
+    {
+      String file = GetStateDirectory() + '\\' + serviceName + ".srv";
+      if (File.Exists(file) && false) {
+        Hashtable state = null;
+        FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read);
+        BinaryFormatter serializer = new BinaryFormatter();
+        state = (Hashtable)serializer.Deserialize(fs);
+        fs.Close();
+        return state;
+      } else {
+        return FakeState();
+      }
+    }
 
     [STAThread]
     public static void Main(String[] args)
@@ -590,11 +461,34 @@ namespace Caucho
       SetupForm setupForm = new SetupForm(new Setup());
       Application.Run(setupForm);
     }
+
+    public static Hashtable FakeState()
+    {
+      Hashtable state = new Hashtable();
+      IDictionary[] states = new IDictionary[2];
+      states[0] = new Hashtable();
+      states[0]["_reserved_nestedSavedStates"] = new IDictionary[0];
+      states[0]["Account"] = ServiceAccount.LocalSystem;
+
+      states[1] = new Hashtable();
+      IDictionary[] substates = new IDictionary[1];
+      substates[0] = new Hashtable();
+      substates[0]["_reserved_nestedSavedStates"] = new IDictionary[0];
+      substates[0]["alreadyRegistered"] = false;
+      substates[0]["logExists"] = true;
+      substates[0]["baseInstalledAndPlatformOK"] = true;
+
+      states[1]["_reserved_nestedSavedStates"] = substates;
+      states[1]["installed"] = true;
+
+      state["_reserved_nestedSavedStates"] = states;
+
+      return state;
+    }
   }
 
   class DirSet : ArrayList
   {
-    //perf doesn't matter
     public override int Add(object value)
     {
       int index = base.IndexOf(value);
@@ -606,45 +500,38 @@ namespace Caucho
     }
   }
 
-  public class ConfigureInfo
+  public class SetupResult
   {
-    public static int SETUP_ALREADY = 1;
-    public static int SETUP_OK = 2;
-    public static int ISAPI_IO_ERROR = 3;
-    public static int REMOVED_OK = 4;
-    public static int REMOVED_ALREADY = 5;
+    public static int OK = 0;
+    public static int ERROR = 1;
+    public static int EXCEPTION = 2;
 
-    private String _backupFile;
-    private String _serviceName;
-    private int _status;
-    private Exception _exception;
-
-    public String BackUpFile
+    public SetupResult(String message)
     {
-      set { _backupFile = value; }
-      get { return _backupFile; }
+      this.Status = OK;
+      this.Message = message;
     }
 
-    public String ServiceName
+    public SetupResult(int status, String message)
     {
-      set { _serviceName = value; }
-      get { return _serviceName; }
+      this.Status = status;
+      this.Message = message;
     }
 
-    public int Status
+    public SetupResult(Exception e)
     {
-      set { _status = value; }
-      get { return _status; }
+      this.Status = EXCEPTION;
+      this.Exception = e;
     }
 
-    public Exception Exception
-    {
-      set { _exception = value; }
-      get { return _exception; }
-    }
+    public int Status { get; set; }
+
+    public Exception Exception { get; set; }
+
+    public String Message { get; set; }
   }
 
-  public class Resin
+  public class Resin : IEquatable<Resin>
   {
     public String Home { get; set; }
     public String[] Servers { get; set; }
@@ -661,30 +548,137 @@ namespace Caucho
 
     public override bool Equals(object obj)
     {
-      return Home.Equals(obj);
+      if (this == obj)
+        return true;
+
+      if (!(obj is Resin))
+        return false;
+
+      Resin resin = (Resin)obj;
+
+      return Home.Equals(resin.Home);
+    }
+
+    #region IEquatable Members
+    public bool Equals(Resin obj)
+    {
+      return Home.Equals(obj.Home);
+    }
+    #endregion
+
+    public override string ToString()
+    {
+      return Home;
     }
   }
 
-  public class ResinService
+  public class ResinService : IEquatable<ResinService>, ICloneable
   {
+    public String Exe { get; set; }
     public String Home { get; set; }
     public String Root { get; set; }
     public String Log { get; set; }
     public String Conf { get; set; }
-    public String ServiceName { get; set; }
-    public String ServiceUser { get; set; }
-    public String ServicePassword { get; set; }
+    public String Name { get; set; }
+    public String User { get; set; }
+    public String Password { get; set; }
     public bool IsPreview { get; set; }
     public String JavaHome { get; set; }
     public String Server { get; set; }
+    public String DynamicServer { get; set; }
     public int DebugPort { get; set; }
     public int JmxPort { get; set; }
+    public int WatchdogPort { get; set; }
+    public String ExtraParams { get; set; }
 
     public ResinService()
     {
       JmxPort = -1;
       DebugPort = -1;
+      WatchdogPort = -1;
       IsPreview = false;
     }
+
+    public String GetServiceArgs()
+    {
+      StringBuilder sb = new StringBuilder();
+      sb.Append("-service -name ");
+      sb.Append(Name);
+      if (Conf != null)
+        sb.Append(" -conf ").Append('"').Append(Conf).Append('"');
+
+      sb.Append(" -resin-home ").Append('"').Append(Home).Append('"');
+
+      if (Root != null)
+        sb.Append(" -root-directory ").Append('"').Append(Root).Append('"');
+
+      if (Log != null)
+        sb.Append(" -log-directory ").Append('"').Append(Log).Append('"');
+
+      if (Server != null && !"".Equals(Server))
+        sb.Append(" -server ").Append(Server);
+      else if (DynamicServer != null)
+        sb.Append(" -dynamic-server ").Append(DynamicServer);
+
+      if (IsPreview)
+        sb.Append(" -preview");
+
+      if (DebugPort > 0)
+        sb.Append(" -debug-port ").Append(DebugPort.ToString());
+
+      if (JmxPort > 0)
+        sb.Append(" -jmx-port ").Append(JmxPort.ToString());
+
+      if (WatchdogPort > 0)
+        sb.Append(" -watchdog-port ").Append(WatchdogPort.ToString());
+
+      if (ExtraParams != null)
+        sb.Append(" ").Append(ExtraParams);
+
+      return sb.ToString();
+    }
+
+    public override int GetHashCode()
+    {
+      return Name.GetHashCode();
+    }
+
+    public bool Equals(ResinService resinService)
+    {
+      if (this == resinService)
+        return true;
+
+      return Name.Equals(resinService);
+    }
+
+    public override String ToString()
+    {
+      StringBuilder result = new StringBuilder(Name);
+      result.Append(" [");
+
+      if (Server != null)
+        result.Append("-server ").Append(Server);
+      else if (DynamicServer != null)
+        result.Append("-dynamic:").Append(DynamicServer);
+      else
+        result.Append("default server");
+
+      result.Append(']');
+
+      return result.ToString();
+    }
+
+    #region ICloneable Members
+
+    public object Clone()
+    {
+      return this.MemberwiseClone();
+    }
+
+    #endregion
+  }
+
+  class StateNofFoundException : Exception
+  {
   }
 }

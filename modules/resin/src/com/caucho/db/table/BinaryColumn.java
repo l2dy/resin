@@ -36,7 +36,7 @@ import com.caucho.db.index.SqlIndexAlreadyExistsException;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 
@@ -187,10 +187,18 @@ class BinaryColumn extends Column {
 	       Expr expr, QueryContext context)
     throws SQLException
   {
-    if (expr.isNull(null))
+    if (expr.isNull(context)) {
       setNull(block, rowOffset);
+    }
     else {
-      expr.evalToBuffer(context, block, rowOffset + _columnOffset);
+      int i = expr.evalToBuffer(context, block, rowOffset + _columnOffset,
+                                getTypeCode());
+      int len = getLength();
+      
+      for (; i < len; i++) {
+        block[rowOffset + _columnOffset + i] = 0;
+      }
+      
       setNonNull(block, rowOffset);
     }
   }
@@ -317,12 +325,31 @@ class BinaryColumn extends Column {
 		  TableIterator iter, Expr expr, QueryContext context)
     throws SQLException
   {
-    if (expr.evalToBuffer(context, iter.getBuffer(),
-			  iter.getRowOffset() + _columnOffset) >= 0) {
-      setNonNull(iter.getBuffer(), iter.getRowOffset());
+    byte []buffer = iter.getBuffer();
+    int rowOffset = iter.getRowOffset();
+    int colOffset = _columnOffset;
+    
+    if (expr.isNull(context)) {
+      setNull(buffer, rowOffset);
+      iter.setDirty();
+      return;
+    }
+    
+    int i = expr.evalToBuffer(context, buffer,
+                              rowOffset + _columnOffset,
+                              getTypeCode());
+    
+    if (i >= 0) {
+      int len = getLength();
+      
+      for (; i < len; i++) {
+        buffer[i + rowOffset + colOffset] = 0;
+      }
+      
+      setNonNull(buffer, rowOffset);
     }
     else
-      setNull(iter.getBuffer(), iter.getRowOffset());
+      setNull(buffer, rowOffset);
     
     
     iter.setDirty();
@@ -347,6 +374,7 @@ class BinaryColumn extends Column {
       try {
         int len = getLength();
 
+        /*
         if (len > 3) {
           int d1 = block[rowOffset + _columnOffset + len - 1];
           int d2 = block[rowOffset + _columnOffset + len - 2];
@@ -358,6 +386,7 @@ class BinaryColumn extends Column {
             Thread.dumpStack();
           }
         }
+        */
 
 	index.insert(block,
 		     rowOffset + _columnOffset, getLength(),
@@ -388,7 +417,7 @@ class BinaryColumn extends Column {
     BTree index = getIndex();
 
     if (index != null)
-      index.remove(block, rowOffset + _columnOffset, getLength(), xa);
+      index.remove(block, rowOffset + _columnOffset, getLength());
   }
 
   private String getDebugString(byte []block, int rowOffset)

@@ -53,7 +53,7 @@
   <property name="jar.update" value="true"/>
 
   <property name="promodules" location="${basedir}/../pro/modules"/>
-  <property name="jdkapi.href" value="http://java.sun.com/j2se/1.5.0/docs/api"/>
+  <property name="jdkapi.href" value="http://java.sun.com/javase/6/docs/api"/>
 
   <property name="shell" value="bash"/>
 
@@ -103,7 +103,7 @@
       <isset property="version"/>
     </condition>
     <property name="maven.m2" value="m2-snapshot"/>
-    <property name="maven.root" value="${dist}/${maven.m2}"/>
+    <property name="maven.root" value="${resin.dist}/${maven.m2}"/>
     
     <property name="version" value="4.0.s${snapshotdate}"/>
     <property name="dist.name" value="${shortproduct}-${version}"/>
@@ -434,9 +434,9 @@
 
     <property file="${artifact.src}/module.properties"/>
 
-    <mkdir dir="${dist}/${dist.name}/project-jars"/>
+    <mkdir dir="${resin.dist}/${dist.name}/project-jars"/>
     
-    <copy tofile="${dist}/${dist.name}/project-jars/resin-${artifact.name}-${version}.jar"
+    <copy tofile="${resin.dist}/${dist.name}/project-jars/resin-${artifact.name}-${version}.jar"
           file="${artifact.dist}/${artifact.jar}"/>
   </target>
 	  
@@ -523,6 +523,10 @@
       <fileset dir="${resin.modules}/junit/classes">
         <exclude name="**/.*"/>
       </fileset>
+    	
+      <fileset dir="${resin.modules}/eclipselink/classes">
+        <exclude name="**/.*"/>
+      </fileset>    	
     </jar>
   </target>
 
@@ -629,8 +633,10 @@
         <include name="lib/activation.LICENSE"/>
         <include name="lib/javamail-141.jar"/>
         <include name="lib/javamail-14.LICENSE"/>
+        <!--
         <include name="lib/jcache.jar"/>
         <include name="lib/jaxstream-15.jar"/>
+        -->
         <include name="lib/jsf-api.jar"/>
         <include name="lib/jsf-impl.jar"/>
         <include name="lib/jsf.LICENSE"/>
@@ -658,8 +664,8 @@
         <include name="description-pak"/>
       </fileset>
     </copy>
-    
-    <copy todir="${dist}/${dist.name}/doc/resin-doc">
+
+    <copy todir="${resin.dist}/${dist.name}/doc/resin-doc">
       <fileset dir="${resin.install}/doc">
         <exclude name="**/*~"/>
         <exclude name="**/.cvsignore"/>
@@ -1217,7 +1223,7 @@
     </exec>
   </target>
 
-  <target name="debian" depends="compile,resin.dist.jar,debian-libexec,debian-perm">
+  <target name="debian" depends="debian-libexec,debian-perm">
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
     </exec>
@@ -1280,7 +1286,9 @@
         <include name="lib/activation.jar"/>
         <include name="lib/javaee-16.jar"/>
         <include name="lib/javamail-141.jar"/>
+        <!--
         <include name="lib/jaxstream-15.jar"/>
+        -->
         <include name="lib/jaxrpc-15.jar"/>
         <include name="lib/jsf-12.jar"/>
         <include name="lib/pro.jar"/>
@@ -1377,26 +1385,26 @@
 
     <exec executable="${basedir}/debian-perm"/>
 
-    <delete dir="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
+    <delete dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
             failonerror="false"/>
 
-    <mkdir dir="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
+    <mkdir dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
         
     <exec executable="dpkg">
       <arg value="-b"/>
       <arg value="dist-debian"/>
-      <arg value="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
+      <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
     </exec>
 
     <exec executable="dpkg-scanpackages"
-          dir="/tmp/debian"
-          output="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"
+          dir="${dist}/debian"
+          output="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"
           logError="true">
       <arg value="dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
     </exec>
 
     <exec executable="gzip">
-      <arg value="/tmp/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"/>
+      <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"/>
     </exec>
   </target>
 

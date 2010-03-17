@@ -32,6 +32,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.ejb.Timer;
@@ -218,14 +219,25 @@ public class StatelessManager<T> extends SessionServer<T> {
   {
     return getStatelessContext();
   }
+  
+  public void destroy()
+  {
+    super.destroy();
+    
+    try {
+      getStatelessContext().destroy();
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
+  }
 
   private StatelessContext getStatelessContext()
   {
     synchronized (this) {
       if (_homeContext == null) {
         try {
-          Class[] param = new Class[] { StatelessManager.class };
-          Constructor cons = _contextImplClass.getConstructor(param);
+          Class<?>[] param = new Class[] { StatelessManager.class };
+          Constructor<?> cons = _contextImplClass.getConstructor(param);
 
           _homeContext = (StatelessContext) cons.newInstance(this);
         } catch (Exception e) {
@@ -233,7 +245,7 @@ public class StatelessManager<T> extends SessionServer<T> {
         }
       }
     }
-
+    
     return _homeContext;
   }
 

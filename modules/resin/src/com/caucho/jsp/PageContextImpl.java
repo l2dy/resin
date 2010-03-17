@@ -43,6 +43,7 @@ import com.caucho.server.http.ToCharResponseAdapter;
 import com.caucho.server.webapp.RequestDispatcherImpl;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.DisplayableException;
 import com.caucho.util.HashMapImpl;
 import com.caucho.util.L10N;
 import com.caucho.util.NullEnumeration;
@@ -830,7 +831,8 @@ public class PageContextImpl extends PageContext
   /**
    * Returns the servlet request for the page.
    */
-  public ServletRequest getRequest()
+  @Override
+  public HttpServletRequest getRequest()
   {
     return _request;
   }
@@ -838,7 +840,8 @@ public class PageContextImpl extends PageContext
   /**
    * Returns the servlet response for the page.
    */
-  public ServletResponse getResponse()
+  @Override
+  public HttpServletResponse getResponse()
   {
     return getCauchoResponse();
   }
@@ -1190,7 +1193,15 @@ public class PageContextImpl extends PageContext
     _topOut.clearBuffer();
     
     if (_errorPage != null) {
-      getApplication().log(e.toString(), e);
+      if (log.isLoggable(Level.FINER)) {
+        log.log(Level.FINER, e.toString(), e);
+      }
+      else if (e instanceof DisplayableException) {
+        log.warning(e.getMessage());
+      }
+      else {
+        log.log(Level.WARNING, e.toString(), e);
+      }
 
       getCauchoRequest().setAttribute(EXCEPTION, e);
       getCauchoRequest().setAttribute("javax.servlet.error.exception", e);
@@ -1969,8 +1980,9 @@ public class PageContextImpl extends PageContext
       }
       else if (prefix.equals("initParam"))
         return getApplication().getInitParameter(suffix);
-      else if (prefix.equals("pageScope"))
+      else if (prefix.equals("pageScope")) {
         return getAttribute(suffix);
+      }
       else if (prefix.equals("requestScope"))
         return getCauchoRequest().getAttribute(suffix);
       else if (prefix.equals("sessionScope"))
@@ -1979,7 +1991,6 @@ public class PageContextImpl extends PageContext
         return getApplication().getAttribute(suffix);
       else
         return null;
-                                  
     }
   }
   

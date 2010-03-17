@@ -108,7 +108,7 @@ public class SessionScope extends ScopeContext {
 
     HttpSession session = ((HttpServletRequest) request).getSession();
 
-    Bean comp = (Bean) bean;
+    Bean<T> comp = (Bean) bean;
 
     String id = ((PassivationCapable) bean).getId();
 
@@ -120,14 +120,14 @@ public class SessionScope extends ScopeContext {
       session.setAttribute("webbeans.resin", context);
     }
 
-    Object result = context.get(id);
+    T result = (T) context.get(id);
 
     if (result != null || creationalContext == null)
-      return (T) result;
+      return result;
 
     result = comp.create(creationalContext);
 
-    context.put(id, result);
+    context.put(comp, id, result, creationalContext);
 
     return (T) result;
   }

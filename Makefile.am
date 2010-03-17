@@ -1,3 +1,4 @@
+ACLOCAL_AMFLAGS=-I m4
 resin_home=@resin_home@
 resin_conf=@resin_conf@
 resin_root=@resin_root@
@@ -20,12 +21,13 @@ clean	:
 
 install	:
 	if test $(resin_home) != `pwd`; then \
+	  mkdir -p $(resin_home)/bin; \
+	  mkdir -p $(resin_home)/keys; \
 	  mkdir -p $(resin_home)/licenses; \
 	  mkdir -p $(resin_home)/lib; \
 	  mkdir -p $(resin_home)/$(LIBEXEC); \
 	  cp lib/*.jar $(resin_home)/lib; \
-	  mkdir -p $(resin_home)/bin; \
-	  cp $(CP_U_FLAG) bin/* $(resin_home)/bin; \
+	  cp bin/* $(resin_home)/bin; \
 	fi; \
 	if test $(resin_root) != `pwd`; then \
 	  mkdir -p $(resin_root)/webapps; \
@@ -39,11 +41,27 @@ install	:
 	  cp $(CP_U_FLAG) conf/app-default.xml $(resin_conf)/app-default.xml; \
 	  cp $(CP_U_FLAG) conf/resin.xml $(resin_conf)/resin.xml; \
 	fi; \
-	if test -n "${resin_init_d}"; then \
-	  cp $(CP_U_FLAG) init.d/resin $(resin_init_d); \
-	  chmod +x $(resin_init_d); \
-	fi; \
 	(cd modules/c/src; $(MAKE) install)
 	if test -r $(resin_pro)/modules/c/src/Makefile; then \
 	  cd $(resin_pro)/modules/c/src; $(MAKE) install; \
-	fi
+	fi; \
+	if test -n "${resin_init_d}"; then \
+		if test -w "${resin_init_d}"; then \
+			cp $(CP_U_FLAG) init.d/resin $(resin_init_d); \
+			chmod +x $(resin_init_d); \
+		else \
+			echo ;\
+			echo ;\
+			echo "****************************************************************"; \
+			echo "WARNING: Unable to install ${resin_init_d}"; \
+			echo "         Destination is not writable. Usually, only root has";\
+			echo "         permissions to install this file.";\
+			echo;\
+			echo "         This file is not required, but is used to start Resin"; \
+			echo "         at boot time.";\
+			echo "****************************************************************"; \
+			echo ;\
+			echo ;\
+		fi; \
+	fi;
+

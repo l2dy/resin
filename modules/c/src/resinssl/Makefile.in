@@ -32,7 +32,7 @@ clean	:
 	rm -f *.o *.$(SO)
 
 install	: libresinssl.$(SO)
-	- mkdir $(resin_home)/$(LIBEXEC)
+	- mkdir -p $(resin_home)/$(LIBEXEC)
 	cp libresinssl.$(SO) $(resin_home)/$(LIBEXEC)
 
 

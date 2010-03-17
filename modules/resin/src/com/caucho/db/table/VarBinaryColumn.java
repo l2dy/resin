@@ -37,7 +37,7 @@ import com.caucho.db.index.SqlIndexAlreadyExistsException;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 
@@ -368,7 +368,7 @@ class VarBinaryColumn extends Column {
     BTree index = getIndex();
 
     if (index != null)
-      index.remove(block, rowOffset + _columnOffset, getLength(), xa);
+      index.remove(block, rowOffset + _columnOffset, getLength());
   }
 
   public String toString()

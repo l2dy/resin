@@ -30,11 +30,11 @@
 package com.caucho.db.index;
 
 import com.caucho.db.Database;
-import com.caucho.db.store.Block;
-import com.caucho.db.store.BlockManager;
-import com.caucho.db.store.Lock;
-import com.caucho.db.store.Store;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.block.Block;
+import com.caucho.db.block.BlockManager;
+import com.caucho.db.block.BlockStore;
+import com.caucho.db.lock.Lock;
+import com.caucho.db.xa.Transaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -71,7 +71,7 @@ public final class BTree {
     = Logger.getLogger(BTree.class.getName());
   
   public final static long FAIL = 0;
-  private final static int BLOCK_SIZE = Store.BLOCK_SIZE;
+  private final static int BLOCK_SIZE = BlockStore.BLOCK_SIZE;
   private final static int PTR_SIZE = 8;
 
   private final static int FLAGS_OFFSET = 0;
@@ -84,10 +84,7 @@ public final class BTree {
   private final static int IS_LEAF = 0x01;
   private final static int IS_NODE = 0x02;
 
-  private BlockManager _blockManager;
-
-  private final Lock _lock;
-  private Store _store;
+  private BlockStore _store;
   
   private long _rootBlockId;
   private Block _rootBlock;
@@ -99,7 +96,6 @@ public final class BTree {
   
   private KeyCompare _keyCompare;
 
-  private int _blockCount;
   private long _timeout = 120000L;
 
   private volatile boolean _isStarted;
@@ -109,7 +105,7 @@ public final class BTree {
    *
    * @param store the underlying store containing the btree.
    */
-  public BTree(Store store,
+  public BTree(BlockStore store,
 	       long rootBlockId,
 	       int keySize,
 	       KeyCompare keyCompare)
@@ -119,12 +115,12 @@ public final class BTree {
       throw new NullPointerException();
     
     _store = store;
-    _blockManager = _store.getBlockManager();
+    _store.getBlockManager();
     
     _rootBlockId = rootBlockId;
     _rootBlock = store.readBlock(rootBlockId);
       
-    _lock = new Lock("index:" + store.getName());
+    // new Lock("index:" + store.getName());
     
     if (BLOCK_SIZE < keySize + HEADER_SIZE)
       throw new IOException(L.l("BTree key size '{0}' is too large.",
@@ -164,17 +160,15 @@ public final class BTree {
   
   public long lookup(byte []keyBuffer,
 		     int keyOffset,
-		     int keyLength,
-		     Transaction xa)
+		     int keyLength)
     throws IOException, SQLException
   {
-    return lookup(keyBuffer, keyOffset, keyLength, xa, _rootBlockId);
+    return lookup(keyBuffer, keyOffset, keyLength, _rootBlockId);
   }
   
   private long lookup(byte []keyBuffer,
 		     int keyOffset,
 		     int keyLength,
-		     Transaction xa,
 		     long blockId)
     throws IOException, SQLException
   {
@@ -208,8 +202,7 @@ public final class BTree {
 	if (isLeaf || value == FAIL)
 	  return value;
 	else
-	  return lookup(keyBuffer, keyOffset, keyLength,
-			xa, value);
+	  return lookup(keyBuffer, keyOffset, keyLength, value);
       } finally {
         blockLock.unlockRead();
       }
@@ -397,7 +390,7 @@ public final class BTree {
                     value, isOverride);
     
     block.setFlushDirtyOnCommit(false);
-    block.setDirty(0, Store.BLOCK_SIZE);
+    block.setDirty(0, BlockStore.BLOCK_SIZE);
   }
 
   /**
@@ -612,13 +605,13 @@ public final class BTree {
       validate(parentBlock);
       validate(leftBlock);
       
-      leftBlock.setDirty(0, Store.BLOCK_SIZE);
-      parentBlock.setDirty(0, Store.BLOCK_SIZE);
+      leftBlock.setDirty(0, BlockStore.BLOCK_SIZE);
+      parentBlock.setDirty(0, BlockStore.BLOCK_SIZE);
     } finally {
       if (leftBlock != null)
 	leftBlock.free();
       
-      block.setDirty(0, Store.BLOCK_SIZE);
+      block.setDirty(0, BlockStore.BLOCK_SIZE);
     }
   }
 
@@ -729,9 +722,9 @@ public final class BTree {
       setLength(parentBuffer, 1);
       setPointer(parentBuffer, NEXT_OFFSET, rightBlockId);
       
-      parentBlock.setDirty(0, Store.BLOCK_SIZE);
-      leftBlock.setDirty(0, Store.BLOCK_SIZE);
-      rightBlock.setDirty(0, Store.BLOCK_SIZE);
+      parentBlock.setDirty(0, BlockStore.BLOCK_SIZE);
+      leftBlock.setDirty(0, BlockStore.BLOCK_SIZE);
+      rightBlock.setDirty(0, BlockStore.BLOCK_SIZE);
       
       validate(parentBlock);
       validate(leftBlock);
@@ -747,8 +740,7 @@ public final class BTree {
   
   public void remove(byte []keyBuffer,
 		      int keyOffset,
-		      int keyLength,
-		      Transaction xa)
+		      int keyLength)
     throws SQLException
   {
     try {
@@ -842,7 +834,7 @@ public final class BTree {
         removeLeafEntry(blockId, buffer,
                         keyBuffer, keyOffset, keyLength);
         
-        block.setDirty(0, Store.BLOCK_SIZE);
+        block.setDirty(0, BlockStore.BLOCK_SIZE);
       }
       else {
         long childId;
@@ -863,6 +855,9 @@ public final class BTree {
           isJoin = ! removeWrite(childBlock, keyBuffer, keyOffset, keyLength);
 
           if (isJoin && joinBlocks(block, childBlock)) {
+            if (childBlock.getUseCount() > 2) {
+              System.out.println("USE: " + childBlock.getUseCount() + " " + block + " " + block.getLock());
+            }
             childBlock.deallocate();
           }
 
@@ -876,15 +871,6 @@ public final class BTree {
     } finally {
       blockLock.unlockReadAndWrite();
     }
-  }
-
-  private void validateIndex(Block block)
-  {
-    if (block == _rootBlock)
-      return;
-    
-    if (! block.isIndex())
-      throw new IllegalStateException("Block " + block + " is not an index");
   }
 
   /**
@@ -954,8 +940,8 @@ public final class BTree {
               validate(leftBlockId, leftBuffer);
               validate(blockId, buffer);
               
-              parent.setDirty(0, Store.BLOCK_SIZE);
-              leftBlock.setDirty(0, Store.BLOCK_SIZE);
+              parent.setDirty(0, BlockStore.BLOCK_SIZE);
+              leftBlock.setDirty(0, BlockStore.BLOCK_SIZE);
 
               return false;
             }
@@ -1002,8 +988,8 @@ public final class BTree {
               validate(blockId, buffer);
               validate(rightBlockId, rightBuffer);
               
-              parent.setDirty(0, Store.BLOCK_SIZE);
-              rightBlock.setDirty(0, Store.BLOCK_SIZE);
+              parent.setDirty(0, BlockStore.BLOCK_SIZE);
+              rightBlock.setDirty(0, BlockStore.BLOCK_SIZE);
 
               return false;
             }
@@ -1056,8 +1042,8 @@ public final class BTree {
               validate(parentBlockId, parentBuffer);
               validate(leftBlockId, leftBuffer);
               
-              parent.setDirty(0, Store.BLOCK_SIZE);
-              leftBlock.setDirty(0, Store.BLOCK_SIZE);
+              parent.setDirty(0, BlockStore.BLOCK_SIZE);
+              leftBlock.setDirty(0, BlockStore.BLOCK_SIZE);
 
               // System.out.println("FREE-ML: " + block);
 
@@ -1110,8 +1096,8 @@ public final class BTree {
               validate(parentBlockId, parentBuffer);
               validate(rightBlockId, rightBuffer);
               
-              rightBlock.setDirty(0, Store.BLOCK_SIZE);
-              parent.setDirty(0, Store.BLOCK_SIZE);
+              rightBlock.setDirty(0, BlockStore.BLOCK_SIZE);
+              parent.setDirty(0, BlockStore.BLOCK_SIZE);
 
               // System.out.println("FREE-MR: " + block);
 
@@ -1670,7 +1656,7 @@ public final class BTree {
 
     int end = HEADER_SIZE + tupleSize * length;
     
-    if (length < 0 || Store.BLOCK_SIZE < end) {
+    if (length < 0 || BlockStore.BLOCK_SIZE < end) {
       throw new IllegalStateException("illegal length " + length + " for " + debugId(blockId));
     }
 
@@ -1712,6 +1698,14 @@ public final class BTree {
   private void validate(Block block)
   {
     isLeaf(block.getBuffer(), block);
+  }
+
+  private void validateIndex(Block block)
+  {
+    if (block == _rootBlock)
+      return;
+    
+    block.validateIsIndex();
   }
 
   private boolean isLeaf(byte []buffer)
@@ -1888,7 +1882,7 @@ public final class BTree {
 
     block.free();
     
-    return next / Store.BLOCK_SIZE;
+    return next / BlockStore.BLOCK_SIZE;
   }
 
   public static BTree createTest(Path path, int keySize)
@@ -1898,7 +1892,7 @@ public final class BTree {
     db.setPath(path);
     db.init();
 
-    Store store = new Store(db, "test", null);
+    BlockStore store = new BlockStore(db, "test", null);
     store.create();
 
     Block block = store.allocateIndexBlock();
@@ -1911,7 +1905,7 @@ public final class BTree {
   public static BTree createStringTest(Path path, int keySize)
     throws IOException, java.sql.SQLException
   {
-    Store store = Store.create(path);
+    BlockStore store = BlockStore.create(path);
 
     Block block = store.allocateIndexBlock();
     long blockId = block.getBlockId();

@@ -84,6 +84,11 @@ public class Binding {
     }
   }
 
+  public boolean isAny()
+  {
+    return _annType == Any.class;
+  }
+
   boolean isMatch(Annotation []annList)
   {
     for (Annotation ann : annList) {
@@ -96,10 +101,12 @@ public class Binding {
 
   boolean isMatch(Annotation ann)
   {
-    Class annType = ann.annotationType();
+    Class<?> annType = ann.annotationType();
 
+    /*
     if (_annType == Any.class)
       return true;
+      */
 
     if (! _annType.equals(annType)) {
       return false;

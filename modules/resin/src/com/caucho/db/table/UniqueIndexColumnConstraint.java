@@ -31,7 +31,7 @@ package com.caucho.db.table;
 
 import com.caucho.db.index.BTree;
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 
@@ -76,8 +76,7 @@ public class UniqueIndexColumnConstraint extends Constraint {
 
       BTree index = _column.getIndex();
 
-      long value = index.lookup(buffer, 0, length,
-				context.getTransaction());
+      long value = index.lookup(buffer, 0, length);
 
       if (value != 0) {
 	Table table = sourceRow.getTable();

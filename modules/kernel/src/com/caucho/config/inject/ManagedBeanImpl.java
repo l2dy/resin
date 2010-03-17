@@ -29,37 +29,44 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.j2ee.*;
-import com.caucho.config.program.Arg;
-import com.caucho.config.program.BeanArg;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.gen.*;
-import com.caucho.config.type.TypeFactory;
-import com.caucho.config.type.ConfigType;
-import com.caucho.util.*;
-import com.caucho.config.bytecode.*;
-import com.caucho.config.cfg.*;
-import com.caucho.config.event.*;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.logging.Logger;
 
-import java.lang.reflect.*;
-import java.lang.annotation.*;
-import java.util.*;
-import java.util.logging.*;
-
-import javax.annotation.*;
+import javax.ejb.Timer;
 import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.context.Dependent;
 import javax.enterprise.context.NormalScope;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.event.*;
-import javax.enterprise.inject.*;
-import javax.enterprise.inject.spi.*;
+import javax.enterprise.event.Observes;
+import javax.enterprise.inject.Disposes;
+import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.spi.Annotated;
+import javax.enterprise.inject.spi.AnnotatedField;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.InjectionTarget;
 import javax.inject.Inject;
 import javax.inject.Named;
 import javax.inject.Qualifier;
-import javax.inject.Scope;
-import javax.inject.Singleton;
+
+import com.caucho.config.Names;
+import com.caucho.config.bytecode.ScopeAdapter;
+import com.caucho.config.program.Arg;
+import com.caucho.config.program.BeanArg;
+import com.caucho.config.timer.ScheduleIntrospector;
+import com.caucho.config.timer.TimeoutCaller;
+import com.caucho.config.timer.TimerTask;
+import com.caucho.util.L10N;
 
 /**
  * SimpleBean represents a POJO Java bean registered as a WebBean.
@@ -129,37 +136,6 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     _injectionTarget = target;
   }
 
-  private void validateType(Class type)
-  {
-    if (type.isInterface())
-      throw new ConfigException(L.l("'{0}' is an invalid ManagedBean because it is an interface",
-                                    type));
-  }
-
-  private boolean isAnnotationPresent(Annotation []annotations, Class type)
-  {
-    for (Annotation ann : annotations) {
-      if (ann.annotationType().equals(type))
-        return true;
-    }
-
-    return false;
-  }
-
-  private boolean isAnnotationDeclares(Annotation []annotations, Class type)
-  {
-    for (Annotation ann : annotations) {
-      if (ann.annotationType().isAnnotationPresent(type))
-        return true;
-    }
-
-    return false;
-  }
-
-  //
-  // Create
-  //
-
   /**
    * Creates a new instance of the component.
    */
@@ -176,21 +152,7 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     return instance;
   }
 
-  /**
-   * Creates a new instance of the component.
-   */
-  /*
-  public T create(CreationalContext<T> context,
-                  InjectionPoint ij)
-  {
-    T object = createNew(context, ij);
-
-    init(object, context);
-
-    return object;
-  }
-  */
-
+  @Override
   public X getScopeAdapter(CreationalContext<X> cxt)
   {
     NormalScope scopeType = getScope().getAnnotation(NormalScope.class);
@@ -293,32 +255,65 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   /**
    * Introspects the methods for any @Produces
    */
-  protected void introspectProduces(AnnotatedType<?> beanType)
+  protected void introspectProduces(AnnotatedType<X> beanType)
   {
-    for (AnnotatedMethod beanMethod : beanType.getMethods()) {
-      if (beanMethod.isAnnotationPresent(Produces.class))
-        addProduces(beanMethod);
+    for (AnnotatedMethod<? super X> beanMethod : beanType.getMethods()) {
+      if (beanMethod.isAnnotationPresent(Produces.class)) {
+        AnnotatedMethod<? super X> disposesMethod 
+          = findDisposesMethod(beanType, beanMethod);
+        
+        addProduces(beanMethod, disposesMethod);
+      }
     }
     
-    for (AnnotatedField beanField : beanType.getFields()) {
+    for (AnnotatedField<?> beanField : beanType.getFields()) {
       if (beanField.isAnnotationPresent(Produces.class))
         addProduces(beanField);
     }
   }
 
-  protected void addProduces(AnnotatedMethod<X> beanMethod)
+  protected void addProduces(AnnotatedMethod producesMethod,
+                             AnnotatedMethod disposesMethod)
   {
-    Arg []args = introspectArguments(beanMethod.getParameters());
+    Arg<?> []args = introspectArguments(producesMethod.getParameters());
 
-    ProducesBean bean = ProducesBean.create(getBeanManager(), this, beanMethod,
-                                            args);
+    ProducesBean<?,?> bean = ProducesBean.create(getBeanManager(), this, 
+                                                 producesMethod, args,
+                                                 disposesMethod);
 
     // bean.init();
 
     _producerBeans.add(bean);
   }
+  
+  private AnnotatedMethod<? super X>
+  findDisposesMethod(AnnotatedType<X> beanType,
+                     AnnotatedMethod<? super X> producesMethod)
+  {
+    for (AnnotatedMethod beanMethod : beanType.getMethods()) {
+      List<AnnotatedParameter<?>> params = beanMethod.getParameters();
+      
+      if (params.size() != 1)
+        continue;
+      
+      AnnotatedParameter<?> param = params.get(0);
+      
+      if (! param.isAnnotationPresent(Disposes.class))
+        continue;
+      
+      if (! producesMethod.getBaseType().equals(param.getBaseType()))
+        continue;
 
-  protected void addProduces(AnnotatedField beanField)
+
+      // XXX: check @Qualifiers
+      
+      return beanMethod;
+    }
+    
+    return null;
+  }
+
+  protected void addProduces(AnnotatedField<?> beanField)
   {
     ProducesFieldBean bean
       = ProducesFieldBean.create(getBeanManager(), this, beanField);
@@ -449,5 +444,50 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     }
 
     return observer;
+  }
+
+  /**
+   * 
+   */
+  public void scheduleTimers(Object value)
+  {
+    ScheduleIntrospector introspector = new ScheduleIntrospector();
+    
+    TimeoutCaller timeoutCaller = new BeanTimeoutCaller(value);
+    
+    ArrayList<TimerTask> taskList
+      = introspector.introspect(timeoutCaller, _annotatedType);
+    
+    if (taskList != null) {
+      for (TimerTask task : taskList) {
+        task.start();
+      }
+    }
+  }
+  
+  static class BeanTimeoutCaller implements TimeoutCaller 
+  {
+    private Object _bean;
+    
+    BeanTimeoutCaller(Object bean)
+    {
+      _bean = bean;
+    }
+
+    @Override
+    public void timeout(Method method)
+    throws InvocationTargetException,
+           IllegalAccessException
+    {
+      method.invoke(_bean);
+    }
+
+    @Override
+    public void timeout(Method method, Timer timer)
+        throws InvocationTargetException, IllegalAccessException
+    {
+      
+    }
+    
   }
 }

@@ -32,17 +32,17 @@ package javax.transaction;
  * @Since JTA 1.1
  */
 public interface TransactionSynchronizationRegistry {
-  Object getTransactionKey();
+  public Object getTransactionKey();
 
-  void putResource(Object key, Object value);
+  public void putResource(Object key, Object value);
 
-  Object getResource(Object key);
+  public Object getResource(Object key);
 
-  void registerInterposedSynchronization(Synchronization sync);
+  public void registerInterposedSynchronization(Synchronization synchronization);
 
-  int getTransactionStatus();
+  public int getTransactionStatus();
 
-  void setRollbackOnly();
+  public void setRollbackOnly();
 
-  boolean getRollbackOnly();
+ public boolean getRollbackOnly();
 }

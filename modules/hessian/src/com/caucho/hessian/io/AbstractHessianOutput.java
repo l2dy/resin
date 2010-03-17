@@ -454,6 +454,12 @@ abstract public class AbstractHessianOutput {
     throws IOException;
 
   /**
+   * @param obj
+   * @return
+   */
+  abstract public int getRef(Object obj);
+
+  /**
    * Resets the references for streaming.
    */
   public void resetReferences()

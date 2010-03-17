@@ -3,7 +3,7 @@
   <property name="jar.update" value="true"/>
 
   <property name="promodules" location="${basedir}/../pro/modules"/>
-  <property name="jdkapi.href" value="http://java.sun.com/j2se/1.5.0/docs/api"/>
+  <property name="jdkapi.href" value="http://java.sun.com/javase/6/docs/api"/>
 
   <property name="shell" value="bash"/>
 
@@ -166,12 +166,26 @@
       <param name="module.jar" value="resin-junit.jar"/>
     </antcall>
   </target>
+	
+  <target name="eclipselink" depends="init">
+    <antcall target="module" inheritRefs="true">
+	  <param name="module.name" value="eclipselink"/>
+	  <param name="module.jar" value="resin-eclipselink.jar"/>
+	</antcall>
+  </target>	
+
+  <target name="hibernate" depends="init">
+    <antcall target="module" inheritRefs="true">
+	  <param name="module.name" value="hibernate"/>
+	  <param name="module.jar" value="resin-hibernate.jar"/>
+	</antcall>
+  </target>	
 
   <target name="ejb" depends="init, jta">
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="ejb"/>
       <param name="module.jar" value="ejb-15.jar"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -179,7 +193,7 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="jpa"/>
       <param name="module.jar" value="jpa-15.jar"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -203,7 +217,7 @@
       <param name="module.name" value="j2ee-management"/>
       <param name="module.dist" value="${lib}"/>
       <param name="module.jar" value="j2ee-management-10.jar"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -212,7 +226,7 @@
       <param name="module.name" value="jaxrpc"/>
       <param name="module.jar" value="jaxrpc-15.jar"/>
       <param name="module.dist" value="${lib}"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -221,7 +235,7 @@
       <param name="module.name" value="jaxstream"/>
       <param name="module.jar" value="jaxstream-15.jar"/>
       <param name="module.dist" value="${lib}"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -229,7 +243,7 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="jws"/>
       <param name="module.jar" value="jws-15.jar"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -370,7 +384,7 @@
     </antcall>
   </target>
   
-  <target name="resin-kernel" depends="init, inject, servlet16">
+  <target name="resin-kernel" depends="init, inject, servlet16, version">
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="kernel"/>
       <param name="module.dist" value="${lib}"/>
@@ -419,7 +433,7 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="experiment"/>
       <param name="module.jar" value="experiment.jar"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -544,7 +558,7 @@
     </antcall>
   </target>
   
-  <target name="resin" depends="init, resin-xml, hessian, jcache, javaee, portlet, script, resin-kernel, version, resin-compile"/>
+  <target name="resin" depends="init, resin-xml, hessian, jcache, javaee, portlet, script, resin-kernel, resin-compile"/>
 
   <!--
   <target name="jaf" depends="init">
@@ -582,7 +596,7 @@
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="ecmascript"/>
       <param name="module.dist" value="${lib}"/>
-      <param name="javac.source" value="1.5"/>
+      <!--param name="javac.source" value="1.5"/-->
     </antcall>
   </target>
 
@@ -641,9 +655,9 @@
     <copy todir="${install}/win64"
           file="${win32}/resin/modules/c/src/resin_os_64/Release/resin_os.dll"/>
     <copy todir="${install}"
-          file="${win32}/resin/modules/csharp/src/resin/Release/resin.exe"/>
+          file="${win32}/resin/modules/csharp/src/resin/bin/Release/resin.exe"/>
     <copy todir="${install}"
-          file="${win32}/resin/modules/csharp/src/setup/Release/setup.exe"/>
+          file="${win32}/resin/modules/csharp/src/setup/bin/Release/setup.exe"/>
     <copy todir="${install}/win32"
           file="${win32}/resin/modules/c/src/isapi_srun/Release/isapi_srun.dll"/>
     <copy todir="${install}/win64"
@@ -707,13 +721,13 @@
     <mkdir dir="${build}/javadoc/web-app"/>
 
     <javadoc destdir="${build}/javadoc/web-app/" 
-      maxmemory="256m"
+      maxmemory="512m"
       use="true" 
       author="true"
       version="true"
       windowtitle="Resin ${version}"
       overview="${modules}/resin/src/overview.html"	     
-      source="1.5"
+      source="1.6"
       splitindex="yes">
 
       <packageset dir="${modules}/ejb/src"/>
@@ -798,7 +812,9 @@
     <copy tofile="${build}/pdf/resin-4.0-admin.pdf"
           file="${build}/pdf/resin-admin/resin-admin.pdf"/>
     
+    <!--
     <generate-pdf name="test"/>
+    -->
   </target>
 
   <target name="test-pdf" depends="init">
@@ -833,7 +849,7 @@
     <delete dir="${dist}/${dist.name}"/>
   </target>
 
-  <target name="dist" depends="dist.clean, configure, compile, update, junit, artifacts, ant, resin.dist.build, dist.package"/>
+  <target name="dist" depends="dist.clean, configure, compile, update, junit, eclipselink, artifacts, ant, resin.dist.build, dist.package"/>
 
   <target name="configure">
      <copy tofile="modules/c/src/resin/Makefile.in"

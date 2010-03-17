@@ -90,7 +90,12 @@ public class ServletManager {
   public boolean isFacesServletConfigured()
   {
     for (ServletConfigImpl servletConfig : _servletList) {
-      String className = servletConfig.getServletClass().getName();
+      Class<?> servletClass = servletConfig.getServletClass();
+      
+      if (servletClass == null)
+        continue;
+      
+      String className = servletClass.getName();
 
       if ("javax.faces.webapp.FacesServlet".equals(className))
         return true;
@@ -312,21 +317,5 @@ public class ServletManager {
         log.log(Level.FINE, e.toString(), e);
       }
     }
-  }
-
-  class Listener implements ELContextListener {
-
-    /* (non-Javadoc)
-     * @see javax.el.ELContextListener#contextCreated(javax.el.ELContextEvent)
-     */
-    @Override
-    public void contextCreated(ELContextEvent event)
-    {
-      // TODO Auto-generated method stub
-
-     ELContext elContext = event.getELContext();
-     ELResolver resolver = elContext.getELResolver();
-    }
-
   }
 }

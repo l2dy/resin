@@ -28,15 +28,26 @@
  */
 package com.caucho.db.jdbc;
 
-import com.caucho.db.sql.Query;
-import com.caucho.db.sql.QueryContext;
-import com.caucho.db.store.Transaction;
-
-import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.Reader;
-import java.sql.*;
+import java.sql.Array;
+import java.sql.Blob;
+import java.sql.Clob;
+import java.sql.NClob;
+import java.sql.ParameterMetaData;
+import java.sql.PreparedStatement;
+import java.sql.Ref;
+import java.sql.ResultSet;
+import java.sql.RowId;
+import java.sql.SQLException;
+import java.sql.SQLXML;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.Calendar;
+
+import com.caucho.db.sql.Query;
+import com.caucho.db.sql.QueryContext;
+import com.caucho.db.xa.Transaction;
 
 /**
  * The JDBC statement implementation.
@@ -45,7 +56,6 @@ public class PreparedStatementImpl extends StatementImpl
   implements PreparedStatement {
 
   private Query _query;
-  private int _updateCount;
   private boolean _wasResultSet;
   private ResultSet _resultSet;
 
@@ -72,62 +82,62 @@ public class PreparedStatementImpl extends StatementImpl
   public void clearParameters()
     throws SQLException
   {
-    _query.clearParameters();
+    getQueryContext().clearParameters();
     // throw new UnsupportedOperationException();
   }
 
   public void setNull(int parameter, int sqlType)
     throws SQLException
   {
-    _query.setString(parameter, null);
+    getQueryContext().setString(parameter, null);
   }
 
   public void setNull(int parameter, int sqlType, String typeName)
     throws SQLException
   {
-    _query.setString(parameter, null);
+    getQueryContext().setString(parameter, null);
   }
 
   public void setBoolean(int parameter, boolean x)
     throws SQLException
   {
-    _query.setBoolean(parameter, x);
+    getQueryContext().setBoolean(parameter, x);
   }
 
   public void setByte(int parameter, byte x)
     throws SQLException
   {
-    _query.setLong(parameter, x);
+    getQueryContext().setLong(parameter, x);
   }
 
   public void setShort(int parameter, short x)
     throws SQLException
   {
-    _query.setLong(parameter, x);
+    getQueryContext().setLong(parameter, x);
   }
 
   public void setInt(int parameter, int x)
     throws SQLException
   {
-    _query.setLong(parameter, x);
+    getQueryContext().setLong(parameter, x);
   }
 
   public void setLong(int parameter, long x)
     throws SQLException
   {
-    _query.setLong(parameter, x);
+    getQueryContext().setLong(parameter, x);
   }
 
   public void setFloat(int parameter, float x)
     throws SQLException
   {
-    _query.setDouble(parameter, x);
+    getQueryContext().setDouble(parameter, x);
   }
 
   public void setDouble(int parameter, double x)
     throws SQLException
   {
-    _query.setDouble(parameter, x);
+    getQueryContext().setDouble(parameter, x);
   }
 
   public void setBigDecimal(int parameter, java.math.BigDecimal x)
@@ -139,14 +149,14 @@ public class PreparedStatementImpl extends StatementImpl
   public void setString(int parameter, String x)
     throws SQLException
   {
-    _query.setString(parameter, x);
+    getQueryContext().setString(parameter, x);
   }
 
   public void setBytes(int parameter, byte []x)
     throws SQLException
   {
     if (x != null) {
-      _query.setBytes(parameter, x);
+      getQueryContext().setBytes(parameter, x);
     }
     else
       setNull(parameter, 0);
@@ -200,7 +210,7 @@ public class PreparedStatementImpl extends StatementImpl
   private void setTime(int parameter, long now)
     throws SQLException
   {
-    _query.setDate(parameter, now);
+    getQueryContext().setDate(parameter, now);
   }
 
   public void setAsciiStream(int parameter, InputStream is, int len)
@@ -218,7 +228,7 @@ public class PreparedStatementImpl extends StatementImpl
   public void setBinaryStream(int parameter, InputStream is, int len)
     throws SQLException
   {
-    _query.setBinaryStream(parameter, is, len);
+    getQueryContext().setBinaryStream(parameter, is, len);
   }
 
   public void setCharacterStream(int parameter, Reader is, int len)
@@ -319,18 +329,15 @@ public class PreparedStatementImpl extends StatementImpl
     _count++;
 
     Transaction xa = null;
-    QueryContext queryContext = null;
 
     try {
       if (_count != 1)
         throw new IllegalStateException("Multithreading execute");
 
       xa = _conn.getTransaction();
-      queryContext = getQueryContext();
+      QueryContext queryContext = getQueryContext();
 
       if (_query.isSelect()) {
-        com.caucho.db.ResultSetImpl rs = null;
-
         _query.execute(queryContext, xa);
 
         _wasResultSet = true;
@@ -348,8 +355,6 @@ public class PreparedStatementImpl extends StatementImpl
       }
     } finally {
       _count--;
-
-      closeQueryContext(queryContext);
 
       if (xa != null && xa.isAutoCommit())
         xa.rollback();

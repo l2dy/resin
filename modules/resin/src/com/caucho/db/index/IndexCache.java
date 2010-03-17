@@ -30,7 +30,8 @@
 package com.caucho.db.index;
 
 import com.caucho.util.*;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
+
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
@@ -104,7 +105,7 @@ public final class IndexCache
     long btreeValue;
     
     try {
-      btreeValue = btree.lookup(buffer, offset, length, xa);
+      btreeValue = btree.lookup(buffer, offset, length);
     } catch (IOException e) {
       throw new SQLException(e);
     }
@@ -136,7 +137,7 @@ public final class IndexCache
     long btreeValue;
     
     try {
-      btreeValue = btree.lookup(buffer, offset, length, xa);
+      btreeValue = btree.lookup(buffer, offset, length);
     } catch (IOException e) {
       throw new SQLException(e);
     }
@@ -165,7 +166,7 @@ public final class IndexCache
       value.setValue(0); // any updates will get written by the thread
     }
     else {
-      btree.remove(buffer, offset, length, xa);
+      btree.remove(buffer, offset, length);
     }
   }
 
@@ -257,8 +258,7 @@ public final class IndexCache
                          value, true);
           }
           else {
-            btree.remove(key.getBuffer(), key.getOffset(), key.getLength(),
-                         xa);
+            btree.remove(key.getBuffer(), key.getOffset(), key.getLength());
           }
         }
 	  

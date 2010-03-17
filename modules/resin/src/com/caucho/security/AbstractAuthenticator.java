@@ -71,9 +71,6 @@ public class AbstractAuthenticator
   private static final Logger log
     = Logger.getLogger(AbstractAuthenticator.class.getName());
   static final L10N L = new L10N(AbstractAuthenticator.class);
-
-  private static final EnvironmentLocal<SingleSignon> _localSingleSignon
-    = new EnvironmentLocal<SingleSignon>();
   
   protected String _passwordDigestAlgorithm = "MD5-base64";
   protected String _passwordDigestRealm = "resin";
@@ -189,14 +186,19 @@ public class AbstractAuthenticator
       }
     }
 
+    /*
     if (Server.getCurrent() != null) {
-      _singleSignon = _localSingleSignon.getLevel();
+      _singleSignon = _localSingleSignon.get();
       
+      // server/1al4 vs server/1ak1
       if (_singleSignon == null) {
-	_singleSignon = new ClusterSingleSignon("authenticator");
+        MemorySingleSignon memorySignon = new MemorySingleSignon();
+        memorySignon.init();
+	_singleSignon = memorySignon;
 	_localSingleSignon.set(_singleSignon);
       }
     }
+    */
   }
 
   //
@@ -458,6 +460,13 @@ public class AbstractAuthenticator
    */
   public SingleSignon getSingleSignon()
   {
+    if (_singleSignon == null) {
+      _singleSignon = AbstractSingleSignon.getCurrent();
+    
+      if (_singleSignon == null)
+        _singleSignon = new NullSingleSignon();
+    }
+    
     return _singleSignon;
   }
 

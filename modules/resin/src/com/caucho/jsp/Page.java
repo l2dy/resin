@@ -39,6 +39,7 @@ import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.QDate;
 import com.caucho.vfs.Depend;
+import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.PersistentDependency;
 
@@ -220,7 +221,7 @@ abstract public class Page implements Servlet, ServletConfig, CauchoPage {
     _caucho_addDepend(depend);
   }
 
-  public ArrayList<PersistentDependency> _caucho_getDependList()
+  public ArrayList<Dependency> _caucho_getDependList()
   {
     return null;
   }
@@ -277,6 +278,7 @@ abstract public class Page implements Servlet, ServletConfig, CauchoPage {
   /**
    * Returns true if the underlying source has been modified.
    */
+  @Override
   public boolean _caucho_isModified()
   {
     return _isDead || _depends.isModified();
@@ -285,10 +287,13 @@ abstract public class Page implements Servlet, ServletConfig, CauchoPage {
   /***
    * Returns true if the underlying source has been modified.
    */
-  public boolean cauchoIsModified()
+  /*
+  public final boolean cauchoIsModified()
   {
-    return (_isDead || _depends.isModified());
+    // return (_isDead || _depends.isModified());
+    return _caucho_isModified();
   }
+  */
 
   protected HashMap<String,Method> _caucho_getFunctionMap()
   {
@@ -318,7 +323,7 @@ abstract public class Page implements Servlet, ServletConfig, CauchoPage {
     _webApp = (WebApp) config.getServletContext();
 
     //cauchoIsModified();
-    ArrayList<PersistentDependency> depends = _caucho_getDependList();
+    ArrayList<Dependency> depends = _caucho_getDependList();
 
     for (int i = 0; depends != null && i < depends.size(); i++)
       _depends.add(depends.get(i));

@@ -29,11 +29,11 @@
 
 package com.caucho.db.table;
 
+import com.caucho.db.block.Block;
+import com.caucho.db.block.BlockStore;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.store.Block;
-import com.caucho.db.store.Store;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.util.L10N;
 
 import java.io.IOException;
@@ -274,7 +274,7 @@ public class TableIterator {
       block.free();
     }
 
-    _blockId = _table.firstRow(_blockId + Table.BLOCK_SIZE);
+    _blockId = _table.firstRowBlock(_blockId + Table.BLOCK_SIZE);
 
     if (_blockId < 0) {
       return false;
@@ -313,7 +313,7 @@ public class TableIterator {
       _buffer = _block.getBuffer();
     }
     
-    _rowOffset = (int) (rowAddr & Store.BLOCK_OFFSET_MASK);
+    _rowOffset = (int) (rowAddr & BlockStore.BLOCK_OFFSET_MASK);
   }
 
   /**

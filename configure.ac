@@ -8,6 +8,7 @@ AC_SUBST(FULL_VERSION)
 dnl Get os info
 AC_CANONICAL_SYSTEM
 
+AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE(resin, 4.0.2)
 
 dnl Checks for programs.
@@ -42,7 +43,11 @@ resin_root=${withval}
 ])
 
 if test -z "$resin_root"; then
-  resin_root="/var/www"
+  if test "$prefix" == "NONE"; then
+    resin_root="/var/www"
+  else
+    resin_root="$prefix"
+  fi
 fi
 
 AC_SUBST(resin_root)
@@ -59,7 +64,11 @@ resin_conf=${withval}
 ])
 
 if test -z "$resin_conf"; then
-  resin_conf="/etc/resin"
+  if test "$prefix" == "NONE"; then
+    resin_conf="/etc/resin"
+  else
+    resin_conf="$prefix/conf"
+  fi
 fi
 
 #
@@ -74,7 +83,11 @@ resin_log=${withval}
 ])
 
 if test -z "$resin_log"; then
-  resin_log="/var/log/resin"
+  if test "$prefix" == "NONE"; then
+    resin_log="/var/log/resin"
+  else
+    resin_log="$prefix/log"
+  fi
 fi
 
 if test -d "/etc/init.d/rc.d"; then
@@ -627,6 +640,11 @@ grep "x86_64" $tmpname 1> /dev/null
 if test "$?" = "0"; then
    b64_jni=true
 fi
+
+grep "s390x-64" $tmpname 1> /dev/null
+if test "$?" = "0"; then
+   b64_jni=true
+fi
                	
 $JAVA_HOME/bin/sparcv9/java -version 2> $tmpname
 grep "64-Bit" $tmpname 1> /dev/null
@@ -980,6 +998,14 @@ JNI_INCLUDE_DIR=""
 
 if test -n "$JNI_INCLUDE"; then
   JNI=yes
+  for x in $JNI_INCLUDE; do
+    y=${x:2}
+    if test -n "$JNI_INCLUDE_DIR"; then
+      JNI_INCLUDE_DIR="$JNI_INCLUDE_DIR $y"
+    else
+      JNI_INCLUDE_DIR="$y"
+    fi
+  done;
 elif test -r "$JAVA_HOME/include/jni_md.h"; then
   JNI_INCLUDE_DIR="${JAVA_HOME}/include"
   JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
@@ -1016,7 +1042,15 @@ else
 ])
 fi
 
-if test -r "$JNI_INCLUDE_DIR/jvmti.h"; then
+HAS_JVMTI=""
+
+for x in $JNI_INCLUDE_DIR; do
+  if test -r "$x/jvmti.h"; then
+    HAS_JVMTI="yes"
+  fi
+done;
+
+if test -n "$HAS_JVMTI"; then
   echo "Using JVMTI for class reloading"
   
   CFLAGS="$CFLAGS -DHAS_JVMTI"

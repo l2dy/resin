@@ -1327,7 +1327,8 @@ public class Var extends Value
   public Var getVar(Value index)
   {
     // php/3d1a
-    if (! _value.isset())
+    // php/34ab
+    if (! _value.toBoolean())
       _value = new ArrayValueImpl();
 
     return _value.getVar(index);
@@ -1389,12 +1390,15 @@ public class Var extends Value
     // php/33m{g,h}
     // _value = _value.toAutoArray().append(index, value);
     _value = _value.append(index, value);
-    
+
     // this is slow, but ok because put() is only used for slow ops
-    if (_value.isArray())
+    if (_value.isArray() || _value.isObject()) {
       return value;
-    else
+    }
+    else {
+      // for strings
       return _value.get(index);
+    }
   }
 
   /**

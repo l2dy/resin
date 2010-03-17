@@ -33,6 +33,10 @@ import com.caucho.config.ConfigException;
 import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
+
+import java.util.ArrayList;
+import java.util.logging.Filter;
+import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,6 +49,11 @@ public class LoggerConfig {
   private Logger _logger;
   private Level _level = Level.INFO;
   private Boolean _useParentHandlers;
+  
+  private Filter _filter;
+  
+  private ArrayList<Handler> _handlerList
+    = new ArrayList<Handler>();
 
   /**
    * Sets the name of the logger to configure.
@@ -89,6 +98,16 @@ public class LoggerConfig {
     else
       throw new ConfigException(L.l("'{0}' is an unknown log level.  Log levels are:\noff - disable logging\nsevere - severe errors only\nwarning - warnings\ninfo - information\nconfig - configuration\nfine - fine debugging\nfiner - finer debugging\nfinest - finest debugging\nall - all debugging", level));
   }
+  
+  public void add(Handler handler)
+  {
+    _handlerList.add(handler);
+  }
+  
+  public void set(Filter filter)
+  {
+    _filter = filter;
+  }
 
   /**
    * Initialize the logger.
@@ -104,5 +123,9 @@ public class LoggerConfig {
 
     if (_useParentHandlers != null)
       _logger.setUseParentHandlers(_useParentHandlers.booleanValue());
+    
+    for (Handler handler : _handlerList) {
+      _logger.addHandler(handler);
+    }
   }
 }

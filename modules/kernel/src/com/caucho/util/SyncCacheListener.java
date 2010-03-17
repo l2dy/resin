@@ -32,5 +32,9 @@ package com.caucho.util;
  * Notifies the cache entry that it's been removed from the cache.
  */
 public interface SyncCacheListener {
+  public boolean startLruRemove();
+  
+  public void syncLruRemoveEvent();
+  
   public void syncRemoveEvent();
 }

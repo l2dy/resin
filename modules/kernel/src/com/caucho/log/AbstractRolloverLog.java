@@ -530,11 +530,20 @@ public class AbstractRolloverLog {
       path = getPath(Alarm.getCurrentTime());
     }
 
+    Path parent = path.getParent();
+
     try {
-      if (! path.getParent().isDirectory())
-        path.getParent().mkdirs();
+      if (! parent.isDirectory()) {
+        if (! parent.mkdirs()) {
+          /* XXX:
+          logWarning(L.l("Can't create log directory {0}.\n",
+                         parent));
+          */
+        }
+      }
     } catch (Throwable e) {
-      logWarning(L.l("Can't create log directory {0}", path.getParent()), e);
+      logWarning(L.l("Can't create log directory {0}.\n  Exception={1}",
+                     parent, e), e);
     }
 
     Exception exn = null;
@@ -563,7 +572,8 @@ public class AbstractRolloverLog {
     }
 
     if (exn != null)
-      logWarning(L.l("Can't create log directory {0}", path), exn);
+      logWarning(L.l("Can't create log for {0}.\n  User={1} Exception={2}",
+                     path, System.getProperty("user.name"), exn), exn);
   }
 
   private void movePathToArchive(Path savedPath)
@@ -804,6 +814,14 @@ public class AbstractRolloverLog {
   private void logWarning(String msg, Throwable e)
   {
     EnvironmentStream.logStderr(msg, e);
+  }
+
+  /**
+   * error messages from the log itself
+   */
+  private void logWarning(String msg)
+  {
+    EnvironmentStream.logStderr(msg);
   }
 
   /**

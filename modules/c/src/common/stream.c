@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2008 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1999-2010 Caucho Technology.  All rights reserved.
  *
  * This file is part of Resin(R) Open Source
  *
@@ -573,9 +573,9 @@ cse_fill_buffer(stream_t *s)
       read_length = s->cluster_srun->srun->read(s, s->read_buf, BUF_LENGTH);
     else
       read_length = read(s->socket, s->read_buf, BUF_LENGTH);
-    // repeat for EINTR, EAGAIN
+    // repeat for EINTR
   } while (read_length < 0
-	   && errno != EPIPE && errno != ECONNRESET
+	   && errno == EINTR
 	   && retry-- > 0);
   
   if (read_length <= 0) {
@@ -1426,11 +1426,11 @@ select_host(cluster_t *cluster, time_t now)
   best_srun = round_robin;
 
   for (i = 0; i < size; i++) {
+    int cost;
     int index = (i + round_robin) % size;
     cluster_srun = &cluster->srun_list[index];
     srun = cluster_srun->srun;
     /* int tail; */
-    int cost;
 
     if (! srun)
       continue;

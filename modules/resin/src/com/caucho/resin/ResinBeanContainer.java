@@ -32,6 +32,7 @@ package com.caucho.resin;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
+import com.caucho.config.cfg.BeansConfig;
 import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.EJBServer;
@@ -64,19 +65,21 @@ import javax.enterprise.inject.spi.Bean;
  * <code><pre>
  * static void main(String []args)
  * {
- *   ResinCdiContainer cdi = new ResinCdiContainer();
+ *   ResinBeanContainer beans = new ResinBeanContainer();
  *
- *   cdi.addModule("test.jar");
- *   cdi.start();
+ *   beans.addModule("test.jar");
+ *   beans.start();
  *
- *   RequestContext req = cxt.beginRequest();
+ *   RequestContext req = beans.beginRequest();
  *   try {
- *     MyMain main = cxt.getInstance(MyMain.class);
+ *     MyMain main = beans.getInstance(MyMain.class);
  *
  *     main.main(args);
  *   } finally {
  *     req.close();
  *   }
+ *
+ *   beans.close();
  * }
  * </pre></code>
  *
@@ -123,9 +126,9 @@ public class ResinBeanContainer
     _classLoader = EnvironmentClassLoader.create("resin-context");
     _injectManager = InjectManager.create(_classLoader);
     _injectManager.addContext(new RequestScope());
-    
+
     _injectManager.addManagedBean(_injectManager.createManagedBean(ResinWebBeansProducer.class));
-    
+
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
@@ -176,16 +179,17 @@ public class ResinBeanContainer
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
+      thread.setContextClassLoader(_classLoader);
+
       Path path = Vfs.lookup(pathName);
 
-      ContextConfig context = new ContextConfig();
+      ContextConfig context = new ContextConfig(_injectManager, path);
 
       Config config = new Config();
       config.configure(context, path, SCHEMA);
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
-
   }
 
   /**
@@ -230,7 +234,7 @@ public class ResinBeanContainer
       thread.setContextClassLoader(_classLoader);
 
       Class<?> cl = Class.forName(className, false, _classLoader);
-      
+
       return getInstance(cl, qualifiers);
     } catch (ClassNotFoundException e) {
       throw new RuntimeException(e);
@@ -340,10 +344,27 @@ public class ResinBeanContainer
     return getClass().getName() + "[]";
   }
 
-  class ContextConfig implements EnvironmentBean {
+  class ContextConfig extends BeansConfig implements EnvironmentBean {
+    ContextConfig(InjectManager manager, Path root)
+    {
+      super(manager, root);
+    }
+
     public ClassLoader getClassLoader()
     {
       return _classLoader;
+    }
+
+    public SystemContext createSystem()
+    {
+      return new SystemContext();
+    }
+  }
+
+  public class SystemContext implements EnvironmentBean {
+    public ClassLoader getClassLoader()
+    {
+      return ClassLoader.getSystemClassLoader();
     }
   }
 
@@ -381,6 +402,5 @@ public class ResinBeanContainer
     {
       return _localContext.get() != null;
     }
-
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -283,12 +283,12 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       }
     } catch (Throwable e) {
       log().log(Level.FINER, e.toString(), e);
-      
+
       String causeMsg = "";
       if (! (e instanceof ClassNotFoundException)) {
         causeMsg = "\n  Exception=" + e + "\n";
       }
-      
+
 
       String msg = L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n"
                          + "\n"

@@ -34,7 +34,7 @@ import com.caucho.db.index.KeyCompare;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 
 import java.sql.SQLException;
 
@@ -303,6 +303,6 @@ class ShortColumn extends Column {
     BTree index = getIndex();
 
     if (index != null)
-      index.remove(block, rowOffset + _columnOffset, 2, xa);
+      index.remove(block, rowOffset + _columnOffset, 2);
   }
 }

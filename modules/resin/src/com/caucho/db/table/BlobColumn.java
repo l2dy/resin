@@ -29,13 +29,13 @@
 
 package com.caucho.db.table;
 
+import com.caucho.db.blob.BlobInputStream;
+import com.caucho.db.blob.BlobOutputStream;
+import com.caucho.db.blob.Inode;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.store.BlobInputStream;
-import com.caucho.db.store.BlobOutputStream;
-import com.caucho.db.store.Inode;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.util.IoUtil;
 
 import java.io.IOException;
@@ -264,9 +264,9 @@ class BlobColumn extends Column {
     byte []block = iter.getBuffer();
     int rowOffset = iter.getRowOffset();
 
-    if (expr.isNull(null))
+    if (expr.isNull(context))
       setNull(block, rowOffset);
-    else if (expr.isBinaryStream())
+    else if (expr.isBinaryStream(context))
       setStream(xa, block, rowOffset, expr.evalStream(context));
     else
       setString(xa, block, rowOffset, expr.evalString(context));
@@ -286,10 +286,10 @@ class BlobColumn extends Column {
 	       Expr expr, QueryContext context)
     throws SQLException
   {
-    if (expr.isNull(null)) {
+    if (expr.isNull(context)) {
       setNull(block, rowOffset);
     }
-    else if (expr.isBinaryStream()) {
+    else if (expr.isBinaryStream(context)) {
       setStream(xa, block, rowOffset, expr.evalStream(context));
     }
     else {

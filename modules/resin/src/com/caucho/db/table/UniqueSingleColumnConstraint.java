@@ -29,10 +29,10 @@
 
 package com.caucho.db.table;
 
+import com.caucho.db.block.BlockStore;
 import com.caucho.db.index.BTree;
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.store.Store;
-import com.caucho.db.store.Transaction;
+import com.caucho.db.xa.Transaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 
@@ -142,8 +142,7 @@ public class UniqueSingleColumnConstraint extends Constraint {
       // currently this is a static length.  See StringColumn.
       int length = column.getLength();
       int offset = sourceOffset + _uniqueColumn.getColumnOffset();
-      long value = index.lookup(sourceBuffer, offset, length,
-				context.getTransaction());
+      long value = index.lookup(sourceBuffer, offset, length);
 
       if (value != 0) {
 	Table table = sourceRow.getTable();
@@ -153,8 +152,8 @@ public class UniqueSingleColumnConstraint extends Constraint {
 						    sourceOffset),
 				   table.getName(),
 				   column.getName(),
-				   ("" + (value / Store.BLOCK_SIZE)
-				    + "." + (value % Store.BLOCK_SIZE))));
+				   ("" + (value / BlockStore.BLOCK_SIZE)
+				    + "." + (value % BlockStore.BLOCK_SIZE))));
       }
     } catch (IOException e) {
       throw new SQLExceptionWrapper(e);

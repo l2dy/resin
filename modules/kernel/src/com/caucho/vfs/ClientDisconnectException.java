@@ -28,8 +28,6 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.ExceptionWrapper;
-
 import java.io.IOException;
 
 /**
@@ -37,10 +35,8 @@ import java.io.IOException;
  * Generally this is a broken pipe exception, but unfortunately, java.io.*
  * doesn't have a specific BrokenPipeException.
  */
-public class ClientDisconnectException extends IOException
-  implements ExceptionWrapper {
-  private Exception exn;
-  
+@SuppressWarnings("serial")
+public class ClientDisconnectException extends IOException {
   public ClientDisconnectException()
   {
   }
@@ -52,9 +48,7 @@ public class ClientDisconnectException extends IOException
   
   public ClientDisconnectException(Exception exn)
   {
-    super(String.valueOf(exn));
-
-    this.exn = exn;
+    super(exn);
   }
 
   /**
@@ -69,10 +63,5 @@ public class ClientDisconnectException extends IOException
       return new ClientDisconnectException(exn);
     else
       return exn;
-  }
-
-  public Throwable getRootCause()
-  {
-    return exn;
   }
 }
