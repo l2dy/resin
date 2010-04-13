@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,8 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+
+import java.util.HashSet;
 
 public class Header {
   private Document _document;
@@ -160,21 +162,28 @@ public class Header {
     out.writeAttribute("rel", "shortcut icon");
     out.writeAttribute("href", _document.getContextPath() + "/images/favicon.ico");
 
+    // this must be a start/end - browsers don't like empty <script/> tags
     out.writeStartElement("script");
-    out.writeCharacters("function hide(id) ");
-    out.writeCharacters("{ document.getElementById(id).style.display = 'none'; }");
-    out.writeCharacters("function show(id) ");
-    out.writeCharacters("{ document.getElementById(id).style.display = ''; }");
-    out.writeEndElement();
+    out.writeAttribute("type", "text/javascript");
+    out.writeAttribute("src", _document.getContextPath() + "/js/default.js");
+    out.writeEndElement(); // script
 
+    out.writeStartElement("script");
+    out.writeAttribute("type", "text/javascript");
+
+    // this init() function is in default.js
+    out.writeCharacters("  window.onload = function() {\n");
+    out.writeCharacters("    init();\n");
+    out.writeCharacters("  };\n");
+    out.writeEndElement(); // script
 
     out.writeStartElement("title");
 
     NavigationItem nav = _document.getNavigation();
 
     if (nav != null
-	&& nav.getNavigation() != null
-	&& nav.getNavigation().getSection() != null)
+        && nav.getNavigation() != null
+        && nav.getNavigation().getSection() != null)
       out.writeCharacters(nav.getNavigation().getSection());
     
     out.writeCharacters(_title);

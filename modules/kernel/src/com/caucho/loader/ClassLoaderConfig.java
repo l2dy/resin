@@ -29,17 +29,12 @@
 
 package com.caucho.loader;
 
+import javax.annotation.PostConstruct;
+
 import com.caucho.config.ConfigException;
 import com.caucho.loader.enhancer.EnhancerManager;
 import com.caucho.loader.ivy.IvyLoader;
-import com.caucho.loader.ivy.IvyModule;
-//import com.caucho.osgi.OsgiLoader;
-//import com.caucho.osgi.OsgiBundleConfig;
 import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-
-import javax.annotation.PostConstruct;
-import java.util.ArrayList;
 
 /**
  * Class for configuration.
@@ -48,14 +43,7 @@ public class ClassLoaderConfig {
   private final static L10N L = new L10N(ClassLoaderConfig.class);
 
   private EnvironmentClassLoader _classLoader;
-  private EnvironmentBean _owner;
-
-  private Path _source;
-  private boolean _servletHack;
-
   private int _index;
-
-  private ArrayList<String> _priorityPackages;
 
   public ClassLoaderConfig()
     throws ConfigException
@@ -89,9 +77,9 @@ public class ClassLoaderConfig {
   /**
    * Adds a simple class loader.
    */
-  public void addSimpleLoader(SimpleLoader loader)
+  public SimpleLoader createSimpleLoader()
   {
-    _classLoader.addLoader(loader, _index++);
+    return new SimpleLoader(_classLoader);
   }
 
   /**
@@ -136,18 +124,7 @@ public class ClassLoaderConfig {
    */
   public LibraryLoader createLibraryLoader()
   {
-    LibraryLoader loader = new LibraryLoader();
-    loader.setLoader(_classLoader);
-
-    return loader;
-  }
-
-  /**
-   * Adds a directory class loader.
-   */
-  public void addLibraryLoader(LibraryLoader loader)
-  {
-    _classLoader.addLoader(loader, _index++);
+    return new LibraryLoader(_classLoader);
   }
 
   /**
@@ -175,9 +152,9 @@ public class ClassLoaderConfig {
   /**
    * Adds a compiling class loader.
    */
-  public void addCompilingLoader(CompilingLoader loader)
+  public CompilingLoader createCompilingLoader()
   {
-    _classLoader.addLoader(loader, _index++);
+    return new CompilingLoader(_classLoader);
   }
 
   /**
@@ -216,15 +193,7 @@ public class ClassLoaderConfig {
    */
   public TreeLoader createTreeLoader()
   {
-    TreeLoader loader = new TreeLoader();
-    loader.setLoader(_classLoader);
-
-    return loader;
-  }
-
-  public void addTreeLoader(TreeLoader loader)
-  {
-    _classLoader.addLoader(loader, _index++);
+    return new TreeLoader(_classLoader);
   }
 
   /**

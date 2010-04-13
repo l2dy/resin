@@ -29,6 +29,27 @@
 
 package com.caucho.loader;
 
+import java.io.FilePermission;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.instrument.ClassFileTransformer;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.security.CodeSource;
+import java.security.Permission;
+import java.security.PermissionCollection;
+import java.security.ProtectionDomain;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.Vector;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
+
 import com.caucho.config.ConfigException;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.enhancer.EnhancerRuntimeException;
@@ -36,7 +57,7 @@ import com.caucho.make.AlwaysModified;
 import com.caucho.make.DependencyContainer;
 import com.caucho.make.Make;
 import com.caucho.make.MakeContainer;
-import com.caucho.management.server.*;
+import com.caucho.management.server.DynamicClassLoaderMXBean;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.ByteBuffer;
 import com.caucho.util.L10N;
@@ -45,22 +66,6 @@ import com.caucho.vfs.Dependency;
 import com.caucho.vfs.JarPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
-
-import java.io.FilePermission;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.*;
-import java.security.*;
-import java.lang.instrument.*;
-import java.util.ArrayList;
-import java.util.Enumeration;
-import java.util.Hashtable;
-import java.util.Vector;
-import java.util.jar.Attributes;
-import java.util.jar.Manifest;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.regex.Pattern;
 
 /**
  * Class loader which checks for changes in class files and automatically
@@ -96,7 +101,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private ArrayList<Path> _nativePath = new ArrayList<Path>();
 
   // List of cached classes
-  private Hashtable<String,ClassEntry> _entryCache;
+  private ConcurrentHashMap<String,ClassEntry> _entryCache
+    = new ConcurrentHashMap<String,ClassEntry>(8);
 
   private TimedCache<String,URL> _resourceCache;
 
@@ -123,7 +129,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   // a normal reference.  Anything in between makes no sense.
   //
   // server/10w3 indicates that it needs to be a regular reference
-  private ArrayList<ClassLoaderListener> _listeners;
+  private ArrayList<ClassLoaderListener> _listeners
+    = new ArrayList<ClassLoaderListener>();
 
   // The security manager for the loader
   private SecurityManager _securityManager;
@@ -145,8 +152,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private final Lifecycle _lifecycle = new Lifecycle();
 
   private boolean _hasNewLoader = true;
-
-  private long _lastNullCheck;
 
   /**
    * Create a new class loader.
@@ -249,7 +254,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private void verbose(String name, String msg)
   {
     if (_isVerbose) {
-      for (int i = _verboseDepth; _verboseDepth > 0; _verboseDepth--)
+      for (int i = _verboseDepth; i > 0; i--)
         System.err.print(' ');
 
       System.err.println(toString() + " " + name + " " + msg);
@@ -330,8 +335,11 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     _loaders.add(offset, loader);
 
-    if (loader.getLoader() == null)
+    if (loader.getClassLoader() == null)
       loader.setLoader(this);
+    else {
+      assert(loader.getClassLoader() == this);
+    }
 
     if (loader instanceof Dependency)
       _dependencies.add((Dependency) loader);
@@ -453,15 +461,16 @@ public class DynamicClassLoader extends java.net.URLClassLoader
         || root.getPath().endsWith(".jar")
         || root.getPath().endsWith(".zip")) {
       if (_jarLoader == null) {
-        _jarLoader = new JarLoader();
-        addLoader(_jarLoader);
+        _jarLoader = new JarLoader(this);
+        _jarLoader.init();
       }
 
       _jarLoader.addJar(root);
     }
     else {
-      SimpleLoader loader = new SimpleLoader();
+      SimpleLoader loader = new SimpleLoader(this);
       loader.setPath(root);
+      loader.init();
 
       if (! _loaders.contains(loader))
         addLoader(loader);
@@ -710,16 +719,14 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       return;
     }
 
-    ArrayList<ClassLoaderListener> listeners;
+    ArrayList<ClassLoaderListener> listeners = _listeners;
     WeakCloseListener closeListener = null;
 
-    synchronized (this) {
-      if (_listeners == null) {
-        _listeners = new ArrayList<ClassLoaderListener>();
+    synchronized (listeners) {
+      if (listeners.size() == 0) {
         closeListener = new WeakCloseListener(this);
         //_closeListener = closeListener;
       }
-      listeners = _listeners;
     }
 
     if (closeListener != null) {
@@ -989,12 +996,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   {
     ArrayList<String> cp = new ArrayList<String>();
 
-    ArrayList<Loader> loaders = getLoaders();
-    for (int i = 0; i < loaders.size(); i++) {
-      Loader loader = loaders.get(i);
-
-      buildClassPath(cp);
-    }
+    buildClassPath(cp);
 
     return toClassPath(cp);
   }
@@ -1218,6 +1220,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   /**
    * Makes any changed classes for the virtual class loader.
    */
+  @Override
   public final void make()
     throws Exception
   {
@@ -1325,12 +1328,12 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    * @return the loaded classes
    */
   @Override
-  protected Class loadClass(String name, boolean resolve)
+  protected Class<?> loadClass(String name, boolean resolve)
     throws ClassNotFoundException
   {
     // XXX: removed sync block, since handled below
 
-    Class cl = null;
+    Class<?> cl = null;
 
     cl = loadClassImpl(name, resolve);
 
@@ -1348,14 +1351,14 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    *
    * @return the loaded classes
    */
-  public Class loadClassImpl(String name, boolean resolve)
+  public Class<?> loadClassImpl(String name, boolean resolve)
     throws ClassNotFoundException
   {
     if (_entryCache != null) {
       ClassEntry entry = _entryCache.get(name);
 
       if (entry != null) {
-        Class cl = entry.getEntryClass();
+        Class<?> cl = entry.getEntryClass();
 
         if (cl != null)
           return cl;
@@ -1363,7 +1366,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     }
 
     // The JVM has already cached the classes, so we don't need to
-    Class cl = findLoadedClass(name);
+    Class<?> cl = findLoadedClass(name);
 
     if (cl != null) {
       if (resolve)
@@ -1430,7 +1433,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   /**
    * Returns any import class, e.g. from an osgi bundle
    */
-  protected Class findImportClass(String name)
+  protected Class<?> findImportClass(String name)
   {
     return null;
   }
@@ -1443,10 +1446,10 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    * @return the loaded class
    */
   @Override
-  protected Class findClass(String name)
+  protected Class<?> findClass(String name)
     throws ClassNotFoundException
   {
-    Class cl = findClassImpl(name);
+    Class<?> cl = findClassImpl(name);
 
     if (cl != null)
       return cl;
@@ -1461,7 +1464,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    *
    * @return the loaded class
    */
-  public Class findClassImpl(String name)
+  public Class<?> findClassImpl(String name)
     throws ClassNotFoundException
   {
     if (_isVerbose)
@@ -1496,7 +1499,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
       // special case for osgi
       for (int i = 0; i < len; i++) {
-        Class cl = _loaders.get(i).loadClass(name);
+        Class<?> cl = _loaders.get(i).loadClass(name);
 
         if (cl != null)
           return cl;
@@ -1511,24 +1514,18 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (entry != null && _isVerbose)
       verbose(name, (isNormalJdkOrder(name) ? "found" : "found (took priority from parent)"));
 
-    if (_isEnableDependencyCheck)
+    if (_isEnableDependencyCheck) {
       entry.addDependencies(_dependencies);
+    }
 
     // Currently, the entry must be in the entry cache for synchronization
     // to work.  The same entry must be returned for two separate threads
     // trying to load the class at the same time.
 
-    synchronized (this) {
-      if (_entryCache == null)
-        _entryCache = new Hashtable<String,ClassEntry>(8);
+    ClassEntry oldEntry = _entryCache.putIfAbsent(name, entry);
 
-      ClassEntry oldEntry = _entryCache.get(name);
-
-      if (oldEntry != null)
-        entry = oldEntry;
-      else
-        _entryCache.put(name, entry);
-    }
+    if (oldEntry != null)
+      entry = oldEntry;
 
     try {
       return loadClassEntry(entry);
@@ -1568,10 +1565,10 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    * Loads the class from the loader.  The loadClass must be in the
    * top classLoader because the defineClass must be owned by the top.
    */
-  protected Class loadClassEntry(ClassEntry entry)
+  protected Class<?> loadClassEntry(ClassEntry entry)
     throws IOException, ClassNotFoundException
   {
-    Class cl = null;
+    Class<?> cl = null;
 
     byte []bBuf;
     int bLen;
@@ -1716,6 +1713,14 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       _dependencies.add(AlwaysModified.create());
       _dependencies.setModified(true);
     }
+
+    return cl;
+  }
+
+  public Class<?> loadClass(String className, byte []bytecode)
+  {
+    Class<?> cl = defineClass(className,
+                              bytecode, 0, bytecode.length);
 
     return cl;
   }

@@ -29,17 +29,19 @@
 
 package com.caucho.util;
 
-import com.caucho.vfs.*;
-import com.caucho.util.*;
+import java.util.HashSet;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import com.caucho.inject.Module;
 import com.caucho.loader.Environment;
 import com.caucho.server.util.CauchoSystem;
-
-import java.util.*;
-import java.util.logging.*;
+import com.caucho.vfs.Path;
 
 /**
  * Common error management for JNI loading
  */
+@Module
 public class JniTroubleshoot {
   private static final Logger log
     = Logger.getLogger(JniTroubleshoot.class.getName());
@@ -54,14 +56,14 @@ public class JniTroubleshoot {
 
   private boolean _isValid;
 
-  public JniTroubleshoot(Class cl, String libraryName)
+  public JniTroubleshoot(Class<?> cl, String libraryName)
   {
     _className = cl.getName();
     _libraryName = libraryName;
     _isValid = true;
   }
 
-  public JniTroubleshoot(Class cl, String libraryName, Throwable cause)
+  public JniTroubleshoot(Class<?> cl, String libraryName, Throwable cause)
   {
     _className = cl.getName();
     _libraryName = libraryName;
@@ -120,8 +122,11 @@ public class JniTroubleshoot {
                    _libraryName, _className, lib.getNativePath(), _cause);
       }
     }
-    else
-      return "boom";
+    else {
+      return L.l("Found library '{0}' as '{1}', but the load failed. "
+                 + "The JVM exception was: {2}\n",
+                 _libraryName, lib.getNativePath(), _cause);
+    }
   }
 
   public void checkIsValid()
@@ -152,42 +157,21 @@ public class JniTroubleshoot {
     return System.getProperty("os.name").startsWith("Windows");
   }
 
-  private String getResinHome()
-  {
-    return System.getProperty("resin.home");
-  }
-
-  private String getJniPrefix()
-  {
-    if (isWin())
-      return "";
-    else
-      return "lib";
-  }
-
-  private String getJniSuffix()
-  {
-    if (isWin())
-      return ".dll";
-    else
-      return ".so";
-  }
-
   private Path getLibexec()
   {
     Path resinHome = CauchoSystem.getResinHome();
 
     if (isWin()) {
       if (is64())
-        return resinHome.lookup("/win64");
+        return resinHome.lookup("win64");
       else
-        return resinHome.lookup("/win32");
+        return resinHome.lookup("win32");
     }
     else {
       if (is64())
-        return resinHome.lookup("/libexec64");
+        return resinHome.lookup("libexec64");
       else
-        return resinHome.lookup("/libexec");
+        return resinHome.lookup("libexec");
     }
   }
 

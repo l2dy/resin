@@ -56,6 +56,10 @@ a.leftnav {
   font-family: Verdana, Helvetica, Arial, sans-serif;
   font-size : 80%;
 }
+
+span.ref {
+  font-size : 80%;
+}
 /*
 a.leftnav:visited {
   text-decoration : none;
@@ -88,7 +92,6 @@ hr {
 h1.title {
   margin : 0em 0.5em;
   border-bottom : 0;
-  border-color : 
 
   font-family : Helvetica, Arial, sans-serif;
   font-variant : normal;
@@ -201,7 +204,7 @@ div.s3 {
 }
 
 /* background: #e5d1ac; */
-div.example {
+div.example-body {
   margin : 1em 2em;
   padding : 0em 1em;
   width : 87.5%;
@@ -223,7 +226,7 @@ div.results {
   font-size : .9em;
 }
 
-div.definition {
+div.definition-body {
   margin : 1em 2em;
   padding : 0em 1em;
   width : 87.5%;
@@ -235,9 +238,19 @@ div.definition {
   font-size : .9em;
 }
 
+.schema-title {
+  margin-left : 1.3em;
+  font-weight: bold;
+  font-family: Helvetica, Arial, sans-serif;
+  color : #666666;
+  text-align : left;
+  font-size : 120%
+}
+
+
 .def-caption {
   margin-left : 1.3em;
-  font-style: bold;
+  font-weight: bold;
   font-family: Helvetica, Arial, sans-serif;
   color : #666666;
   text-align : left;
@@ -246,7 +259,7 @@ div.definition {
 
 .caption {
   margin-left : 1.3em;
-  font-style: bold;
+  font-weight: bold;
   font-family: Helvetica, Arial, sans-serif;
   color : #990033;
   text-align : left;
@@ -258,14 +271,14 @@ div.definition {
 
 table.deftable {
   margin : 1em 0em 1em 1.6em;
-  border : solid, 1px;
+  border : solid 1px;
   width : 90%;
   border-collapse: collapse;
 }
 
 caption {
   padding : 0.3em 0em;
-  font-style: bold;
+  font-weight: bold;
   font-family: Helvetica, Arial, Helvetica, sans-serif;
   color : #990033;
   text-align : left;
@@ -406,9 +419,59 @@ dl.atoc-1 {
 
 dl.atoc-top > dt {
     font-size : large;
-    font-style : bold;
+    font-weight: bold;
     background : #ccddff;
     padding : 5px;
     margin : 0.5em;
 }
 
+div.reference-parents > span.child-of {
+  font-weight: bold;
+}
+
+div.javadoc > span.javadoc {
+  font-weight: bold;
+}
+
+div#reference-legend {
+  position : fixed; 
+  bottom : 0; 
+  right : 0; 
+  border : solid 1px #fdba31;
+  background : #fef3dd;
+}
+
+div#popup {
+  position : absolute;
+  top : 0px;
+  left : 0px;
+  border : solid 1px #fdba31;
+  background : #fef3dd;
+  display : none;
+  overflow : auto;
+  padding : 1em;
+}
+
+div.note {
+  background-color: #fef3dd;
+  min-height: 65px;
+  border: solid 1px #fdba31;
+  padding: 1em;
+  margin : 1em 1em;
+  width : 87.5%;
+}
+
+div.note > div.note-header {
+  font-weight: bold;
+  font-size: 1.1em;
+}
+
+div.note > img.note {
+  float: left;
+  padding-right: 1em;
+  padding-bottom: 1em;
+}
+
+div.pro {
+  font-style: italic;
+}

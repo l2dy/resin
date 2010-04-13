@@ -48,13 +48,13 @@ import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.caucho.network.listen.ProtocolConnection;
+import com.caucho.network.listen.TcpSocketLink;
+import com.caucho.network.listen.TcpDuplexController;
+import com.caucho.network.listen.TcpDuplexHandler;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.security.SecurityContextProvider;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.ProtocolConnection;
-import com.caucho.server.connection.TransportConnection;
-import com.caucho.server.connection.TcpConnection;
-import com.caucho.server.connection.TcpDuplexController;
-import com.caucho.server.connection.TcpDuplexHandler;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationDecoder;
@@ -121,19 +121,19 @@ public abstract class AbstractHttpRequest
 
   private static final Cookie []NULL_COOKIES = new Cookie[0];
 
-  protected final Server _server;
+  private final Server _server;
 
-  protected final TransportConnection _conn;
-  protected final TcpConnection _tcpConn;
+  private final SocketLink _conn;
+  private final TcpSocketLink _tcpConn;
 
-  protected final AbstractHttpResponse _response;
+  private final AbstractHttpResponse _response;
 
   private final InvocationKey _invocationKey = new InvocationKey();
 
   // Connection stream
-  protected final ReadStream _rawRead;
+  private final ReadStream _rawRead;
   // Stream for reading post contents
-  protected final ReadStream _readStream;
+  private final ReadStream _readStream;
 
   private final ArrayList<Cookie> _cookies = new ArrayList<Cookie>();
 
@@ -151,10 +151,10 @@ public abstract class AbstractHttpRequest
   private final ErrorPageManager _errorManager = new ErrorPageManager(null);
 
   // Efficient date class for printing date headers
-  protected final QDate _calendar = new QDate();
+  private final QDate _calendar = new QDate();
   private final CharBuffer _cbName = new CharBuffer();
   private final CharBuffer _cbValue = new CharBuffer();
-  protected final CharBuffer _cb = new CharBuffer();
+  private final CharBuffer _cb = new CharBuffer();
 
   private HttpBufferStore _httpBuffer;
 
@@ -178,7 +178,7 @@ public abstract class AbstractHttpRequest
    *
    * @param server the parent server
    */
-  protected AbstractHttpRequest(Server server, TransportConnection conn)
+  protected AbstractHttpRequest(Server server, SocketLink conn)
   {
     _server = server;
 
@@ -189,8 +189,8 @@ public abstract class AbstractHttpRequest
     else
       _rawRead = null;
 
-    if (conn instanceof TcpConnection)
-      _tcpConn = (TcpConnection) conn;
+    if (conn instanceof TcpSocketLink)
+      _tcpConn = (TcpSocketLink) conn;
     else
       _tcpConn = null;
 
@@ -224,7 +224,7 @@ public abstract class AbstractHttpRequest
   /**
    * Returns the connection.
    */
-  public final TransportConnection getConnection()
+  public final SocketLink getConnection()
   {
     return _conn;
   }
@@ -240,6 +240,11 @@ public abstract class AbstractHttpRequest
   public final DispatchServer getDispatchServer()
   {
     return _server;
+  }
+
+  protected final CharBuffer getCharBuffer()
+  {
+    return _cb;
   }
 
   /**
@@ -354,7 +359,7 @@ public abstract class AbstractHttpRequest
     else
       return null;
   }
-  
+
   @Override
   public String getProtocolRequestURL()
   {
@@ -363,7 +368,7 @@ public abstract class AbstractHttpRequest
     if (request != null)
       return request.getRequestURL().toString();
     else
-      return null;    
+      return null;
   }
 
   /**
@@ -522,17 +527,9 @@ public abstract class AbstractHttpRequest
   /**
    * Returns the server's address.
    */
-  public String getLocalAddr()
+  public String getLocalHost()
   {
-    return _conn.getLocalAddress().getHostAddress();
-  }
-
-  /**
-   * Returns the server's address.
-   */
-  public String getLocalName()
-  {
-    return _conn.getLocalAddress().getHostAddress();
+    return _conn.getLocalHost();
   }
 
   public String getRemoteAddr()
@@ -711,7 +708,7 @@ public abstract class AbstractHttpRequest
    */
   protected void handleConnectionClose()
   {
-    TransportConnection conn = _conn;
+    SocketLink conn = _conn;
 
     if (conn != null)
       conn.killKeepalive();
@@ -938,10 +935,10 @@ public abstract class AbstractHttpRequest
     throws UnsupportedEncodingException
   {
     // server/122k (tck)
-    
+
     if (_hasReadStream)
       return;
-    
+
     _readEncoding = encoding;
 
     try {
@@ -1167,6 +1164,16 @@ public abstract class AbstractHttpRequest
     return _readStream;
   }
 
+  public final ReadStream getRawRead()
+  {
+    return _rawRead;
+  }
+
+  public final ReadStream getReadStream()
+  {
+    return _readStream;
+  }
+
   /**
    * Returns the raw read buffer.
    */
@@ -1384,10 +1391,13 @@ public abstract class AbstractHttpRequest
    */
   public final long getStartTime()
   {
+    return _startTime;
+    /*
     if (_tcpConn != null)
       return _tcpConn.getRequestStartTime();
     else
       return _startTime;
+      */
   }
 
   /**
@@ -1423,8 +1433,9 @@ public abstract class AbstractHttpRequest
 
       // Default host name if the host doesn't have a canonical
       // name
-      int p = hostName.indexOf(':');
-      if (p > 0)
+      int p = hostName.lastIndexOf(':');
+      int q = hostName.lastIndexOf(']');
+      if (p > 0 && q < p)
         invocation.setHostName(hostName.substring(0, p));
       else
         invocation.setHostName(hostName);
@@ -1462,7 +1473,7 @@ public abstract class AbstractHttpRequest
 
     return invocation.getRequestInvocation(_requestFacade);
   }
-  
+
   /**
    * Handles a comet-style resume.
    *
@@ -1473,14 +1484,14 @@ public abstract class AbstractHttpRequest
   {
     try {
       startInvocation();
-      
+
       HttpServletRequestImpl request = getRequestFacade();
-      
+
       /*
       if (! request.isAsyncStarted())
         return false;
         */
-      
+
       if (request == null)
         return false;
 
@@ -1488,12 +1499,12 @@ public abstract class AbstractHttpRequest
 
       ServletContext webApp = asyncContext.getDispatchContext();
       String url = asyncContext.getDispatchPath();
-      
+
       HttpServletRequest asyncRequest = getRequestFacade();
       HttpServletResponse asyncResponse = getResponseFacade();
-      
+
       // asyncContext.onStart(webApp, asyncRequest, asyncResponse);
-      
+
       if (url != null) {
         if (webApp == null)
           webApp = getWebApp();
@@ -1538,13 +1549,13 @@ public abstract class AbstractHttpRequest
 
     return isSuspend();
   }
-  
+
   WebApp getAsyncDispatchWebApp()
   {
     // XXX:
     throw new UnsupportedOperationException();
   }
-  
+
   String getAsyncDispatchUrl()
   {
     // XXX:
@@ -1605,7 +1616,7 @@ public abstract class AbstractHttpRequest
    */
   public void killKeepalive()
   {
-    TransportConnection conn = _conn;
+    SocketLink conn = _conn;
 
     if (conn != null)
       conn.killKeepalive();
@@ -1643,13 +1654,13 @@ public abstract class AbstractHttpRequest
 
   /**
    * Returns true if a keepalive has been allocated for the request.
-   * 
+   *
    * The keepalives are preallocated at the start of the request to keep
    * the connection state machine simple.
    */
   public boolean isKeepaliveAllowed()
   {
-    TransportConnection conn = _conn;
+    SocketLink conn = _conn;
 
     if (conn != null)
       return conn.isKeepaliveAllocated();

@@ -36,8 +36,8 @@ import java.util.logging.Level;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
+import com.caucho.network.listen.TcpSocketLink;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
@@ -192,10 +192,10 @@ public class HttpResponse extends AbstractHttpResponse
       return false;
     }
 
-    TcpConnection tcpConn = null;
+    TcpSocketLink tcpConn = null;
 
-    if (_request.getConnection() instanceof TcpConnection)
-      tcpConn = (TcpConnection) _request.getConnection();
+    if (_request.getConnection() instanceof TcpSocketLink)
+      tcpConn = (TcpSocketLink) _request.getConnection();
 
     WebApp webApp = request.getWebApp();
 
@@ -472,15 +472,23 @@ public class HttpResponse extends AbstractHttpResponse
   private void fillDate(long now)
   {
     if (_lastDate / 60000 == now / 60000) {
-      _lastDate = now;
-
+      int min = (int) (now / 60000 % 60);
       int sec = (int) (now / 1000 % 60);
+
+      int m2 = '0' + (min / 10);
+      int m1 = '0' + (min % 10);
 
       int s2 = '0' + (sec / 10);
       int s1 = '0' + (sec % 10);
 
+      _dateBuffer[28] = (byte) m2;
+      _dateBuffer[29] = (byte) m1;
+
       _dateBuffer[31] = (byte) s2;
       _dateBuffer[32] = (byte) s1;
+
+      _lastDate = now;
+
       return;
     }
 

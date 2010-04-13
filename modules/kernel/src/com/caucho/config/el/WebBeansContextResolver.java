@@ -33,9 +33,9 @@ import java.beans.*;
 import java.util.*;
 import javax.el.*;
 
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.xml.XmlConfigContext;
 
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
@@ -97,12 +97,23 @@ public class WebBeansContextResolver extends ELResolver {
 
     Bean<?> bean = webBeans.resolve(beans);
     
+    XmlConfigContext env = XmlConfigContext.getCurrent();
+    
     CreationalContext<?> cxt = null;
     
-    ConfigContext env = ConfigContext.getCurrent();
-    
     if (env != null) {
-      cxt = new CreationalContextImpl(bean, env.getCreationalContext());
+      cxt = env.getCreationalContext();
+      
+      if (cxt instanceof CreationalContextImpl<?>) {
+        CreationalContextImpl<?> cxtImpl = (CreationalContextImpl<?>) cxt;
+        
+        Object value = cxtImpl.get(bean);
+        
+        if (value != null)
+          return value;
+      }
+      
+      cxt = new CreationalContextImpl(bean, cxt);
     }
     else {
       cxt = new CreationalContextImpl(bean, null);

@@ -38,10 +38,12 @@ import javax.enterprise.inject.spi.Bean;
 
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.inject.Module;
 
 /**
  * Custom bean configured by namespace
  */
+@Module
 public class BeanArg<T> extends Arg<T> {
   private InjectManager _beanManager;
   private Type _type;
@@ -66,7 +68,7 @@ public class BeanArg<T> extends Arg<T> {
 	bindings.add(ann);
       }
       
-      _bean = _beanManager.resolveByInjectionPoint(_type, bindings);
+      _bean = _beanManager.resolveByInjectionPoint(_type, bindings, null);
       /*
       for (Bean bean : _beanManager.getBeans(_type, _bindings)) {
 	_bean = bean;

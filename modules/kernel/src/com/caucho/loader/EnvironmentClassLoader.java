@@ -29,29 +29,21 @@
 
 package com.caucho.loader;
 
-import com.caucho.config.ConfigException;
-import com.caucho.jmx.Jmx;
-import com.caucho.lifecycle.Lifecycle;
-import com.caucho.loader.enhancer.ScanListener;
-import com.caucho.loader.enhancer.ScanManager;
-import com.caucho.log.EnvironmentStream;
-import com.caucho.management.server.EnvironmentMXBean;
-import com.caucho.naming.Jndi;
-import com.caucho.util.ResinThreadPoolExecutor;
-import com.caucho.vfs.Vfs;
-
-import javax.management.MBeanServerFactory;
-import javax.naming.NamingException;
-import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Hashtable;
-import java.util.Properties;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.lifecycle.Lifecycle;
+import com.caucho.loader.enhancer.ScanListener;
+import com.caucho.loader.enhancer.ScanManager;
+import com.caucho.loader.module.ArtifactManager;
+import com.caucho.management.server.EnvironmentMXBean;
+import com.caucho.util.ResinThreadPoolExecutor;
 
 /**
  * Class loader which checks for changes in class files and automatically
@@ -72,7 +64,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
   // listeners invoked when a Loader is added
   private static EnvironmentLocal<ArrayList<AddLoaderListener>> _addLoaderListeners;
-  
+
   // The owning bean
   private EnvironmentBean _owner;
 
@@ -355,7 +347,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     synchronized (_childListenerLock) {
       if (_childListeners == null)
         _childListeners = new EnvironmentLocal<ArrayList<EnvironmentListener>>();
-      
+
       ArrayList<EnvironmentListener> listeners
         = _childListeners.getLevel(this);
 
@@ -381,7 +373,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     synchronized (_childListenerLock) {
       if (_childListeners == null)
         return;
-      
+
       ArrayList<EnvironmentListener> listeners
         = _childListeners.getLevel(this);
 
@@ -442,7 +434,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     synchronized (_childListenerLock) {
       if (_addLoaderListeners == null)
         _addLoaderListeners = new EnvironmentLocal<ArrayList<AddLoaderListener>>();
-      
+
       ArrayList<AddLoaderListener> listeners
         = _addLoaderListeners.getLevel(this);
 
@@ -470,7 +462,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     if (_addLoaderListeners == null)
       return listeners;
-    
+
     // add the descendent listeners
     synchronized (_childListenerLock) {
       ClassLoader loader;
@@ -537,25 +529,25 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     _pendingScanUrls.add(url);
   }
-  
+
   /**
    * Tells the classloader to scan the root classpath.
    */
   public void scanRoot()
   {
     super.scanRoot();
-    
+
     ClassLoader parent = getParent();
     if (parent instanceof EnvironmentClassLoader)
       return;
-    
-    if (parent instanceof URLClassLoader) {    
+
+    if (parent instanceof URLClassLoader) {
       URLClassLoader urlParent = (URLClassLoader) parent;
 
       for (URL url : urlParent.getURLs()) {
         _pendingScanUrls.add(url);
       }
-      
+
       return;
     }
   }
@@ -570,7 +562,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     int i = 0;
     for (; i < _scanListeners.size(); i++) {
-      if (listener.getPriority() < _scanListeners.get(i).getPriority())
+      if (listener.getScanPriority() < _scanListeners.get(i).getScanPriority())
         break;
     }
     _scanListeners.add(i, listener);
@@ -627,7 +619,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   /**
    * Returns any import class, e.g. from an artifact
    */
-  protected Class findImportClass(String name)
+  protected Class<?> findImportClass(String name)
   {
     if (_artifactManager != null)
       return _artifactManager.findImportClass(name);
@@ -691,7 +683,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     ArrayList<URL> urlList = new ArrayList<URL>(_pendingScanUrls);
     _pendingScanUrls.clear();
-    
+
     try {
       if (_scanListeners != null && urlList.size() > 0) {
         try {
@@ -731,11 +723,11 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     int size = listeners.size();
     for (int i = 0; listeners != null && i < size; i++) {
       EnvironmentListener listener = listeners.get(i);
-      
+
       if (listener instanceof EnvironmentEnhancerListener) {
         EnvironmentEnhancerListener enhancerListener
           = (EnvironmentEnhancerListener) listener;
-        
+
         enhancerListener.environmentConfigureEnhancer(this);
       }
     }

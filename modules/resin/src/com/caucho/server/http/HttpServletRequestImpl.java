@@ -63,13 +63,13 @@ import javax.servlet.http.Part;
 
 import com.caucho.config.scope.ScopeRemoveListener;
 import com.caucho.i18n.CharacterEncoding;
+import com.caucho.network.listen.TcpDuplexController;
+import com.caucho.network.listen.TcpDuplexHandler;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.security.AbstractLogin;
 import com.caucho.security.Authenticator;
 import com.caucho.security.Login;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.TcpDuplexController;
-import com.caucho.server.connection.TcpDuplexHandler;
-import com.caucho.server.connection.TransportConnection;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
@@ -93,7 +93,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * User facade for http requests.
  */
-public class HttpServletRequestImpl extends AbstractCauchoRequest
+public final class HttpServletRequestImpl extends AbstractCauchoRequest
   implements CauchoRequest, WebSocketServletRequest
 {
   private static final Logger log
@@ -265,13 +265,13 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public String getLocalAddr()
   {
-    return _request.getLocalAddr();
+    return _request.getLocalHost();
   }
 
   /**
    * Returns the IP address of the local host, i.e. the server.
    *
-   * This call returns the name of the host actaully used to connect to the
+   * This call returns the name of the host actually used to connect to the
    * Resin server,  which means that if ipchains, load balancing, or proxying
    * is involved this call <i>does not</i> return the correct host for
    * forming urls.
@@ -281,7 +281,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public String getLocalName()
   {
-    return _request.getLocalAddr();
+    return _request.getLocalHost();
   }
 
   /**
@@ -409,9 +409,9 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     if (_isSecure != null)
       return _isSecure;
-    
+
     AbstractHttpRequest request = _request;
-    
+
     if (request != null)
       return request.isSecure();
     else
@@ -1405,7 +1405,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     return _isLoginRequested;
   }
-  
+
   @Override
   public void requestLogin()
   {
@@ -1471,7 +1471,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     try {
       WebApp webApp = getWebApp();
-      
+
       if (webApp == null) {
         if (log.isLoggable(Level.FINE))
           log.finer("authentication failed, no web-app found");
@@ -1716,7 +1716,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     _request.clientDisconnect();
   }
 
-  public TransportConnection getConnection()
+  public SocketLink getConnection()
   {
     return _request.getConnection();
   }
@@ -1758,10 +1758,10 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   public void finishInvocation()
   {
     AsyncContextImpl asyncContext = _asyncContext;
-    
+
     if (asyncContext != null)
       asyncContext.onComplete();
-    
+
     _request.finishInvocation();
   }
 
@@ -1816,7 +1816,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   public AsyncContext startAsync(ServletRequest request,
                                  ServletResponse response)
   {
-    
+
     if (! isAsyncSupported())
       throw new IllegalStateException(L.l("The servlet '{0}' at '{1}' does not support async because the servlet or one of the filters does not support asynchronous mode.  The servlet should be annotated with a @WebServlet(asyncSupported=true) annotation or have a <async-supported> tag in the web.xml.",
                                           getServletName(), getServletPath()));
@@ -1826,9 +1826,9 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     }
 
     boolean isOriginal = (request == this && response == _response);
-      
+
     _asyncContext = new AsyncContextImpl(_request, request, response, isOriginal);
-      
+
     if (_asyncTimeout > 0)
       _asyncContext.setTimeout(_asyncTimeout);
 
@@ -1960,13 +1960,13 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     AsyncContextImpl comet = _asyncContext;
     _asyncContext = null;
-    
+
     /* server/1ld5
     if (comet != null) {
       comet.onComplete();
     }
     */
-    
+
     super.finishRequest();
 
     // ioc/0a10
@@ -1983,7 +1983,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
         }
       }
     }
-    
+
     _request = null;
   }
 
@@ -2033,7 +2033,7 @@ public class HttpServletRequestImpl extends AbstractCauchoRequest
     else
       return null;
   }
-  
+
   public boolean isClosed()
   {
     return _request == null;

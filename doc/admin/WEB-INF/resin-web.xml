@@ -23,7 +23,8 @@
     <resin:if test="${! resin_admin_external}">
       <resin:IfNetwork>
         <value>127.0.0.1</value>
-        <value>192.168/16</value>
+        <value>192.168.0.0/16</value>
+        <value>[::1]</value>
       </resin:IfNetwork>
     </resin:if>
 
@@ -32,4 +33,5 @@
     </resin:if>
     <resin:IfUserInRole role="resin-admin"/>
   </resin:Allow>
+
 </web-app>

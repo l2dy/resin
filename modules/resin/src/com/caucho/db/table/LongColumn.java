@@ -28,15 +28,14 @@
 
 package com.caucho.db.table;
 
-import com.caucho.db.index.BTree;
-import com.caucho.db.index.LongKeyCompare;
+import java.sql.SQLException;
+
 import com.caucho.db.index.KeyCompare;
+import com.caucho.db.index.LongKeyCompare;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
 import com.caucho.db.xa.Transaction;
-
-import java.sql.SQLException;
 
 /**
  * Represents a 64-bit long integer column.
@@ -57,16 +56,16 @@ class LongColumn extends Column {
    * Returns the column's type code.
    */
   @Override
-  public int getTypeCode()
+  public ColumnType getTypeCode()
   {
-    return LONG;
+    return ColumnType.LONG;
   }
 
   /**
    * Returns the column's Java type.
    */
   @Override
-  public Class getJavaType()
+  public Class<?> getJavaType()
   {
     return long.class;
   }
@@ -121,12 +120,12 @@ class LongColumn extends Column {
    * @param rowOffset the offset of the row in the block
    */
   @Override
-  public String getString(byte []block, int rowOffset)
+  public String getString(long blockId, byte []block, int rowOffset)
   {
     if (isNull(block, rowOffset))
       return null;
     else
-      return String.valueOf(getLong(block, rowOffset));
+      return String.valueOf(getLong(blockId, block, rowOffset));
   }
   
   /**
@@ -149,9 +148,9 @@ class LongColumn extends Column {
    * @param rowOffset the offset of the row in the block
    */
   @Override
-  public int getInteger(byte []block, int rowOffset)
+  public int getInteger(long blockId, byte []block, int rowOffset)
   {
-    return (int) getLong(block, rowOffset);
+    return (int) getLong(blockId, block, rowOffset);
   }
   
   /**
@@ -185,7 +184,7 @@ class LongColumn extends Column {
    * @param rowOffset the offset of the row in the block
    */
   @Override
-  public long getLong(byte []block, int rowOffset)
+  public long getLong(long blockId, byte []block, int rowOffset)
   {
     if (isNull(block, rowOffset))
       return 0;
@@ -212,9 +211,9 @@ class LongColumn extends Column {
    * @param rowOffset the offset of the row in the block
    */
   @Override
-  public double getDouble(byte []block, int rowOffset)
+  public double getDouble(long blockId, byte []block, int rowOffset)
   {
-    return (double) getLong(block, rowOffset);
+    return (double) getLong(blockId, block, rowOffset);
   }
   
   /**
@@ -254,14 +253,15 @@ class LongColumn extends Column {
    * Evaluates the column to a stream.
    */
   @Override
-  public void evalToResult(byte []block, int rowOffset, SelectResult result)
+  public void evalToResult(long blockId, byte []block, int rowOffset,
+                           SelectResult result)
   {
     if (isNull(block, rowOffset)) {
       result.writeNull();
       return;
     }
 
-    result.writeLong(getLong(block, rowOffset));
+    result.writeLong(getLong(blockId, block, rowOffset));
   }
   
   /**
@@ -312,45 +312,4 @@ class LongColumn extends Column {
 	    block1[startOffset1 + 6] == block2[startOffset2 + 6] &&
 	    block1[startOffset1 + 7] == block2[startOffset2 + 7]);
   }
-  
-  /**
-   * Sets any index for the column.
-   *
-   * @param block the block's buffer
-   * @param rowOffset the offset of the row in the block
-   * @param rowAddr the address of the row
-   */
-  /*
-  void setIndex(Transaction xa,
-		byte []block, int rowOffset,
-		long rowAddr, QueryContext context)
-    throws SQLException
-  {
-    BTree index = getIndex();
-
-    if (index == null)
-      return;
-
-    index.insert(block, rowOffset + _columnOffset, 8, rowAddr, xa, false);
-  }
-  */
-  
-  /**
-   * Deleting the row, based on the column.
-   *
-   * @param block the block's buffer
-   * @param rowOffset the offset of the row in the block
-   * @param expr the expression to store
-   */
-  /*
-  @Override
-  void deleteIndex(Transaction xa, byte []block, int rowOffset)
-    throws SQLException
-  {
-    BTree index = getIndex();
-
-    if (index != null)
-      index.remove(block, rowOffset + _columnOffset, 8, xa);
-  }
-  */
-}
+ }

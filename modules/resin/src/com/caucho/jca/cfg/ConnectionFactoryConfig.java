@@ -41,6 +41,11 @@ import com.caucho.config.cfg.BeanConfig;
 import com.caucho.config.types.*;
 import com.caucho.jca.*;
 import com.caucho.jca.cfg.JavaMailConfig;
+import com.caucho.jca.pool.ConnectionPool;
+import com.caucho.jca.ra.ResourceAdapterController;
+import com.caucho.jca.ra.ResourceArchive;
+import com.caucho.jca.ra.ResourceArchiveManager;
+import com.caucho.jca.ra.ResourceManagerImpl;
 import com.caucho.jmx.IntrospectionMBean;
 import com.caucho.jmx.Jmx;
 import com.caucho.loader.ClassLoaderListener;
@@ -85,7 +90,7 @@ public class ConnectionFactoryConfig extends BeanConfig {
   private int _maxConnections = 1024;
   private long _maxActiveTime = Long.MAX_VALUE / 2;
 
-  private @Inject Instance<ResourceAdapterController> _raControllerInstance;
+  private @Inject Instance<ResourceAdapter> _raInstance;
 
   public ConnectionFactoryConfig()
   {
@@ -218,18 +223,18 @@ public class ConnectionFactoryConfig extends BeanConfig {
     InjectManager webBeans = InjectManager.create();
     String raName = ra.getResourceAdapterClass().getName();
 
-    Instance<ResourceAdapterController> instance
-      = _raControllerInstance.select(Names.create(raName));
+    Instance<ResourceAdapter> instance
+      = _raInstance.select(Names.create(raName));
 
-    ResourceAdapterController raController = instance.get();
+    ResourceAdapter resourceAdapter = instance.get();
 
-    if (raController == null) {
+    if (resourceAdapter == null) {
       throw new ConfigException(L.l("'{0}' does not have a configured resource-adapter for '{1}'.",
                                     raName,
                                     cl.getName()));
     }
 
-    return raController.getResourceAdapter();
+    return resourceAdapter;
   }
 
   @Override

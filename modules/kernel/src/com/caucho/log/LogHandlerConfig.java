@@ -29,35 +29,30 @@
 
 package com.caucho.log;
 
-import com.caucho.config.ConfigException;
-import com.caucho.config.cfg.BeanConfig;
-import com.caucho.config.types.*;
-import com.caucho.jmx.Jmx;
-import com.caucho.loader.CloseListener;
-import com.caucho.loader.Environment;
-import com.caucho.log.formatter.TimestampFormatter;
-import com.caucho.log.handler.PathHandler;
-import com.caucho.management.server.*;
-import com.caucho.util.L10N;
-import com.caucho.vfs.*;
-
-import javax.annotation.PostConstruct;
-import javax.management.*;
-import java.io.*;
-import java.util.*;
-import java.util.logging.Logger;
-import java.util.logging.Level;
 import java.util.logging.Filter;
 import java.util.logging.Formatter;
 import java.util.logging.Handler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
+import com.caucho.config.cfg.BeanConfig;
+import com.caucho.config.types.Bytes;
+import com.caucho.config.types.Period;
+import com.caucho.config.types.RawString;
+import com.caucho.loader.CloseListener;
+import com.caucho.loader.Environment;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 
 /**
- * Configures a log handler
+ * Configuration for the <log-handler> tag.
  */
-
+@Configurable
 public class LogHandlerConfig extends BeanConfig {
-  private static final Logger log
-    = Logger.getLogger(LogHandlerConfig.class.getName());
   private static final L10N L = new L10N(LogHandlerConfig.class);
 
   private Level _level;
@@ -66,7 +61,6 @@ public class LogHandlerConfig extends BeanConfig {
   
   private Filter _filter;
 
-  private boolean _useParentHandlers;
   private Handler _handler;
   
   private String _timestamp = "[%Y/%m/%d %H:%M:%S.%s] {%{thread}} ";
@@ -163,16 +157,15 @@ public class LogHandlerConfig extends BeanConfig {
   public void setUseParentHandlers(boolean useParentHandlers)
     throws ConfigException
   {
-    _useParentHandlers = useParentHandlers;
   }
 
   /**
    * Sets the output level.
    */
-  public void setLevel(String level)
+  public void setLevel(Level level)
     throws ConfigException
   {
-    _level = toLevel(level);
+    _level = level;
   }
 
   /**
@@ -183,7 +176,7 @@ public class LogHandlerConfig extends BeanConfig {
     if (_level != null)
       return _level.getName();
     else
-      return Level.INFO.getName();
+      return Level.ALL.getName();
   }
 
   /**
@@ -263,12 +256,12 @@ public class LogHandlerConfig extends BeanConfig {
 
     if (_timestamp != null) {
       if (_pathHandler != null) {
-	_pathHandler.setTimestamp(_timestamp);
+        _pathHandler.setTimestamp(_timestamp);
       }
       else if (_formatter == null) {
-	TimestampFormatter formatter = new TimestampFormatter();
-	_formatter = formatter;
-	formatter.setTimestamp(_timestamp);
+        TimestampFormatter formatter = new TimestampFormatter();
+        _formatter = formatter;
+        formatter.setTimestamp(_timestamp);
       }
     }
     
@@ -286,10 +279,16 @@ public class LogHandlerConfig extends BeanConfig {
       Environment.addClassLoaderListener(listener);
     }
     
+    // env/02s9
+    if (_level != null)
+      _handler.setLevel(_level);
+
+    /* JDK defaults to Level.ALL
     if (_level != null)
       _handler.setLevel(_level);
     else
       _handler.setLevel(Level.INFO);
+    */
 
     if (_formatter != null)
       _handler.setFormatter(_formatter);
@@ -321,7 +320,12 @@ public class LogHandlerConfig extends BeanConfig {
       return Level.FINEST;
     else if (level.equals("all"))
       return Level.ALL;
-    else
-      throw new ConfigException(L.l("`{0}' is an unknown log level.  Log levels are:\noff - disable logging\nsevere - severe errors only\nwarning - warnings\ninfo - information\nconfig - configuration\nfine - fine debugging\nfiner - finer debugging\nfinest - finest debugging\nall - all debugging", level));
+    else {
+      try {
+        return Level.parse(level);
+      } catch (IllegalArgumentException e) {
+        throw new ConfigException(L.l("`{0}' is an unknown log level.  Log levels are:\noff - disable logging\nsevere - severe errors only\nwarning - warnings\ninfo - information\nconfig - configuration\nfine - fine debugging\nfiner - finer debugging\nfinest - finest debugging\nall - all debugging\n[-]?[0-9]+ - custom level", level));
+      }
+    }
   }
 }

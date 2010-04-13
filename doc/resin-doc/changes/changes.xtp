@@ -11,6 +11,40 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.7 - snapshot">
+<ul>
+</ul>
+</s2>
+
+<s2 title="4.0.6 - April 6, 2010">
+<ul>
+<li>openssl: crypto threading issues with CRYPTO_set_locking_callback (#3531, #3740, rep by Benjamin Loy, bryan)</li> 
+<li>jni: socket accept/close changes to avoid fd leak (#3960, rep by rmann)</li>
+<li>jsp: jsp:param in jsp:include must encode '%' (#3976, rep by Aaron Freeman)</li>
+<li>servlet: escape status message for default error page (#3781, rep by Bill Au)</li>
+<li>class-loader: changed override order to match config order (#3773, rep by cyttesen)</li>
+<li>servlet: add cookie-domain-regexp to &lt;session-config> (#3865, rep by Matt Sporleder)</li>
+<li>watchdog: add &lt;jvm-arg-line> as shortcut for &lt;jvm-arg> (#3940, rep by Bill Au)</li>
+<li>log: print timestamp only for first item for multiline (#3229, rep by Jamison Novak)</li>
+<li>log: remove excess synchronization for log period calculation (#3814, rep by zenant)</li>
+<li>log: change date calculating to use TimeZone.getOffset(time) (#3853, rep by Jamison Novak)</li>
+<li>cdi: allow circular XML/EL definition of beans (#3954, rep by Hontvari Jozsef)</li>
+<li>classloader: avoid class loader deadlocks on ClassEntry (#3848, rep by zenant)</li>
+<li>jni: LD_LIBRARY_PATH handling moved from Watchdog to SystemClassLoader</li>
+<li>servlet: micro-second logging not properly matching start time (#3935, rep by mocospace)</li>
+<li>jsp: jsp:forward issues with buffer="10k" (#3922, rep by Danny Mann)</li>
+<li>jsp: SimpleTag parents not properly managed with fragments (#3953, rep by Jamison Novak)</li>
+<li>jni: readNative was not properly handling SO_RCVTIMEO (#3941, rep by Vinod Mehra)</li>
+<li>configure: --enable-64bit needs to enable both JNI and plugin (#3968, rep by Bill Au)</li>
+<li>cdi: ProcessInjectionTarget.getAnnotatedType() was returning null (#3967, rep by jharting)</li>
+<li>ejb: ejb-ref partial support added (rep by 3964, rep by Matthew Brew)</li>
+<li>jsp: x:forEach was not properly setting isFirst and isLast (#3752, rep by biku)</li>
+<li>rewrite: IfNetwork now supports IPv6 (#3903)</li>
+<li>ejb: ejb-server should no longer be required (rep by smallufo)</li>
+<li>network: IPv6 support (#3924, rep by webapps)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.5 - March 16, 2010">
 <ul>
 <li>mod_caucho: read timeout needs to repeat only on EINTR</li>

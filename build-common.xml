@@ -1157,7 +1157,7 @@
     -->
   
   <target name="debian-libexec" depends="init">
-    <property name="libexec" value="${dist}/libexec"/>
+    <property name="libexec" value="${resin.dist}/libexec"/>
     
     <delete dir="${libexec}"/>
     <mkdir dir="${libexec}"/>
@@ -1300,7 +1300,7 @@
         <include name="bin/resin.sh"/>
       </fileset>
       
-      <fileset dir="dist/libexec">
+      <fileset dir="${resin.install}/dist/libexec">
         <include name="**"/>
         <exclude name="aclocal.m4"/>
         <exclude name="automake"/>

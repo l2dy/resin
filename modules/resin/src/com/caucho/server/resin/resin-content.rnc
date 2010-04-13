@@ -311,6 +311,13 @@ r_keepalive-select-max =
   attribute keepalive-select-max { r_int-Type }
   | element keepalive-select-max { r_int-Type }
 
+r_listen =
+  element listen {
+    r_port-Content
+
+    & r_bean-Content*
+  }
+
 r_log-service = element log-service {
   r_enable?
 
@@ -568,6 +575,10 @@ r_resin-Content =
   & (attribute security-provider { string }
      | element security-provider { string })*
 
+  & element system {
+      r_env-Content
+    }*
+
   & r_watchdog-manager?
 
   & element rcore:if|r:if { rcore_if-Args, r_resin-Content }*
@@ -629,6 +640,9 @@ r_server-Content =
   & (attribute jvm-arg { string }
      | element jvm-arg { string })*
 
+  & (attribute jvm-arg-line { string }
+     | element jvm-arg-line { string })*
+
   & (attribute jvm-classpath { string }
      | element jvm-classpath { string })*
 
@@ -646,6 +660,8 @@ r_server-Content =
   & r_keepalive-select-thread-timeout?
 
   & r_keepalive-timeout?
+  
+  & r_listen*
 
   & (attribute load-balance-connect-timeout { r_period-Type }
      | element load-balance-connect-timeout { r_period-Type })?

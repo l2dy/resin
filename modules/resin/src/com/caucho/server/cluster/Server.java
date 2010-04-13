@@ -29,13 +29,24 @@
 
 package com.caucho.server.cluster;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.annotation.PostConstruct;
+import javax.servlet.http.HttpServletResponse;
+
 import com.caucho.VersionFactory;
 import com.caucho.bam.ActorClient;
 import com.caucho.bam.ActorStream;
 import com.caucho.bam.Broker;
 import com.caucho.bam.SimpleActorClient;
-import com.caucho.distcache.ClusterCache;
-import com.caucho.distcache.GlobalCache;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
@@ -44,10 +55,12 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
+import com.caucho.distcache.ClusterCache;
+import com.caucho.distcache.GlobalCache;
 import com.caucho.git.GitRepository;
+import com.caucho.hemp.broker.DomainManager;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.hemp.broker.HempBrokerManager;
-import com.caucho.hemp.broker.DomainManager;
 import com.caucho.hemp.servlet.ServerAuthManager;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.ClassLoaderListener;
@@ -60,15 +73,17 @@ import com.caucho.make.AlwaysModified;
 import com.caucho.management.server.CacheItem;
 import com.caucho.management.server.EnvironmentMXBean;
 import com.caucho.management.server.ServerMXBean;
-import com.caucho.security.PermissionManager;
+import com.caucho.network.balance.ClientSocketFactory;
+import com.caucho.network.listen.AbstractProtocol;
+import com.caucho.network.listen.AbstractSelectManager;
+import com.caucho.network.listen.SocketLinkListener;
+import com.caucho.network.listen.TcpSocketLink;
+import com.caucho.network.server.NetworkServer;
 import com.caucho.security.AdminAuthenticator;
+import com.caucho.security.PermissionManager;
 import com.caucho.server.admin.Management;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cache.TempFileManager;
-import com.caucho.server.connection.AbstractProtocol;
-import com.caucho.server.connection.AbstractSelectManager;
-import com.caucho.server.connection.Port;
-import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
@@ -78,8 +93,8 @@ import com.caucho.server.distcache.DistributedCacheManager;
 import com.caucho.server.distcache.FileCacheManager;
 import com.caucho.server.distcache.PersistentStoreConfig;
 import com.caucho.server.distlock.AbstractLockManager;
-import com.caucho.server.distlock.SingleLockManager;
 import com.caucho.server.distlock.AbstractVoteManager;
+import com.caucho.server.distlock.SingleLockManager;
 import com.caucho.server.distlock.SingleVoteManager;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.host.Host;
@@ -89,8 +104,8 @@ import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
 import com.caucho.server.http.HttpProtocol;
 import com.caucho.server.log.AccessLog;
-import com.caucho.server.repository.Repository;
 import com.caucho.server.repository.FileRepository;
+import com.caucho.server.repository.Repository;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
 import com.caucho.server.webapp.ErrorPage;
@@ -100,20 +115,10 @@ import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
 import com.caucho.util.ThreadPool;
-import com.caucho.vfs.*;
-
-import javax.annotation.PostConstruct;
-import javax.servlet.http.HttpServletResponse;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.caucho.vfs.MemoryPath;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.QServerSocket;
+import com.caucho.vfs.Vfs;
 
 public class Server extends ProtocolDispatchServer
   implements EnvironmentBean, SchemaBean, AlarmListener,
@@ -132,6 +137,7 @@ public class Server extends ProtocolDispatchServer
     = new EnvironmentLocal<Server>();
 
   private final Resin _resin;
+  private final NetworkServer _networkServer;
   private final ClusterServer _selfServer;
 
   private EnvironmentClassLoader _classLoader;
@@ -172,7 +178,7 @@ public class Server extends ProtocolDispatchServer
   // <server> configuration
   
   private ClusterPort _clusterPort;
-  private final ArrayList<Port> _ports = new ArrayList<Port>();
+  private final ArrayList<SocketLinkListener> _ports = new ArrayList<SocketLinkListener>();
   
   private Management _management;
 
@@ -186,7 +192,7 @@ public class Server extends ProtocolDispatchServer
   private int _threadIdleMin = -1;
   private int _threadIdleMax = -1;
   
-  private ContainerProgram _portDefaults
+  private ContainerProgram _listenerDefaults
     = new ContainerProgram();
 
   // <cluster> configuration
@@ -225,8 +231,14 @@ public class Server extends ProtocolDispatchServer
   /**
    * Creates a new servlet server.
    */
-  public Server(ClusterServer clusterServer)
+  public Server(NetworkServer networkServer,
+                ClusterServer clusterServer)
   {
+    _networkServer = networkServer;
+    
+    if (networkServer == null)
+      throw new NullPointerException();
+    
     if (clusterServer == null)
       throw new NullPointerException();
 
@@ -315,6 +327,11 @@ public class Server extends ProtocolDispatchServer
   public static Server getCurrent()
   {
     return _serverLocal.get();
+  }
+  
+  public NetworkServer getNetworkServer()
+  {
+    return _networkServer;
   }
 
   public boolean isResinServer()
@@ -736,6 +753,13 @@ public class Server extends ProtocolDispatchServer
   /**
    * Arguments on boot
    */
+  public void addJvmArgLine(String args)
+  {
+  }
+
+  /**
+   * Arguments on boot
+   */
   public void addJvmClasspath(String args)
   {
   }
@@ -929,10 +953,10 @@ public class Server extends ProtocolDispatchServer
    return _clusterPort;
   }
   
-  public Port createHttp()
+  public SocketLinkListener createHttp()
     throws ConfigException
   {
-    Port port = new Port();
+    SocketLinkListener port = new SocketLinkListener();
     
     applyPortDefaults(port);
 
@@ -944,7 +968,7 @@ public class Server extends ProtocolDispatchServer
     return port;
   }
 
-  public Port createProtocol()
+  public SocketLinkListener createProtocol()
   {
     ProtocolPortConfig port = new ProtocolPortConfig();
 
@@ -953,7 +977,16 @@ public class Server extends ProtocolDispatchServer
     return port;
   }
 
-  public void addProtocolPort(Port port)
+  public SocketLinkListener createListen()
+  {
+    ProtocolPortConfig port = new ProtocolPortConfig();
+
+    _ports.add(port);
+
+    return port;
+  }
+
+  public void addProtocolPort(SocketLinkListener port)
   {
     try {
       if (! _ports.contains(port))
@@ -971,7 +1004,7 @@ public class Server extends ProtocolDispatchServer
 
   public void add(ProtocolPort protocolPort)
   {
-    Port port = new Port();
+    SocketLinkListener port = new SocketLinkListener();
 
     AbstractProtocol protocol = protocolPort.getProtocol();
     port.setProtocol(protocol);
@@ -983,13 +1016,13 @@ public class Server extends ProtocolDispatchServer
     addProtocolPort(port);
   }
 
-  private void applyPortDefaults(Port port)
+  private void applyPortDefaults(SocketLinkListener port)
   {
     ConfigProgram program = _selfServer.getPortDefaults();
     
     program.configure(port);
     
-    _portDefaults.configure(port);
+    _listenerDefaults.configure(port);
   }
 
   //
@@ -1099,7 +1132,7 @@ public class Server extends ProtocolDispatchServer
    */
   public void addPortDefault(ConfigProgram program)
   {
-    _portDefaults.addProgram(program);
+    _listenerDefaults.addProgram(program);
   }
 
   /**
@@ -1619,9 +1652,9 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * Returns the {@link Port}s for this server.
+   * Returns the {@link SocketLinkListener}s for this server.
    */
-  public Collection<Port> getPorts()
+  public Collection<SocketLinkListener> getPorts()
   {
     return Collections.unmodifiableList(_ports);
   }
@@ -1943,7 +1976,7 @@ public class Server extends ProtocolDispatchServer
     for (Cluster cluster : getResin().getClusterList()) {
       for (ClusterPod pod : cluster.getPodList()) {
         for (ClusterServer server : pod.getStaticServerList()) {
-          ServerPool pool = server.getServerPool();
+          ClientSocketFactory pool = server.getServerPool();
 
           if (pool != null)
             pool.start();
@@ -1977,7 +2010,7 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      Port port = _clusterPort;
+      SocketLinkListener port = _clusterPort;
 
       if (port != null && port.getPort() != 0) {
         log.info("");
@@ -1991,13 +2024,13 @@ public class Server extends ProtocolDispatchServer
   }
   
   public void bind(String address, int port, QServerSocket ss)
-  throws Exception
+    throws Exception
   {
     if ("null".equals(address))
       address = null;
 
     for (int i = 0; i < _ports.size(); i++) {
-      Port serverPort = _ports.get(i);
+      SocketLinkListener serverPort = _ports.get(i);
 
       if (port != serverPort.getPort())
         continue;
@@ -2036,14 +2069,14 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      ArrayList<Port> ports = _ports;
+      ArrayList<SocketLinkListener> ports = _ports;
       if (ports.size() > 0
           && (ports.get(0) != _clusterPort
               || ports.size() > 1)) {
         log.info("");
 
         for (int i = 0; i < ports.size(); i++) {
-          Port port = ports.get(i);
+          SocketLinkListener port = ports.get(i);
 
           port.bind();
         }
@@ -2066,9 +2099,9 @@ public class Server extends ProtocolDispatchServer
     try {
       thread.setContextClassLoader(_classLoader);
 
-      ArrayList<Port> ports = _ports;
+      ArrayList<SocketLinkListener> ports = _ports;
       for (int i = 0; i < ports.size(); i++) {
-        Port port = ports.get(i);
+        SocketLinkListener port = ports.get(i);
 
         port.start();
       }
@@ -2095,10 +2128,10 @@ public class Server extends ProtocolDispatchServer
       }
 
       try {
-        ArrayList<Port> ports = _ports;
+        ArrayList<SocketLinkListener> ports = _ports;
 
         for (int i = 0; i < ports.size(); i++) {
-          Port port = ports.get(i);
+          SocketLinkListener port = ports.get(i);
 
           if (port.isClosed()) {
             log.severe("Resin restarting due to closed port: " + port);
@@ -2278,10 +2311,10 @@ public class Server extends ProtocolDispatchServer
   /**
    * Finds the TcpConnection given the threadId
    */
-  public TcpConnection findConnectionByThreadId(long threadId)
+  public TcpSocketLink findConnectionByThreadId(long threadId)
   {
-    for (Port port : getPorts()) {
-      TcpConnection conn = port.findConnectionByThreadId(threadId);
+    for (SocketLinkListener port : getPorts()) {
+      TcpSocketLink conn = port.findConnectionByThreadId(threadId);
 
       if (conn != null)
         return conn;
@@ -2355,9 +2388,9 @@ public class Server extends ProtocolDispatchServer
       if (getSelectManager() != null)
         getSelectManager().stop();
 
-      ArrayList<Port> ports = _ports;
+      ArrayList<SocketLinkListener> ports = _ports;
       for (int i = 0; i < ports.size(); i++) {
-        Port port = ports.get(i);
+        SocketLinkListener port = ports.get(i);
 
         try {
           if (port != _clusterPort)
@@ -2550,7 +2583,7 @@ public class Server extends ProtocolDispatchServer
       return _server.getId();
     }
 
-    private int getPort(Port port)
+    private int getPort(SocketLinkListener port)
     {
       if (port == null)
         return 0;
@@ -2558,7 +2591,7 @@ public class Server extends ProtocolDispatchServer
       return port.getPort();
     }
 
-    private String getAddress(Port port)
+    private String getAddress(SocketLinkListener port)
     {
       if (port == null)
         return null;
@@ -2571,12 +2604,12 @@ public class Server extends ProtocolDispatchServer
       return address;
     }
 
-    private Port getFirstPort(String protocol, boolean isSSL)
+    private SocketLinkListener getFirstPort(String protocol, boolean isSSL)
     {
       if (_ports == null)
         return null;
 
-      for (Port port : _ports) {
+      for (SocketLinkListener port : _ports) {
         if (protocol.equals(port.getProtocolName()) && (port.isSSL() == isSSL))
           return port;
       }

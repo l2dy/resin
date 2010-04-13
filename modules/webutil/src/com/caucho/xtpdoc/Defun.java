@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,7 +34,12 @@ import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 
+import java.util.HashSet;
+
 public class Defun extends Section {
+  private DefunParents _parents;
+  private DefunJavadoc _javadoc;
+
   public Defun(Document document)
   {
     super(document);
@@ -47,12 +52,81 @@ public class Defun extends Section {
     return s2;
   }
 
+  public DefunParents createParents()
+  {
+    _parents = new DefunParents(getDocument());
+    addItem(_parents);
+
+    return _parents;
+  }
+
+  public DefunPro createPro()
+  {
+    DefunPro pro = new DefunPro(this);
+    addItem(pro);
+
+    return pro;
+  }
+
+  public DefunJavadoc createJavadoc()
+  {
+    _javadoc = new DefunJavadoc(this);
+    addItem(_javadoc);
+
+    return _javadoc;
+  }
+
+  public DefunSchema createSchema()
+  {
+    DefunSchema schema = new DefunSchema(this);
+    addItem(schema);
+
+    return schema;
+  }
+
+  public DefunExamples createExamples()
+  {
+    DefunExamples examples = new DefunExamples(getDocument());
+    addItem(examples);
+
+    return examples;
+  }
+
+  public DefunExample createExample()
+  {
+    DefunExample example = new DefunExample(getDocument());
+    addItem(example);
+
+    return example;
+  }
+
+  public DefunAttributes createAttributes()
+  {
+    DefunAttributes attributes = new DefunAttributes(this);
+    addItem(attributes);
+
+    return attributes;
+  }
+
+  public DefunDescription createDescription()
+  {
+    DefunDescription description = new DefunDescription(getDocument());
+    addItem(description);
+
+    return description;
+  }
+
+  public DefunParents getParents()
+  {
+    return _parents;
+  }
+
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
   {
     out.writeCharacters("\n");
     out.writeStartElement("div");
-    out.writeAttribute("class", "s1");
+    out.writeAttribute("class", "s1 defun");
     
     out.writeStartElement("a");
     out.writeAttribute("name", getHref());

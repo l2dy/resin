@@ -12,17 +12,6 @@ options.
 
 <localtoc/>
 
-<s1 title="See Also">
-
-<ul>
-<li><a href="../reference/webapp-tags.xtp">web-app tags</a> defines all of the available
-tags for web-app configuration.</li>
-<li><a href="../reference/host-tags.xtp">host tags</a> defines all of the available
-tags for host configuration.</li>
-</ul>
-
-</s1>
-
 <s1 title="Custom web-app with .war file">
 
 <p>In this scenario, you want to configure a web-app with a
@@ -86,6 +75,35 @@ archive files should be placed, beyond the standard webapps directory.</p>
 &lt;/resin>
 </example>
 
+</s1>
+
+<s1 title="Startup and Redeploy Modes">
+<p>
+The startup-mode is used in a number of places to determine the behaviour of a resource when the server starts.
+</p>
+
+<p>
+The startup-mode has three values: "automatic", "lazy", and "manual".
+</p>
+
+<ul>
+  <li>automatic - starts the resource on server start (default)</li>
+  <li>lazy - starts the resource on the first use</li>
+  <li>manual - waits for JMX to start the resource</li>
+</ul>
+
+<p>
+The redeploy-mode is used in a number of places to determine the behaviour of a resource when it is replaced or modified while the server is running.
+</p>
+
+<p>
+The redeploy-mode has two values: "automatic", and "manual".
+</p>
+
+<ul>
+  <li>automatic - restarts the resource when it is modified (web.xml, *.class, *.war, etc).</li>
+  <li>manual - waits for JMX to restart the resource when changes occur.</li>
+</ul>
 </s1>
 
 <s1 title="web-app versioning">
@@ -160,7 +178,7 @@ As of Resin 4.0.0, it is now possible to deploy web applications remotely
 to a shared repository that is distributed across the cluster.  This feature
 allows you to deploy once to any triad server and have the application
 be updated automatically across the entire cluster.  When a new 
-<a href="dynamic-servers.xtp">dynamic server</a> joins the cluster, the
+<a href="cluster-overview.xtp">dynamic server</a> joins the cluster, the
 triad will populate it with these applications as well.
 </p>
 <p>

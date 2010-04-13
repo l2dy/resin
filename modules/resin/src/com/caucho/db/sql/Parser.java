@@ -32,6 +32,7 @@ import com.caucho.db.Database;
 import com.caucho.db.table.Column;
 import com.caucho.db.table.Table;
 import com.caucho.db.table.TableFactory;
+import com.caucho.inject.Module;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
@@ -42,6 +43,7 @@ import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+@Module
 public class Parser {
   private static final Logger log
     = Logger.getLogger(Parser.class.getName());
@@ -247,7 +249,7 @@ public class Parser {
     query.setFromItems(fromItems);
 
     token = scanToken();
-
+    
     int tailToken = token;
     int tailOffset = _parseIndex;
 
@@ -370,6 +372,8 @@ public class Parser {
 
     if (fromItem != null)
       fromItems.add(fromItem);
+    
+    int parenCount = 0;
 
     while (true) {
       token = scanToken();
@@ -384,8 +388,18 @@ public class Parser {
 	fromItems.add(fromItem);
 	continue;
       }
-      else if (token == '(' || token == ')')
-	continue;
+      else if (token == '(') {
+        parenCount++;
+        continue;
+      }
+      else if (token == ')') {
+        if (--parenCount < 0) {
+          _token = token;
+          break;
+        }
+        else
+          continue;
+      }
       else if (token != IDENTIFIER) {
 	_token = token;
 	break;
@@ -507,7 +521,7 @@ public class Parser {
     throws SQLException
   {
     String tableName = parseIdentifier();
-
+    
     if (tableName.equalsIgnoreCase("DUAL"))
       return null;
 
@@ -838,8 +852,11 @@ public class Parser {
       factory.addVarchar(name, 255);
     }
     else if (type.equalsIgnoreCase("decimal")
-	     || type.equalsIgnoreCase("numeric")) {
+             || type.equalsIgnoreCase("numeric")) {
       factory.addNumeric(name, length, scale);
+    }
+    else if (type.equalsIgnoreCase("identity")) {
+      factory.addIdentity(name);
     }
     else
       throw error(L.l("Unknown type {0}", type));

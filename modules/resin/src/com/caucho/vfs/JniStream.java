@@ -6,20 +6,19 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.L10N;
-
 import java.io.IOException;
 import java.io.InterruptedIOException;
+
+import com.caucho.inject.Module;
 
 /**
  * Stream using with JNI.
  */
+@Module
 public class JniStream extends StreamImpl {
-  private static final L10N L = new L10N(JniStream.class);
-
   private final static int INTERRUPT_EXN = -2;
   private final static int DISCONNECT_EXN = -3;
-  private final static int TIMEOUT_EXN = -4;
+  public final static int TIMEOUT_EXN = -4;
 
   private static NullPath NULL_PATH;
 
@@ -46,9 +45,10 @@ public class JniStream extends StreamImpl {
     _readException = null;
   }
 
+  @Override
   public boolean canRead()
   {
-    return _socket.getFd() != 0;
+    return ! _socket.isClosed();
   }
 
   public int read(byte []buf, int offset, int length)
@@ -62,7 +62,7 @@ public class JniStream extends StreamImpl {
       throw _readException;
 
     int result = _socket.read(buf, offset, length, -1);
-
+    
     if (result > 0) {
       _totalReadBytes += result;
       return result;
@@ -107,11 +107,13 @@ public class JniStream extends StreamImpl {
     return 0;
   }
 
+  @Override
   public boolean canWrite()
   {
-    return _socket.getFd() != 0;
+    return ! _socket.isClosed();
   }
 
+  @Override
   public void write(byte []buf, int offset, int length, boolean isEnd)
     throws IOException
   {
@@ -173,10 +175,12 @@ public class JniStream extends StreamImpl {
     _socket.close();
   }
 
+  /*
   public void finalize()
     throws IOException
   {
     close();
   }
+  */
 }
 

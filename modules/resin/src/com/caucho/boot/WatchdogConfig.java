@@ -31,12 +31,13 @@ package com.caucho.boot;
 
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.log.AbstractRolloverLog;
 import com.caucho.log.RotateStream;
+import com.caucho.network.listen.SocketLinkListener;
 import com.caucho.server.cluster.ProtocolPort;
-import com.caucho.server.connection.Port;
 import com.caucho.util.*;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -93,7 +94,7 @@ class WatchdogConfig
   private String _userName;
   private String _groupName;
 
-  private ArrayList<Port> _ports = new ArrayList<Port>();
+  private ArrayList<SocketLinkListener> _ports = new ArrayList<SocketLinkListener>();
   
   private long _shutdownWaitTime = 60000L;
 
@@ -155,6 +156,7 @@ class WatchdogConfig
       return _args.getJavaHome();
   }
   
+  @Configurable
   public void addJvmArg(String arg)
   {
     _jvmArgs.add(arg);
@@ -165,6 +167,15 @@ class WatchdogConfig
       _hasXss = true;
     else if (arg.startsWith("-Xmx"))
       _hasXmx = true;
+  }
+
+  @Configurable
+  public void addJvmArgLine(String argLine)
+  {
+    for (String arg : argLine.split("\\s+")) {
+      if (! "".equals(arg))
+        addJvmArg(arg);
+    }
   }
   
   public ArrayList<String> getJvmArgs()
@@ -201,7 +212,7 @@ class WatchdogConfig
   /**
    * Adds a custom-protocol port.
    */
-  public Port createProtocol()
+  public SocketLinkListener createProtocol()
     throws ConfigException
   {
     OpenPort port = new OpenPort();
@@ -214,7 +225,7 @@ class WatchdogConfig
   /**
    * Adds a watchdog managed port
    */
-  public void addOpenPort(Port port)
+  public void addOpenPort(SocketLinkListener port)
   {
     _ports.add(port);
   }
@@ -367,7 +378,7 @@ class WatchdogConfig
     return _args;
   }
 
-  Iterable<Port> getPorts()
+  Iterable<SocketLinkListener> getPorts()
   {
     return _ports;
   }

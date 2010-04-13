@@ -32,6 +32,7 @@ package com.caucho.config.inject;
 import com.caucho.config.*;
 import com.caucho.config.j2ee.*;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.reflect.BaseType;
 import com.caucho.util.*;
 
 import java.lang.annotation.*;
@@ -56,8 +57,8 @@ public class DecoratorEntry<X> {
 
   private Decorator<X> _decorator;
 
-  private ArrayList<Binding> _bindings
-    = new ArrayList<Binding>();
+  private ArrayList<QualifierBinding> _bindings
+    = new ArrayList<QualifierBinding>();
 
   private BaseType _delegateType;
 
@@ -68,11 +69,11 @@ public class DecoratorEntry<X> {
     _delegateType = delegateType;
 
     for (Annotation ann : decorator.getDelegateQualifiers()) {
-      _bindings.add(new Binding(ann));
+      _bindings.add(new QualifierBinding(ann));
     }
 
     if (_bindings.size() == 0)
-      _bindings.add(new Binding(CurrentLiteral.CURRENT));
+      _bindings.add(new QualifierBinding(CurrentLiteral.CURRENT));
   }
 
   public Decorator<X> getDecorator()
@@ -87,7 +88,7 @@ public class DecoratorEntry<X> {
 
   public boolean isMatch(Annotation []bindingAnn)
   {
-    for (Binding binding : _bindings) {
+    for (QualifierBinding binding : _bindings) {
       if (! isMatch(binding, bindingAnn)) {
         return false;
       }
@@ -96,7 +97,7 @@ public class DecoratorEntry<X> {
     return true;
   }
 
-  public boolean isMatch(Binding binding, Annotation []bindingAnn)
+  public boolean isMatch(QualifierBinding binding, Annotation []bindingAnn)
   {
     for (Annotation ann : bindingAnn) {
       if (binding.isMatch(ann))

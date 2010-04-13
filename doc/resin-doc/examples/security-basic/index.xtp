@@ -100,7 +100,7 @@ that is required.  In JSP/Servlet terminology, this is called <var>Declarative S
         
   &lt;resin:Allow url-pattern="/professors/*">
     &lt;resin:IfUserInRole role="professor"/>
-  &lt;/resin:Allow url-pattern="/professors/*">
+  &lt;/resin:Allow>
 
 &lt;/web-app>
 </example>
@@ -285,7 +285,7 @@ logout page is not cached by the browser.</p>
 
 <s1 title="Using XmlAuthenticator">
 <p>Resin provides an authenticator
-<a href="javadoc|com.caucho.http.security.XmlAuthenticator|"/> which is
+<a javadoc="com.caucho.http.security.XmlAuthenticator"/> which is
 useful for sites which have minimal security requirements.
 The developer places entries for users in the authenticator
 configuration, or in an xml file, or both.</p>

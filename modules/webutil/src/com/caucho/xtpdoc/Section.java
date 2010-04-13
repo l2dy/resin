@@ -46,7 +46,7 @@ public abstract class Section extends ContainerNode {
     this(document, "");
   }
 
-    public Section(Document document, String parentHref)
+  public Section(Document document, String parentHref)
   {
     super(document);
     _parentHref = parentHref;
@@ -126,12 +126,12 @@ public abstract class Section extends ContainerNode {
       char ch = href.charAt(i);
 
       switch (ch) {
-      case '<': case '>': case '(': case ')': case '?':
-	break;
-	
-      default:
-	sb.append(ch);
-	break;
+        case '<': case '>': case '(': case ')': case '?':
+          break;
+
+        default:
+          sb.append(ch);
+          break;
       }
     }
 
@@ -152,11 +152,12 @@ public abstract class Section extends ContainerNode {
     return list;
   }
 
+  /*
   public FormattedTextWithAnchors createDescription()
   {
     _description = new FormattedTextWithAnchors(getDocument());
     return _description;
-  }
+  }*/
 
   public BlockQuote createBlockquote()
   {
@@ -258,8 +259,8 @@ public abstract class Section extends ContainerNode {
 
   public FormattedTextWithAnchors createNote()
   {
-    FormattedTextWithAnchors note = new FormattedTextWithAnchors(getDocument());
-    addItem(new NamedText("Note", note));
+    Note note = new Note(getDocument());
+    addItem(note);
     return note;
   }
 
@@ -271,13 +272,6 @@ public abstract class Section extends ContainerNode {
     return warning;
   }
 
-  public FormattedText createParents()
-  {
-    FormattedText parents = new FormattedText(getDocument());
-    addItem(new NamedText("child of", parents));
-    return parents;
-  }
- 
   public FormattedText createDefault()
   {
     FormattedText def = new FormattedText(getDocument());
@@ -309,11 +303,11 @@ public abstract class Section extends ContainerNode {
       char ch = label.charAt(i);
 
       if (ch == ' ')
-	sb.append('-');
+        sb.append('-');
       else if (ch == '<' || ch == '>') {
       }
       else
-	sb.append(ch);
+        sb.append(ch);
     }
     
     label = sb.toString();

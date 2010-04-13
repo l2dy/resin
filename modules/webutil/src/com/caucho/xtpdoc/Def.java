@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,9 +47,17 @@ public class Def extends VerboseFormattedTextWithAnchors {
     _title = title;
   }
 
+  public String getCssClass()
+  {
+    return "definition";
+  }
+
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
   {
+    out.writeStartElement("div");
+    out.writeAttribute("class", getCssClass());
+
     if (_title != null) {
       out.writeStartElement("div");
       out.writeAttribute("class", "def-caption");
@@ -58,13 +66,15 @@ public class Def extends VerboseFormattedTextWithAnchors {
     }
 
     out.writeStartElement("div");
-    out.writeAttribute("class", "definition");
+    out.writeAttribute("class", "definition-body");
+
     out.writeStartElement("pre");
 
     super.writeHtml(out);
 
-    out.writeEndElement();
-    out.writeEndElement();
+    out.writeEndElement(); // pre
+    out.writeEndElement(); // div
+    out.writeEndElement(); // div
   }
 
   public void writeLaTeX(PrintWriter out)

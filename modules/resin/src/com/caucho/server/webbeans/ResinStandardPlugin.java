@@ -29,6 +29,9 @@
 
 package com.caucho.server.webbeans;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.ejb.MessageDriven;
 import javax.ejb.Singleton;
 import javax.ejb.Stateful;
@@ -39,6 +42,7 @@ import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Extension;
 import javax.enterprise.inject.spi.ProcessAnnotatedType;
+import javax.enterprise.inject.spi.ProcessBean;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.AbstractBean;
@@ -47,7 +51,10 @@ import com.caucho.config.inject.ProcessBeanImpl;
 import com.caucho.ejb.inject.EjbGeneratedBean;
 import com.caucho.ejb.manager.EjbContainer;
 import com.caucho.hemp.broker.HempBroker;
+import com.caucho.inject.Jndi;
+import com.caucho.inject.MBean;
 import com.caucho.jms.JmsMessageListener;
+import com.caucho.jmx.Jmx;
 import com.caucho.remote.BamService;
 import com.caucho.server.admin.AdminService;
 import com.caucho.server.cluster.Server;
@@ -58,12 +65,22 @@ import com.caucho.util.L10N;
  */
 public class ResinStandardPlugin implements Extension {
   private static final L10N L = new L10N(ResinStandardPlugin.class);
+  private static final Logger log
+    = Logger.getLogger(ResinStandardPlugin.class.getName());
 
-  public ResinStandardPlugin(InjectManager manager) {
-    Thread.currentThread().getContextClassLoader();
+  private InjectManager _injectManager;
+  
+  public ResinStandardPlugin(InjectManager manager) 
+  {
+    _injectManager = manager;
   }
 
-  public <T> void processAnnotatedType(@Observes ProcessAnnotatedType<T> event) {
+  /**
+   * Callback for discovered annotated types. EJBs are dispatched to
+   * EJB and disabled for normal processing.
+   */
+  public <T> void processAnnotatedType(@Observes ProcessAnnotatedType<T> event) 
+  {
     AnnotatedType<T> annotatedType = event.getAnnotatedType();
 
     if (annotatedType == null)
@@ -76,15 +93,16 @@ public class ResinStandardPlugin implements Extension {
         && (annotatedType.isAnnotationPresent(Stateful.class)
             || annotatedType.isAnnotationPresent(Stateless.class)
             || annotatedType.isAnnotationPresent(Singleton.class)
-            || annotatedType.isAnnotationPresent(MessageDriven.class) || annotatedType
-            .isAnnotationPresent(JmsMessageListener.class))) {
+            || annotatedType.isAnnotationPresent(MessageDriven.class)
+            || annotatedType.isAnnotationPresent(JmsMessageListener.class))) {
       EjbContainer ejbContainer = EjbContainer.create();
       ejbContainer.createBean(annotatedType, null);
       event.veto();
     }
   }
 
-  public <T> void processBean(@Observes ProcessBeanImpl<T> event) {
+  public <T> void processBean(@Observes ProcessBeanImpl<T> event) 
+  {
     Annotated annotated = event.getAnnotated();
     Bean<T> bean = event.getBean();
 
@@ -105,7 +123,45 @@ public class ResinStandardPlugin implements Extension {
 
       if (annType != null) {
         ejbContainer.createBean(annType, absBean.getInjectionTarget());
-        event.veto();
+        
+        if (event instanceof ProcessBeanImpl)
+          ((ProcessBeanImpl) event).veto();
+      }
+    }
+    
+    if (annotated.isAnnotationPresent(Jndi.class)) {
+      Jndi jndi = annotated.getAnnotation(Jndi.class);
+      String jndiName = jndi.value();
+      
+      if ("".equals(jndiName)) {
+        jndiName = bean.getBeanClass().getSimpleName();
+      }
+      
+      JndiBeanProxy<T> proxy = new JndiBeanProxy<T>(_injectManager, bean);
+      
+      if (log.isLoggable(Level.FINE))
+        log.fine("bind to JNDI '" + jndiName + "' for " + bean);
+                 
+      try {
+        com.caucho.naming.Jndi.bindDeepShort(jndiName, proxy);
+      } catch (Exception e) {
+        log.log(Level.FINE, e.toString(), e);
+      }
+    }
+    
+    if (annotated.isAnnotationPresent(MBean.class)) {
+      MBean manage = annotated.getAnnotation(MBean.class);
+      
+      String mbeanName = manage.value();
+      if ("".equals(mbeanName))
+        mbeanName = "type=" + bean.getBeanClass().getSimpleName();
+      
+      AnnotatedType<?> annType = (AnnotatedType<?>) annotated;
+      
+      try {
+        Jmx.register(new BeanMBean(_injectManager, bean, annType), mbeanName);
+      } catch (Exception e) {
+        log.log(Level.FINE, e.toString(), e);
       }
     }
 
@@ -138,7 +194,8 @@ public class ResinStandardPlugin implements Extension {
   }
 
   @Override
-  public String toString() {
+  public String toString()
+  {
     return getClass().getSimpleName() + "[]";
   }
 }

@@ -32,7 +32,6 @@ package com.caucho.vfs;
 import java.io.IOException;
 import java.net.InetAddress;
 
-import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.JniTroubleshoot;
 import com.caucho.util.L10N;
 
@@ -45,6 +44,8 @@ public class JniServerSocketImpl extends QServerSocket {
 
   private long _fd;
   private String _id;
+  
+  private String _host;
 
   /**
    * Creates the new server socket.
@@ -55,6 +56,8 @@ public class JniServerSocketImpl extends QServerSocket {
     _fd = bindPort(host, port);
 
     _id = host + ":" + port;
+    
+    _host = host;
 
     if (_fd == 0)
       throw new IOException(L.l("Socket bind failed for {0}:{1} while running as {2}.  Check for other processes listening to the port and check for permissions (root on unix).",
@@ -175,13 +178,7 @@ public class JniServerSocketImpl extends QServerSocket {
     if (_fd == 0)
       throw new IOException("accept from closed socket");
 
-    if (nativeAccept(_fd, jniSocket.getFd())) {
-      jniSocket.initFd();
-
-      return true;
-    }
-    else
-      return false;
+    return jniSocket.accept(_fd);
   }
 
   /**
@@ -198,7 +195,10 @@ public class JniServerSocketImpl extends QServerSocket {
   public InetAddress getLocalAddress()
   {
     try {
-      return InetAddress.getLocalHost();
+      if (_host != null)
+        return InetAddress.getByName(_host);
+      else
+        return InetAddress.getLocalHost();
     } catch (Exception e) {
       return null;
     }
@@ -238,12 +238,16 @@ public class JniServerSocketImpl extends QServerSocket {
     return getClass().getSimpleName() + "[" + _id + "]";
   }
 
+  @Override
   public void finalize()
+    throws Throwable
   {
     try {
       close();
     } catch (Throwable e) {
     }
+    
+    super.finalize();
   }
 
   /**
@@ -265,12 +269,6 @@ public class JniServerSocketImpl extends QServerSocket {
    * Sets the listen backlog
    */
   native void nativeListen(long fd, int listen);
-
-  /**
-   * Accepts a new connection from the accept socket.
-   */
-  private native boolean nativeAccept(long fd, long connFd)
-    throws IOException;
 
   /**
    * Returns the server's local port.

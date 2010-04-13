@@ -227,11 +227,6 @@ std_read(connection_t *conn, char *buf, int len, int timeout)
     return result;
   }
   else {
-    conn->is_read_shutdown = 1;
-#ifndef WIN32
-    shutdown(fd, SHUT_RD);
-#endif
-
     return read_exception_status(conn, errno);
   }
 }
@@ -327,7 +322,7 @@ std_accept(server_socket_t *ss, connection_t *conn)
   int fd;
   int sock = -1;
   char sin_data[256];
-  struct sockaddr *sin = (struct sockaddr *) sin_data;
+  struct sockaddr *sin = (struct sockaddr *) &sin_data;
   unsigned int sin_len;
   int tcp_no_delay = 1;
   int poll_result;
@@ -341,8 +336,9 @@ std_accept(server_socket_t *ss, connection_t *conn)
   if (fd < 0)
     return 0;
 
+  memset(sin_data, 0, sizeof(sin_data));
+  sin = (struct sockaddr *) &sin_data;
   sin_len = sizeof(sin_data);
-  memset(sin, 0, sin_len);
 
 #ifdef WIN32
   WaitForSingleObject(ss->accept_lock, INFINITE);
@@ -363,7 +359,7 @@ std_accept(server_socket_t *ss, connection_t *conn)
     sock = accept(fd, sin, &sin_len);
   */
   sock = accept(fd, sin, &sin_len);
-  
+
 #ifdef WIN32
   ReleaseMutex(ss->accept_lock);
 #endif
@@ -402,12 +398,12 @@ std_accept(server_socket_t *ss, connection_t *conn)
   conn->fd = sock;
   conn->sock = 0;
   conn->ops = &std_ops;
-  conn->client_sin = conn->client_data;
+  conn->client_sin = (struct sockaddr *) &conn->client_data;
   memcpy(conn->client_sin, sin, sizeof(conn->client_data));
   conn->is_init = 0;
-  sin_len = sizeof(conn->server_data);
 
-  conn->server_sin = conn->server_data;
+  conn->server_sin = (struct sockaddr *) &conn->server_data;
+  sin_len = sizeof(conn->server_data);
   getsockname(sock, conn->server_sin, &sin_len);
 
   conn->ssl_cipher = 0;

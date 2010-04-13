@@ -43,15 +43,15 @@ import javax.enterprise.context.spi.CreationalContext;
 
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.types.RawString;
+import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.Environment;
+import com.caucho.network.listen.StreamSocketLink;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.ClusterServer;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.StreamConnection;
 import com.caucho.server.host.Host;
 import com.caucho.server.host.HostConfig;
 import com.caucho.server.http.HttpRequest;
@@ -511,7 +511,7 @@ public class ResinEmbed
    * Test HTTP connection
    */
   private class TestConnection {
-    StreamConnection _conn;
+    StreamSocketLink _conn;
     HttpRequest _request;
     VfsStream _vfsStream;
     ReadStream _readStream;
@@ -524,7 +524,7 @@ public class ResinEmbed
 
     TestConnection()
     {
-      _conn = new StreamConnection();
+      _conn = new StreamSocketLink();
       // _conn.setVirtualHost(_virtualHost);
 
       _request = new HttpRequest(_resin.getServer(), _conn);

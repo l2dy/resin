@@ -29,14 +29,6 @@
 
 package com.caucho.db.sql;
 
-import com.caucho.db.block.Block;
-import com.caucho.db.jdbc.GeneratedKeysResultSet;
-import com.caucho.db.table.TableIterator;
-import com.caucho.db.xa.Transaction;
-import com.caucho.util.FreeList;
-import com.caucho.util.L10N;
-
-import java.io.IOException;
 import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.HashMap;
@@ -44,9 +36,19 @@ import java.util.Iterator;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.db.block.Block;
+import com.caucho.db.jdbc.GeneratedKeysResultSet;
+import com.caucho.db.table.TableIterator;
+import com.caucho.db.table.Column.ColumnType;
+import com.caucho.db.xa.Transaction;
+import com.caucho.inject.Module;
+import com.caucho.util.FreeList;
+import com.caucho.util.L10N;
+
 /**
  * Represents the state of the query at any particular time.
  */
+@Module
 public class QueryContext {
   private static final Logger log
     = Logger.getLogger(QueryContext.class.getName());
@@ -484,7 +486,7 @@ public class QueryContext {
     return _parameters[index - 1].getBytes();
   }
 
-  public int getType(int index)
+  public ColumnType getType(int index)
   {
     return _parameters[index - 1].getType();
   }

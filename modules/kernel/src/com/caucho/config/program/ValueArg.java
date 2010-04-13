@@ -31,11 +31,11 @@ package com.caucho.config.program;
 
 import com.caucho.config.*;
 import com.caucho.config.annotation.StartupType;
-import com.caucho.config.inject.AnnotatedTypeImpl;
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.*;
+import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.type.*;
+import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.util.*;
 import com.caucho.xml.QName;
 
@@ -81,7 +81,7 @@ public class ValueArg<T> extends Arg<T> {
       HashSet<Annotation> bindings = new HashSet<Annotation>();
       
       try {
-	_bean = (Bean<T>) _beanManager.resolveByInjectionPoint(_type, bindings);
+	_bean = (Bean<T>) _beanManager.resolveByInjectionPoint(_type, bindings, null);
       } catch (RuntimeException e) {
 	_bindException = e;
       }

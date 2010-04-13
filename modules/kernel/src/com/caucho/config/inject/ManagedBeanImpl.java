@@ -66,26 +66,21 @@ import com.caucho.config.program.BeanArg;
 import com.caucho.config.timer.ScheduleIntrospector;
 import com.caucho.config.timer.TimeoutCaller;
 import com.caucho.config.timer.TimerTask;
+import com.caucho.inject.Module;
 import com.caucho.util.L10N;
 
 /**
  * SimpleBean represents a POJO Java bean registered as a WebBean.
  */
+@Module
 public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   implements ScopeAdapterBean<X>
 {
   private static final L10N L = new L10N(ManagedBeanImpl.class);
-  private static final Logger log
-    = Logger.getLogger(ManagedBeanImpl.class.getName());
-
-  private static final Object []NULL_ARGS = new Object[0];
-
+  
   private AnnotatedType<X> _annotatedType;
 
   private InjectionTarget<X> _injectionTarget;
-
-  private Set<InjectionPoint> _injectionPointSet
-    = new LinkedHashSet<InjectionPoint>();
 
   private HashSet<Bean<?>> _producerBeans
     = new LinkedHashSet<Bean<?>>();
@@ -93,8 +88,6 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   private HashSet<ObserverMethodImpl<X,?>> _observerMethods
     = new LinkedHashSet<ObserverMethodImpl<X,?>>();
 
-  private Class<X> _instanceClass;
-  private boolean _isBound;
   private Object _scopeAdapter;
 
   public ManagedBeanImpl(InjectManager webBeans,
@@ -121,11 +114,13 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     _injectionTarget = injectionTarget;
   }
 
+  @Override
   public AnnotatedType<X> getAnnotatedType()
   {
     return _annotatedType;
   }
 
+  @Override
   public InjectionTarget<X> getInjectionTarget()
   {
     return _injectionTarget;
@@ -144,7 +139,8 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   {
     X instance = _injectionTarget.produce(context);
 
-    context.push(instance);
+    if (context != null)
+      context.push(instance);
 
     _injectionTarget.inject(instance, context);
     _injectionTarget.postConstruct(instance);
@@ -153,7 +149,7 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   }
 
   @Override
-  public X getScopeAdapter(CreationalContext<X> cxt)
+  public X getScopeAdapter(Bean<?> topBean, CreationalContext<X> cxt)
   {
     NormalScope scopeType = getScope().getAnnotation(NormalScope.class);
 
@@ -167,7 +163,7 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
 
       if (value == null) {
         ScopeAdapter scopeAdapter = ScopeAdapter.create(getBaseType().getRawClass());
-        _scopeAdapter = scopeAdapter.wrap(getBeanManager(), this);
+        _scopeAdapter = scopeAdapter.wrap(getBeanManager(), topBean);
         value = _scopeAdapter;
       }
 
@@ -175,6 +171,18 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     }
 
     return null;
+  }
+  
+  protected boolean isProxiedScope()
+  {
+    NormalScope scopeType = getScope().getAnnotation(NormalScope.class);
+    
+    if (scopeType != null
+        && ! getScope().equals(ApplicationScoped.class)) {
+      return true;
+    }
+    else
+      return false;
   }
 
   public Object getScopeAdapter()
@@ -219,18 +227,11 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
     getInjectionTarget().preDestroy(instance);
   }
 
-  /**
-   * Returns the injection points.
-   */
-  public Set<InjectionPoint> getInjectionPoints()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
   //
   // introspection
   //
 
+  @Override
   public void introspect()
   {
     super.introspect();
@@ -243,7 +244,8 @@ public class ManagedBeanImpl<X> extends InjectionTargetImpl<X>
   /**
    * Called for implicit introspection.
    */
-  public void introspect(AnnotatedType beanType)
+  @Override
+  public void introspect(AnnotatedType<X> beanType)
   {
     super.introspect(beanType);
 

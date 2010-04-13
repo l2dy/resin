@@ -42,6 +42,11 @@ public class Text implements ContentItem {
     _text = text;
   }
 
+  public String getText()
+  {
+    return _text;
+  }
+
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
   {
@@ -64,5 +69,10 @@ public class Text implements ContentItem {
     throws IOException
   {
     writeLaTeX(out);
+  }
+
+  public String toString()
+  {
+    return "Text[" + _text + "]";
   }
 }

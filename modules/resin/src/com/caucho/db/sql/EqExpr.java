@@ -31,8 +31,11 @@ package com.caucho.db.sql;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.logging.Logger;
 
+import com.caucho.db.table.Column.ColumnType;
+import com.caucho.inject.Module;
+
+@Module
 final class EqExpr extends Expr {
   private final Expr _left;
   private final Expr _right;
@@ -53,6 +56,7 @@ final class EqExpr extends Expr {
     _right = right;
   }
 
+  @Override
   public Expr bind(Query query)
     throws SQLException
   {
@@ -74,9 +78,9 @@ final class EqExpr extends Expr {
       return new LongEqExpr(newLeft, newRight);
 
     if (newLeft.isDouble() && (newRight.isDouble() || newRight.isParam()))
-        return new DoubleEqExpr(newLeft, newRight);
+      return new DoubleEqExpr(newLeft, newRight);
     if (newRight.isDouble() && (newLeft.isDouble() || newLeft.isParam()))
-        return new DoubleEqExpr(newLeft, newRight);
+      return new DoubleEqExpr(newLeft, newRight);
 
     if (_left == newLeft && _right == newRight)
       return this;
@@ -87,13 +91,18 @@ final class EqExpr extends Expr {
   /**
    * Returns an index expression if available.
    */
-  public IndexExpr getIndexExpr(FromItem item)
+  @Override
+  public RowIterateExpr getIndexExpr(FromItem item)
   {
     if (_left instanceof IdExpr) {
       IdExpr expr = (IdExpr) _left;
 
-      if (expr.getColumn().getIndex() != null &&
-          item == expr.getFromItem()) {
+      if (item != expr.getFromItem()) {
+      }
+      else if (expr.getColumn().getTypeCode() == ColumnType.IDENTITY) {
+        return new IdentityIndexExpr(expr, _right);
+      }
+      else if (expr.getColumn().getIndex() != null) {
         return new IndexExpr(expr, _right);
       }
     }
@@ -101,8 +110,12 @@ final class EqExpr extends Expr {
     if (_right instanceof IdExpr) {
       IdExpr expr = (IdExpr) _right;
 
-      if (expr.getColumn().getIndex() != null &&
-          item == expr.getFromItem()) {
+      if (item != expr.getFromItem()) {
+      }
+      else if (expr.getColumn().getTypeCode() == ColumnType.IDENTITY) {
+        return new IdentityIndexExpr(expr, _left);
+      }
+      else if (expr.getColumn().getIndex() != null) {
         return new IndexExpr(expr, _left);
       }
     }
@@ -113,7 +126,8 @@ final class EqExpr extends Expr {
   /**
    * Returns the type of the expression.
    */
-  public Class getType()
+  @Override
+  public Class<?> getType()
   {
     return boolean.class;
   }
@@ -121,6 +135,7 @@ final class EqExpr extends Expr {
   /**
    * Returns the cost based on the given FromList.
    */
+  @Override
   public long cost(ArrayList<FromItem> fromList)
   {
     if (_left instanceof UnboundIdentifierExpr
@@ -143,6 +158,7 @@ final class EqExpr extends Expr {
   /**
    * Returns the cost based on a subitem.
    */
+  @Override
   public long subCost(ArrayList<FromItem> fromList)
   {
     return _left.subCost(fromList) + _right.subCost(fromList);
@@ -151,6 +167,7 @@ final class EqExpr extends Expr {
   /**
    * Evaluates the expression for nulls
    */
+  @Override
   public boolean isNull(QueryContext context)
     throws SQLException
   {
@@ -160,6 +177,7 @@ final class EqExpr extends Expr {
   /**
    * Evaluates the expression as a boolean.
    */
+  @Override
   public int evalBoolean(QueryContext context)
     throws SQLException
   {
@@ -181,7 +199,7 @@ final class EqExpr extends Expr {
     else {
       String leftValue = _left.evalString(context);
       String rightValue = _right.evalString(context);
-
+      
       if (leftValue == rightValue || leftValue.equals(rightValue))
         return TRUE;
       else
@@ -189,6 +207,7 @@ final class EqExpr extends Expr {
     }
   }
 
+  @Override
   public String evalString(QueryContext context)
     throws SQLException
   {
@@ -200,6 +219,7 @@ final class EqExpr extends Expr {
    *
    * @param state the current database tuple
    */
+  @Override
   public void evalGroup(QueryContext context)
     throws SQLException
   {

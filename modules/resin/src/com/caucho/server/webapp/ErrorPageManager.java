@@ -349,7 +349,7 @@ public class ErrorPageManager {
         title = "404 Not Found";
 
         if (location == null)
-          location = getErrorPage(response.SC_NOT_FOUND);
+          location = getErrorPage(HttpServletResponse.SC_NOT_FOUND);
       }
       else {
         response.setStatus(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
@@ -360,7 +360,7 @@ public class ErrorPageManager {
                                 unAvail.getUnavailableSeconds());
 
         if (location == null)
-          location = getErrorPage(response.SC_SERVICE_UNAVAILABLE);
+          location = getErrorPage(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
       }
     }
     /*
@@ -379,8 +379,11 @@ public class ErrorPageManager {
 
     if (log.isLoggable(Level.FINER))
       log.log(level, e.toString(), e);
-    else if (isCompileException)
+    else if (isCompileException) {
+      level = location == null ? Level.WARNING : Level.INFO;
+      
       log.log(level, compileException.getMessage());
+    }
     else if (! doStackTrace)
       log.log(level, rootExn.toString());
     else
@@ -465,8 +468,6 @@ public class ErrorPageManager {
       }
 
       if (compileException instanceof DisplayableException) {
-        DisplayableException dispExn = (DisplayableException) compileException;
-
         // ioc/0000
         // XXX: dispExn.print doesn't normalize user.name
         // dispExn.print(out);
@@ -528,7 +529,7 @@ public class ErrorPageManager {
       out.println("of this problem.</p>");
 
       out.println("<pre><code>");
-      out.println("Date: " + new QDate().formatISO8601(Alarm.getCurrentTime()));
+      out.println("Date: " + QDate.formatISO8601(Alarm.getCurrentTime()));
       if (Resin.getCurrent() != null)
         out.println("Server: '" + Resin.getCurrent().getServerId() + "'");
 
@@ -624,7 +625,7 @@ public class ErrorPageManager {
         out.print("<head><title>");
         out.print(code);
         out.print(" ");
-        out.print(message);
+        out.print(escapeHtml(message));
         out.println("</title></head>");
       }
 
@@ -632,7 +633,7 @@ public class ErrorPageManager {
       out.print("<h1>");
       out.print(code);
       out.print(" ");
-      out.print(message);
+      out.print(escapeHtml(message));
       out.println("</h1>");
 
       if (code == HttpServletResponse.SC_NOT_FOUND) {

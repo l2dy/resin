@@ -34,7 +34,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -52,17 +51,17 @@ import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.inject.Module;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentEnhancerListener;
-import com.caucho.loader.EnvironmentListener;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.loader.enhancer.ScanClass;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.loader.enhancer.ScanMatch;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.IoUtil;
-import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.Vfs;
@@ -70,10 +69,10 @@ import com.caucho.vfs.Vfs;
 /**
  * Manages the JPA persistence contexts.
  */
+@Module
 public class ManagerPersistence 
   implements ScanListener, EnvironmentEnhancerListener
 {
-  private static final L10N L = new L10N(ManagerPersistence.class);
   private static final Logger log
     = Logger.getLogger(ManagerPersistence.class.getName());
 
@@ -520,9 +519,10 @@ public class ManagerPersistence
   //
 
   /**
-   * Since Amber enhances it's priority 0
+   * Since JPA enhances, it is priority 0
    */
-  public int getPriority()
+  @Override
+  public int getScanPriority()
   {
     return 0;
   }
@@ -530,19 +530,23 @@ public class ManagerPersistence
   /**
    * Returns true if the root is a valid scannable root.
    */
+  @Override
   public boolean isRootScannable(Path root)
   {
-    if (root.lookup("META-INF/persistence.xml").canRead())
+    if (root.lookup("META-INF/persistence.xml").canRead()) {
       _pendingRootList.add(root);
+    }
 
     return false;
   }
 
-  public ScanMatch isScanMatchClass(String className, int modifiers)
+  @Override
+  public ScanClass scanClass(Path root, String className, int modifiers)
   {
-    return ScanMatch.DENY;
+    return null;
   }
 
+  @Override
   public boolean isScanMatchAnnotation(CharBuffer annotationName)
   {
     return false;
@@ -551,6 +555,7 @@ public class ManagerPersistence
   /**
    * Callback to note the class matches
    */
+  @Override
   public void classMatchEvent(EnvironmentClassLoader loader, 
                               Path root,
                               String className)

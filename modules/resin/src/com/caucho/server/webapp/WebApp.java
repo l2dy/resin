@@ -49,12 +49,16 @@ import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.loader.enhancer.AbstractScanClass;
+import com.caucho.loader.enhancer.ScanClass;
 import com.caucho.loader.enhancer.ScanMatch;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.make.AlwaysModified;
 import com.caucho.make.DependencyContainer;
 import com.caucho.management.server.HostMXBean;
 import com.caucho.naming.Jndi;
+import com.caucho.network.listen.ProtocolConnection;
+import com.caucho.network.listen.TcpSocketLink;
 import com.caucho.rewrite.RewriteFilter;
 import com.caucho.rewrite.DispatchRule;
 import com.caucho.rewrite.RedirectSecure;
@@ -63,8 +67,6 @@ import com.caucho.rewrite.Not;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.ProtocolConnection;
-import com.caucho.server.connection.TcpConnection;
 import com.caucho.server.deploy.DeployContainer;
 import com.caucho.server.deploy.DeployGenerator;
 import com.caucho.server.deploy.EnvironmentDeployInstance;
@@ -112,6 +114,7 @@ import java.util.regex.Matcher;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.lang.reflect.Modifier;
 import java.net.URL;
 
 /**
@@ -132,6 +135,9 @@ public class WebApp extends ServletContextImpl
   private static final int JSP_NONE = 0;
   private static final int JSP_1 = 1;
   private static final int JSP_2 = 2;
+  
+  private static final char []SERVLET_ANNOTATION
+    = "javax.servlet.annotation.".toCharArray();
 
   private static EnvironmentLocal<AbstractAccessLog> _accessLogLocal
     = new EnvironmentLocal<AbstractAccessLog>("caucho.server.access-log");
@@ -271,7 +277,7 @@ public class WebApp extends ServletContextImpl
     = new HashMap<String,String>();
 
   // List of all the listeners.
-  private ArrayList<Listener> _listeners = new ArrayList<Listener>();
+  private ArrayList<ListenerConfig> _listeners = new ArrayList<ListenerConfig>();
 
   // List of the ServletContextListeners from the configuration file
   private ArrayList<ServletContextListener> _webAppListeners
@@ -1898,7 +1904,7 @@ public class WebApp extends ServletContextImpl
   }
 
   @Configurable
-  public void addListener(Listener listener)
+  public void addListener(ListenerConfig listener)
     throws Exception
   {
     if (! hasListener(listener.getListenerClass())) {
@@ -1916,7 +1922,7 @@ public class WebApp extends ServletContextImpl
   public boolean hasListener(Class listenerClass)
   {
     for (int i = 0; i < _listeners.size(); i++) {
-      Listener listener = _listeners.get(i);
+      ListenerConfig listener = _listeners.get(i);
 
       if (listenerClass.equals(listener.getListenerClass()))
         return true;
@@ -2482,7 +2488,7 @@ public class WebApp extends ServletContextImpl
 
   public static ServletRequest getThreadRequest()
   {
-    ProtocolConnection serverRequest = TcpConnection.getCurrentRequest();
+    ProtocolConnection serverRequest = TcpSocketLink.getCurrentRequest();
 
     if (serverRequest instanceof ServletRequest)
       return (ServletRequest) serverRequest;
@@ -2623,11 +2629,6 @@ public class WebApp extends ServletContextImpl
           validator.validate();
         }
       }
-
-      callInitializers();
-
-      //Servlet 3.0
-      initAnnotated();
     } finally {
       _lifecycle.toInit();
     }
@@ -2904,7 +2905,7 @@ public class WebApp extends ServletContextImpl
         = listenerClass.getAnnotation(WebListener.class);
 
       if (webListener != null) {
-        Listener listener = new Listener();
+        ListenerConfig listener = new ListenerConfig();
         listener.setListenerClass(listenerClass);
 
         addListener(listener);
@@ -2989,9 +2990,14 @@ public class WebApp extends ServletContextImpl
 
       _jspApplicationContext.addELResolver(new WebBeansELResolver());
 
+      callInitializers();
+
+      //Servlet 3.0
+      initAnnotated();
+
       ServletContextEvent event = new ServletContextEvent(this);
 
-      for (Listener listener : _listeners) {
+      for (ListenerConfig listener : _listeners) {
         try {
           addListenerObject(listener.createListenerObject(), false);
         } catch (Exception e) {
@@ -3029,6 +3035,8 @@ public class WebApp extends ServletContextImpl
       clearCache();
 
       isOkay = true;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
     } finally {
       if (! isOkay)
         _lifecycle.toError();
@@ -4003,7 +4011,7 @@ public class WebApp extends ServletContextImpl
 
       // server/10g8 -- webApp listeners after session
       for (int i = _listeners.size() - 1; i >= 0; i--) {
-        Listener listener = _listeners.get(i);
+        ListenerConfig listener = _listeners.get(i);
 
         try {
           listener.destroy();
@@ -4092,7 +4100,7 @@ public class WebApp extends ServletContextImpl
     return _status500LastTime;
   }
 
-  public int getPriority()
+  public int getScanPriority()
   {
     return 2;
   }
@@ -4102,9 +4110,13 @@ public class WebApp extends ServletContextImpl
     return true;
   }
 
-  public ScanMatch isScanMatchClass(String name, int modifiers)
+  @Override
+  public ScanClass scanClass(Path root, String name, int modifiers)
   {
-    return ScanMatch.DENY;
+    if (Modifier.isPublic(modifiers))
+      return new WebScanClass(name);
+    else
+      return null;
   }
 
   public boolean isScanMatchAnnotation(CharBuffer string)
@@ -4192,6 +4204,41 @@ public class WebApp extends ServletContextImpl
     boolean isAsyncSupported() {
       return _isAsyncSupported;
     }
+  }
+  
+  class WebScanClass extends AbstractScanClass {
+    private String _className;
+    private boolean _isValid;
+    
+    WebScanClass(String className)
+    {
+      _className = className;
+    }
+    
+    @Override
+    public void addClassAnnotation(char [] buffer, int offset, int length)
+    {
+      if (length < SERVLET_ANNOTATION.length)
+        return;
+      
+      for (int i = SERVLET_ANNOTATION.length - 1; i >= 0; i--) {
+        if (buffer[offset + i] != SERVLET_ANNOTATION[i])
+          return;
+      }
+      
+      _isValid = true;      
+    }
+
+    /**
+     * Complete scan processing.
+     */
+    @Override
+    public void finishScan()
+    {
+      if (_isValid) {
+        _pendingClasses.add(_className);
+      }
+  }    
   }
 
   static {

@@ -56,9 +56,9 @@ import com.caucho.hessian.io.Hessian2StreamingInput;
 import com.caucho.hessian.io.HessianDebugInputStream;
 import com.caucho.hmtp.HmtpReader;
 import com.caucho.hmtp.HmtpWriter;
+import com.caucho.network.listen.ProtocolConnection;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.TransportConnection;
-import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.http.AbstractHttpRequest;
 import com.caucho.server.http.AbstractResponseStream;
@@ -272,7 +272,7 @@ public class HmuxRequest extends AbstractHttpRequest
   private ErrorPageManager _errorManager = new ErrorPageManager(null);
 
   public HmuxRequest(Server server,
-                     TransportConnection conn,
+                     SocketLink conn,
                      HmuxProtocol protocol)
   {
     super(server, conn);
@@ -322,7 +322,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   protected HmuxResponse createResponse()
   {
-    return new HmuxResponse(this, _conn.getWriteStream());
+    return new HmuxResponse(this, getConnection().getWriteStream());
   }
 
   public boolean isWaitForRead()
@@ -387,7 +387,7 @@ public class HmuxRequest extends AbstractHttpRequest
     if (log.isLoggable(Level.FINE))
       log.fine(dbgId() + "start request");
 
-    _filter.init(this, _rawRead, _rawWrite);
+    _filter.init(this, getRawRead(), getRawWrite());
 
     try {
       HttpBufferStore httpBuffer = HttpBufferStore.allocate((Server) _server);
@@ -398,7 +398,7 @@ public class HmuxRequest extends AbstractHttpRequest
       return handleInvocation();
     } finally {
       if (! _hasRequest)
-        _response.setHeaderWritten(true);
+        getResponse().setHeaderWritten(true);
 
       if (_brokerStream == null) {
         finishInvocation();
@@ -417,8 +417,10 @@ public class HmuxRequest extends AbstractHttpRequest
       // cluster/6610 - hmtp mode doesn't close the stream.
       if (_brokerStream == null) {
         try {
-          _readStream.setDisableClose(false);
-          _readStream.close();
+          ReadStream is = getReadStream();
+
+          is.setDisableClose(false);
+          is.close();
         } catch (Exception e) {
           killKeepalive();
           log.log(Level.FINE, dbgId() + e, e);
@@ -433,7 +435,7 @@ public class HmuxRequest extends AbstractHttpRequest
     try {
       _hasRequest = false;
 
-      if (! scanHeaders() || ! _conn.isPortActive()) {
+      if (! scanHeaders() || ! getConnection().isPortActive()) {
         _hasRequest = false;
         killKeepalive();
         return false;
@@ -453,12 +455,16 @@ public class HmuxRequest extends AbstractHttpRequest
     _hasRequest = true;
     // setStartDate();
 
-    if (_server == null || _server.isDestroyed()) {
+    Server server = getServer();
+
+    if (server == null || server.isDestroyed()) {
       log.fine(dbgId() + "server is closed");
 
+      ReadStream is = getRawRead();
+
       try {
-        _readStream.setDisableClose(false);
-        _readStream.close();
+        is.setDisableClose(false);
+        is.close();
       } catch (Exception e) {
       }
 
@@ -537,10 +543,11 @@ public class HmuxRequest extends AbstractHttpRequest
     try {
       CertificateFactory cf = CertificateFactory.getInstance("X.509");
       InputStream is = _clientCert.createInputStream();
-      Object cert = cf.generateCertificate(is);
+      X509Certificate cert = (X509Certificate) cf.generateCertificate(is);
       is.close();
 
-      request.setAttribute("javax.servlet.request.X509Certificate", cert);
+      request.setAttribute("javax.servlet.request.X509Certificate",
+                           new X509Certificate[]{cert});
       request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
                            ((X509Certificate) cert).getSubjectDN());
     } catch (Exception e) {
@@ -581,7 +588,7 @@ public class HmuxRequest extends AbstractHttpRequest
     _pendingData = 0;
     _bufferStartOffset = 0;
 
-   _isSecure = _conn.isSecure();
+    _isSecure = getConnection().isSecure();
   }
 
   /**
@@ -604,7 +611,9 @@ public class HmuxRequest extends AbstractHttpRequest
     throws IOException
   {
     boolean isLoggable = log.isLoggable(Level.FINE);
-    ReadStream is = _rawRead;
+    ReadStream is = getRawRead();
+    WriteStream os = getRawWrite();
+    CharBuffer cb = getCharBuffer();
     int code;
     int len;
 
@@ -613,7 +622,8 @@ public class HmuxRequest extends AbstractHttpRequest
 
       code = is.read();
 
-      if (_server == null || _server.isDestroyed()) {
+      Server server = getServer();
+      if (server == null || server.isDestroyed()) {
         log.fine(dbgId() + " request after server close");
         killKeepalive();
         return false;
@@ -638,10 +648,10 @@ public class HmuxRequest extends AbstractHttpRequest
         if (log.isLoggable(Level.FINER))
           log.finer(dbgId() + (char) code + "-r: yield");
 
-        _rawWrite.write(HMUX_ACK);
-        _rawWrite.write(0);
-        _rawWrite.write(0);
-        _rawWrite.flush();
+        os.write(HMUX_ACK);
+        os.write(0);
+        os.write(0);
+        os.flush();
         break;
 
       case HMUX_QUIT:
@@ -678,7 +688,7 @@ public class HmuxRequest extends AbstractHttpRequest
       case HMUX_URI:
         len = (is.read() << 8) + is.read();
         _uri.setLength(len);
-        _rawRead.readAll(_uri.getBuffer(), 0, len);
+        is.readAll(_uri.getBuffer(), 0, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + ":uri " + _uri);
         _hasRequest = true;
@@ -695,12 +705,12 @@ public class HmuxRequest extends AbstractHttpRequest
       case CSE_REAL_PATH:
         len = (is.read() << 8) + is.read();
         _cb1.clear();
-        _rawRead.readAll(_cb1, len);
-        code = _rawRead.read();
+        is.readAll(_cb1, len);
+        code = is.read();
         if (code != HMUX_STRING)
           throw new IOException("protocol expected HMUX_STRING");
         _cb2.clear();
-        _rawRead.readAll(_cb2, readLength());
+        is.readAll(_cb2, readLength(is));
 
         //http.setRealPath(cb1.toString(), cb2.toString());
         if (isLoggable)
@@ -711,28 +721,28 @@ public class HmuxRequest extends AbstractHttpRequest
 
       case CSE_REMOTE_HOST:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_remoteHost, len);
+        is.readAll(_remoteHost, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " " + _remoteHost);
         break;
 
       case CSE_REMOTE_ADDR:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_remoteAddr, len);
+        is.readAll(_remoteAddr, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " " + _remoteAddr);
         break;
 
       case HMUX_SERVER_NAME:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_serverName, len);
+        is.readAll(_serverName, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " server-host: " + _serverName);
         break;
 
       case CSE_REMOTE_PORT:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_remotePort, len);
+        is.readAll(_remotePort, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code +
                   " remote-port: " + _remotePort);
@@ -740,7 +750,7 @@ public class HmuxRequest extends AbstractHttpRequest
 
       case CSE_SERVER_PORT:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_serverPort, len);
+        is.readAll(_serverPort, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code +
                   " server-port: " + _serverPort);
@@ -751,14 +761,14 @@ public class HmuxRequest extends AbstractHttpRequest
         if (len > 0) {
           _uri.add('?');
           _uri.ensureCapacity(_uri.getLength() + len);
-          _rawRead.readAll(_uri.getBuffer(), _uri.getLength(), len);
+          is.readAll(_uri.getBuffer(), _uri.getLength(), len);
           _uri.setLength(_uri.getLength() + len);
         }
         break;
 
       case CSE_PROTOCOL:
         len = (is.read() << 8) + is.read();
-        _rawRead.readAll(_protocol, len);
+        is.readAll(_protocol, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " protocol: " + _protocol);
         for (int i = 0; i < len; i++) {
@@ -782,11 +792,11 @@ public class HmuxRequest extends AbstractHttpRequest
         CharBuffer valueCb = _headerValues[headerSize];
         valueCb.clear();
 
-        _rawRead.readAll(key, len);
-        code = _rawRead.read();
+        is.readAll(key, len);
+        code = is.read();
         if (code != HMUX_STRING)
           throw new IOException("protocol expected HMUX_STRING at " + (char) code);
-        _rawRead.readAll(valueCb, readLength());
+        is.readAll(valueCb, readLength(is));
 
         if (isLoggable)
           log.fine(dbgId() + "H " + key + "=" + valueCb);
@@ -803,7 +813,7 @@ public class HmuxRequest extends AbstractHttpRequest
         _headerKeys[_headerSize].clear();
         _headerKeys[_headerSize].append("Content-Length");
         _headerValues[_headerSize].clear();
-        _rawRead.readAll(_headerValues[_headerSize], len);
+        is.readAll(_headerValues[_headerSize], len);
 
         setContentLength(_headerValues[_headerSize]);
 
@@ -820,7 +830,7 @@ public class HmuxRequest extends AbstractHttpRequest
         _headerKeys[_headerSize].clear();
         _headerKeys[_headerSize].append("Content-Type");
         _headerValues[_headerSize].clear();
-        _rawRead.readAll(_headerValues[_headerSize], len);
+        is.readAll(_headerValues[_headerSize], len);
         if (isLoggable)
           log.fine(dbgId() + (char) code
                    + " content-type=" + _headerValues[_headerSize]);
@@ -832,14 +842,14 @@ public class HmuxRequest extends AbstractHttpRequest
         _isSecure = true;
         if (isLoggable)
           log.fine(dbgId() + "secure");
-        _rawRead.skip(len);
+        is.skip(len);
         break;
 
       case CSE_CLIENT_CERT:
         len = (is.read() << 8) + is.read();
         _clientCert.clear();
         _clientCert.setLength(len);
-        _rawRead.readAll(_clientCert.getBuffer(), 0, len);
+        is.readAll(_clientCert.getBuffer(), 0, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " cert=" + _clientCert
                    + " len:" + len);
@@ -848,7 +858,7 @@ public class HmuxRequest extends AbstractHttpRequest
       case CSE_SERVER_TYPE:
         len = (is.read() << 8) + is.read();
         _cb1.clear();
-        _rawRead.readAll(_cb1, len);
+        is.readAll(_cb1, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " server=" + _cb1);
         if (_cb1.length() > 0)
@@ -857,12 +867,12 @@ public class HmuxRequest extends AbstractHttpRequest
 
       case CSE_REMOTE_USER:
         len = (is.read() << 8) + is.read();
-        _cb.clear();
-        _rawRead.readAll(_cb, len);
+        cb.clear();
+        is.readAll(cb, len);
         if (isLoggable)
-          log.fine(dbgId() + (char) code + " " + _cb);
+          log.fine(dbgId() + (char) code + " " + cb);
         getRequestFacade().setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
-                                        new com.caucho.security.BasicPrincipal(_cb.toString()));
+                                        new com.caucho.security.BasicPrincipal(cb.toString()));
         break;
 
       case HMUX_DATA:
@@ -1043,10 +1053,10 @@ public class HmuxRequest extends AbstractHttpRequest
     _headerValues = newValues;
   }
 
-  private int readLength()
+  private int readLength(ReadStream is)
     throws IOException
   {
-    return ((_rawRead.read() << 8) + _rawRead.read());
+    return ((is.read() << 8) + is.read());
   }
 
   //
@@ -1164,7 +1174,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   public boolean isSecure()
   {
-    return _conn.isSecure() || _isSecure;
+    return super.isSecure() || _isSecure;
   }
 
   /**
@@ -1239,7 +1249,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   public void getHeaderBuffers(String key, ArrayList<CharSegment> values)
   {
-    CharBuffer cb = _cb;
+    CharBuffer cb = getCharBuffer();
 
     cb.clear();
     cb.append(key);

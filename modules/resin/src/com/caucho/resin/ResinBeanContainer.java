@@ -66,6 +66,9 @@ import javax.enterprise.inject.spi.Bean;
  * static void main(String []args)
  * {
  *   ResinBeanContainer beans = new ResinBeanContainer();
+ *   
+ *   // optional resin configuration file
+ *   // beans.addBeansXml("resin-context.xml");
  *
  *   beans.addModule("test.jar");
  *   beans.start();
@@ -159,11 +162,9 @@ public class ResinBeanContainer
       _classLoader.addJar(path);
     }
     else {
-      CompilingLoader loader = new CompilingLoader();
+      CompilingLoader loader = new CompilingLoader(_classLoader);
       loader.setPath(path);
       loader.init();
-
-      _classLoader.addLoader(loader);
     }
   }
 
@@ -273,6 +274,34 @@ public class ResinBeanContainer
     } catch (IllegalAccessException e) {
       // XXX: proper exception
       throw new RuntimeException(e);
+    } finally {
+      thread.setContextClassLoader(oldLoader);
+    }
+  }
+
+  /**
+   * Returns an instance of the bean with the given name.
+   * If the type is a managed bean, it will be injected before returning.
+   *
+   * @param name the @Named of the bean to instantiate
+   */
+  public Object getBeanByName(String name)
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+
+    try {
+      thread.setContextClassLoader(_classLoader);
+
+      Set<Bean<?>> beans = _injectManager.getBeans(name);
+
+      if (beans.size() > 0) {
+        Bean<?> bean = _injectManager.resolve(beans);
+
+        return _injectManager.getReference(bean);
+      }
+
+      return null;
     } finally {
       thread.setContextClassLoader(oldLoader);
     }

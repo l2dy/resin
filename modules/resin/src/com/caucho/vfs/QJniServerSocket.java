@@ -58,26 +58,36 @@ public class QJniServerSocket {
   public static QServerSocket create(int port, int listenBacklog)
     throws IOException
   {
-    return create(null, port, listenBacklog);
+    return create(null, port, listenBacklog, true);
+  }
+  
+  public static QServerSocket create(InetAddress host, int port,
+                                     int listenBacklog)
+    throws IOException
+  {
+    return create(host, port, listenBacklog, true);
   }
 
   /**
    * Creates the SSL ServerSocket.
    */
   public static QServerSocket create(InetAddress host, int port,
-				     int listenBacklog)
+				     int listenBacklog,
+				     boolean isEnableJni)
     throws IOException
   {
-    try {
-      // JNI doesn't listen immediately
-      QServerSocket ss = createJNI(host, port);
+    if (isEnableJni) {
+      try {
+        // JNI doesn't listen immediately
+        QServerSocket ss = createJNI(host, port);
 
-      if (ss != null)
-	return ss;
-    } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
-    } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
+        if (ss != null)
+          return ss;
+      } catch (IOException e) {
+        log.log(Level.FINE, e.toString(), e);
+      } catch (Throwable e) {
+        log.log(Level.FINE, e.toString(), e);
+      }
     }
 
     for (int i = 0; i < 10; i++) {
@@ -128,8 +138,9 @@ public class QJniServerSocket {
 
       if (host != null)
 	hostAddress = host.getHostAddress();
-      else
-	hostAddress = "0.0.0.0";
+      else {
+	hostAddress = null;
+      }
 
       try {
 	return (QServerSocket) method.invoke(null, hostAddress, port);

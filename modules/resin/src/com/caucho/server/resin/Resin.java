@@ -67,6 +67,7 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
+import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.jsp.cfg.JspPropertyGroup;
@@ -84,6 +85,7 @@ import com.caucho.management.server.ClusterMXBean;
 import com.caucho.management.server.ResinMXBean;
 import com.caucho.management.server.ThreadPoolMXBean;
 import com.caucho.naming.Jndi;
+import com.caucho.network.server.NetworkServer;
 import com.caucho.repository.ModuleRepository;
 import com.caucho.server.admin.Management;
 import com.caucho.server.admin.TransactionManager;
@@ -144,6 +146,8 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
   private Path _rootDirectory;
 
   private Path _resinDataDirectory;
+  
+  private NetworkServer _networkServer;
 
   private long _minFreeMemory = 2 * 1024L * 1024L;
   private long _shutdownWaitMax = 60000L;
@@ -402,6 +406,15 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       // default server id
       if (getServerId() == null)
         setServerId("");
+      
+      String serverName = getServerId();
+      if (serverName == null || "".equals(serverName))
+        serverName = "default";
+      
+      Path resinData = getRootDirectory().lookup("resin-data");
+      _networkServer = new NetworkServer(serverName,
+                                         getRootDirectory(),
+                                         resinData.lookup(serverName));
 
       // watchdog/0212
       // else
@@ -409,6 +422,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
       Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
       Environment.addChildLoaderListener(new WebBeansAddLoaderListener());
+      Environment.addChildLoaderListener(new EjbEnvironmentListener());
       InjectManager webBeans = InjectManager.create();
 
       Config.setProperty("resinHome", getResinHome());
@@ -445,6 +459,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       _threadPoolAdmin.register();
 
       MemoryAdmin.create();
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -980,7 +998,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
                                         _serverId));
 
 
-      Server server = clusterServer.startServer();
+      Server server = clusterServer.startServer(_networkServer);
 
       assert(server == _server);
 
@@ -1250,7 +1268,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     } finally {
       _lifecycle.toDestroy();
 
-      if (_mainThread != null)
+      if (Alarm.isTest()) {
+        log().finer("test simulating exit");
+      }
+      else if (_mainThread != null)
         System.exit(EXIT_OK); // check exit code with config errors
     }
   }
@@ -1502,8 +1523,10 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
     addRandom();
 
-    _failSafeHaltThread = new FailSafeHaltThread();
-    _failSafeHaltThread.start();
+    if (! Alarm.isTest()) {
+      _failSafeHaltThread = new FailSafeHaltThread();
+      _failSafeHaltThread.start();
+    }
 
     _shutdownThread = new ShutdownThread();
     _shutdownThread.start();

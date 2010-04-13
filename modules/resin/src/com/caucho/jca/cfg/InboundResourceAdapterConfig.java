@@ -29,16 +29,11 @@
 package com.caucho.jca.cfg;
 
 import com.caucho.config.ConfigException;
-import com.caucho.util.L10N;
-
-import java.util.logging.Logger;
 
 /**
  * Configuration for a connector.
  */
 public class InboundResourceAdapterConfig {
-  private static final L10N L = new L10N(InboundResourceAdapterConfig.class);
-
   private ResourceAdapterConfig _resourceAdapter;
   
   InboundResourceAdapterConfig(ResourceAdapterConfig ra)

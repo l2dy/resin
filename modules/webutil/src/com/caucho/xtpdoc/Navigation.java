@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -52,13 +52,16 @@ public class Navigation {
   private String _section;
   private boolean _threaded;
   private boolean _comment;
-  private ArrayList<NavigationItem> _items 
+  private final ArrayList<NavigationItem> _items 
     = new ArrayList<NavigationItem>();
 
   private NavigationItem _docItem;
   private NavigationItem _child;
 
-  private HashMap<String,NavigationItem> _itemMap
+  private final HashMap<String,NavigationItem> _itemMap
+    = new HashMap<String,NavigationItem>();
+
+  private final HashMap<String,NavigationItem> _refMap
     = new HashMap<String,NavigationItem>();
 
   public Navigation(Document document, String uri, Path path, int depth)
@@ -145,21 +148,35 @@ public class Navigation {
   {
     if (_child != null && _child.getUri().equals(uri)) {
       if (item.getParent() != null)
-	_child.setParent(item.getParent());
+        _child.setParent(item.getParent());
+
       _itemMap.put(uri, _child);
 
-      if (_parent != null)
-	_parent.putItem(uri, item);
+      if (_child.getReference() != null)
+        _refMap.put(_child.getReferenceUri(), _child);
     }
     else {
       _itemMap.put(uri, item);
 
-      if (_parent != null)
-	_parent.putItem(uri, item);
+      if (item.getReference() != null)
+        _refMap.put(item.getReferenceUri(), item);
     }
+
+    if (_parent != null)
+      _parent.putItem(uri, item);
   }
 
   public NavigationItem getItem(String uri)
+  {
+    NavigationItem item = _itemMap.get(uri);
+
+    if (item == null)
+      item = _refMap.get(uri);
+
+    return item;
+  }
+
+  public NavigationItem getItemByReference(String uri)
   {
     return _itemMap.get(uri);
   }
@@ -185,22 +202,15 @@ public class Navigation {
   }
   
   public void writeHtml(XMLStreamWriter out, String path,
-			int depth, int styleDepth, int maxDepth)
+                        int depth, int styleDepth, int maxDepth)
     throws XMLStreamException
   {
-    /*
-    String depthString = (depth == 0) ? "top" : ("" + depth);
-    out.writeStartElement("dl");
-    out.writeAttribute("class", "atoc-toplevel atoc-toplevel-" + depthString);
-    */
     out.writeStartElement("ol");
 
     for (NavigationItem item : _items)
       item.writeHtml(out, path, depth, styleDepth, maxDepth);
 
     out.writeEndElement(); // ol
-
-    //out.writeEndElement(); // dl
   }
 
   protected void initSummary()

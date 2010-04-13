@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2000 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.xtpdoc;
 
 import com.caucho.config.types.RawString;
 
+import javax.annotation.PostConstruct;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
@@ -38,24 +39,41 @@ import java.io.PrintWriter;
 import java.net.URI;
 import java.util.logging.Logger;
 
+import com.caucho.config.ConfigException;
+
 public class Anchor extends FormattedText {
   private static final Logger log = Logger.getLogger(Anchor.class.getName());
 
   private String _configTag;
-  private String _href = "";
+  private String _javadoc;
+  private String _href;
 
   public Anchor(Document document)
   {
     super(document);
   }
 
+  public void setJavadoc(String javadoc)
+  {
+    if (_configTag != null || _href != null)
+      throw new ConfigException("Anchors must have exactly one of href, config-tag, or javadoc attributes");
+
+    _javadoc = javadoc;
+  }
+
   public void setConfigTag(String configTag)
   {
+    if (_javadoc != null || _href != null)
+      throw new ConfigException("Anchors must have exactly one of href, config-tag, or javadoc attributes");
+
     _configTag = configTag;
   }
 
   public void setHref(String href)
   {
+    if (_configTag != null || _javadoc != null)
+      throw new ConfigException("Anchors must have exactly one of href, config-tag, or javadoc attributes");
+
     _href = href;
   }
 
@@ -66,54 +84,85 @@ public class Anchor extends FormattedText {
     }
   }
 
+  @PostConstruct
+  public void init()
+  {
+    if (_javadoc == null && _configTag == null && _href == null)
+      throw new ConfigException("Anchors must have exactly one of href, config-tag, or javadoc attributes");
+  }
+
+  private void writeConfigTagHtml(XMLStreamWriter out)
+    throws XMLStreamException
+  {
+    ReferenceDocument referenceDocument 
+      = getDocument().getReferenceDocument();
+
+    if (referenceDocument != null) {
+      out.writeStartElement("a");
+      out.writeAttribute("href", referenceDocument.getURI() 
+                                 + '#' + _configTag);
+
+      if (getDocument().isJavascriptEnabled()) {
+        out.writeAttribute("onmouseover", 
+                           "popup.mouseOverHandler(this, "
+                                                + "'" + _configTag + "')");
+        out.writeAttribute("onmouseout", "popup.mouseOutHandler()");
+      }
+    }
+
+    setDefaultText(_configTag);
+    super.writeHtml(out);
+
+    if (referenceDocument != null)
+      out.writeEndElement(); // a
+  }
+
+  private void writeJavadocHtml(XMLStreamWriter out)
+    throws XMLStreamException
+  {
+    String path 
+      = "http://www.caucho.com/resin-javadoc/" + _javadoc.replace('.', '/');
+
+    int i = path.indexOf('#');
+
+    if (i >= 0) {
+      path = path.substring(0, i) + ".html" + path.substring(i + 1);
+    }
+    else {
+      path = path + ".html";
+    }
+
+    setDefaultText(_javadoc);
+
+    out.writeAttribute("href", path);
+  }
+
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
   {
     if (_configTag != null) {
+      writeConfigTagHtml(out);
+    }
+    else {
       out.writeStartElement("a");
-      // XXX: href
 
-      setDefaultText(_configTag);
-      super.writeHtml(out);
-      out.writeEndElement(); // XMLStreamWriter
-
-      return;
-    }
-
-    out.writeStartElement("a");
-
-    if (_href.startsWith("javadoc|")) {
-      String name = _href.substring("javadoc|".length());
-
-      // XXX: method name is just stripped here
-      int i = name.indexOf('|');
-
-      while (i >= 0) {
-        if (i == 0)
-          name = name.substring(1);
-        else if (i > 0)
-          name = name.substring(0, i);
-
-        i = name.indexOf('|');
+      if (_javadoc != null) {
+        writeJavadocHtml(out);
       }
+      // XXX we should deprecate this syntax
+      else if (_href.indexOf('|') >= 0) {
+        String href 
+          = getDocument().getContextPath() + '/' + _href.replace('|', '/');
 
-      setDefaultText(name);
+        out.writeAttribute("href", href);
+      }
+      else
+        out.writeAttribute("href", _href);
 
-      name = name.replace('.', '/') + ".html";
+      super.writeHtml(out);
 
-      out.writeAttribute("href", "http://www.caucho.com/resin-javadoc/" + name);
+      out.writeEndElement();
     }
-    else if (_href.indexOf('|') >= 0) {
-      String href = getDocument().getContextPath() + '/' + _href.replace('|', '/');
-      
-      out.writeAttribute("href", href);
-    }
-    else
-      out.writeAttribute("href", _href);
-
-    super.writeHtml(out);
-
-    out.writeEndElement();
   }
 
   public void writeLaTeX(PrintWriter out)
@@ -131,6 +180,7 @@ public class Anchor extends FormattedText {
 
       out.print("}");
     } else {
+      // XXX javadoc?
       try {
         URI uri = new URI(_href);
 

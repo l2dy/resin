@@ -49,9 +49,10 @@ public class EjbEnvironmentListener implements AddLoaderListener
   /**
    * Handles the case where the environment is starting (after init).
    */
+  @Override
   public void addLoader(EnvironmentClassLoader loader)
   {
-    EjbContainer ejbContainer = EjbContainer.create(loader);
+    EjbContainer.create(loader);
   }
 }
 

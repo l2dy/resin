@@ -29,35 +29,36 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.j2ee.*;
-import com.caucho.config.program.Arg;
-import com.caucho.config.types.*;
-import com.caucho.util.*;
-import com.caucho.config.*;
-import com.caucho.config.cfg.*;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
-import java.lang.reflect.*;
-import java.lang.annotation.*;
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.annotation.*;
+import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.Dependent;
+import javax.enterprise.context.NormalScope;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeanManager;
+import javax.enterprise.inject.CreationException;
+import javax.enterprise.inject.IllegalProductException;
 import javax.enterprise.inject.spi.AnnotatedMember;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.enterprise.inject.spi.Producer;
 
+import com.caucho.config.bytecode.ScopeAdapter;
+import com.caucho.config.program.Arg;
+import com.caucho.inject.Module;
+import com.caucho.util.L10N;
+
 /*
  * Configuration for a @Produces method
  */
+@Module
 public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
-  implements InjectionTarget<T>
+  implements InjectionTarget<T>, ScopeAdapterBean<X>
 {
   private static final L10N L = new L10N(ProducesBean.class);
 
@@ -74,6 +75,8 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
 
   private boolean _isBound;
 
+  private Object _scopeAdapter;
+
   protected ProducesBean(InjectManager manager,
                          Bean<X> producerBean,
                          AnnotatedMethod<X> producesMethod,
@@ -85,6 +88,12 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
     _producerBean = producerBean;
     _producesMethod = producesMethod;
     _disposesMethod = disposesMethod;
+    
+    if (producesMethod != null)
+      producesMethod.getJavaMember().setAccessible(true);
+    
+    if (disposesMethod != null)
+      disposesMethod.getJavaMember().setAccessible(true);
 
     _args = args;
 
@@ -240,13 +249,28 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
       else
         args = NULL_ARGS;
 
+      // ioc/0084
+      _producesMethod.getJavaMember().setAccessible(true);
+      
       T value = (T) _producesMethod.getJavaMember().invoke(bean, args);
-
-      return value;
+      
+      if (value != null)
+        return value;
+      
+      if (Dependent.class.equals(getScope()))
+        return null;
+      
+      throw new IllegalProductException(L.l("producer {0} returned null, which is not allowed by the CDI spec.",
+                                            this));
     } catch (RuntimeException e) {
       throw e;
+    } catch (InvocationTargetException e) {
+      if (e.getCause() instanceof RuntimeException)
+        throw (RuntimeException) e.getCause();
+      else
+        throw new CreationException(e.getCause());
     } catch (Exception e) {
-      throw new RuntimeException(e);
+      throw new CreationException(e);
     }
   }
 
@@ -258,6 +282,31 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
   }
   */
 
+  @Override
+  public X getScopeAdapter(Bean<?> topBean, CreationalContext<X> cxt)
+  {
+    NormalScope scopeType = getScope().getAnnotation(NormalScope.class);
+
+    // ioc/0520
+    if (scopeType != null
+        && ! getScope().equals(ApplicationScoped.class)) {
+      // && scopeType.normal()
+      //  && ! env.canInject(getScope())) {
+
+      Object value = _scopeAdapter;
+
+      if (value == null) {
+        ScopeAdapter scopeAdapter = ScopeAdapter.create(getBaseType().getRawClass());
+        _scopeAdapter = scopeAdapter.wrap(getBeanManager(), topBean);
+        value = _scopeAdapter;
+      }
+
+      return (X) value;
+    }
+
+    return null;
+  } 
+  
   public void inject(T instance, CreationalContext<T> cxt)
   {
   }
@@ -364,11 +413,6 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  protected InjectionPointBean createInjectionPointBean(BeanManager manager)
-  {
-    return new InjectionPointBean(manager);
-  }
-
   public String toString()
   {
     StringBuilder sb = new StringBuilder();
@@ -408,4 +452,5 @@ public class ProducesBean<X,T> extends AbstractIntrospectedBean<T>
 
     return sb.toString();
   }
+
 }

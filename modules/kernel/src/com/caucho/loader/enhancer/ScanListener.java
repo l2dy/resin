@@ -29,6 +29,7 @@
 
 package com.caucho.loader.enhancer;
 
+import com.caucho.inject.Module;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.util.CharBuffer;
 import com.caucho.vfs.Path;
@@ -36,15 +37,16 @@ import com.caucho.vfs.Path;
 /**
  * Interface for a scan manager
  */
+@Module
 public interface ScanListener {
   /**
    * Returns the listener's priority.
    *
    *  0 is an enhancer like Amber
-   *  1 is an extender like WebBeans
+   *  1 is an extender like CanDI
    *  2 is an extender like WebApp 3.0
    */
-  public int getPriority();
+  public int getScanPriority();
   
   /**
    * Called to check if the archive should be scan.
@@ -57,9 +59,9 @@ public interface ScanListener {
    * @param name the class name
    * @param modifiers the class modifiers
    *
-   * @return DENY, ALLOW or MATCH
+   * @return the ScanClass object
    */
-  public ScanMatch isScanMatchClass(String name, int modifiers);
+  public ScanClass scanClass(Path root, String name, int modifiers);
   
   /**
    * Returns true if the string matches an annotation class.

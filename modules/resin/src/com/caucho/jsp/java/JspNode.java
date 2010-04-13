@@ -842,15 +842,17 @@ public abstract class JspNode {
     
   void generateSetParameter(JspJavaWriter out,
                             String obj, Object objValue, Method method,
-                            boolean allowRtexpr, String contextVar,
+                            boolean allowRtexpr, 
+                            String contextVar, boolean isParentSimpleTag,
 			    boolean isFragment, TagAttributeInfo attrInfo)
     throws Exception
   {
-    Class type = method.getParameterTypes()[0];
+    Class<?> type = method.getParameterTypes()[0];
 
     if (isFragment || JspFragment.class.equals(type)) {
       generateFragmentParameter(out, obj, objValue, method,
-				allowRtexpr, contextVar);
+				allowRtexpr, contextVar,
+				isParentSimpleTag);
       return;
     }
 
@@ -891,10 +893,10 @@ public abstract class JspNode {
 
   void generateSetParameter(JspJavaWriter out,
                             String obj, String value, Method method,
-                            Class editorClass)
+                            Class<?> editorClass)
     throws Exception
   {
-    Class type = method.getParameterTypes()[0];
+    Class<?> type = method.getParameterTypes()[0];
     
     String name = "_jsp_editor" + _gen.uniqueId();
     out.print("java.beans.PropertyEditor " + name + " = new " + editorClass.getName() + "();");
@@ -905,12 +907,14 @@ public abstract class JspNode {
   
   void generateFragmentParameter(JspJavaWriter out,
                                  Object obj, Object objValue, Method method,
-                                 boolean allowRtexpr, String contextVar)
+                                 boolean allowRtexpr, String contextVar,
+                                 boolean isParentSimpleTag)
     throws Exception
   {
     out.print(obj + "." + method.getName() + "(");
     if (objValue instanceof JspFragmentNode)
-      generateFragment(out, (JspFragmentNode) objValue, contextVar);
+      generateFragment(out, (JspFragmentNode) objValue, contextVar,
+                       isParentSimpleTag);
     else if (objValue instanceof String) {
       String string = (String) objValue;
 
@@ -946,8 +950,10 @@ public abstract class JspNode {
       return null;
   }
 
-  void generateFragment(JspJavaWriter out, JspFragmentNode frag,
-			String contextVar)
+  void generateFragment(JspJavaWriter out,
+                        JspFragmentNode frag,
+			String contextVar,
+			boolean isParentSimpleTag)
     throws Exception
   {
     out.print(generateFragment(frag, contextVar));
@@ -969,7 +975,7 @@ public abstract class JspNode {
       out.print(parentId);
   }
 
-  String generateRTValue(Class type, Object value)
+  String generateRTValue(Class<?> type, Object value)
     throws Exception
   {
     if (value instanceof String)
@@ -994,7 +1000,8 @@ public abstract class JspNode {
   /**
    * Generates the code for a fragment.
    */
-  protected String generateFragment(JspFragmentNode frag, String contextVar)
+  protected String generateFragment(JspFragmentNode frag, 
+                                    String contextVar)
     throws Exception
   {
     int index = _gen.addFragment(frag);
@@ -1014,13 +1021,25 @@ public abstract class JspNode {
 
     String fragmentVar = frag.getFragmentName();
 
-    cb.append(fragmentVar + " = createFragment(" + fragmentVar
-	      + ", " + index
-	      + ", _jsp_parentContext"
-	      + ", " + contextVar
-	      + ", ");
-
     JspNode parentTag = getParentTagNode();
+    
+    // jsp/0800
+    boolean isParentSimpleTag = (parentTag instanceof CustomSimpleTag); 
+
+    if (! isParentSimpleTag) {
+      cb.append(fragmentVar + " = createFragment(" + fragmentVar
+                + ", " + index
+                + ", _jsp_parentContext"
+                + ", " + contextVar
+                + ", ");
+    }
+    else {
+      cb.append(fragmentVar + " = createFragment(null"
+                + ", " + index
+                + ", _jsp_parentContext"
+                + ", " + contextVar
+                + ", ");
+    }
 
     if (parentTag == null)
       cb.append("null");
@@ -1138,6 +1157,64 @@ public abstract class JspNode {
 	out.print(" + com.caucho.el.Expr.toString(" + outValue + ", null)");
     }
   }
+  
+  protected void generateIncludeUrl(JspJavaWriter out, String page,
+                                    ArrayList<JspParam> params)
+    throws Exception
+  {
+    if (params != null) {
+      for (int i = 0; i < params.size(); i++) {
+        out.print("pageContext.encode(");
+      }
+
+      out.print("pageContext.encode(");
+    }
+
+    if (hasRuntimeAttribute(page)) {
+      out.print(getRuntimeAttribute(page));
+    }
+    else {
+      out.print(generateParameterValue(String.class, page));
+    }
+
+    if (params != null) {
+      out.print(")");
+
+      for (int i = 0; i < params.size(); i++) {
+        if (i > 0)
+          out.print(".append('&')");
+
+        out.print(", ");
+
+        generateIncludeParam(out, params.get(i));
+
+        out.print(")");
+      }
+
+      out.print(".toString()");
+    }
+  }
+
+  /**
+   * Generate include params.
+   */
+  void generateIncludeParam(JspJavaWriter out,
+                            JspParam param)
+    throws Exception
+  {
+    String value = param.getValue();
+        
+    out.print("\"" + param.getName() + "=\"");
+
+    String outValue = generateParameterValue(String.class, value);
+
+    if (outValue.equals("null")) {
+    }
+    else if (outValue.startsWith("\""))
+      out.print(" + (" + outValue + ")");
+    else
+      out.print(" + com.caucho.el.Expr.toString(" + outValue + ", null)");
+  }
 
   String generateJstlValue(Class type, String value)
     throws Exception
@@ -1152,14 +1229,14 @@ public abstract class JspNode {
                                   _parseState.isELIgnored());
   }
 
-  String generateParameterValue(Class type, String value)
+  String generateParameterValue(Class<?> type, String value)
     throws Exception
   {
     return generateParameterValue(type, value, true, null,
                                   _parseState.isELIgnored());
   }
 
-  String generateParameterValue(Class type,
+  String generateParameterValue(Class<?> type,
 				String value,
 				boolean rtexpr,
 				TagAttributeInfo attrInfo,

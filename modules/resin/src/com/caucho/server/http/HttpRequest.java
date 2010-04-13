@@ -41,12 +41,12 @@ import com.caucho.env.sample.ActiveTimeProbe;
 import com.caucho.env.sample.AverageProbe;
 import com.caucho.env.sample.ProbeManager;
 import com.caucho.env.sample.SampleCountProbe;
+import com.caucho.network.listen.ProtocolConnection;
+import com.caucho.network.listen.TcpSocketLink;
+import com.caucho.network.listen.TcpDuplexController;
+import com.caucho.network.listen.TcpDuplexHandler;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.ProtocolConnection;
-import com.caucho.server.connection.TcpConnection;
-import com.caucho.server.connection.TcpDuplexController;
-import com.caucho.server.connection.TcpDuplexHandler;
-import com.caucho.server.connection.TransportConnection;
 import com.caucho.server.dispatch.BadRequestException;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.util.CharBuffer;
@@ -123,7 +123,7 @@ public class HttpRequest extends AbstractHttpRequest
    *
    * @param server the owning server.
    */
-  public HttpRequest(Server server, TransportConnection conn)
+  public HttpRequest(Server server, SocketLink conn)
   {
     super(server, conn);
 
@@ -137,7 +137,7 @@ public class HttpRequest extends AbstractHttpRequest
   @Override
   protected HttpResponse createResponse()
   {
-    return new HttpResponse(this, _conn.getWriteStream());
+    return new HttpResponse(this, getConnection().getWriteStream());
   }
 
   /**
@@ -224,7 +224,7 @@ public class HttpRequest extends AbstractHttpRequest
     if (_host != null)
       return _host;
 
-    String virtualHost = _conn.getVirtualHost();
+    String virtualHost = getConnection().getVirtualHost();
     if (virtualHost != null)
       _host = virtualHost;
     else if (_uriHost.length() > 0)
@@ -244,7 +244,7 @@ public class HttpRequest extends AbstractHttpRequest
     if (_host != null)
       return _host;
 
-    String virtualHost = _conn.getVirtualHost();
+    String virtualHost = getConnection().getVirtualHost();
     if (virtualHost != null)
       return virtualHost;
     else if (_host != null) {
@@ -595,9 +595,14 @@ public class HttpRequest extends AbstractHttpRequest
   @Override
   protected void initAttributes(HttpServletRequestImpl request)
   {
-    TcpConnection tcpConn = _tcpConn;
+    SocketLink conn = getConnection();
 
-    if (tcpConn == null || ! tcpConn.isSecure())
+    if (! (conn instanceof TcpSocketLink))
+      return;
+    
+    TcpSocketLink tcpConn = (TcpSocketLink) conn;
+    
+    if (! conn.isSecure())
       return;
 
     QSocket socket = tcpConn.getSocket();
@@ -632,7 +637,7 @@ public class HttpRequest extends AbstractHttpRequest
    */
   public String findSessionIdFromConnection()
   {
-    TcpConnection tcpConn = _tcpConn;
+    TcpSocketLink tcpConn = (TcpSocketLink) getConnection();
 
     if (tcpConn == null || ! tcpConn.isSecure())
       return null;
@@ -673,6 +678,8 @@ public class HttpRequest extends AbstractHttpRequest
   public boolean initStream(ReadStream readStream, ReadStream rawRead)
     throws IOException
   {
+    // ReadStream readStream = getReadStream();
+
     // needed to avoid auto-flush on read conflicting with partially
     // generated response
     rawRead.setSibling(null);
@@ -682,7 +689,7 @@ public class HttpRequest extends AbstractHttpRequest
       readStream.init(_rawInputStream, null);
       return true;
     }
-    
+
     long contentLength = getLongContentLength();
 
     String te;
@@ -695,20 +702,20 @@ public class HttpRequest extends AbstractHttpRequest
     // Otherwise use content-length
     else if (contentLength >= 0) {
       _contentLengthStream.init(rawRead, contentLength);
-      _readStream.init(_contentLengthStream, null);
+      readStream.init(_contentLengthStream, null);
 
       return true;
     }
     else if (getMethod().equals("POST")) {
       _contentLengthStream.init(rawRead, 0);
-      _readStream.init(_contentLengthStream, null);
+      readStream.init(_contentLengthStream, null);
 
       throw new com.caucho.server.dispatch.BadRequestException("POST requires content-length");
     }
 
     else {
       _contentLengthStream.init(rawRead, 0);
-      _readStream.init(_contentLengthStream, null);
+      readStream.init(_contentLengthStream, null);
 
       return false;
     }
@@ -728,7 +735,7 @@ public class HttpRequest extends AbstractHttpRequest
    */
   public ReadStream getRawInput()
   {
-    return _rawRead;
+    return getRawRead();
   }
 
   /**
@@ -743,15 +750,16 @@ public class HttpRequest extends AbstractHttpRequest
     throws IOException
   {
     boolean isInvocation = false;
-    
+
+    Server server = getServer();
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
     long startTime = 0;
-    
+
     try {
-      thread.setContextClassLoader(_server.getClassLoader());
-      
-      startRequest(HttpBufferStore.allocate((Server) _server));
+      thread.setContextClassLoader(server.getClassLoader());
+
+      startRequest(HttpBufferStore.allocate(server));
 
       if (! parseRequest()) {
          return false;
@@ -811,7 +819,9 @@ public class HttpRequest extends AbstractHttpRequest
     throws IOException
   {
     try {
-      if (! readRequest(_rawRead)) {
+      ReadStream is = getRawRead();
+
+      if (! readRequest(is)) {
         if (log.isLoggable(Level.FINE))
           log.fine(dbgId() + "read timeout");
 
@@ -823,11 +833,11 @@ public class HttpRequest extends AbstractHttpRequest
       if (log.isLoggable(Level.FINE)) {
         log.fine(dbgId() + _method + " "
                  + new String(_uri, 0, _uriLength) + " " + _protocol);
-        log.fine(dbgId() + "Remote-IP: " + _conn.getRemoteHost()
-                 + ":" + _conn.getRemotePort());
+        log.fine(dbgId() + "Remote-IP: " + getRemoteHost()
+                 + ":" + getRemotePort());
       }
 
-      parseHeaders(_rawRead);
+      parseHeaders(is);
 
       return true;
     } catch (ClientDisconnectException e) {
@@ -891,7 +901,7 @@ public class HttpRequest extends AbstractHttpRequest
 
         readOffset = 0;
       }
-      
+
       ch = readBuffer[readOffset++];
     } while (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n');
 
@@ -1214,12 +1224,12 @@ public class HttpRequest extends AbstractHttpRequest
   @Override
   public TcpDuplexController startDuplex(TcpDuplexHandler handler)
   {
-    TcpConnection conn = (TcpConnection) _conn;
+    TcpSocketLink conn = (TcpSocketLink) getConnection();
 
     TcpDuplexController context = conn.startDuplex(handler);
 
     _rawInputStream.init(conn.getReadStream());
-    _readStream.setSource(_rawInputStream);
+    getReadStream().setSource(_rawInputStream);
 
     return context;
   }
@@ -1242,19 +1252,24 @@ public class HttpRequest extends AbstractHttpRequest
 
   protected String dbgId()
   {
-    if ("".equals(_server.getServerId()))
-      return "Http[" + _conn.getId() + "] ";
+    String serverId = getServer().getServerId();
+    int connId = getConnectionId();
+
+    if ("".equals(serverId))
+      return "Http[" + connId + "] ";
     else
-      return "Http[" + _server.getServerId() + ", " + _conn.getId() + "] ";
+      return "Http[" + serverId + ", " + connId + "] ";
   }
 
   public String toString()
   {
-    if ("".equals(_server.getServerId()))
-      return "HttpRequest[" + _conn.getId() + "]";
+    String serverId = getServer().getServerId();
+    int connId = getConnectionId();
+
+    if ("".equals(serverId))
+      return "HttpRequest[" + connId + "]";
     else {
-      return ("HttpRequest[" + _server.getServerId()
-              + ", " + _conn.getId() + "]");
+      return ("HttpRequest[" + serverId + ", " + connId + "]");
     }
   }
 }

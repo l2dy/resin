@@ -30,10 +30,10 @@
 package com.caucho.server.http;
 
 import com.caucho.config.ConfigException;
+import com.caucho.network.listen.AbstractProtocol;
+import com.caucho.network.listen.ProtocolConnection;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.connection.TransportConnection;
-import com.caucho.server.connection.AbstractProtocol;
-import com.caucho.server.connection.ProtocolConnection;
 import com.caucho.util.L10N;
 
 /**

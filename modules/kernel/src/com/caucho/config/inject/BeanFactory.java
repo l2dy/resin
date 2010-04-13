@@ -41,6 +41,7 @@ import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
+import com.caucho.config.reflect.AnnotatedElementImpl;
 
 /**
  * SingletonBean represents a singleton instance exported as a web beans.
@@ -180,6 +181,7 @@ public class BeanFactory<T>
     return this;
   }
 
+  @SuppressWarnings("unchecked")
   public Bean<T> singleton(Object value)
   {
     return new SingletonBean<T>(_managedBean,

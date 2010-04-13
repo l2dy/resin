@@ -31,16 +31,17 @@ package com.caucho.ejb.inject;
 
 import com.caucho.ejb.session.StatefulProvider;
 import com.caucho.ejb.session.StatefulManager;
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ScopeAdapterBean;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.util.L10N;
 import javax.enterprise.inject.spi.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Type;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import javax.enterprise.context.spi.Contextual;
@@ -56,11 +57,14 @@ public class StatefulBeanImpl<X> extends SessionBeanImpl<X>
   private StatefulManager _server;
   private String _name;
   private StatefulProvider _producer;
-
+  
   private InjectionTarget _target;
+  
+  private LinkedHashSet<Type> _types = new LinkedHashSet<Type>();
   
   public StatefulBeanImpl(StatefulManager server,
 			  ManagedBeanImpl<X> bean,
+			  Class<?> api,
 			  StatefulProvider producer)
   {
     super(bean);
@@ -72,11 +76,19 @@ public class StatefulBeanImpl<X> extends SessionBeanImpl<X>
       throw new NullPointerException();
 
     _target = bean.getInjectionTarget();
+    
+    _types.add(api);
   }
 
   @Override
   public X create(CreationalContext context)
   {
     return (X) _producer.__caucho_createNew(getInjectionTarget(), context);
+  }
+  
+  @Override
+  public Set<Type> getTypes()
+  {
+    return _types;
   }
 }

@@ -29,11 +29,11 @@
 
 package com.caucho.ejb.inject;
 
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ScopeAdapterBean;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.ejb.session.StatelessProvider;
 import com.caucho.ejb.session.StatelessManager;
 import com.caucho.util.L10N;
@@ -41,6 +41,7 @@ import com.caucho.util.L10N;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Type;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
 import javax.enterprise.inject.spi.*;
@@ -52,20 +53,23 @@ import javax.enterprise.context.spi.CreationalContext;
  */
 public class StatelessBeanImpl<X> extends SessionBeanImpl<X>
 {
-  private static final L10N L = new L10N(StatelessBeanImpl.class);
-
-  private StatelessManager _server;
+  private StatelessManager<X> _server;
   private String _name;
-  private StatelessProvider _producer;
-
-  private InjectionTarget _target;
+  private StatelessProvider<X> _producer;
+  private Class<?> _api;
   
-  public StatelessBeanImpl(StatelessManager server,
+  private LinkedHashSet<Type> _types = new LinkedHashSet<Type>();
+
+  private InjectionTarget<X> _target;
+  
+  public StatelessBeanImpl(StatelessManager<X> server,
 			   ManagedBeanImpl<X> bean,
-                           StatelessProvider producer)
+			   Class<?> api,
+                           StatelessProvider<X> producer)
   {
     super(bean);
-
+    
+    _api = api;
     _server = server;
     _producer = producer;
 
@@ -73,11 +77,19 @@ public class StatelessBeanImpl<X> extends SessionBeanImpl<X>
       throw new NullPointerException();
 
     _target = bean.getInjectionTarget();
+    
+    _types.add(api);
   }
 
   @Override
   public X create(CreationalContext context)
   {
     return (X) _producer.__caucho_get();
+  }
+  
+  @Override
+  public Set<Type> getTypes()
+  {
+    return _types;
   }
 }

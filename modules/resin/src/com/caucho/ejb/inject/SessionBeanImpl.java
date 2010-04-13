@@ -30,11 +30,11 @@
 package com.caucho.ejb.inject;
 
 import com.caucho.config.inject.BeanWrapper;
-import com.caucho.config.inject.ConfigContext;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ScopeAdapterBean;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.util.L10N;
 import javax.enterprise.inject.spi.*;
 import java.lang.annotation.Annotation;
@@ -50,7 +50,7 @@ import javax.enterprise.inject.spi.PassivationCapable;
  * Internal implementation for a Bean
  */
 public class SessionBeanImpl<X> extends BeanWrapper<X>
-  implements ScopeAdapterBean, PassivationCapable, EjbGeneratedBean
+  implements ScopeAdapterBean<X>, PassivationCapable, EjbGeneratedBean
 {
   private static final L10N L = new L10N(SessionBeanImpl.class);
 
@@ -59,7 +59,8 @@ public class SessionBeanImpl<X> extends BeanWrapper<X>
     super(bean.getBeanManager(), bean);
   }
 
-  public Object getScopeAdapter(CreationalContext context)
+  @Override
+  public X getScopeAdapter(Bean<?> topBean, CreationalContext<X> context)
   {
     return null;
   }

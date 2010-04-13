@@ -29,12 +29,14 @@
 
 package com.caucho.boot;
 
-import com.caucho.management.server.*;
-import com.caucho.vfs.*;
+import java.io.IOException;
+import java.security.CodeSource;
+import java.security.SecureClassLoader;
 
-import java.io.*;
-import java.security.*;
-import java.lang.instrument.*;
+import com.caucho.server.util.CauchoSystem;
+import com.caucho.vfs.JarPath;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.ReadStream;
 
 /**
  * Class loader which checks for changes in class files and automatically
@@ -61,8 +63,8 @@ class ProLoader extends SecureClassLoader
 
     _resinHome = resinHome;
 
-    boolean is64bit = "64".equals(System.getProperty("sun.arch.data.model"));
-                                  
+    boolean is64bit = CauchoSystem.is64Bit();
+                                 
     if (is64bit)
       _libexec = _resinHome.lookup("libexec64");
     else
@@ -87,8 +89,8 @@ class ProLoader extends SecureClassLoader
    *
    * @return the loaded classes
    */
-  // XXX: added synchronized for RSN-373
-  protected synchronized Class loadClass(String name, boolean resolve)
+  @Override
+  protected Class<?> loadClass(String name, boolean resolve)
     throws ClassNotFoundException
   {
     String className = name.replace('.', '/') + ".class";
@@ -109,7 +111,7 @@ class ProLoader extends SecureClassLoader
 
           is.readAll(buffer, 0, buffer.length);
 
-          Class cl = defineClass(name, buffer, 0, buffer.length,
+          Class<?> cl = defineClass(name, buffer, 0, buffer.length,
                                  (CodeSource) null);
 
           return cl;
@@ -131,7 +133,8 @@ class ProLoader extends SecureClassLoader
    *
    * @return the loaded class
    */
-  protected Class findClass(String name)
+  @Override
+  protected Class<?> findClass(String name)
     throws ClassNotFoundException
   {
     return super.findClass(name);
@@ -140,6 +143,7 @@ class ProLoader extends SecureClassLoader
   /**
    * Returns the full library path for the name.
    */
+  @Override
   public String findLibrary(String name)
   {
     Path path = _libexec.lookup("lib" + name + ".so");

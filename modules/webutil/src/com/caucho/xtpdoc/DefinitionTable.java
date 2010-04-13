@@ -40,11 +40,16 @@ public class DefinitionTable extends Table {
     super(document);
   }
 
+  public String getCssClass()
+  {
+    return "deftable";
+  }
+
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
   {
     out.writeStartElement("table");
-    out.writeAttribute("class", "deftable");
+    out.writeAttribute("class", getCssClass());
 
     if (_title != null) {
       out.writeStartElement("caption");
