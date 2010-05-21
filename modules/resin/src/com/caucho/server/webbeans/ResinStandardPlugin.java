@@ -43,16 +43,20 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Extension;
 import javax.enterprise.inject.spi.ProcessAnnotatedType;
 import javax.enterprise.inject.spi.ProcessBean;
+import javax.enterprise.inject.spi.ProcessManagedBean;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ProcessBeanImpl;
 import com.caucho.ejb.inject.EjbGeneratedBean;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.inject.Jndi;
+import com.caucho.inject.LazyExtension;
 import com.caucho.inject.MBean;
+import com.caucho.inject.Module;
 import com.caucho.jms.JmsMessageListener;
 import com.caucho.jmx.Jmx;
 import com.caucho.remote.BamService;
@@ -63,6 +67,7 @@ import com.caucho.util.L10N;
 /**
  * Standard XML behavior for META-INF/beans.xml
  */
+@Module
 public class ResinStandardPlugin implements Extension {
   private static final L10N L = new L10N(ResinStandardPlugin.class);
   private static final Logger log
@@ -79,15 +84,21 @@ public class ResinStandardPlugin implements Extension {
    * Callback for discovered annotated types. EJBs are dispatched to
    * EJB and disabled for normal processing.
    */
-  public <T> void processAnnotatedType(@Observes ProcessAnnotatedType<T> event) 
+  @LazyExtension
+  public void processAnnotatedType(@Observes ProcessAnnotatedType<?> event) 
   {
+    processAnnotatedTypeImpl(event);
+  }
+    
+  private <T> void processAnnotatedTypeImpl(ProcessAnnotatedType<T> event) 
+    {
     AnnotatedType<T> annotatedType = event.getAnnotatedType();
 
     if (annotatedType == null)
       return;
 
     // ioc/0j08
-    boolean isXmlConfig = false;
+    boolean isXmlConfig = true;
 
     if (isXmlConfig
         && (annotatedType.isAnnotationPresent(Stateful.class)
@@ -95,37 +106,46 @@ public class ResinStandardPlugin implements Extension {
             || annotatedType.isAnnotationPresent(Singleton.class)
             || annotatedType.isAnnotationPresent(MessageDriven.class)
             || annotatedType.isAnnotationPresent(JmsMessageListener.class))) {
-      EjbContainer ejbContainer = EjbContainer.create();
+      EjbManager ejbContainer = EjbManager.create();
       ejbContainer.createBean(annotatedType, null);
       event.veto();
     }
   }
 
-  public <T> void processBean(@Observes ProcessBeanImpl<T> event) 
+  @LazyExtension
+  public void processBean(@Observes ProcessBean<?> event) 
+  {
+    processBeanImpl(event);
+  }
+  
+  private <T> void processBeanImpl(ProcessBean<T> event)
   {
     Annotated annotated = event.getAnnotated();
     Bean<T> bean = event.getBean();
 
-    if (annotated == null || bean instanceof EjbGeneratedBean
-        || !(bean instanceof AbstractBean<?>)) {
+    if (annotated == null || bean instanceof EjbGeneratedBean) {
       return;
     }
-
-    AbstractBean<T> absBean = (AbstractBean<T>) bean;
 
     if (annotated.isAnnotationPresent(Stateful.class)
         || annotated.isAnnotationPresent(Stateless.class)
         || annotated.isAnnotationPresent(Singleton.class)
         || annotated.isAnnotationPresent(MessageDriven.class)
         || annotated.isAnnotationPresent(JmsMessageListener.class)) {
-      EjbContainer ejbContainer = EjbContainer.create();
-      AnnotatedType<T> annType = absBean.getAnnotatedType();
+      EjbManager ejbContainer = EjbManager.create();
 
-      if (annType != null) {
-        ejbContainer.createBean(annType, absBean.getInjectionTarget());
+      if (bean instanceof ManagedBeanImpl<?>) {
+        // XXX: shouldn't reach processBeanImpl
+        if (true)
+          throw new IllegalStateException(String.valueOf(annotated));
         
-        if (event instanceof ProcessBeanImpl)
-          ((ProcessBeanImpl) event).veto();
+        ManagedBeanImpl<T> mBean = (ManagedBeanImpl<T>) bean;
+        AnnotatedType<T> annType = mBean.getAnnotatedType();
+        
+        ejbContainer.createBean(annType, mBean.getInjectionTarget());
+        
+        if (event instanceof ProcessBeanImpl<?>)
+          ((ProcessBeanImpl<?>) event).veto();
       }
     }
     

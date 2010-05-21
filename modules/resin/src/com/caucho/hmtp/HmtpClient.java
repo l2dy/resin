@@ -69,7 +69,7 @@ public class HmtpClient extends SimpleActorClient {
     _url = url;
     
     _webSocketClient = new WebSocketClient(url);
-    _webSocketHandler = new WebSocketHandler();
+    _webSocketHandler = new HmtpWebSocketHandler();
   }
 
   public HmtpClient(String url, ActorStream actorStream)
@@ -219,7 +219,7 @@ public class HmtpClient extends SimpleActorClient {
     close();
   }
   
-  class WebSocketHandler implements WebSocketListener {
+  class HmtpWebSocketHandler implements WebSocketListener {
     private HmtpReader _in;
     private HmtpWriter _out;
     

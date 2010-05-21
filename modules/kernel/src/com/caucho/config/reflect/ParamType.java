@@ -31,8 +31,9 @@ package com.caucho.config.reflect;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.Set;
 
 import com.caucho.config.inject.InjectManager;
@@ -92,6 +93,18 @@ public class ParamType extends BaseType implements ParameterizedType
   {
     return _param;
   }
+  
+  @Override
+  public boolean isGeneric()
+  {
+    // ioc/07f0
+    for (BaseType type : _param) {
+      if (type.isGeneric())
+        return true;
+    }
+    
+    return false;
+  }
 
   @Override
   public HashMap<String,BaseType> getParamMap()
@@ -106,10 +119,77 @@ public class ParamType extends BaseType implements ParameterizedType
   }
 
   @Override
+  protected void fillTypeClosure(InjectManager manager, Set<Type> typeSet)
+  {
+    typeSet.add(toType());
+    
+    for (Type type : _type.getGenericInterfaces()) {
+      BaseType ifaceType = createForSource(type, _paramMap);
+
+      ifaceType.fillTypeClosure(manager, typeSet);
+    }
+
+    Class<?> superclass = _type.getSuperclass();
+    
+    if (superclass == null)
+      return;
+
+    BaseType superType = createForSource(superclass, _paramMap);
+
+    superType.fillTypeClosure(manager, typeSet);
+  }
+  
+  @Override
+  public BaseType fill(BaseType ...types)
+  {
+    TypeVariable []vars = _type.getTypeParameters();
+    
+    if (vars.length != types.length)
+      throw new IllegalStateException();
+    
+    HashMap<String,BaseType> paramMap = new HashMap<String,BaseType>(_paramMap);
+
+    for (int i = 0; i < vars.length; i++) {
+      TypeVariable<Class<?>> var = vars[i];
+      
+      paramMap.put(var.getName(), types[i]);
+    }
+    
+    return new ParamType(_type, types, paramMap);
+  }
+
+  @Override
   public boolean isAssignableFrom(BaseType type)
   {
     // ioc/0062
     if (! getRawClass().isAssignableFrom(type.getRawClass()))
+      return false;
+    
+    BaseType []paramA = getParameters();
+    BaseType []paramB = type.getParameters();
+
+    if (paramA.length != paramB.length)
+      return false;
+
+    for (int i = 0; i < paramA.length; i++) {
+      if (! paramA[i].isParamAssignableFrom(paramB[i])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+  
+  @Override
+  public boolean isParamAssignableFrom(BaseType type)
+  {
+    if (! (type instanceof ParamType))
+      return false;
+
+    ParamType pType = (ParamType) type;
+    Type rawType = pType.getRawType();
+
+    if (! _type.equals(rawType))
       return false;
 
     BaseType []paramA = getParameters();
@@ -120,7 +200,7 @@ public class ParamType extends BaseType implements ParameterizedType
 
     for (int i = 0; i < paramA.length; i++) {
       if (! paramA[i].isParamAssignableFrom(paramB[i])) {
-	return false;
+        return false;
       }
     }
 
@@ -128,101 +208,9 @@ public class ParamType extends BaseType implements ParameterizedType
   }
 
   @Override
-  public BaseType findClass(InjectManager manager, Class<?> cl)
-  {
-    if (_type.equals(cl))
-      return this;
-
-    for (Type type : _type.getGenericInterfaces()) {
-      BaseType ifaceType = manager.createBaseType(type, _paramMap);
-
-      BaseType baseType = ifaceType.findClass(manager, cl);
-
-      if (baseType != null)
-	return baseType;
-    }
-
-    Class<?> superclass = _type.getSuperclass();
-
-    if (superclass == null)
-      return null;
-
-    BaseType superType = manager.createBaseType(superclass, _paramMap);
-
-    return superType.findClass(manager, cl);
-  }
-
-  @Override
-  protected void fillTypeClosure(InjectManager manager, Set<Type> typeSet)
-  {
-    typeSet.add(toType());
-    
-    for (Type type : _type.getGenericInterfaces()) {
-      BaseType ifaceType = manager.createBaseType(type, _paramMap);
-
-      ifaceType.fillTypeClosure(manager, typeSet);
-    }
-
-    Class<?> superclass = _type.getSuperclass();
-    
-    if (superclass == null)
-      return;
-
-    BaseType superType = manager.createBaseType(superclass, _paramMap);
-
-    superType.fillTypeClosure(manager, typeSet);
-
-  }
-  
-  @Override
-  public BaseType fill(BaseType ...types)
-  {
-    if (_param.length != types.length)
-      throw new IllegalStateException();
-    
-    HashMap<String,BaseType> paramMap = new HashMap<String,BaseType>(_paramMap);
-
-    for (int i = 0; i < _param.length; i++) {
-      BaseType param = _param[i];
-    
-      if (param instanceof VarType<?>) {
-        VarType<?> var = (VarType<?>) param;
-        
-        paramMap.put(var.getSimpleName(), types[i]);
-      }
-    }
-    
-    return new ParamType(_type, types, paramMap);
-  }
-  
-  @Override
-  public boolean isMatch(Type type)
-  {
-    if (! (type instanceof ParameterizedType))
-      return false;
-
-    ParameterizedType pType = (ParameterizedType) type;
-    Type rawType = pType.getRawType();
-
-    if (! _type.equals(rawType))
-      return false;
-
-    Type []args = pType.getActualTypeArguments();
-
-    if (_param.length != args.length)
-      return false;
-
-    for (int i = 0; i < _param.length; i++) {
-      if (! _param[i].isMatch(args[i]))
-	return false;
-    }
-
-    return true;
-  }
-
   public int hashCode()
   {
-    return _type.hashCode();
+    return _type.hashCode() ^ Arrays.hashCode(_param);
   }
 
   public boolean equals(Object o)

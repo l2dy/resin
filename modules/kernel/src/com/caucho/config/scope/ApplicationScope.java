@@ -32,24 +32,23 @@ package com.caucho.config.scope;
 import java.lang.annotation.Annotation;
 
 import javax.enterprise.context.ApplicationScoped;
-import javax.enterprise.context.spi.Contextual;
 
 import com.caucho.inject.Module;
 import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentClassLoader;
 
 /**
  * The application scope value
  */
 @Module
-public class ApplicationScope extends ScopeContext {
-  private ScopeMap _scopeMap = new ScopeMap();
+public class ApplicationScope extends AbstractScopeContext {
+  private ContextContainer _context = new ContextContainer();
 
   /**
    * Returns the current application scope
    */
   public ApplicationScope()
   {
+    Environment.addCloseListener(_context);
   }
 
   /**
@@ -71,39 +70,14 @@ public class ApplicationScope extends ScopeContext {
   }
 
   @Override
-  protected ScopeMap getScopeMap()
+  protected ContextContainer getContextContainer()
   {
-    return _scopeMap;
+    return _context;
   }
 
   @Override
-  protected ScopeMap createScopeMap()
+  protected ContextContainer createContextContainer()
   {
-    return _scopeMap;
-  }
-
-  @Override
-  public boolean canInject(ScopeContext scope)
-  {
-    return (scope instanceof ApplicationScope);
-  }
-
-  @Override
-  public <T> void addDestructor(Contextual<T> comp, T value)
-  {
-    EnvironmentClassLoader loader = Environment.getEnvironmentClassLoader();
-
-    if (loader != null) {
-      DestructionListener listener
-        = (DestructionListener) loader.getAttribute("caucho.destroy");
-
-      if (listener == null) {
-        listener = new DestructionListener();
-        loader.setAttribute("caucho.destroy", listener);
-        loader.addListener(listener);
-      }
-
-      listener.addValue(comp, value);
-    }
+    return _context;
   }
 }

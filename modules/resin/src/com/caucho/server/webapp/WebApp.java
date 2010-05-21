@@ -38,6 +38,7 @@ import com.caucho.config.SchemaBean;
 import com.caucho.config.Config;
 import com.caucho.config.el.WebBeansELResolver;
 import com.caucho.config.types.*;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.jsp.JspServlet;
 import com.caucho.jsp.cfg.JspConfig;
@@ -403,6 +404,8 @@ public class WebApp extends ServletContextImpl
 
       Vfs.setPwd(_appDir, _classLoader);
       WorkDir.setLocalWorkDir(_appDir.lookup("WEB-INF/work"), _classLoader);
+      
+      EjbManager.setScanAll();
 
       // map.put("app", _appVar);
 
@@ -1910,6 +1913,7 @@ public class WebApp extends ServletContextImpl
     if (! hasListener(listener.getListenerClass())) {
       _listeners.add(listener);
 
+      //jsp/18n
       if (_lifecycle.isStarting() || _lifecycle.isActive()) {
         addListenerObject(listener.createListenerObject(), true);
       }
@@ -2970,7 +2974,13 @@ public class WebApp extends ServletContextImpl
       _invocationDependency.clearModified();
       _classLoader.clearModified();
 
-      String serverId = (String) new EnvironmentLocal("caucho.server-id").get();
+      String serverId = null;
+      
+      Server server = Server.getCurrent();
+      
+      if (server != null)
+        serverId = server.getServerId();
+      
       if (serverId != null)
         setAttribute("caucho.server-id", serverId);
 
@@ -2992,9 +3002,6 @@ public class WebApp extends ServletContextImpl
 
       callInitializers();
 
-      //Servlet 3.0
-      initAnnotated();
-
       ServletContextEvent event = new ServletContextEvent(this);
 
       for (ListenerConfig listener : _listeners) {
@@ -3014,6 +3021,9 @@ public class WebApp extends ServletContextImpl
           log.log(Level.WARNING, e.toString(), e);
         }
       }
+      
+      //Servlet 3.0
+      initAnnotated();
 
       try {
         _filterManager.init();
@@ -3163,6 +3173,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Fills the servlet instance.  (Generalize?)
    */
+  @Override
   public Invocation buildInvocation(Invocation invocation)
   {
     Thread thread = Thread.currentThread();
@@ -4105,13 +4116,15 @@ public class WebApp extends ServletContextImpl
     return 2;
   }
 
-  public boolean isRootScannable(Path root)
+  @Override
+  public boolean isRootScannable(Path root, String packageRoot)
   {
     return true;
   }
 
   @Override
-  public ScanClass scanClass(Path root, String name, int modifiers)
+  public ScanClass scanClass(Path root, String packageRoot,
+                             String name, int modifiers)
   {
     if (Modifier.isPublic(modifiers))
       return new WebScanClass(name);
@@ -4119,6 +4132,7 @@ public class WebApp extends ServletContextImpl
       return null;
   }
 
+  @Override
   public boolean isScanMatchAnnotation(CharBuffer string)
   {
     if (string.startsWith("javax.servlet.annotation."))
@@ -4127,6 +4141,7 @@ public class WebApp extends ServletContextImpl
     return false;
   }
 
+  @Override
   public void classMatchEvent(EnvironmentClassLoader loader,
                               Path root,
                               String className)

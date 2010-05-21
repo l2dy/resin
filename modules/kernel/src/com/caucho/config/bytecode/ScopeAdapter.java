@@ -29,22 +29,31 @@
 
 package com.caucho.config.bytecode;
 
-import java.io.*;
-import java.util.*;
+import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.lang.reflect.*;
 
 import javax.enterprise.inject.spi.Bean;
 
-import com.caucho.bytecode.*;
-import com.caucho.config.*;
-import com.caucho.inject.Module;
-import com.caucho.loader.*;
-import com.caucho.config.cfg.*;
+import com.caucho.bytecode.CodeWriterAttribute;
+import com.caucho.bytecode.JavaClass;
+import com.caucho.bytecode.JavaClassLoader;
+import com.caucho.bytecode.JavaField;
+import com.caucho.bytecode.JavaMethod;
+import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.util.*;
-import com.caucho.vfs.*;
+import com.caucho.config.reflect.BaseType;
+import com.caucho.inject.Module;
+import com.caucho.loader.DynamicClassLoader;
+import com.caucho.loader.ProxyClassLoader;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Vfs;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Scope adapting
@@ -74,11 +83,27 @@ public class ScopeAdapter {
     return adapter;
   }
 
-  public Object wrap(InjectManager manager, Bean<?> comp)
+  public static void validateType(Type type)
+  {
+    BaseType baseType = InjectManager.getCurrent().createTargetBaseType(type);
+    Class<?> rawType = baseType.getRawClass();
+    
+    if (rawType.isPrimitive())
+      throw new ConfigException(L.l("'{0}' is an invalid @NormalScope bean because it's a Java primitive.",
+                                    baseType));
+    
+    
+    if (rawType.isArray())
+      throw new ConfigException(L.l("'{0}' is an invalid @NormalScope bean because it's a Java array.",
+                                    baseType));
+    
+  }
+  
+  public <X> X wrap(InjectManager.ReferenceFactory<X> factory)
   {
     try {
-      Object v = _proxyCtor.newInstance(manager, comp);
-      return v;
+      Object v = _proxyCtor.newInstance(factory);
+      return (X) v;
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
@@ -100,15 +125,28 @@ public class ScopeAdapter {
         throw new ConfigException(L.l("'{0}' does not have a zero-arg public or protected constructor.  Scope adapter components need a zero-arg constructor, e.g. @RequestScoped stored in @ApplicationScoped.",
                                       cl.getName()));
       }
-      
-      zeroCtor.setAccessible(true);
+
+      if (zeroCtor != null)
+        zeroCtor.setAccessible(true);
       
       String typeClassName = cl.getName().replace('.', '/');
       
       String thisClassName = typeClassName + "__ResinScopeProxy";
       String cleanName = thisClassName.replace('/', '.');
       
-      DynamicClassLoader loader = (DynamicClassLoader) Thread.currentThread().getContextClassLoader();
+      boolean isPackagePrivate = false;
+      
+      DynamicClassLoader loader;
+      
+      if (! Modifier.isPublic(cl.getModifiers()) 
+          && ! Modifier.isProtected(cl.getModifiers())) {
+        isPackagePrivate = true;
+      }
+
+      if (isPackagePrivate)
+        loader = (DynamicClassLoader) cl.getClassLoader();
+      else
+        loader = (DynamicClassLoader) Thread.currentThread().getContextClassLoader();
       
       try {
         _proxyClass = Class.forName(cleanName, false, loader);
@@ -129,7 +167,7 @@ public class ScopeAdapter {
 
         String superClassName;
 
-        if (!cl.isInterface())
+        if (! cl.isInterface())
           superClassName = typeClassName;
         else
           superClassName = "java/lang/Object";
@@ -139,20 +177,17 @@ public class ScopeAdapter {
 
         if (cl.isInterface())
           jClass.addInterface(typeClassName);
+        
+        jClass.addInterface(ScopeProxy.class.getName().replace('.', '/'));
 
-        JavaField managerField =
-          jClass.createField("_manager",
-                             "Lcom/caucho/config/inject/InjectManager;");
-        managerField.setAccessFlags(Modifier.PRIVATE);
-
-        JavaField beanField =
-          jClass.createField("_bean", "Ljavax/enterprise/inject/spi/Bean;");
-        beanField.setAccessFlags(Modifier.PRIVATE);
+        JavaField factoryField =
+          jClass.createField("_factory",
+                             "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
+        factoryField.setAccessFlags(Modifier.PRIVATE);
 
         JavaMethod ctor =
           jClass.createMethod("<init>",
-                              "(Lcom/caucho/config/inject/InjectManager;"
-                                  + "Ljavax/enterprise/inject/spi/Bean;)V");
+                              "(Lcom/caucho/config/inject/InjectManager$ReferenceFactory;)V");
         ctor.setAccessFlags(Modifier.PUBLIC);
 
         CodeWriterAttribute code = ctor.createCodeWriter();
@@ -160,17 +195,16 @@ public class ScopeAdapter {
         code.setMaxStack(4);
 
         code.pushObjectVar(0);
-        code.invokespecial(superClassName, "<init>", "()V", 1, 0);
-        code.pushObjectVar(0);
         code.pushObjectVar(1);
-        code.putField(thisClassName, managerField.getName(), managerField
-            .getDescriptor());
+        code.putField(thisClassName, factoryField.getName(),
+                      factoryField.getDescriptor());
+        
         code.pushObjectVar(0);
-        code.pushObjectVar(2);
-        code.putField(thisClassName, beanField.getName(), beanField
-            .getDescriptor());
+        code.invokespecial(superClassName, "<init>", "()V", 1, 0);
         code.addReturn();
         code.close();
+        
+        createGetDelegateMethod(jClass);
 
         for (Method method : _cl.getMethods()) {
           if (Modifier.isStatic(method.getModifiers()))
@@ -196,8 +230,15 @@ public class ScopeAdapter {
          * (IOException e) { }
          */
 
-        // ioc/0517
-        _proxyClass = loader.loadClass(cleanName, buffer);
+        if (isPackagePrivate) {
+          // ioc/0517
+          _proxyClass = loader.loadClass(cleanName, buffer);
+        }
+        else {
+          ProxyClassLoader proxyLoader = new ProxyClassLoader(loader);
+          
+          _proxyClass = proxyLoader.loadClass(cleanName, buffer);
+        }
       }
       
       _proxyCtor = _proxyClass.getConstructors()[0];
@@ -225,17 +266,16 @@ public class ScopeAdapter {
     code.setMaxStack(3 + 2 * parameterTypes.length);
 
     code.pushObjectVar(0);
-    code.getField(jClass.getThisClass(), "_manager",
-                  "Lcom/caucho/config/inject/InjectManager;");
+    code.getField(jClass.getThisClass(), "_factory",
+                  "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
+    
+    code.pushNull();
+    code.pushNull();
 
-    code.pushObjectVar(0);
-    code.getField(jClass.getThisClass(), "_bean",
-                  "Ljavax/enterprise/inject/spi/Bean;");
-
-    code.invoke("com/caucho/config/inject/InjectManager",
-                "getInstance",
-                "(Ljavax/enterprise/inject/spi/Bean;)Ljava/lang/Object;",
-                1, 1);
+    code.invoke("com/caucho/config/inject/InjectManager$ReferenceFactory",
+                "create",
+                "(Lcom/caucho/config/inject/CreationalContextImpl;Ljavax/enterprise/inject/spi/InjectionPoint;)Ljava/lang/Object;",
+                3, 1);
 
     code.cast(method.getDeclaringClass().getName().replace('.', '/'));
 
@@ -312,6 +352,35 @@ public class ScopeAdapter {
     code.close();
   }
 
+  private void createGetDelegateMethod(JavaClass jClass)
+  {
+    String descriptor = "()Ljava/lang/Object;";
+
+    JavaMethod jMethod = jClass.createMethod("__caucho_getDelegate",
+                                             descriptor);
+    jMethod.setAccessFlags(Modifier.PUBLIC);
+
+    CodeWriterAttribute code = jMethod.createCodeWriter();
+    code.setMaxLocals(1);
+    code.setMaxStack(3);
+
+    code.pushObjectVar(0);
+    code.getField(jClass.getThisClass(), "_factory",
+                  "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
+
+    code.pushNull();
+    code.pushNull();
+
+    code.invoke("com/caucho/config/inject/InjectManager$ReferenceFactory",
+                "create",
+                "(Lcom/caucho/config/inject/CreationalContextImpl;Ljavax/enterprise/inject/spi/InjectionPoint;)Ljava/lang/Object;",
+                3, 1);
+
+    code.addObjectReturn();
+
+    code.close();
+  }
+
   private String createDescriptor(Method method)
   {
     StringBuilder sb = new StringBuilder();
@@ -354,4 +423,5 @@ public class ScopeAdapter {
     _prim.put(double.class, "D");
     _prim.put(void.class, "V");
   }
+
 }

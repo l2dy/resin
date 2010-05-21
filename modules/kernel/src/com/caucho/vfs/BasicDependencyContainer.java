@@ -37,7 +37,8 @@ import java.util.logging.Logger;
 /**
  * Contains a set of dependencies.
  */
-public class BasicDependencyContainer implements Dependency
+public class BasicDependencyContainer
+  implements Dependency
 {
   private static Logger _log;
   
@@ -132,6 +133,7 @@ public class BasicDependencyContainer implements Dependency
   public void clearModified()
   {
     _isModified = false;
+    
     _lastCheckTime = Alarm.getCurrentTime();
   }
 
@@ -142,30 +144,32 @@ public class BasicDependencyContainer implements Dependency
   {
     synchronized (this) {
       if (_isChecking || _isModified) {
-	return _isModified;
+        return _isModified;
       }
 
       _isChecking = true;
     }
 
     try {
-      long now = Alarm.getCurrentTime();
+      long now;
+      
+      now = Alarm.getCurrentTime();
 
       if (now < _lastCheckTime + _checkInterval)
-	return _isModified;
+        return _isModified;
 
       _lastCheckTime = now;
 
       for (int i = _dependencyList.size() - 1; i >= 0; i--) {
-	Dependency dependency = _dependencyList.get(i);
-	
-	if (dependency.isModified()) {
-	  dependency.logModified(log());
-
-	  _isModified = true;
+        Dependency dependency = _dependencyList.get(i);
         
-	  return _isModified;
-	}
+        if (dependency.isModified()) {
+          dependency.logModified(log());
+
+          _isModified = true;
+            
+          return _isModified;
+        }
       }
 
       // _isModified = false;
@@ -185,7 +189,7 @@ public class BasicDependencyContainer implements Dependency
       Dependency dependency = _dependencyList.get(i);
 	
       if (dependency.logModified(log))
-	return true;
+        return true;
     }
 
     return false;

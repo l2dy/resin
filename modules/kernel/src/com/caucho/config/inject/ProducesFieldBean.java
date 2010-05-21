@@ -29,48 +29,45 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.j2ee.*;
-import com.caucho.config.program.Arg;
-import com.caucho.config.types.*;
-import com.caucho.util.*;
-import com.caucho.config.*;
-import com.caucho.config.cfg.*;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
 
-import java.lang.reflect.*;
-import java.lang.annotation.*;
-import java.util.ArrayList;
-import java.util.List;
-
-import javax.annotation.*;
+import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.IllegalProductException;
+import javax.enterprise.inject.InjectionException;
+import javax.enterprise.inject.spi.AnnotatedField;
+import javax.enterprise.inject.spi.AnnotatedMember;
+import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeanManager;
-import javax.enterprise.inject.spi.AnnotatedMember;
-import javax.enterprise.inject.spi.AnnotatedField;
-import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.enterprise.inject.spi.Producer;
 
+import com.caucho.config.reflect.BaseType;
+import com.caucho.inject.Module;
+import com.caucho.util.L10N;
+
 /*
  * Configuration for a @Produces method
  */
+@Module
 public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
   implements InjectionTarget<T>
 {
   private static final L10N L = new L10N(ProducesFieldBean.class);
 
-  private final Bean _producerBean;
-  private final AnnotatedField _beanField;
+  private final Bean<X> _producerBean;
+  private final AnnotatedField<X> _beanField;
 
   private Producer<T> _producer;
 
   private boolean _isBound;
 
   protected ProducesFieldBean(InjectManager manager,
-                              Bean producerBean,
-                              AnnotatedField beanField)
+                              Bean<X> producerBean,
+                              AnnotatedField<X> beanField)
   {
     super(manager, beanField.getBaseType(), beanField);
 
@@ -89,6 +86,15 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
       = new ProducesFieldBean(manager, producer, beanField);
     bean.introspect();
     bean.introspect(beanField);
+    
+    BaseType type = manager.createSourceBaseType(beanField.getBaseType());
+    
+    if (type.isGeneric()) {
+      // ioc/07f1
+      throw new InjectionException(L.l("'{0}' is an invalid @Produces field because it returns a generic type {1}",
+                                       beanField.getJavaMember(),
+                                       type));
+    }
 
     return bean;
   }
@@ -103,7 +109,7 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
     _producer = producer;
   }
 
-  protected AnnotatedField getField()
+  protected AnnotatedField<X> getField()
   {
     return _beanField;
   }
@@ -127,11 +133,13 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
     return _producerBean;
   }
 
+  @Override
   public T create(CreationalContext<T> createEnv)
   {
     return produce(createEnv);
   }
 
+  @Override
   public InjectionTarget<T> getInjectionTarget()
   {
     return this;
@@ -140,11 +148,15 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
   /**
    * Produces a new bean instance
    */
+  @Override
   public T produce(CreationalContext<T> cxt)
   {
     Class<?> type = _producerBean.getBeanClass();
+    
+    CreationalContextImpl<X> producerCxt
+      = new CreationalContextImpl<X>(_producerBean, cxt);
 
-    X factory = (X) getBeanManager().getReference(_producerBean, type, cxt);
+    X factory = (X) getBeanManager().getReference(_producerBean, type, producerCxt);
 
     if (factory == null) {
       throw new IllegalStateException(L.l("{0}: unexpected null factory for {1}",
@@ -166,6 +178,13 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
       field.setAccessible(true);
       
       T value = (T) _beanField.getJavaMember().get(bean);
+      
+      if (value != null)
+        return value;
+      
+      if (! Dependent.class.equals(getScope()))
+        throw new IllegalProductException(L.l("'{0}' is an invalid producer because it returns null",
+                                              bean));
 
       return value;
     } catch (RuntimeException e) {

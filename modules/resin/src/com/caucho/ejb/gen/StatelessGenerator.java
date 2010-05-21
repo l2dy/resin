@@ -30,45 +30,207 @@
 package com.caucho.ejb.gen;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 
-import com.caucho.config.gen.ApiClass;
-import com.caucho.config.gen.View;
-import com.caucho.java.JavaWriter;
-import javax.ejb.Stateful;
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import javax.ejb.Schedule;
 import javax.ejb.Stateless;
+import javax.ejb.TimedObject;
+import javax.ejb.Timeout;
+import javax.ejb.Timer;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Interceptor;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.gen.LifecycleInterceptor;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
+import com.caucho.util.L10N;
 
 /**
  * Generates the skeleton for a session bean.
  */
-public class StatelessGenerator extends SessionGenerator {
-  public StatelessGenerator(String ejbName, ApiClass ejbClass,
-                            ArrayList<ApiClass> localApi,
-                            ArrayList<ApiClass> remoteApi)
+@Module
+public class StatelessGenerator<X> extends SessionGenerator<X> {
+  private static final L10N L = new L10N(StatelessGenerator.class);
+  
+  private String _timeoutMethod;
+
+  private LifecycleInterceptor _postConstructInterceptor;
+  private LifecycleInterceptor _preDestroyInterceptor;
+  
+  private final AspectBeanFactory<X> _aspectBeanFactory;
+  private final StatelessScheduledAspectBeanFactory<X> _scheduledBeanFactory;
+  
+  public StatelessGenerator(String ejbName, 
+                            AnnotatedType<X> beanType,
+                            ArrayList<AnnotatedType<? super X>> localApi,
+                            ArrayList<AnnotatedType<? super X>> remoteApi)
   {
-    super(ejbName, ejbClass, localApi, remoteApi, 
+    super(ejbName, beanType, localApi, remoteApi, 
           Stateless.class.getSimpleName());
+    
+    InjectManager manager = InjectManager.create();
+    
+    _aspectBeanFactory 
+      = new StatelessAspectBeanFactory<X>(manager, getBeanType());
+    _scheduledBeanFactory
+      = new StatelessScheduledAspectBeanFactory<X>(manager, getBeanType());
   }
 
-  public boolean isStateless() {
+  @Override
+  protected AspectBeanFactory<X> getAspectBeanFactory()
+  {
+    return _aspectBeanFactory;
+  }
+
+  @Override
+  protected AspectBeanFactory<X> getScheduledAspectBeanFactory()
+  {
+    return _scheduledBeanFactory;
+  }
+  
+  @Override
+  public boolean isStateless()
+  {
+    return true;
+  }
+  
+  @Override
+  protected boolean isTimerSupported()
+  {
+    return true;
+  }
+
+  /**
+   * Returns the interface itself for the no-interface view
+   */
+  @Override
+  protected AnnotatedType<? super X> introspectLocalDefault() 
+  {
+    return getBeanType();
+  }
+
+  public String getContextClassName()
+  {
+    return getClassName();
+  }
+
+  /**
+   * True if the implementation is a proxy, i.e. an interface stub which
+   * calls an instance class.
+   */
+  @Override
+  public boolean isProxy()
+  {
     return true;
   }
 
   @Override
-  protected View createLocalView(ApiClass api) {
-    return new StatelessView(this, api);
+  public String getViewClassName()
+  {
+    return "StatelessLocal";
   }
 
   @Override
-  protected View createRemoteView(ApiClass api) {
-    return new StatelessView(this, api);
+  public String getBeanClassName()
+  {
+    // XXX: 4.0.7 CDI TCK package-private issues
+    return getBeanType().getJavaClass().getName();
+    // return getViewClass().getJavaClass().getSimpleName() + "__Bean";
+    // return getStatelessBean().getClassName();
   }
+  
+  //
+  // introspection
+  //
+  
+
+  /**
+   * Introspects the APIs methods, producing a business method for each.
+   */
+  @Override
+  public void introspect()
+  {
+    super.introspect();
+    
+    introspectLifecycle(getBeanType().getJavaClass());
+
+    _postConstructInterceptor = new LifecycleInterceptor(PostConstruct.class);
+    _postConstructInterceptor.introspect(getBeanType());
+
+    _preDestroyInterceptor = new LifecycleInterceptor(PreDestroy.class);
+    _preDestroyInterceptor.introspect(getBeanType());
+
+    // XXX: type is incorrect here. Should be moved to stateless generator?
+    introspectTimer(getBeanType());
+  }
+
+  /**
+   * Introspects the lifecycle methods
+   */
+  public void introspectLifecycle(Class<?> cl)
+  {
+    if (cl == null || cl.equals(Object.class))
+      return;
+
+    for (Method method : cl.getDeclaredMethods()) {
+      if (method.isAnnotationPresent(PostConstruct.class)) {
+      }
+    }
+
+    introspectLifecycle(cl.getSuperclass());
+  }
+
+  /**
+   * Introspects the lifecycle methods
+   */
+  public void introspectTimer(AnnotatedType<X> apiClass)
+  {
+    Class<X> cl = apiClass.getJavaClass();
+
+    if (cl == null || cl.equals(Object.class))
+      return;
+
+    if (TimedObject.class.isAssignableFrom(cl)) {
+      _timeoutMethod = "ejbTimeout";
+      return;
+    }
+
+    for (AnnotatedMethod<? super X> apiMethod : apiClass.getMethods()) {
+      Method method = apiMethod.getJavaMember();
+
+      if (method.isAnnotationPresent(Timeout.class)) {
+        if ((method.getParameterTypes().length != 0)
+            && (method.getParameterTypes().length != 1
+                || ! Timer.class.equals(method.getParameterTypes()[0]))) {
+          throw new ConfigException(L.l(
+              "{0}: timeout method '{1}' does not have a (Timer) parameter", cl
+                  .getName(), method.getName()));
+        }
+
+        _timeoutMethod = method.getName();
+
+        addBusinessMethod(apiMethod);
+      }
+    }
+  }
+  
+  //
+  // Java generation
+  //
 
   /**
    * Generates the stateful session bean
    */
   @Override
-  public void generate(JavaWriter out) throws IOException {
+  public void generate(JavaWriter out) throws IOException
+  {
     generateTopComment(out);
 
     out.println();
@@ -81,17 +243,13 @@ public class StatelessGenerator extends SessionGenerator {
     out.println("import javax.ejb.*;");
     out.println("import javax.transaction.*;");
 
-    out.println();
-    out.println("public class " + getClassName());
-    out.println("  extends StatelessContext");
+    generateHeader(out);
     out.println("{");
     out.pushDepth();
 
-    generateContext(out);
+    generateBody(out);
 
-    generateCreateProvider(out);
-
-    generateViews(out);
+    // generateView(out);
 
     generateDependency(out);
 
@@ -99,65 +257,57 @@ public class StatelessGenerator extends SessionGenerator {
     out.println("}");
   }
 
-  protected void generateCreateProvider(JavaWriter out) throws IOException {
+  /**
+   * Generates the local/remote proxy.
+   */
+  public void generateHeader(JavaWriter out)
+    throws IOException
+  {
     out.println();
-    out.println("public StatelessProvider getProvider(Class api)");
-    out.println("{");
-    out.pushDepth();
+    out.println("public class " + getClassName() + "<T>");
 
-    for (View view : getViews()) {
-      StatelessView sView = (StatelessView) view;
+    if (hasNoInterfaceView())
+      out.println("  extends " + getBeanType().getJavaClass().getName());
 
-      sView.generateCreateProvider(out, "api");
+    out.print("  implements SessionProxyFactory<T>");
+    
+    for (AnnotatedType<? super X> api : getLocalApi()) {
+      out.print(", " + api.getJavaClass().getName());
     }
-
     out.println();
-    out.println("return super.getProvider(api);");
-
-    out.popDepth();
-    out.println("}");
   }
 
-  @Override
-  protected void generateContext(JavaWriter out) throws IOException {
-    out
-        .println("protected static final java.util.logging.Logger __caucho_log = java.util.logging.Logger.getLogger(\""
-            + getFullClassName() + "\");");
-    out
-        .println("protected static final boolean __caucho_isFiner = __caucho_log.isLoggable(java.util.logging.Level.FINER);");
-
+  private void generateBody(JavaWriter out) throws IOException
+  {
+    out.println("private static final java.util.logging.Logger __caucho_log = java.util.logging.Logger.getLogger(\""
+                + getFullClassName() + "\");");
+    out.println("private static final boolean __caucho_isFiner = __caucho_log.isLoggable(java.util.logging.Level.FINER);");
+    
     out.println();
-    out.println("public " + getClassName() + "(StatelessManager server)");
-    out.println("{");
-    out.pushDepth();
+    out.println("private final StatelessManager _manager;");
+    out.println();
+    out.println("private final StatelessPool<" + getBeanClassName() + ",T> _statelessPool;");
 
-    out.println("super(server);");
-    // out.println("_xaManager = server.getTransactionManager();");
+    generateConstructor(out);
 
-    for (View view : getViews()) {
-      view.generateContextHomeConstructor(out);
-    }
+    generateProxyPool(out);
 
-    out.popDepth();
-    out.println("}");
+    generateBusinessMethods(out);
 
-    for (View view : getViews()) {
-      view.generateContextPrologue(out);
-    }
+    generateContextPrologue(out);
 
+    /*
     out.println();
     out.println("public void __caucho_timeout_callback(javax.ejb.Timer timer)");
     out.println("{");
     out.pushDepth();
 
-    for (View view : getViews()) {
-      view.generateTimer(out);
-    }
+    generateTimer(out);
 
     out.popDepth();
     out.println("}");
 
-    generateTimeoutCallback(out);
+    generateTimeoutCallback(out);*/
 
     out.println();
     out.println("public void destroy()");
@@ -169,66 +319,207 @@ public class StatelessGenerator extends SessionGenerator {
     out.popDepth();
     out.println("}");
   }
-
-  protected void generateTimeoutCallback(JavaWriter out) throws IOException {
-    String beanClass = getBeanClass().getName();
-
+  
+  private void generateConstructor(JavaWriter out)
+    throws IOException
+  {
     out.println();
-    out
-        .println("public void __caucho_timeout_callback(java.lang.reflect.Method method, javax.ejb.Timer timer)");
-    out
-        .println("  throws IllegalAccessException, java.lang.reflect.InvocationTargetException");
+    out.print("private static final ");
+    out.print("java.util.ArrayList<");
+    out.printClass(Interceptor.class);
+    out.println("<?>> __caucho_interceptor_beans");
+    out.print("  = new java.util.ArrayList<");
+    out.printClass(Interceptor.class);
+    out.println("<?>>();");
+    
+    out.println();
+    out.println("public " + getClassName() + "(StatelessManager manager"
+                + ", StatelessContext context)");
     out.println("{");
     out.pushDepth();
 
-    View objectView = null;
-
-    for (View view : getViews()) {
-      if (view instanceof StatelessView) {
-        objectView = view;
-        break;
-      }
-    }
-
-    if (objectView != null) {
-      out.print(beanClass + " bean = ");
-      objectView.generateNewInstance(out);
-      out.println(";");
-      out.println("method.invoke(bean, timer);");
-      objectView.generateFreeInstance(out, "bean");
-    }
+    out.println("_manager = manager;");
+    out.println("_statelessPool = manager.createStatelessPool(context, __caucho_interceptor_beans);");
+  
+    generateProxyConstructor(out);
 
     out.popDepth();
     out.println("}");
 
     out.println();
-    out
-        .println("public void __caucho_timeout_callback(java.lang.reflect.Method method)");
-    out
-        .println("  throws IllegalAccessException, java.lang.reflect.InvocationTargetException");
+    out.println("@Override");
+    out.println("public T __caucho_createProxy(javax.enterprise.context.spi.CreationalContext<T> env)");
+    out.println("{");
+    out.println("  return (T) this;");
+    out.println("}");
+  }
+    
+  /**
+   * Generates the local/remote proxy.
+   */
+  public void generateProxy(JavaWriter out)
+    throws IOException
+  {
+    out.println();
     out.println("{");
     out.pushDepth();
 
-    if (objectView != null) {
-      out.print(beanClass + " bean = ");
-      objectView.generateNewInstance(out);
-      out.println(";");
-      out.println("method.invoke(bean);");
-      objectView.generateFreeInstance(out, "bean");
-    }
+    out.println();
+    out.println(getClassName() + "()");
+    out.println("{");
+    out.pushDepth();
+    
+    out.println("_context = context;");
+    
+    out.popDepth();
+    out.println("}");
+
+    out.println("public void __caucho_preDestroy(Object instance)");
+    out.println("{");
+    out.println("}");
+
+    out.println("public void __caucho_postConstruct(Object instance)");
+    out.println("{");
+    out.println("}");
+
+    out.println();
+    out.println("public " + getViewClassName() + " __caucho_get()");
+    out.println("{");
+    out.println("  return this;");
+    out.println("}");
 
     out.popDepth();
     out.println("}");
   }
 
-  public void generateViews(JavaWriter out) throws IOException {
-    for (View view : getViews()) {
-      out.println();
+  protected void generateTimeoutCallback(JavaWriter out) throws IOException
+  {
+    String beanClass = getBeanType().getJavaClass().getName();
 
-      view.generate(out);
+    out.println();
+    out.println("public void __caucho_timeout_callback(java.lang.reflect.Method method, javax.ejb.Timer timer)");
+    out.println("  throws IllegalAccessException, java.lang.reflect.InvocationTargetException");
+    out.println("{");
+    out.pushDepth();
+
+    // View<X> objectView = getView();
+
+    //if (objectView != null) {
+      // XXX: 4.0.7 - needs to be moved to view
+      /*
+      out.println("StatelessPool.Item<" + beanClass +"> item");
+      out.println("  = _statelessPool.allocate();");
+
+      out.println("try {");
+      out.println("  method.invoke(item.getValue(), timer);");
+      out.println("} finally {");
+      out.println("  _statelessPool.free(item);");
+      out.println("}");
+      */
+    //}
+
+    out.popDepth();
+    out.println("}");
+
+    out.println();
+    out.println("public void __caucho_timeout_callback(java.lang.reflect.Method method)");
+    out.println("  throws IllegalAccessException, java.lang.reflect.InvocationTargetException");
+    out.println("{");
+    out.pushDepth();
+
+    //if (objectView != null) {
+      // XXX: 4.0.7 - must be moved to view
+      /*
+      out.println("StatelessPool.Item<" + beanClass +"> item");
+      out.println("  = _statelessPool.allocate();");
+
+      out.println("try {");
+      out.println("  method.invoke(item.getValue());");
+      out.println("} finally {");
+      out.println("  _statelessPool.free(item);");
+      out.println("}");
+      */
+    //}
+
+    out.popDepth();
+    out.println("}");
+  }
+
+  //
+  // code generation
+  //
+
+  protected void generateExtends(JavaWriter out)
+    throws IOException
+  {
+    if (! isProxy()) {
+      out.print("extends ");
+      out.printClass(getBeanType().getJavaClass());
     }
   }
 
-  protected void generateNewInstance(JavaWriter out) throws IOException {
+  public void generateProxyPool(JavaWriter out) throws IOException
+  {
+    out.println();
+    out.println("public void __caucho_destroy()");
+    out.println("{");
+    out.println("  _statelessPool.destroy();");
+    out.println("}");
+  }
+
+  public void generateProxyCall(JavaWriter out, Method implMethod)
+      throws IOException
+  {
+    if (! void.class.equals(implMethod.getReturnType())) {
+      out.printClass(implMethod.getReturnType());
+      out.println(" result;");
+    }
+
+    out.println(getBeanClassName() + " bean = _statelessPool.allocate();");
+
+    if (! void.class.equals(implMethod.getReturnType()))
+      out.print("result = ");
+
+    out.print("bean." + implMethod.getName() + "(");
+
+    Class<?>[] types = implMethod.getParameterTypes();
+    for (int i = 0; i < types.length; i++) {
+      if (i != 0)
+        out.print(", ");
+
+      out.print(" a" + i);
+    }
+
+    out.println(");");
+
+    out.println("_ejb_free(bean);");
+
+    if (!void.class.equals(implMethod.getReturnType()))
+      out.println("return result;");
+  }
+
+  protected void generateSuper(JavaWriter out, String serverVar)
+      throws IOException
+  {
+    out.println("super(" + serverVar + ");");
+  }
+
+  @Override
+  public void generateTimer(JavaWriter out) throws IOException
+  {
+    if (_timeoutMethod != null) {
+      // String localVar = "_local_" + getViewClass().getJavaClass().getSimpleName();
+      
+      String beanClassName = getBeanType().getJavaClass().getName();
+      
+      out.println("StatelessPool.Item<" + beanClassName + "> item");
+      out.println("  = _statelessPool.allocate();");
+
+      out.println("try {");
+      out.println("  item.getValue()." + _timeoutMethod + "(timer);");
+      out.println("} finally {");
+      out.println("  _statelessPool.free(item);");
+      out.println("}");
+    }
   }
 }

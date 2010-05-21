@@ -29,15 +29,13 @@
 
 package com.caucho.util;
 
-import com.caucho.loader.DynamicClassLoader;
-import com.caucho.loader.ClassLoaderListener;
-import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentListener;
-
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.loader.ClassLoaderListener;
+import com.caucho.loader.DynamicClassLoader;
 
 /**
  * The alarm class provides a lightweight event scheduler.  This allows
@@ -71,7 +69,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
 
   private static long _testTime;
   private static long _testNanoDelta;
-
+  
   private long _wakeTime;
   private AlarmListener _listener;
   private ClassLoader _contextLoader;
@@ -187,6 +185,11 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   protected void setName(String name)
   {
     _name = name;
+  }
+  
+  public static boolean isActive()
+  {
+    return _testTime == 0 && _alarmThread != null;
   }
 
   /**
@@ -554,7 +557,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
 
     if (_heapTop < i)
       throw new IllegalStateException();
-
+    
     return (i == 1 && _coordinatorThread != null);
   }
 
@@ -642,7 +645,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
       _heap[_heapTop] = null;
     }
   }
-
+  
   static void setTestTime(long time)
   {
     _testTime = time;
@@ -752,10 +755,9 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     /**
      * Runs the coordinator task.
      */
+    @Override
     public void run()
     {
-      Thread thread = this;
-
       while (true) {
         try {
           Alarm alarm;
@@ -801,7 +803,6 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
           long now = getCurrentTime();
 
           if (now < next) {
-            Thread.interrupted();
             LockSupport.parkNanos((next - now) * 1000000L);
           }
         } catch (Throwable e) {
@@ -824,13 +825,20 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     }
 
     try {
-      alarmThread = new AlarmThread();
-      alarmThread.start();
+      ClassLoader loader = Alarm.class.getClassLoader();
 
-      coordinatorThread = new CoordinatorThread();
-      coordinatorThread.start();
+      if (loader == null
+          || loader == systemLoader
+          || systemLoader != null && loader == systemLoader.getParent()) {
+        alarmThread = new AlarmThread();
+        alarmThread.start();
+
+        coordinatorThread = new CoordinatorThread();
+        coordinatorThread.start();
+      }
     } catch (Throwable e) {
       // should display for security manager issues
+      log.fine("Alarm not started: " + e);
     }
 
     _systemLoader = systemLoader;

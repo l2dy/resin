@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -73,5 +73,5 @@ import javax.inject.Qualifier;
 @Retention(RUNTIME)
 @Target({FIELD, METHOD, PARAMETER, TYPE})
 public @interface New {
-  public Class<?> value() default void.class;
+  public Class<?> value() default New.class;
 }

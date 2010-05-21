@@ -37,6 +37,10 @@ import com.caucho.config.program.Arg;
  * A saved program for creating a constructor argument
  */
 public class InjectionPointArg<T> extends Arg<T> {
+  public InjectionPointArg()
+  {
+  }
+  
   @Override
   public T eval(CreationalContext<T> env)
   {

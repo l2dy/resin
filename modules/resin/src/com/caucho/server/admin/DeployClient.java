@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -193,6 +193,36 @@ public class DeployClient
     RemoveTagQuery query = new RemoveTagQuery(tag, user, message);
 
     return (Boolean) querySet(query);
+  }
+  
+  /**
+   * Returns the state for a tag.
+   */
+  public String getTagState(String tag)
+  {
+    TagStateQuery query = new TagStateQuery(tag);
+    
+    query = (TagStateQuery) queryGet(query);
+    
+    if (query != null)
+      return query.getState();
+    else
+      return null;
+  }
+  
+  /**
+   * Returns the state for a tag.
+   */
+  public Throwable getTagException(String tag)
+  {
+    TagStateQuery query = new TagStateQuery(tag);
+    
+    query = (TagStateQuery) queryGet(query);
+    
+    if (query != null)
+      return query.getThrowable();
+    else
+      return null;
   }
 
   //
@@ -413,6 +443,11 @@ public class DeployClient
       throw new ServiceUnavailableException("Deploy service is not available, possibly because the resin.xml is missing a <resin:DeployService> tag\n  " + e.getMessage(),
 					    e);
     }
+  }
+  
+  public void close()
+  {
+    _bamClient.close();
   }
 
   protected Serializable querySet(Serializable query)

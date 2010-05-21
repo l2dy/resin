@@ -152,12 +152,11 @@ public abstract class Section extends ContainerNode {
     return list;
   }
 
-  /*
   public FormattedTextWithAnchors createDescription()
   {
     _description = new FormattedTextWithAnchors(getDocument());
     return _description;
-  }*/
+  }
 
   public BlockQuote createBlockquote()
   {
@@ -270,6 +269,13 @@ public abstract class Section extends ContainerNode {
       new FormattedTextWithAnchors(getDocument());
     addItem(new NamedText("Warning", warning));
     return warning;
+  }
+
+  public FormattedText createParents()
+  {
+    FormattedText parents = new FormattedText(getDocument());
+    addItem(new NamedText("child of", parents));
+    return parents;
   }
 
   public FormattedText createDefault()

@@ -70,6 +70,7 @@ import com.caucho.config.types.Period;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.hemp.broker.HempBrokerManager;
+import com.caucho.java.WorkDir;
 import com.caucho.jsp.cfg.JspPropertyGroup;
 import com.caucho.license.LicenseCheck;
 import com.caucho.lifecycle.Lifecycle;
@@ -411,7 +412,13 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       if (serverName == null || "".equals(serverName))
         serverName = "default";
       
-      Path resinData = getRootDirectory().lookup("resin-data");
+      Path resinData;
+      
+      if (isWatchdog())
+        resinData = getRootDirectory().lookup("watchdog-data");
+      else
+        resinData = getRootDirectory().lookup("resin-data");
+      
       _networkServer = new NetworkServer(serverName,
                                          getRootDirectory(),
                                          resinData.lookup(serverName));
@@ -580,6 +587,11 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     else
       return "";
   }
+  
+  protected NetworkServer getNetworkServer()
+  {
+    return _networkServer;
+  }
 
   /**
    * Sets the server id.
@@ -665,7 +677,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       path = getRootDirectory().lookup("resin-data");
 
     if (path instanceof MemoryPath) { // QA
-      path = Vfs.lookup("file:/tmp/caucho/qa/resin-data");
+      path = WorkDir.getTmpWorkDir().lookup("qa/resin-data");
     }
 
     return path;
@@ -1659,7 +1671,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
     */
   }
 
-  protected void dumpHeapOnExit()
+  public void dumpHeapOnExit()
   {
 
   }

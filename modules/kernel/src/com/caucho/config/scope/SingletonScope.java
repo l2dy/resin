@@ -42,19 +42,21 @@ import com.caucho.loader.EnvironmentClassLoader;
  * The application scope value
  */
 @Module
-public class SingletonScope extends ScopeContext {
-  private ScopeMap _scopeMap = new ScopeMap();
+public class SingletonScope extends AbstractScopeContext {
+  private ContextContainer _context = new ContextContainer();
 
   /**
    * Returns the current application scope
    */
   public SingletonScope()
   {
+    Environment.addCloseListener(_context);
   }
 
   /**
    * Returns true if the scope is currently active.
    */
+  @Override
   public boolean isActive()
   {
     return true;
@@ -63,27 +65,22 @@ public class SingletonScope extends ScopeContext {
   /**
    * Returns the scope annotation type.
    */
+  @Override
   public Class<? extends Annotation> getScope()
   {
     return Singleton.class;
   }
 
   @Override
-  protected ScopeMap getScopeMap()
+  protected ContextContainer getContextContainer()
   {
-    return _scopeMap;
+    return _context;
   }
 
   @Override
-  protected ScopeMap createScopeMap()
+  protected ContextContainer createContextContainer()
   {
-    return _scopeMap;
-  }
-
-  @Override
-  public boolean canInject(ScopeContext scope)
-  {
-    return (scope instanceof ApplicationScope);
+    return _context;
   }
 
   public <T> void addDestructor(Contextual<T> comp, T value)

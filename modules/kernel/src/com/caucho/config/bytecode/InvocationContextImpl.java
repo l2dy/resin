@@ -94,6 +94,7 @@ public class InvocationContextImpl implements InvocationContext {
     return _map;
   }
       
+  @Override
   public Object proceed()
     throws Exception
   {
@@ -103,8 +104,9 @@ public class InvocationContextImpl implements InvocationContext {
 
 	return _chainMethods[i].invoke(_chainObjects[i], this);
       }
-      else
+      else {
 	return _method.invoke(_target, _param);
+      }
     } catch (InvocationTargetException e) {
       Throwable cause = e.getCause();
 
@@ -113,5 +115,13 @@ public class InvocationContextImpl implements InvocationContext {
       else
 	throw e;
     }
+  }
+  
+  public String toString()
+  {
+    if (_target != null)
+      return getClass().getSimpleName() + "[" + _target.getClass() + "," + _method + "]";
+    else
+      return getClass().getSimpleName() + "[" + _method + "]"; 
   }
 }

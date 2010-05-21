@@ -30,7 +30,7 @@
 package com.caucho.ejb.message;
 
 import com.caucho.ejb.server.AbstractContext;
-import com.caucho.ejb.server.AbstractServer;
+import com.caucho.ejb.server.AbstractEjbBeanManager;
 import com.caucho.transaction.*;
 import com.caucho.util.L10N;
 
@@ -49,17 +49,17 @@ public class MessageDrivenContextImpl extends AbstractContext
   protected static final Logger log
     = Logger.getLogger(MessageDrivenContextImpl.class.getName());
 
-  private MessageServer _server;
+  private MessageManager _server;
   private UserTransaction _ut;
   private boolean _isRollbackOnly;
 
-  MessageDrivenContextImpl(MessageServer server, UserTransaction ut)
+  MessageDrivenContextImpl(MessageManager server, UserTransaction ut)
   {
     _server = server;
     _ut = ut;
   }
 
-  public AbstractServer getServer()
+  public AbstractEjbBeanManager getServer()
   {
     return _server;
   }
@@ -146,5 +146,10 @@ public class MessageDrivenContextImpl extends AbstractContext
     } catch (Exception e) {
       throw new EJBException(e);
     }
+  }
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _server.getAnnotatedType().getJavaClass() + "]"; 
   }
 }

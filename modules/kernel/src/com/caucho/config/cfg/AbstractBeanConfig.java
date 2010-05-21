@@ -31,11 +31,12 @@ package com.caucho.config.cfg;
 
 import com.caucho.config.*;
 import com.caucho.config.inject.AbstractBean;
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.j2ee.*;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.reflect.AnnotatedTypeImpl;
+import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.config.types.*;
 import com.caucho.naming.*;
 import com.caucho.util.*;
@@ -51,6 +52,7 @@ import javax.enterprise.context.Dependent;
 import javax.enterprise.context.RequestScoped;
 import javax.enterprise.context.SessionScoped;
 import javax.enterprise.inject.Stereotype;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.util.AnnotationLiteral;
 import javax.inject.Qualifier;
@@ -69,7 +71,7 @@ abstract public class AbstractBeanConfig {
   private String _name;
   private String _jndiName;
 
-  private Class _cl;
+  private Class<?> _cl;
 
   private ArrayList<Annotation> _annotations
     = new ArrayList<Annotation>();
@@ -80,7 +82,7 @@ abstract public class AbstractBeanConfig {
   private ArrayList<Annotation> _stereotypes
     = new ArrayList<Annotation>();
 
-  private Class _scope;
+  private Class<? extends Annotation> _scope;
 
   private ContainerProgram _init;
 
@@ -144,7 +146,7 @@ abstract public class AbstractBeanConfig {
   /**
    * Assigns the class
    */
-  public void setClass(Class cl)
+  public void setClass(Class<?> cl)
   {
     _cl = cl;
   }
@@ -152,7 +154,7 @@ abstract public class AbstractBeanConfig {
   /**
    * Returns the instance class
    */
-  public Class getInstanceClass()
+  public Class<?> getInstanceClass()
   {
     return _cl;
   }
@@ -227,28 +229,15 @@ abstract public class AbstractBeanConfig {
       throw new ConfigException(L.l("{0} requires a 'class' attribute",
                                     getClass().getSimpleName()));
     }
-
+  }
+  
+  protected <X> void deploy()
+  {
     InjectManager beanManager = InjectManager.create();
 
-    AnnotatedTypeImpl beanType = new AnnotatedTypeImpl(_cl, _cl);
+    AnnotatedTypeImpl<X> beanType = buildAnnotatedType();
 
-    if (_name != null) {
-      beanType.addAnnotation(Names.create(_name));
-    }
-
-    for (Annotation binding : _bindings) {
-      beanType.addAnnotation(binding);
-    }
-
-    for (Annotation stereotype : _stereotypes) {
-      beanType.addAnnotation(stereotype);
-    }
-
-    for (Annotation ann : _annotations) {
-      beanType.addAnnotation(ann);
-    }
-
-    BeanFactory factory = beanManager.createBeanFactory(beanType);
+    BeanBuilder<X> factory = beanManager.createBeanFactory(beanType);
 
     if (_scope != null)
       factory.scope(_scope);
@@ -257,7 +246,7 @@ abstract public class AbstractBeanConfig {
       factory.init(_init);
 
     Object value = replaceObject();
-    Bean bean = null;
+    Bean<X> bean = null;
 
     if (value != null) {
       bean = factory.singleton(value);
@@ -277,6 +266,34 @@ abstract public class AbstractBeanConfig {
         throw ConfigException.create(e);
       }
     }
+  }
+  
+  protected <X> AnnotatedTypeImpl<X> buildAnnotatedType()
+  {
+    InjectManager beanManager = InjectManager.create();
+
+    AnnotatedType<X> annType = (AnnotatedType<X>) ReflectionAnnotatedFactory.introspectType(_cl);
+    AnnotatedTypeImpl<X> beanType;
+    
+    beanType = new AnnotatedTypeImpl<X>(annType);
+
+    if (_name != null) {
+      beanType.addAnnotation(Names.create(_name));
+    }
+
+    for (Annotation binding : _bindings) {
+      beanType.addAnnotation(binding);
+    }
+
+    for (Annotation stereotype : _stereotypes) {
+      beanType.addAnnotation(stereotype);
+    }
+
+    for (Annotation ann : _annotations) {
+      beanType.addAnnotation(ann);
+    }
+    
+    return beanType;
   }
 
   protected Object replaceObject()

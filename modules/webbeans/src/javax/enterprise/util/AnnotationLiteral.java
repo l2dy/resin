@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package javax.enterprise.util;
 
+import java.io.Serializable;
 import java.lang.annotation.*;
 import java.lang.reflect.*;
 
@@ -46,27 +47,41 @@ import java.lang.reflect.*;
  * </pre></code>
  */
 public abstract class AnnotationLiteral<T extends Annotation>
-  implements Annotation
+  implements Annotation, Serializable
 {
   private transient Class<T> _annotationType;
+  private transient Method [] _methods;
+  private transient int _hashCode;
   
-  @SuppressWarnings("unchecked")
+  protected AnnotationLiteral()
+  {
+  }
+  
   @Override
   public final Class<T> annotationType()
   {
     if (_annotationType == null) {
-      Type type = getClass().getGenericSuperclass();
-
-      if (type instanceof ParameterizedType) {
-        ParameterizedType pType = (ParameterizedType) type;
-
-        _annotationType = (Class) pType.getActualTypeArguments()[0];
-      }
-      else
-        throw new UnsupportedOperationException(type.toString());
+      fillAnnotationType(getClass());
     }
     
     return _annotationType;
+  }
+  
+  private void fillAnnotationType(Class<?> cl)
+  {
+    if (cl == null)
+      throw new UnsupportedOperationException(getClass().toString());
+      
+    Type type = cl.getGenericSuperclass();
+
+    if (type instanceof ParameterizedType) {
+      ParameterizedType pType = (ParameterizedType) type;
+
+      _annotationType = (Class) pType.getActualTypeArguments()[0];
+    }
+    else {
+      fillAnnotationType(cl.getSuperclass());
+    }
   }
   
   @Override
@@ -77,26 +92,29 @@ public abstract class AnnotationLiteral<T extends Annotation>
     else if (! (o instanceof Annotation))
       return false;
 
-    Class<?> type = annotationType();
+    Class<?> annTypeA = annotationType();
+    Class<?> annTypeB = ((Annotation) o).annotationType();
     
-    if (! type.isInstance(o))
+    if (! annTypeA.equals(annTypeB))
       return false;
     
-    for (Method method : type.getMethods()) {
-      if (method.getParameterTypes().length > 0 
-          || method.getDeclaringClass() == Annotation.class
-          || method.getDeclaringClass() == Object.class) {
+    for (Method annMethod : getMethods()) {
+      if (annMethod.getParameterTypes().length > 0 
+          || annMethod.getDeclaringClass() == Annotation.class
+          || annMethod.getDeclaringClass() == Object.class) {
         continue;
       }
       
       try {
-        Object a = method.invoke(this);
-        Object b = method.invoke(o);
+        annMethod.setAccessible(true);
+        
+        Object a = annMethod.invoke(this);
+        Object b = annMethod.invoke(o);
         
         if (a != b && (a == null || ! a.equals(b)))
           return false;
       } catch (Exception e) {
-        return false;
+        throw new RuntimeException(e);
       }
     }
     
@@ -106,26 +124,52 @@ public abstract class AnnotationLiteral<T extends Annotation>
   @Override
   public int hashCode()
   {
+    if (_hashCode != 0)
+      return _hashCode;
+    
     int hash = 0;
     
-    for (Method method : annotationType().getMethods()) {
-      if (method.getParameterTypes().length > 0 
-          || method.getDeclaringClass() == Annotation.class
-          || method.getDeclaringClass() == Object.class) {
-        continue;
+    for (Method annMethod : getMethods()) {
+      try {
+        Method method = getClass().getMethod(annMethod.getName());
+        
+        method.setAccessible(true);
+
+        hash += (127 * method.getName().hashCode()) ^ valueHashCode(method);
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException(e);
       }
-      
-      hash += (127 * method.getName().hashCode() ^ valueHashCode(method));
     }
+    
+    _hashCode = hash;
 
     return hash;
+  }
+  
+  private Method []getMethods()
+  {
+    if (_methods == null) {
+      Class<?> annType = annotationType();
+      
+      _methods = annType.getDeclaredMethods();
+      
+      if (_methods.length > 0 && ! annType.isAssignableFrom(getClass())) {
+        throw new IllegalStateException("Annotation literal '" + getClass()
+                                        + "' must implement '" + annType.getName()
+                                        + "' because it has member values.");
+      }
+    }
+    
+    return _methods;
   }
   
   private int valueHashCode(Method method)
   {
     try {
       Object value = method.invoke(this);
-      
+
       if (value != null)
         return value.hashCode();
       else

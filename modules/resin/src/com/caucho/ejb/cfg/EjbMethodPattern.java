@@ -28,32 +28,29 @@
 
 package com.caucho.ejb.cfg;
 
-import com.caucho.config.ConfigException;
-import com.caucho.config.gen.ApiMethod;
-import com.caucho.config.gen.BeanGenerator;
-import com.caucho.config.gen.BusinessMethodGenerator;
-import com.caucho.config.gen.SecurityCallChain;
-import com.caucho.config.gen.View;
-import com.caucho.config.gen.XaCallChain;
-import com.caucho.util.L10N;
-
-import java.util.ArrayList;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.*;
+import java.util.ArrayList;
 
-import javax.ejb.*;
+import javax.ejb.TransactionAttribute;
+import javax.ejb.TransactionAttributeType;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.gen.SecurityGenerator;
+import com.caucho.config.reflect.AnnotatedMethodImpl;
+import com.caucho.util.L10N;
 
 /**
  * Configuration for a method.
  */
-public class EjbMethodPattern {
+public class EjbMethodPattern<X> {
   private static L10N L = new L10N(EjbMethodPattern.class);
 
   public final static int RESIN_DATABASE = 0;
   public final static int RESIN_READ_ONLY = 1;
   public final static int RESIN_ROW_LOCK = 2;
 
-  private EjbBean _bean;
+  private EjbBean<X> _bean;
 
   private String _location;
 
@@ -84,7 +81,7 @@ public class EjbMethodPattern {
    * @param entity the owning entity bean.
    * @param signature the method signature.
    */
-  public EjbMethodPattern(EjbBean bean, MethodSignature signature)
+  public EjbMethodPattern(EjbBean<X> bean, MethodSignature signature)
   {
     _bean = bean;
     _signature = signature;
@@ -93,7 +90,7 @@ public class EjbMethodPattern {
   /**
    * Sets the bean.
    */
-  public void setBean(EjbBean bean)
+  public void setBean(EjbBean<X> bean)
   {
     _bean = bean;
   }
@@ -326,16 +323,16 @@ public class EjbMethodPattern {
   /**
    * Configures the bean with the override values
    */
-  public void configure(ApiMethod apiMethod)
+  public void configure(AnnotatedMethod<?> apiMethod)
   {
-    if (_signature.isMatch(apiMethod.getName(),
-			   apiMethod.getParameterTypes())) {
+    if (_signature.isMatch(apiMethod.getJavaMember().getName(),
+			   apiMethod.getJavaMember().getParameterTypes())) {
       // configureSecurity(apiMethod);
       configureXA(apiMethod);
     }
   }
 
-  private void configureXA(ApiMethod apiMethod)
+  private void configureXA(AnnotatedMethod<?> apiMethod)
   {
     if (_transactionType == null)
       return;
@@ -345,7 +342,7 @@ public class EjbMethodPattern {
 	public TransactionAttributeType value() { return _transactionType; }
       };
 
-    apiMethod.addAnnotation(ann);
+    ((AnnotatedMethodImpl<?>) apiMethod).addAnnotation(ann);
 
     // XXX: need to modify ...
     
@@ -354,25 +351,27 @@ public class EjbMethodPattern {
     // xa.setTransactionType(_transactionType);
   }
 
-  private void configureSecurity(BusinessMethodGenerator bizMethod)
+  /*
+  private void configureSecurity(AspectGenerator bizMethod)
   {
     if (_roles == null)
       return;
 
-    SecurityCallChain security = bizMethod.getSecurity();
+    SecurityGenerator security = bizMethod.getSecurity();
 
     // security.setRoles(_roles);
   }
+  */
 
   /**
    * Returns true if these are equivalent.
    */
   public boolean equals(Object o)
   {
-    if (! (o instanceof EjbMethodPattern))
+    if (! (o instanceof EjbMethodPattern<?>))
       return false;
 
-    EjbMethodPattern method = (EjbMethodPattern) o;
+    EjbMethodPattern<?> method = (EjbMethodPattern<?>) o;
 
     return _signature.equals(method.getSignature());
   }

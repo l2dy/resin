@@ -880,17 +880,20 @@ public class QuercusClass extends NullValue {
     else if (_javaClassDef != null && _javaClassDef.isDelegate()) {
       objectValue = new ObjectExtValue(this);
     }
-    else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
+    else if (_javaClassDef != null && _javaClassDef.isPhpClass()) {
       // Java objects always need to call the constructor?
       Value javaWrapper = _javaClassDef.callNew(env, Value.NULL_ARGS);
       Object object = javaWrapper.toJavaObject();
       
       objectValue = new ObjectExtJavaValue(this, object, _javaClassDef);
     }
+    else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
+      objectValue = new ObjectExtJavaValue(this, null, _javaClassDef);
+    }
     else {
       objectValue = _classDef.createObject(env, this);
     }
-
+    
     initObject(env, objectValue);
 
     return objectValue;
@@ -931,15 +934,13 @@ public class QuercusClass extends NullValue {
       else if (_javaClassDef != null && _javaClassDef.isDelegate()) {
         objectValue = new ObjectExtValue(this);
       }
-      /*
-      else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
+      else if (_javaClassDef != null && _javaClassDef.isPhpClass()) {
         // php/0k3-
         Value javaWrapper = _javaClassDef.callNew(env, args);
         Object object = javaWrapper.toJavaObject();
         
         objectValue = new ObjectExtJavaValue(this, object, _javaClassDef);
       }
-      */
       else if (_javaClassDef != null && ! _javaClassDef.isDelegate()) {
         objectValue = new ObjectExtJavaValue(this, null, _javaClassDef);
       }

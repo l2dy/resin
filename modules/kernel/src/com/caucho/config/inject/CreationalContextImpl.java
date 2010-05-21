@@ -31,6 +31,7 @@ import javax.enterprise.context.spi.Contextual;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
+import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.inject.Module;
 
@@ -38,46 +39,85 @@ import com.caucho.inject.Module;
  * Stack of partially constructed beans.
  */
 @Module
-public class CreationalContextImpl<T> implements CreationalContext<T> {
-  private final CreationalContextImpl<?> _next;
+public final class CreationalContextImpl<T> implements CreationalContext<T> {
+  private final CreationalContextImpl<?> _top;
+  private final CreationalContextImpl<?> _parent; // parent in the creation chain
+  private CreationalContextImpl<?> _next; // next in the dependent chain
+  
   private final Contextual<T> _bean;
-  private final InjectionPoint _injectionPoint;
+  private InjectionPoint _injectionPoint;
   private T _value;
   
   public CreationalContextImpl(Contextual<T> bean,
-                               CreationalContext<?> next,
+                               CreationalContext<?> parent,
                                InjectionPoint ij)
   {
-    _next = (CreationalContextImpl<?>) next;
     _bean = bean;
     _injectionPoint = ij;
+    
+    if (parent instanceof CreationalContextImpl<?>) {
+      CreationalContextImpl<?> parentEnv = (CreationalContextImpl<?>) parent;
+      
+      _parent = parentEnv;
+      _top = parentEnv._top;
+      _next = _top._next;
+      _top._next = this;
+    }
+    else {
+      _top = this;
+      _parent = null;
+      // _next = next;
+    }
+  }
+  
+  public CreationalContextImpl(Contextual<T> bean,
+                               CreationalContextImpl<?> parentEnv,
+                               InjectionPoint ij)
+  {
+    _bean = bean;
+    _injectionPoint = ij;
+    
+    _parent = parentEnv;
+    
+    if (parentEnv != null) {
+      _top = parentEnv._top;
+      _next = _top._next;
+      _top._next = this;
+    }
+    else
+      _top = this;
   }
   
   public CreationalContextImpl()
   {
-    _next = null;
-    _bean = null;
-    _injectionPoint = null;
+    this(null, (CreationalContextImpl<?>) null, null);
   }
   
   public CreationalContextImpl(Contextual<T> bean,
                                CreationalContext<?> next)
   {
-    _bean = bean;
-    _next = (CreationalContextImpl<?>) next;
-    _injectionPoint = null;
+    this(bean, next, null);
   }
   
-  CreationalContextImpl(Contextual<T> bean)
+  public CreationalContextImpl(Contextual<T> bean,
+                               CreationalContextImpl<?> next)
   {
-    _next = null;
-    _bean = bean;
-    _injectionPoint = null;
+    this(bean, next, null);
+  }
+  
+  public CreationalContextImpl(Contextual<T> bean)
+  {
+    this(bean, null, null);
   }
   
   public static CreationalContextImpl<Object> create()
   {
     return new CreationalContextImpl<Object>();
+  }
+  
+  public boolean isTop()
+  {
+    return this == _top;
   }
   
   public <X> X get(Contextual<X> bean)
@@ -89,7 +129,29 @@ public class CreationalContextImpl<T> implements CreationalContext<T> {
   public
   static <X> X find(CreationalContextImpl<?> ptr, Contextual<X> bean)
   {
-    for (; ptr != null; ptr = ptr._next){
+    for (; ptr != null; ptr = ptr._parent) {
+      Contextual<?> testBean = ptr._bean;
+      
+      if (testBean == bean && ptr._value != null) {
+        return (X) ptr._value;
+      }
+    }
+    
+    return null;
+  }
+  
+  /**
+   * Find any bean, for disposers.
+   */
+  public <X> X getAny(Contextual<X> bean)
+  {
+    return findAny(_top, bean);    
+  }
+  
+  @SuppressWarnings("unchecked")
+  static <X> X findAny(CreationalContextImpl<?> ptr, Contextual<X> bean)
+  {
+    for (; ptr != null; ptr = ptr._next) {
       Contextual<?> testBean = ptr._bean;
       
       if (testBean == bean) {
@@ -102,7 +164,7 @@ public class CreationalContextImpl<T> implements CreationalContext<T> {
   
   public static Object findByName(CreationalContextImpl<?> ptr, String name)
   {
-    for (; ptr != null; ptr = ptr._next) {
+    for (; ptr != null; ptr = ptr._parent) {
       Contextual<?> testBean = ptr._bean;
       
       if (! (testBean instanceof Bean<?>))
@@ -118,9 +180,29 @@ public class CreationalContextImpl<T> implements CreationalContext<T> {
     return null;
   }
   
+  public void setInjectionPoint(InjectionPoint ip)
+  {
+    _injectionPoint = ip;
+  }
+  
   public InjectionPoint getInjectionPoint()
   {
-    return _injectionPoint;
+    CreationalContext<?> ptr = this; 
+    
+    while (ptr != null) {
+      if (ptr instanceof CreationalContextImpl<?>) {
+        CreationalContextImpl<?> env = (CreationalContextImpl<?>) ptr;
+        
+        if (env._injectionPoint != null)
+          return env._injectionPoint;
+        
+        ptr = env._parent;
+      }
+      else
+        ptr = null;
+    }
+    
+    return null;
   }
 
   @Override
@@ -128,16 +210,50 @@ public class CreationalContextImpl<T> implements CreationalContext<T> {
   {
     _value = value;
   }
+  
+  public void setInjectionTarget(InjectionTarget<T> injectionTarget)
+  {
+  }
 
   @Override
   public void release()
   {
-    // Bean.remove?
+    CreationalContextImpl<?> next = _next;
+    _next = null;
+    _value = null;
+    
+    if (next != null)
+      next.releaseImpl();
+  }
+  
+  void releaseImpl()
+  {
+    T value = _value;
+    _value = null;
+    
+    if (value != null)
+      _bean.destroy(value, this);
+  }
+  
+  void postConstruct()
+  {
+    /*
+    if (_next != null)
+      _next.postConstruct();
+    
+    T value = _value;
+    // _value = null;
+    
+    if (value != null && _injectionTarget != null) {
+      _injectionTarget.postConstruct(value);
+      _injectionTarget = null;
+    }
+    */
   }
 
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _bean + "," + _value + ",next=" + _next + "]";
+    return getClass().getSimpleName() + "[" + _bean + "," + _value + ",parent=" + _parent + "]";
   }
 }

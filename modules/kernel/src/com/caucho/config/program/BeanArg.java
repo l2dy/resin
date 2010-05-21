@@ -35,9 +35,12 @@ import java.util.HashSet;
 
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
 
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.InjectionPointImpl;
+import com.caucho.config.inject.InjectManager.ReferenceFactory;
 import com.caucho.inject.Module;
 
 /**
@@ -48,48 +51,42 @@ public class BeanArg<T> extends Arg<T> {
   private InjectManager _beanManager;
   private Type _type;
   private Annotation []_bindings;
-  private Bean<?> _bean;
+  private ReferenceFactory<?> _factory;
+  private InjectionPoint _ip;
 
-  public BeanArg(Type type, Annotation []bindings)
+  public BeanArg(InjectManager injectManager,
+                 Type type, 
+                 Annotation []bindings,
+                 InjectionPoint ip)
   {
-    _beanManager = InjectManager.create();
+    _beanManager = injectManager;
     
     _type = type;
     _bindings = bindings;
+    
+    _ip = ip;
   }
 
   @Override
   public void bind()
   {
-    if (_bean == null) {
-      HashSet<Annotation> bindings = new HashSet<Annotation>();
+    if (_factory == null) {
+      HashSet<Annotation> qualifiers = new HashSet<Annotation>();
       
       for (Annotation ann : _bindings) {
-	bindings.add(ann);
+	qualifiers.add(ann);
       }
       
-      _bean = _beanManager.resolveByInjectionPoint(_type, bindings, null);
-      /*
-      for (Bean bean : _beanManager.getBeans(_type, _bindings)) {
-	_bean = bean;
-      }
-
-      if (_bean == null)
-	throw new ConfigException(L.l("No matching bean for '{0}' with bindings {1}",
-				      _type, toList(_bindings)));
-      */
+      _factory = (ReferenceFactory<T>) _beanManager.getReferenceFactory(_type, qualifiers, _ip);
     }
   }
 
   @Override
   public Object eval(CreationalContext<T> parentEnv)
   {
-    if (_bean == null)
+    if (_factory == null)
       bind();
 
-    CreationalContext<T> beanEnv = new CreationalContextImpl(_bean, parentEnv);
-    
-    // XXX: getInstance for injection?
-    return _beanManager.getReference(_bean, _type, beanEnv);
+    return _factory.create((CreationalContextImpl) parentEnv, _ip);
   }
 }

@@ -30,8 +30,8 @@
 package com.caucho.ejb.protocol;
 
 import com.caucho.config.ConfigException;
-import com.caucho.ejb.manager.EjbContainer;
-import com.caucho.ejb.server.AbstractServer;
+import com.caucho.ejb.manager.EjbManager;
+import com.caucho.ejb.server.AbstractEjbBeanManager;
 import com.caucho.server.e_app.EnterpriseApplication;
 import com.caucho.naming.Jndi;
 import com.caucho.util.L10N;
@@ -59,10 +59,10 @@ public class EjbProtocolManager {
 
   private static ThreadLocal<String> _protocolLocal = new ThreadLocal<String>();
 
-  private static Hashtable<String, WeakReference<AbstractServer>> _staticServerMap
-    = new Hashtable<String, WeakReference<AbstractServer>>();
+  private static Hashtable<String, WeakReference<AbstractEjbBeanManager>> _staticServerMap
+    = new Hashtable<String, WeakReference<AbstractEjbBeanManager>>();
 
-  private final EjbContainer _ejbContainer;
+  private final EjbManager _ejbContainer;
   private final ClassLoader _loader;
 
   private String _localJndiPrefix; // = "java:comp/env/cmp";
@@ -70,8 +70,8 @@ public class EjbProtocolManager {
 
   private String _jndiPrefix; // java:comp/env/ejb/FooBean/local
 
-  private HashMap<String, AbstractServer> _serverMap 
-    = new HashMap<String, AbstractServer>();
+  private HashMap<String, AbstractEjbBeanManager> _serverMap 
+    = new HashMap<String, AbstractEjbBeanManager>();
 
   // handles remote stuff
   protected ProtocolContainer _protocolContainer;
@@ -80,12 +80,12 @@ public class EjbProtocolManager {
   /**
    * Create a server with the given prefix name.
    */
-  public EjbProtocolManager(EjbContainer ejbContainer) throws ConfigException
+  public EjbProtocolManager(EjbManager ejbContainer) throws ConfigException
   {
     _ejbContainer = ejbContainer;
     _loader = _ejbContainer.getClassLoader();
 
-    EjbContainer parent = ejbContainer.getParent();
+    EjbManager parent = ejbContainer.getParent();
     if (parent != null) {
       _localJndiPrefix = parent.getProtocolManager().getLocalJndiPrefix();
       _remoteJndiPrefix = parent.getProtocolManager().getRemoteJndiPrefix();
@@ -126,7 +126,7 @@ public class EjbProtocolManager {
   /**
    * Returns the EJB server.
    */
-  public EjbContainer getEjbContainer()
+  public EjbManager getEjbContainer()
   {
     return _ejbContainer;
   }
@@ -206,7 +206,7 @@ public class EjbProtocolManager {
 
   private void addProtocolServers(ProtocolContainer protocol)
   {
-    for (AbstractServer server : _serverMap.values()) {
+    for (AbstractEjbBeanManager server : _serverMap.values()) {
       protocol.addServer(server);
     }
   }
@@ -214,9 +214,9 @@ public class EjbProtocolManager {
   /**
    * Returns the named server if it's in the same JVM.
    */
-  public static AbstractServer<?> getJVMServer(String serverId)
+  public static AbstractEjbBeanManager<?> getJVMServer(String serverId)
   {
-    WeakReference<AbstractServer> serverRef = _staticServerMap.get(serverId);
+    WeakReference<AbstractEjbBeanManager> serverRef = _staticServerMap.get(serverId);
 
     return serverRef != null ? serverRef.get() : null;
   }
@@ -224,7 +224,7 @@ public class EjbProtocolManager {
   /**
    * Adds a server.
    */
-  public void addServer(AbstractServer<?> server)
+  public void addServer(AbstractEjbBeanManager<?> server)
   {
     _serverMap.put(server.getProtocolId(), server);
 
@@ -245,6 +245,7 @@ public class EjbProtocolManager {
       // with the local prefix
 
       bindDefaultJndi(_jndiPrefix, server);
+      bindPortableJndiApis(server);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -255,17 +256,17 @@ public class EjbProtocolManager {
   }
 
   @SuppressWarnings("unchecked")
-  private void bindDefaultJndi(String prefix, AbstractServer server)
+  private void bindDefaultJndi(String prefix, AbstractEjbBeanManager server)
   {
     try {
-      EnterpriseApplication eApp = EnterpriseApplication.getLocal();
+      EnterpriseApplication eApp = EnterpriseApplication.getCurrent();
 
       if (prefix == null)
         prefix = "";
       else if (!prefix.endsWith("/"))
         prefix = prefix + "/";
 
-      if (eApp != null)
+      if (eApp != null && eApp.getName() != null)
         prefix = prefix + eApp.getName() + "/";
 
       prefix = prefix + server.getEJBName();
@@ -278,7 +279,7 @@ public class EjbProtocolManager {
 
         Jndi.bindDeep(jndiName, new ServerLocalProxy(server, apiList.get(0)));
 
-        log.fine(server + " local binding to '" + jndiName + "' " + loader);
+        log.finer(server + " local binding to '" + jndiName + "' " + loader);
       }
 
       Object localHome = null;
@@ -288,17 +289,120 @@ public class EjbProtocolManager {
 
         Jndi.bindDeep(jndiName, localHome);
 
-        log
-            .fine(server + " local-home binding to '" + jndiName + "' "
-                + loader);
+        log.finer(server + " local-home binding to '" + jndiName + "' "
+                   + loader);
       }
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
   }
 
+  private void bindPortableJndi(String appName,
+                                String moduleName, 
+                                String suffix, 
+                                ServerLocalProxy proxy)
+  {
+    try {
+      Thread thread = Thread.currentThread();
+      ClassLoader oldLoader = thread.getContextClassLoader();
+      
+      try {
+        thread.setContextClassLoader(_loader);
+
+        String jndiName = null;
+        
+        // global _may_ mean across applications, but is not required
+        // (EJB 3.1 spec. sec. 3.2.2).
+        if (appName != null)
+          jndiName = "java:global/" + appName + '/' + moduleName + '/' + suffix;
+        else
+          jndiName = "java:global/" + moduleName + '/' + suffix;
+
+        Jndi.bindDeep(jndiName, proxy);
+        log.finer(proxy + " global binding to '" + jndiName + "' "
+                  + _loader);
+        
+        // application means across modules within an application
+        jndiName = "java:app/" + moduleName + '/' + suffix;
+        Jndi.bindDeep(jndiName, proxy);
+        log.finer(proxy + " application binding to '" + jndiName + "' "
+                  + _loader);
+
+        // XXX module binding - this is problematic because this will
+        // expose a module-level binding to the application context
+        // used by the EJBContainer
+        
+        // module means local to a single module within an application
+        jndiName = "java:module/" + suffix;
+        Jndi.bindDeep(jndiName, proxy);
+        
+        log.finer(proxy + " module binding to '" + jndiName + "' "
+                  + _loader);
+      }
+      finally {
+        Thread.currentThread().setContextClassLoader(oldLoader);
+      }
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  private void bindPortableJndiApis(AbstractEjbBeanManager manager)
+  {
+    String jndiName = null;
+    String appName = null;
+
+    EnterpriseApplication app = EnterpriseApplication.getCurrent();
+    if (app != null)
+      appName = app.getName();
+    
+    String moduleName = manager.getModuleName();
+
+    if (moduleName != null) {
+      ServerLocalProxy proxy = null;
+      
+      if (manager.hasNoInterfaceView()) {
+        String suffix = manager.getEJBName();
+        Class api = manager.getEjbClass();
+
+        proxy = new ServerLocalProxy(manager, api); 
+
+        bindPortableJndi(appName, moduleName, suffix, proxy);
+
+        suffix = suffix + '!' + manager.getEjbClass().getName();
+        bindPortableJndi(appName, moduleName, suffix, proxy);
+      }
+
+      ArrayList<Class> apiList = manager.getLocalApiList();
+
+      if (apiList.size() == 1) {
+        String suffix = manager.getEJBName();
+        Class api = apiList.get(0);
+
+        if (proxy == null)
+          proxy = new ServerLocalProxy(manager, api); 
+
+        if (! manager.hasNoInterfaceView())
+          bindPortableJndi(appName, moduleName, suffix, proxy);
+
+        suffix = suffix + '!' + api.getName();
+        bindPortableJndi(appName, moduleName, suffix, proxy);
+      }
+      else {
+        for (Class api : apiList) {
+          String suffix = manager.getEJBName() + '!' + api.getName();
+
+          if (proxy == null)
+            proxy = new ServerLocalProxy(manager, api); 
+
+          bindPortableJndi(appName, moduleName, suffix, proxy);
+        }
+      }
+    }
+  }
+
   @SuppressWarnings("unchecked")
-  private void bindServer(String jndiName, AbstractServer server, Class api)
+  private void bindServer(String jndiName, AbstractEjbBeanManager server, Class api)
       throws NamingException
   {
     Thread thread = Thread.currentThread();
@@ -317,7 +421,7 @@ public class EjbProtocolManager {
   }
 
   @SuppressWarnings("unchecked")
-  private void bindRemoteServer(String jndiName, AbstractServer server,
+  private void bindRemoteServer(String jndiName, AbstractEjbBeanManager server,
       Class api) throws NamingException
   {
     Thread thread = Thread.currentThread();
@@ -335,7 +439,7 @@ public class EjbProtocolManager {
   /**
    * Adds a server.
    */
-  public void removeServer(AbstractServer server) throws NamingException
+  public void removeServer(AbstractEjbBeanManager server) throws NamingException
   {
     for (ProtocolContainer protocol : _protocolMap.values()) {
       protocol.removeServer(server);
@@ -345,7 +449,7 @@ public class EjbProtocolManager {
   /**
    * Returns the server specified by the serverId.
    */
-  public AbstractServer getServerByEJBName(String ejbName)
+  public AbstractEjbBeanManager getServerByEJBName(String ejbName)
   {
     if (!ejbName.startsWith("/"))
       ejbName = "/" + ejbName;
@@ -356,9 +460,9 @@ public class EjbProtocolManager {
   /**
    * Returns the server specified by the serverId.
    */
-  public AbstractServer getServerByServerId(String protocolId)
+  public AbstractEjbBeanManager getServerByServerId(String protocolId)
   {
-    for (AbstractServer server : _serverMap.values()) {
+    for (AbstractEjbBeanManager server : _serverMap.values()) {
       if (protocolId.equals(server.getProtocolId()))
         return server;
     }
@@ -392,9 +496,9 @@ public class EjbProtocolManager {
     while (iter.hasNext()) {
       String name = iter.next();
 
-      AbstractServer server = _serverMap.get(name);
+      AbstractEjbBeanManager server = _serverMap.get(name);
 
-      if (server.getLocalObject(null) == null)
+      if (server.getLocalProxy(null) == null)
         continue;
 
       if (name.startsWith(ejbName)) {
@@ -431,7 +535,7 @@ public class EjbProtocolManager {
     while (iter.hasNext()) {
       String name = iter.next();
 
-      AbstractServer server = _serverMap.get(name);
+      AbstractEjbBeanManager server = _serverMap.get(name);
     }
 
     if (children.size() == 0)

@@ -32,53 +32,93 @@ package com.caucho.ejb.gen;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import com.caucho.config.gen.ApiClass;
-import com.caucho.config.gen.View;
-import com.caucho.java.JavaWriter;
 import javax.ejb.Singleton;
+import javax.enterprise.inject.spi.AnnotatedType;
+
+import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 
 /**
  * Generates the skeleton for a singleton bean.
  */
-public class SingletonGenerator extends SessionGenerator {
-  public SingletonGenerator(String ejbName, ApiClass ejbClass,
-                           ArrayList<ApiClass> localApi,
-                           ArrayList<ApiClass> remoteApi) {
-    super(ejbName, ejbClass, localApi, remoteApi, Singleton.class
-        .getSimpleName());
+@Module
+public class SingletonGenerator<X> extends SessionGenerator<X> {
+  
+  private final AspectBeanFactory<X> _aspectBeanFactory;
+
+  public SingletonGenerator(String ejbName, AnnotatedType<X> ejbClass,
+                            ArrayList<AnnotatedType<? super X>> localApi,
+                            ArrayList<AnnotatedType<? super X>> remoteApi)
+  {
+    super(ejbName, ejbClass, localApi, remoteApi, 
+          Singleton.class.getSimpleName());
+    
+    InjectManager manager = InjectManager.create();
+    
+    _aspectBeanFactory = new SingletonAspectBeanFactory<X>(manager, getBeanType());
+  }
+  
+  @Override
+  protected AspectBeanFactory<X> getAspectBeanFactory()
+  {
+    return _aspectBeanFactory;
   }
 
-  public boolean isStateless() {
+  @Override
+  public boolean isStateless()
+  {
     return false;
   }
-
+    
   @Override
-  protected View createLocalView(ApiClass api) {
-    return new SingletonView(this, api);
+  protected boolean isTimerSupported()
+  {
+    return true;
+  }
+
+  public String getContextClassName()
+  {
+    return getClassName();
+  }
+
+  /**
+   * True if the implementation is a proxy, i.e. an interface stub which
+   * calls an instance class.
+   */
+  public boolean isProxy()
+  {
+    return true;
   }
 
   @Override
-  protected View createRemoteView(ApiClass api) {
-    return new SingletonView(this, api);
+  public String getViewClassName()
+  {
+    return "SingletonView";
+  }
+
+  @Override
+  public String getBeanClassName()
+  {
+    return "Bean";
   }
 
   /**
    * Scans for the @Local interfaces
    */
   @Override
-  protected ArrayList<ApiClass> introspectLocalDefault() {
-    ArrayList<ApiClass> apiClass = new ArrayList<ApiClass>();
-
-    apiClass.add(getBeanClass());
-
-    return apiClass;
+  protected AnnotatedType<? super X> introspectLocalDefault()
+  {
+    return getBeanType();
   }
 
   /**
    * Generates the singleton session bean
    */
   @Override
-  public void generate(JavaWriter out) throws IOException {    
+  public void generate(JavaWriter out) throws IOException
+  {    
     generateTopComment(out);
 
     out.println();
@@ -91,84 +131,107 @@ public class SingletonGenerator extends SessionGenerator {
     out.println();
     out.println("import javax.ejb.*;");
     out.println("import javax.transaction.*;");
+    out.println("import javax.enterprise.context.spi.CreationalContext;");
 
-    out.println();
-    out.println("public class " + getClassName());
-    out.println("  extends SingletonContext");
+    generateClassHeader(out);
     out.println("{");
     out.pushDepth();
 
-    out.println();
-    out.println("public " + getClassName() + "(SingletonManager manager)");
-    out.println("{");
-    out.pushDepth();
+    generateConstructor(out);
 
-    out.println("super(manager);");
+    generateContextPrologue(out);
 
-    for (View view : getViews()) {
-      view.generateContextHomeConstructor(out);
-    }
-
-    out.popDepth();
-    out.println("}");
-
-    out.println();
-    out
-        .println("public " + getClassName() + "(" + getClassName()
-            + " context)");
-    out.println("{");
-    out.pushDepth();
-
-    out.println("super(context.getServer());");
-
-    generateContextObjectConstructor(out);
-
-    out.popDepth();
-    out.println("}");
-
-    for (View view : getViews()) {
-      view.generateContextPrologue(out);
-    }
-
-    generateCreateProvider(out);
-    generateViews(out);
+    generateClassContent(out);
 
     generateDependency(out);
 
     out.popDepth();
     out.println("}");
   }
-
-  protected void generateCreateProvider(JavaWriter out) throws IOException {
+  
+  private void generateClassHeader(JavaWriter out)
+    throws IOException
+  {
     out.println();
-    out.println("@Override");
-    out.println("public SingletonProxyFactory getProxyFactory(Class api)");
+    out.println("public class " + getClassName() + "<T>");
+
+    if (hasNoInterfaceView())
+      out.println("  extends " + getBeanType().getJavaClass().getName());
+    
+    out.print("  implements SessionProxyFactory<T>");
+
+    for (AnnotatedType<? super X> apiType : getLocalApi()) {
+      out.print(", " + apiType.getJavaClass().getName());
+    }
+    out.println();
+  }
+
+  @Override
+  protected void generateClassContent(JavaWriter out)
+    throws IOException
+  {
+    out.println("private transient SingletonContext _context;");
+    out.println("private transient SingletonManager _manager;");
+
+    String beanClassName = getBeanType().getJavaClass().getName();
+    
+    out.println("private " + beanClassName + " _bean;");
+
+    out.println("private transient boolean _isValid;");
+    out.println("private transient boolean _isActive;");
+    
+    generateProxyFactory(out);
+
+    generateBusinessMethods(out);
+  }
+  
+  private void generateConstructor(JavaWriter out)
+    throws IOException
+  {
+    String beanClassName = getBeanType().getJavaClass().getName();
+    
+    out.println();
+    out.print("public " + getClassName() + "(SingletonManager manager");
+    out.println(", SingletonContext context)");
     out.println("{");
     out.pushDepth();
 
-    for (View view : getViews()) {
-      SingletonView sView = (SingletonView) view;
+    out.println("_manager = manager;");
 
-      sView.generateCreateProvider(out, "api");
-    }
+    out.popDepth();
+    out.println("}");
 
     out.println();
-    out.println("return super.getProxyFactory(api);");
+    out.print("private ");
+    out.println(getClassName() 
+                + "(SingletonManager manager"
+                + ", CreationalContext<T> env)");
+    out.println("{");
+    out.pushDepth();
+
+    out.println("_manager = manager;");
+    out.println("_isValid = true;");
+
+    out.println("_bean = (" + beanClassName + ") manager.newInstance(env);");
 
     out.popDepth();
     out.println("}");
   }
 
-  /**
-   * Creates any additional code in the constructor
-   */
-  public void generateContextObjectConstructor(JavaWriter out)
-      throws IOException {
-    for (View view : getViews()) {
-      view.generateContextObjectConstructor(out);
-    }
-  }
-
-  protected void generateContext(JavaWriter out) {
+  private void generateProxyFactory(JavaWriter out)
+    throws IOException
+  {
+      out.println();
+      out.println("@Override");
+      out.println("public T __caucho_createProxy(CreationalContext<T> env)");
+      out.println("{");
+      out.println("  return (T) new " + getClassName() + "(_manager, env);");
+      out.println("}");
+      out.println();
+      
+      out.println("@Override");
+      out.println("public void __caucho_destroy()");
+      out.println("{");
+      out.println("}");
   }
 }

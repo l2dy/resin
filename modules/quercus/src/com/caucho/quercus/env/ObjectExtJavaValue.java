@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -73,7 +73,7 @@ public class ObjectExtJavaValue extends ObjectExtValue
   protected Value getFieldExt(Env env, StringValue name)
   {
     if (_object == null) {
-      _object = createJavaObject(Env.getInstance());
+      _object = createJavaObject(env);
     }
     
     Value value = _javaClassDef.getField(env, this, name);

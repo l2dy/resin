@@ -33,6 +33,7 @@ import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.inject.Alternative;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Interceptor;
 
@@ -43,7 +44,6 @@ import com.caucho.config.inject.DecoratorBean;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.InterceptorBean;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.scope.ScopeContext;
 import com.caucho.config.types.CustomBeanConfig;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -190,10 +190,11 @@ public class BeansConfig {
   public void init()
   {
     for (Class<?> cl : _decoratorList) {
-      DecoratorBean<?> decorator = new DecoratorBean(_injectManager, cl);
+      // DecoratorBean<?> decorator = new DecoratorBean(_injectManager, cl);
 
-      _injectManager.addDecorator(decorator);
+      _injectManager.addDecoratorClass(cl);
     }
+    
     _decoratorList.clear();
 
     update();
@@ -249,11 +250,6 @@ public class BeansConfig {
     }
   }
 
-  public ScopeContext getScopeContext(Class<?> cl)
-  {
-    return _injectManager.getScopeContext(cl);
-  }
-
   public <T> void addInterceptor(Class<T> cl)
   {
     if (_interceptorList == null)
@@ -280,7 +276,7 @@ public class BeansConfig {
       addInterceptor(cl);
     }
 
-    public void addCustomBean(CustomBeanConfig config)
+    public void addCustomBean(CustomBeanConfig<?> config)
     {
       Class<?> cl = config.getClassType();
 
@@ -306,7 +302,7 @@ public class BeansConfig {
       _decoratorList.add(cl);
     }
 
-    public void addCustomBean(CustomBeanConfig config)
+    public void addCustomBean(CustomBeanConfig<?> config)
     {
       Class<?> cl = config.getClassType();
 
@@ -347,11 +343,31 @@ public class BeansConfig {
   public class AlternativesConfig {
     public void addClass(Class<?> cl)
     {
+      if (cl.isAnnotation())
+        throw new ConfigException(L.l("'{0}' is an invalid alternative because it is an annotation.",
+                                      cl.getName()));
+      
+      if (! cl.isAnnotationPresent(Alternative.class))
+        throw new ConfigException(L.l("'{0}' is an invalid alternative because it does not have an @Alternative annotation.",
+                                      cl.getName()));
+     
+      if (_deployList.contains(cl))
+        throw new ConfigException(L.l("'{0}' is an invalid alternative because it is listed twice.",
+                                      cl.getName()));
+        
       _deployList.add(cl);
     }
 
     public void addStereotype(Class<?> cl)
     {
+      if (! cl.isAnnotation())
+        throw new ConfigException(L.l("'{0}' is an invalid alternative because it is not an annotation.",
+                                      cl.getName()));
+      
+      if (! cl.isAnnotationPresent(Alternative.class))
+        throw new ConfigException(L.l("'{0}' is an invalid alternative because it is missing an @Alternative.",
+                                      cl.getName()));
+      
       _deployList.add(cl);
     }
   }

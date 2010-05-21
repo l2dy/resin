@@ -29,9 +29,10 @@
 
 package com.caucho.ejb.session;
 
-import java.lang.reflect.Constructor;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.logging.Logger;
 
 import javax.ejb.FinderException;
@@ -39,14 +40,12 @@ import javax.ejb.NoSuchEJBException;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.InjectionTarget;
 
+import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.xml.XmlConfigContext;
-import com.caucho.ejb.EJBExceptionWrapper;
-import com.caucho.ejb.inject.StatefulBeanImpl;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.inject.SessionBeanImpl;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
@@ -54,21 +53,20 @@ import com.caucho.util.LruCache;
 /**
  * Server container for a session bean.
  */
-public class StatefulManager<T> extends SessionServer<T>
+public class StatefulManager<X> extends AbstractSessionManager<X>
 {
   private static final L10N L = new L10N(StatefulManager.class);
   private static final Logger log
     = Logger.getLogger(StatefulManager.class.getName());
   
-  private StatefulContext _homeContext;
-  
   // XXX: need real lifecycle
   private LruCache<String,StatefulObject> _remoteSessions;
 
-  public StatefulManager(EjbContainer ejbContainer,
-			AnnotatedType<T> annotatedType)
+  public StatefulManager(EjbManager ejbContainer,
+			AnnotatedType<X> annotatedType,
+			Class<?> proxyImplClass)
   {
-    super(ejbContainer, annotatedType);
+    super(ejbContainer, annotatedType, proxyImplClass);
   }
 
   @Override
@@ -76,29 +74,17 @@ public class StatefulManager<T> extends SessionServer<T>
   {
     return "stateful:";
   }
+  
+  @Override
+  protected Class<?> getContextClass()
+  {
+    return StatefulContext.class;
+  }
 
   @Override
-  public AbstractSessionContext getSessionContext()
+  public <T> StatefulContext<X,T> getSessionContext(Class<T> api)
   {
-    return getStatefulContext();
-  }
-    
-  private StatefulContext getStatefulContext()
-  {
-    synchronized (this) {
-      if (_homeContext == null) {
-        try {
-          Class<?> []param = new Class[] { StatefulManager.class };
-          Constructor<?> cons = _contextImplClass.getConstructor(param);
-
-          _homeContext = (StatefulContext) cons.newInstance(this);
-        } catch (Exception e) {
-          throw new EJBExceptionWrapper(e);
-        }
-      }
-    }
-
-    return _homeContext;
+    return (StatefulContext<X,T>) super.getSessionContext(api);
   }
 
   /**
@@ -106,54 +92,65 @@ public class StatefulManager<T> extends SessionServer<T>
    * local interface.
    */
   @Override
-  public Object getLocalProxy(Class api)
+  public <T> Object getLocalJndiProxy(Class<T> api)
   {
-    StatefulProvider provider = getStatefulContext().getProvider(api);
+    StatefulContext<X,T> context = getSessionContext(api);
 
-    if (provider != null)
-      return new StatefulProviderProxy(provider);
-    else
-      return null;
+    return new StatefulProviderProxy<X,T>(context);
   }
 
   /**
    * Returns the object implementation
    */
   @Override
-  public Object getLocalObject(Class api)
+  public <T> T getLocalProxy(Class<T> api)
   {
-    StatefulProvider provider = getStatefulContext().getProvider(api);
+    StatefulContext<X,T> context = getSessionContext(api);
 
-    if (provider != null) {
-      CreationalContextImpl<?> env = CreationalContextImpl.create();
-      
-      // XXX: should be bean
-      return provider.__caucho_createNew(null, env);
+    if (context != null) {
+      CreationalContextImpl<T> env = 
+        (CreationalContextImpl<T>) CreationalContextImpl.create();
+
+      return context.createProxy(env);
     }
     else
       return null;
   }
-
-  @Override
-  protected Bean<T> createBean(ManagedBeanImpl<T> mBean, Class<?> api)
+  
+  public <T> T initProxy(T instance, CreationalContext<T> env)
   {
-    StatefulProvider provider = getStatefulContext().getProvider(api);
-
-    if (provider == null)
-      throw new NullPointerException(L.l("'{0}' is an unknown api for {1}",
-					 api, getStatefulContext()));
+    if (instance instanceof CandiEnhancedBean) {
+      CandiEnhancedBean bean = (CandiEnhancedBean) instance;
+      
+      Object []delegates = null;
+      
+      bean.__caucho_inject(delegates, env);
+    }
     
-    StatefulBeanImpl statefulBean
-      = new StatefulBeanImpl(this, mBean, api, provider);
-
-    return statefulBean;
+    return instance;
   }
 
-  protected InjectionTarget createSessionComponent(Class api, Class beanClass)
+  @Override
+  protected <T> StatefulContext<X,T> createSessionContext(Class<T> api)
   {
-    StatefulProvider provider = getStatefulContext().getProvider(api);
+    return new StatefulContext<X,T>(this, api);
+  }
+
+  @Override
+  protected <T> Bean<T> createBean(ManagedBeanImpl<X> mBean, 
+                                   Class<T> api,
+                                   Set<Type> apiList)
+  {
+    StatefulContext<X,T> context = getSessionContext(api);
+
+    if (context == null)
+      throw new NullPointerException(L.l("'{0}' is an unknown api for {1}",
+                                         api, getContext()));
     
-    return new StatefulComponent(provider, beanClass);
+    SessionBeanImpl<X,T> statefulBean
+      = new SessionBeanImpl<X,T>(context, mBean, apiList);
+
+    return statefulBean;
   }
 
   public void addSession(StatefulObject remoteObject)
@@ -190,27 +187,9 @@ public class StatefulManager<T> extends SessionServer<T>
   }
 
   /**
-   * Initialize an instance
-   */
-  public <X> void initInstance(T instance,
-                               InjectionTarget<T> target,
-                               X proxy,
-                               CreationalContext<X> cxt)
-  {
-    getProducer().initInstance(instance, target, proxy, cxt);
-  }
-
-  /**
-   * Initialize an instance
-   */
-  public void destroyInstance(T instance)
-  {
-    getProducer().destroyInstance(instance);
-  }
-
-  /**
    * Returns the remote object.
    */
+  /*
   @Override
   public Object getRemoteObject(Object key)
   {
@@ -221,6 +200,7 @@ public class StatefulManager<T> extends SessionServer<T>
 
     return remote;
   }
+  */
 
   /**
    * Creates a handle for a new session.
@@ -244,15 +224,17 @@ public class StatefulManager<T> extends SessionServer<T>
    * Returns the remote stub for the container
    */
   @Override
-  public Object getRemoteObject(Class api, String protocol)
+  public <T> T getRemoteObject(Class<T> api, String protocol)
   {
-    StatefulProvider provider = getStatefulContext().getProvider(api);
+    StatefulContext<X,T> context = getSessionContext(api);
 
-    if (provider != null) {
+    if (context != null) {
       // XXX: bean?
-      Object value = provider.__caucho_createNew(null, null);
+      // T value = context.__caucho_createNew(null, null);
       
-      return value;
+      // return value;
+      
+      throw new UnsupportedOperationException(getClass().getName());
     }
     else
       return null;
@@ -287,7 +269,7 @@ public class StatefulManager<T> extends SessionServer<T>
     if (_remoteSessions != null) {
       Iterator<StatefulObject> iter = _remoteSessions.values();
       while (iter.hasNext()) {
-	values.add(iter.next());
+        values.add(iter.next());
       }
     }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,6 +42,7 @@ import com.caucho.bam.Broker;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.config.ConfigException;
 import com.caucho.quercus.QuercusContext;
+import com.caucho.quercus.ResinQuercus;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.JavaValue;
 import com.caucho.quercus.env.BooleanValue;
@@ -70,7 +71,7 @@ public class BamPhpServiceManager implements BrokerListener {
   private static final Logger log
     = Logger.getLogger(BamPhpServiceManager.class.getName());
 
-  private final QuercusContext _quercus = new QuercusContext();
+  private final QuercusContext _quercus = new ResinQuercus();
 
   private final HashMap<String,BamPhpActor> _children = 
     new HashMap<String,BamPhpActor>();
@@ -126,6 +127,7 @@ public class BamPhpServiceManager implements BrokerListener {
       throw new ConfigException(L.l("script path not specified"));
 
     _quercus.init();
+    _quercus.start();
 
     _broker.addBrokerListener(this);
   }

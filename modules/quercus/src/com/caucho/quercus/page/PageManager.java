@@ -56,7 +56,7 @@ public class PageManager
   //private Path _pwd;
   private boolean _isLazyCompile;
   private boolean _isCompile;
-  private boolean _isCompileFailover = ! Alarm.isTest();
+  private boolean _isCompileFailover = Alarm.isActive();
 
   private boolean _isRequireSource = true;
 
@@ -253,6 +253,9 @@ public class PageManager
         program = preloadProgram(path, fileName);
 
         if (program == null) {
+          if (log.isLoggable(Level.FINE))
+            log.fine(L.l("Quercus[{0}] parsing page", path));
+          
           program = QuercusParser.parse(_quercus,
                                         path,
                                         _quercus.getScriptEncoding(),

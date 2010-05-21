@@ -29,50 +29,42 @@
 package com.caucho.ejb.session;
 
 import javax.ejb.TimerService;
+import javax.enterprise.context.spi.CreationalContext;
 
-import com.caucho.config.*;
-import com.caucho.config.xml.XmlConfigContext;
-import com.caucho.ejb.*;
-import com.caucho.ejb.server.AbstractServer;
-import com.caucho.util.*;
+import com.caucho.inject.Module;
+import com.caucho.util.L10N;
 
 /**
  * Abstract base class for an session context
  */
-abstract public class StatefulContext extends AbstractSessionContext {
+@Module
+public class StatefulContext<X,T> extends AbstractSessionContext<X,T> {
   private static final L10N L = new L10N(StatefulContext.class);
     
-  private transient StatefulManager _server;
-
-  public StatefulContext(StatefulManager server)
+  public StatefulContext(StatefulManager<X> manager, Class<T> api)
   {
-    assert(server != null);
-
-    _server = server;
-  }
-
-  /**
-   * Returns the server which owns this bean.
-   */
-  public StatefulManager getStatefulManager()
-  {
-    return _server;
+    super(manager, api);
   }
 
   /**
    * Returns the server which owns this bean.
    */
   @Override
-  public AbstractServer getServer()
+  public StatefulManager<X> getServer()
   {
-    return _server;
+    return (StatefulManager<X>) super.getServer();
   }
   
-  public StatefulProvider getProvider(Class api)
+  @Override
+  public T createProxy(CreationalContext<T> env)
   {
-    return null;
+    T proxy = super.createProxy(env);
+    
+    getServer().initProxy(proxy, env);
+    
+    return proxy;
   }
-  
+ 
   /**
    * Returns the timer service.
    */
@@ -80,46 +72,6 @@ abstract public class StatefulContext extends AbstractSessionContext {
   public TimerService getTimerService()
     throws IllegalStateException
   {
-    throw new IllegalStateException("Stateful session beans cannot call SessionContext.getTimerService()");
-  }
-
-  /**
-   * Returns the new instance for EJB 3.0
-   */
-  protected Object _caucho_newInstance()
-  {
-    return null;
-  }
-
-  /**
-   * Returns the new instance for EJB 3.0
-   */
-  protected Object _caucho_newInstance(XmlConfigContext env)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Returns the new instance for EJB 2.1
-   */
-  protected Object _caucho_newInstance21()
-  {
-    return null;
-  }
-
-  /**
-   * Returns the new remote instance for EJB 3.0
-   */
-  protected Object _caucho_newRemoteInstance()
-  {
-    return null;
-  }
-
-  /**
-   * Returns the new remote instance for EJB 2.1
-   */
-  protected Object _caucho_newRemoteInstance21()
-  {
-    return null;
+    throw new IllegalStateException(L.l("Stateful session beans cannot call SessionContext.getTimerService()"));
   }
 }

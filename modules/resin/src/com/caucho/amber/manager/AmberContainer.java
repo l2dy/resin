@@ -57,7 +57,7 @@ import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.LineConfigException;
 import com.caucho.config.Names;
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.program.ConfigProgram;
@@ -1022,7 +1022,8 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
   /**
    * Returns true if the root is a valid scannable root.
    */
-  public boolean isRootScannable(Path root)
+  @Override
+  public boolean isRootScannable(Path root, String packageRoot)
   {
     if (! root.lookup("META-INF/persistence.xml").canRead())
       return false;
@@ -1048,7 +1049,8 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
   }
 
   @Override
-  public ScanClass scanClass(Path root, String className, int modifiers)
+  public ScanClass scanClass(Path root, String packageRoot,
+                             String className, int modifiers)
   {
     if (Modifier.isInterface(modifiers))
       return null;
@@ -1062,6 +1064,7 @@ public class AmberContainer implements ScanListener, EnvironmentListener {
       return ScanClassAllow.ALLOW;
   }
 
+  @Override
   public boolean isScanMatchAnnotation(CharBuffer annotationName)
   {
     if (annotationName.matches("javax.persistence.Entity"))

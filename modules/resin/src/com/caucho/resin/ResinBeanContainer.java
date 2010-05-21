@@ -29,33 +29,33 @@
 
 package com.caucho.resin;
 
+import java.lang.annotation.Annotation;
+import java.net.URL;
+import java.util.Enumeration;
+import java.util.Set;
+
+import javax.enterprise.context.RequestScoped;
+import javax.enterprise.context.spi.Context;
+import javax.enterprise.context.spi.Contextual;
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
+
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
-import com.caucho.config.SchemaBean;
 import com.caucho.config.cfg.BeansConfig;
-import com.caucho.config.inject.BeanFactory;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.ejb.EJBServer;
+import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.java.WorkDir;
 import com.caucho.loader.CompilingLoader;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
+import com.caucho.loader.ResourceLoader;
 import com.caucho.server.webbeans.ResinWebBeansProducer;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
-
-import java.io.IOException;
-import java.lang.annotation.Annotation;
-import java.util.Set;
-
-import javax.enterprise.context.RequestScoped;
-import javax.enterprise.context.spi.Contextual;
-import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.context.spi.Context;
-import javax.enterprise.inject.spi.Bean;
 
 /**
  * Embeddable Resin context for unit testing of
@@ -128,7 +128,7 @@ public class ResinBeanContainer
   {
     _classLoader = EnvironmentClassLoader.create("resin-context");
     _injectManager = InjectManager.create(_classLoader);
-    _injectManager.addContext(new RequestScope());
+    _injectManager.replaceContext(new RequestScope());
 
     _injectManager.addManagedBean(_injectManager.createManagedBean(ResinWebBeansProducer.class));
 
@@ -140,10 +140,8 @@ public class ResinBeanContainer
 
       Environment.init();
 
-      EJBServer ejbServer = new EJBServer();
-      ejbServer.init();
-
       Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
+      Environment.addChildLoaderListener(new EjbEnvironmentListener());
 
       _classLoader.scanRoot();
     } finally {
@@ -165,6 +163,87 @@ public class ResinBeanContainer
       CompilingLoader loader = new CompilingLoader(_classLoader);
       loader.setPath(path);
       loader.init();
+    }
+  }
+  
+  /**
+   * Adds a package as module root.
+   * 
+   * @param packageName the name of the package to be treated as a virtual
+   * module root.
+   */
+  public void addPackageModule(String modulePath, String packageName)
+  {
+    Path root = Vfs.lookup(modulePath);
+    
+    try {
+      URL url = new URL(root.getURL());
+    
+      _classLoader.addScanPackage(url, packageName);
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+  
+  /**
+   * Adds a package in the classpath as module root.
+   * 
+   * @param packageName the name of the package to be treated as a virtual
+   * module root.
+   */
+  public void addPackageModule(String packageName)
+  {
+    try {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+      Enumeration<URL> e = loader.getResources(packageName.replace('.', '/'));
+
+      URL bestUrl = null;
+
+      while (e.hasMoreElements()) {
+        URL url = e.nextElement();
+
+        if (bestUrl == null) {
+          bestUrl = url;
+          continue;
+        }
+
+        URL urlA = bestUrl;
+
+        Path pathA = Vfs.lookup(urlA);
+        Path pathB = Vfs.lookup(url);
+
+        for (String name : pathA.list()) {
+          if (name.endsWith(".class")) {
+            bestUrl = urlA;
+            break;
+          }
+        }
+
+        for (String name : pathB.list()) {
+          if (name.endsWith(".class")) {
+            bestUrl = url;
+            break;
+          }
+        }
+      }
+
+      if (bestUrl == null)
+        throw new NullPointerException(packageName);
+
+      Path path = Vfs.lookup(bestUrl);
+
+      String moduleName = path.getNativePath();
+
+      if (moduleName.endsWith(packageName.replace('.', '/'))) {
+        int prefixLength = moduleName.length() - packageName.length();
+        moduleName = moduleName.substring(0, prefixLength);
+      }
+
+      addResourceRoot(path);
+      addPackageModule(moduleName, packageName);
+    } catch (Exception e) {
+      throw ConfigException.create(e);
     }
   }
 
@@ -192,6 +271,12 @@ public class ResinBeanContainer
       thread.setContextClassLoader(oldLoader);
     }
   }
+  
+  public void addResourceRoot(Path path)
+  {
+    ResourceLoader loader = new ResourceLoader(_classLoader, path);
+    loader.init();
+  }
 
   /**
    * Sets the work directory for Resin to use when generating temporary
@@ -199,7 +284,7 @@ public class ResinBeanContainer
    */
   public void setWorkDirectory(String path)
   {
-    WorkDir.setLocalWorkDir(Vfs.lookup(path));
+    WorkDir.setLocalWorkDir(Vfs.lookup(path), _classLoader);
   }
 
   /**
@@ -366,6 +451,11 @@ public class ResinBeanContainer
     if (loader != null) {
       loader.destroy();
     }
+  }
+
+  public ClassLoader getClassLoader()
+  {
+    return _classLoader;
   }
 
   public String toString()

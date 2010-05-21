@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -232,7 +232,7 @@ public class QuercusParser {
   public QuercusParser(QuercusContext quercus)
   {
     _quercus = quercus;
-
+    
     if (quercus == null)
       _factory = ExprFactory.create();
     else
@@ -387,6 +387,11 @@ public class QuercusParser {
     parser.close();
 
     return fun;
+  }
+  
+  public boolean isUnicodeSemantics()
+  {
+    return _quercus != null && _quercus.isUnicodeSemantics();
   }
 
   public static Expr parse(QuercusContext quercus, String str)
@@ -4760,13 +4765,10 @@ public class QuercusParser {
     _peek = ch;
   }
 
-  /**
-   * XXX: parse as Unicode if and only if uncode.semantics is on.
-   */
   private void parseStringToken(int end)
     throws IOException
   {
-    parseStringToken(end, true);
+    parseStringToken(end, isUnicodeSemantics());
   }
 
   /**
@@ -4785,11 +4787,27 @@ public class QuercusParser {
 
         if (isUnicode) {
           if (ch == 'u') {
-            _sb.append(Character.toChars(parseUnicodeEscape(false)));
+            int value = parseUnicodeEscape(false);
+            
+            if (value < 0) {
+              _sb.append('\\');
+              _sb.append('u');
+            }
+            else
+              _sb.append(Character.toChars(value));
+            
             continue;
           }
           else if (ch == 'U') {
-            _sb.append(Character.toChars(parseUnicodeEscape(true)));
+            int value = parseUnicodeEscape(true);
+            
+            if (value < 0) {
+              _sb.append('\\');
+              _sb.append('U');
+            }
+            else
+              _sb.append(Character.toChars(value));
+            
             continue;
           }
         }
@@ -5017,7 +5035,7 @@ public class QuercusParser {
   private Expr createString(String lexeme)
   {
     // XXX: see QuercusParser.parseDefault for _quercus == null
-    if (_quercus != null && _quercus.isUnicodeSemantics())
+    if (isUnicodeSemantics())
       return _factory.createUnicode(lexeme);
     else
       return _factory.createString(lexeme);
@@ -5026,7 +5044,7 @@ public class QuercusParser {
   private StringValue createStringValue(String lexeme)
   {
     // XXX: see QuercusParser.parseDefault for _quercus == null
-    if (_quercus != null && _quercus.isUnicodeSemantics())
+    if (isUnicodeSemantics())
       return new UnicodeBuilderValue(lexeme);
     else
       return new ConstStringValue(lexeme);
@@ -5039,7 +5057,7 @@ public class QuercusParser {
     // php/0ch1, php/0350
     // return _factory.createBinary(bytes);
 
-    if (_quercus != null && _quercus.isUnicodeSemantics())
+    if (isUnicodeSemantics())
       return _factory.createBinary(bytes);
     else {
       try {
@@ -5056,7 +5074,7 @@ public class QuercusParser {
   private int parseEscapedString(char end)
     throws IOException
   {
-    return parseEscapedString(end, true);
+    return parseEscapedString(end, isUnicodeSemantics());
   }
 
   /**
@@ -5114,16 +5132,36 @@ public class QuercusParser {
           break;
         }
         case 'u':
-          if (isUnicode)
-            _sb.append(Character.toChars(parseUnicodeEscape(false)));
-          else
+          if (isUnicode) {
+            int result = parseUnicodeEscape(false);
+            
+            if (result < 0) {
+              _sb.append('\\');
+              _sb.append('u');
+            }
+            else
+              _sb.append(Character.toChars(result));
+          }
+          else {
+            _sb.append('\\');
             _sb.append((char) ch);
+          }
           break;
         case 'U':
-          if (isUnicode)
-            _sb.append(Character.toChars(parseUnicodeEscape(true)));
-          else
+          if (isUnicode) {
+            int result = parseUnicodeEscape(true);
+            
+            if (result < 0) {
+              _sb.append('\\');
+              _sb.append('U');
+            }
+            else
+              _sb.append(Character.toChars(result));
+          }
+          else {
+            _sb.append('\\');
             _sb.append((char) ch);
+          }
           break;
         case '{':
           ch = read();
@@ -5296,7 +5334,7 @@ public class QuercusParser {
     throws IOException
   {
     int codePoint = parseHexEscape();
-    
+
     if (codePoint < 0)
       return -1;
     

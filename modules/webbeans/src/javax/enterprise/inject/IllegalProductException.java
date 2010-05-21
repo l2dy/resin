@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,8 @@ package javax.enterprise.inject;
  */
 public class IllegalProductException extends InjectionException
 {
+  private static final long serialVersionUID = -6280627846071966243L;
+
   public IllegalProductException()
   {
   }

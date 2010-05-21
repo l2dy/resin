@@ -194,6 +194,34 @@ public class QDate {
 
     setLocalTime(Alarm.getCurrentTime());
   }
+  
+  /**
+   * Creates the date from local or GMT.
+   */
+  public QDate(TimeZone zone, long now)
+  {
+    _timeZone = zone;
+
+    if (zone == _gmtTimeZone) {
+      _stdName = _gmtStdName;
+      _dstName = _gmtDstName;
+    }
+    else if (zone == _localTimeZone) {
+      _stdName = _localStdName;
+      _dstName = _localDstName;
+    }
+    else {
+      _stdName = _timeZone.getDisplayName(false, TimeZone.SHORT);
+      _dstName = _timeZone.getDisplayName(true, TimeZone.SHORT);
+    }
+
+    _calendar = new GregorianCalendar(_timeZone);
+
+    if (zone == _gmtTimeZone)
+      setGMTTime(now);
+    else
+      setLocalTime(now);
+  }
 
   /**
    * Creates the date for the local time zone.

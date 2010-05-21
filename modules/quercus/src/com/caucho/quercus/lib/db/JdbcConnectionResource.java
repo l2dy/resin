@@ -71,7 +71,6 @@ public abstract class JdbcConnectionResource
 
   private String _errorMessage = null;
   private int _errorCode;
-  private boolean _fieldCount = false;
   private SQLWarning _warnings;
 
   private Env _env;
@@ -86,7 +85,6 @@ public abstract class JdbcConnectionResource
 
   private String _catalog;
   private boolean _isCatalogOptimEnabled = false;
-  private boolean _isCloseOnClose = true;
 
   private boolean _isUsed;
 
@@ -203,10 +201,10 @@ public abstract class JdbcConnectionResource
 
     if (_conn != null) {
       try {
-	if ("".equals(_catalog)) 
-	  _catalog = _conn.getConnection().getCatalog();
+        if ("".equals(_catalog)) 
+          _catalog = _conn.getConnection().getCatalog();
       } catch (SQLException e) {
-	log.log(Level.FINE, e.toString(), e);
+        log.log(Level.FINE, e.toString(), e);
       }
     }
 
@@ -217,16 +215,16 @@ public abstract class JdbcConnectionResource
    * Connects to the underlying database.
    */
   protected abstract ConnectionEntry connectImpl(Env env,
-						 String host,
-						 String userName,
-						 String password,
-						 String dbname,
-						 int port,
-						 String socket,
-						 int flags,
-						 String driver,
-						 String url,
-						 boolean isNewLink);
+                                                 String host,
+                                                 String userName,
+                                                 String password,
+                                                 String dbname,
+                                                 int port,
+                                                 String socket,
+                                                 int flags,
+                                                 String driver,
+                                                 String url,
+                                                 boolean isNewLink);
 
   /**
    * Escape the given string for SQL statements.
@@ -405,6 +403,8 @@ public abstract class JdbcConnectionResource
     else {
       env.warning(L.l("Connection is not available: {0}", _conn));
       
+      _errorMessage = L.l("Connection is not available: {0}", _conn);
+      
       return null;
     }
   }
@@ -472,24 +472,29 @@ public abstract class JdbcConnectionResource
   /**
    * Returns the table metadata.
    */
-  public JdbcTableMetaData getTableMetaData(String catalog,
+  public JdbcTableMetaData getTableMetaData(Env env,
+                                            String catalog,
                                             String schema,
                                             String table)
     throws SQLException
   {
     try {
       if (table == null || table.equals(""))
-	return null;
+        return null;
     
       TableKey key = new TableKey(getURL(), catalog, schema, table);
 
       // XXX: needs invalidation on DROP or ALTER
       JdbcTableMetaData tableMd = _tableMetadataMap.get(key);
     
-      if (tableMd != null && tableMd.isValid())
-	return tableMd;
+      if (tableMd != null && tableMd.isValid(env))
+        return tableMd;
     
-      tableMd = new JdbcTableMetaData(catalog, schema, table, getMetaData());
+      tableMd = new JdbcTableMetaData(env,
+                                      catalog,
+                                      schema,
+                                      table,
+                                      getMetaData());
 
       _tableMetadataMap.put(key, tableMd);
 

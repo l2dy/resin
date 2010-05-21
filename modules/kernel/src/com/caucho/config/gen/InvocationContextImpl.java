@@ -64,33 +64,39 @@ public class InvocationContextImpl implements InvocationContext {
     _param = param;
   }
 
+  @Override
   public Object getTarget()
   {
     return _target;
   }
 
+  @Override
   public Method getMethod()
   {
     return _apiMethod;
   }
 
+  @Override
   public Object getTimer()
   {
     return null;
   }
 
+  @Override
   public Object[] getParameters()
     throws IllegalStateException
   {
     return _param;
   }
 
+  @Override
   public void setParameters(Object[] parameters)
     throws IllegalStateException
   {
     _param = parameters;
   }
 
+  @Override
   public Map<String, Object> getContextData()
   {
     if (_map == null)
@@ -99,6 +105,7 @@ public class InvocationContextImpl implements InvocationContext {
     return _map;
   }
 
+  @Override
   public Object proceed()
     throws Exception
   {
@@ -109,8 +116,9 @@ public class InvocationContextImpl implements InvocationContext {
 
         return _chainMethods[i].invoke(_chainObjects[_chainIndex[i]], this);
       }
-      else
+      else {
         return _implMethod.invoke(_target, _param);
+      }
     } catch (InvocationTargetException e) {
       Throwable cause = e.getCause();
 
@@ -119,5 +127,10 @@ public class InvocationContextImpl implements InvocationContext {
       else
         throw e;
     }
+  }
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _implMethod.getName() + "]";
   }
 }

@@ -31,10 +31,12 @@ package com.caucho.naming;
 
 import com.caucho.util.L10N;
 
+import javax.naming.NameNotFoundException;
 import javax.naming.NamingException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map.Entry;
 
 /**
  * Environment based model for JNDI.
@@ -44,7 +46,7 @@ public class EnvironmentModel extends AbstractModel
   private static final L10N L = new L10N(EnvironmentModel.class);
   
   private final EnvironmentModelRoot _root;
-  private final String _name;
+  private String _name;
   
   private HashMap<String,Object> _children
     = new HashMap<String,Object>(8);
@@ -56,9 +58,6 @@ public class EnvironmentModel extends AbstractModel
   {
     _root = root;
     _name = name;
-
-    if ("ejb".equals(name))
-      Thread.dumpStack();
   }
 
   /**
@@ -90,17 +89,17 @@ public class EnvironmentModel extends AbstractModel
       return null;
     
     EnvironmentModelRoot parentRoot
-      = EnvironmentModelRoot.getLocal(loader.getParent());
+      = EnvironmentModelRoot.getCurrent(loader.getParent());
 
     if (parentRoot != null) {
       EnvironmentModel parentModel = parentRoot.get(_name);
 
       if (parentModel != null) {
-	value = parentModel.lookup(name);
+        value = parentModel.lookup(name);
 
-	if (value instanceof EnvironmentModel) {
-	  value = createSubcontext(name);
-	}
+        if (value instanceof EnvironmentModel) {
+          value = createSubcontext(name);
+        }
       }
     }
       
@@ -123,8 +122,10 @@ public class EnvironmentModel extends AbstractModel
     throws NamingException
   {
     Object oldValue = _children.remove(name);
-
-    if (oldValue instanceof EnvironmentModel)
+    
+    if (oldValue == null)
+      throw new NameNotFoundException(name);
+    else if (oldValue instanceof EnvironmentModel)
       _root.remove(_name + "/" + name);
   }
 
@@ -154,6 +155,30 @@ public class EnvironmentModel extends AbstractModel
 
     return model;
   }
+  
+  /**
+   * Renames a child.
+   */
+  public void rename(String newName)
+    throws NamingException
+  {
+    _name = newName;
+    HashMap<String,Object> newChildren = new HashMap<String,Object>();
+    
+    for (Entry<String,Object> entry : _children.entrySet()) {
+      String key = entry.getKey();
+      Object obj = entry.getValue();
+      
+      String name = newName + "/" + key;
+      
+      if (obj instanceof EnvironmentModel)
+        ((EnvironmentModel) obj).rename(name);
+      
+      newChildren.put(name, obj);
+    }
+    
+    _children = newChildren;
+  }
 
   /**
    * Lists the child names.
@@ -180,7 +205,7 @@ public class EnvironmentModel extends AbstractModel
       return;
     
     EnvironmentModelRoot parentRoot
-      = EnvironmentModelRoot.getLocal(loader.getParent());
+      = EnvironmentModelRoot.getCurrent(loader.getParent());
 
     if (parentRoot != null) {
       EnvironmentModel parentModel = parentRoot.get(_name);
@@ -189,5 +214,10 @@ public class EnvironmentModel extends AbstractModel
 	parentModel.fillList(values);
       }
     }
+  }
+  
+  public String toString()
+  {
+    return "EnvironmentModel[" + _name + "]";
   }
 }

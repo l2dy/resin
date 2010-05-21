@@ -660,7 +660,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
     if (_userTransaction != null)
       _suspendState = _userTransaction.userSuspend();
 
-    if (log.isLoggable(Level.FINER))
+    if (log.isLoggable(Level.FINE))
       log.fine(this + " suspended");
   }
 
@@ -813,14 +813,11 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
         if (_rollbackException != null)
           throw new RollbackExceptionWrapper(
-              L
-                  .l(
-                      "Transaction can't commit because it has been marked rolled back\n  {0}",
-                      _rollbackException), _rollbackException);
+              L.l("Transaction can't commit because it has been marked rolled back\n  {0}",
+                  _rollbackException), _rollbackException);
         else
           throw new RollbackException(
-              L
-                  .l("Transaction can't commit because it has been marked rolled back."));
+              L.l("Transaction can't commit because it has been marked rolled back."));
       }
 
       if (_resourceCount > 0) {
@@ -1221,8 +1218,11 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
     _resourceCount = 0;
 
-    _mappedResources.clear();
+    Map<Object,Object> mappedResources = _mappedResources;
     _mappedResources = null;
+    
+    if (mappedResources != null)
+      mappedResources.clear();
 
     _xid = null;
   }

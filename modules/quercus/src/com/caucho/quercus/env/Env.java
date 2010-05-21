@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.java.WorkDir;
 import com.caucho.quercus.*;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.lib.ErrorModule;
@@ -80,7 +81,8 @@ import java.util.logging.Logger;
 /**
  * Represents the Quercus environment.
  */
-public class Env {
+public class Env
+{
   private static final L10N L = new L10N(Env.class);
   private static final Logger log
     = Logger.getLogger(Env.class.getName());
@@ -320,9 +322,6 @@ public class Env {
 
   private StreamContextResource _defaultStreamContext;
 
-  // XXX: need to look this up from the module itself
-  private int _errorMask = E_DEFAULT;
-
   private int _objectId = 0;
 
   private Logger _logger;
@@ -446,11 +445,6 @@ public class Env {
 
     _internalAutoload
       = new InternalAutoloadCallback("com/caucho/quercus/php/");
-
-    fillPost(_postArray,
-             _files,
-             _request,
-             getIniBoolean("magic_quotes_gpc"));
 
     // Define the constant string PHP_VERSION
 
@@ -802,7 +796,15 @@ public class Env {
 
   public TimeZone getDefaultTimeZone()
   {
-    return _defaultTimeZone;
+    if (_defaultTimeZone != null)
+      return _defaultTimeZone;
+    
+    String timeZone = getIniString("date.timezone");
+    
+    if (timeZone != null)
+      return TimeZone.getTimeZone(timeZone);
+    else
+      return TimeZone.getDefault();
   }
 
   public QDate getGmtDate()
@@ -827,6 +829,18 @@ public class Env {
     }
 
     return _localDate;
+  }
+  
+  public QDate getDate()
+  {
+    TimeZone zone = getDefaultTimeZone();
+    
+    if (zone.getID().equals("GMT"))
+      return getGmtDate();
+    else if (zone.equals(TimeZone.getDefault()))
+      return getLocalDate();
+    else
+      return new QDate(zone);
   }
 
   public void setDefaultTimeZone(String id)
@@ -908,7 +922,7 @@ public class Env {
   {
     _oldThreadEnv = _threadEnv.get();
 
-    _startTime = Alarm.getCurrentTime();
+    _startTime = _quercus.getCurrentTime();
     _timeLimit = getIniLong("max_execution_time") * 1000;
 
     if (_timeLimit > 0)
@@ -917,6 +931,11 @@ public class Env {
       _endTime = Long.MAX_VALUE / 2;
 
     _threadEnv.set(this);
+    
+    fillPost(_postArray,
+             _files,
+             _request,
+             getIniBoolean("magic_quotes_gpc"));
 
     // quercus/1b06
     String encoding = getOutputEncoding();
@@ -945,6 +964,22 @@ public class Env {
       listener.startup(this);
     
     _quercus.startEnv(this);
+  }
+  
+  /**
+   * Returns the current time (may be cached).
+   */
+  public long getCurrentTime()
+  {
+    return getQuercus().getCurrentTime();
+  }
+  
+  /**
+   * Returns the current time (not cached).
+   */
+  public long getExactTime()
+  {
+    return getQuercus().getExactTime();
   }
 
   /**
@@ -1112,7 +1147,7 @@ public class Env {
  
   public void updateTimeout()
   {
-    long now = Alarm.getCurrentTime();
+    long now = _quercus.getCurrentTime();
     
     if (_endTime < now)
       _isTimeout = true;
@@ -1120,7 +1155,7 @@ public class Env {
   
   public void resetTimeout()
   {
-    _startTime = Alarm.getCurrentTime();
+    _startTime = _quercus.getCurrentTime();
     _endTime = _startTime + _timeLimit;
     _isTimeout = false;
   }
@@ -1415,8 +1450,15 @@ public class Env {
   public Path getUploadDirectory()
   {
     if (_uploadPath == null) {
-      String realPath = getUploadPath();
-
+      String realPath = getIniString("upload_tmp_dir");
+      
+      if (realPath != null) {
+      }
+      else if (getRequest() != null)
+        realPath = "WEB-INF/upload";
+      else
+        realPath = WorkDir.getTmpWorkDir().lookup("upload").getNativePath();
+      
       _uploadPath = _quercus.getPwd().lookup(realPath);
 
       try {
@@ -1431,20 +1473,6 @@ public class Env {
     }
 
     return _uploadPath;
-  }
-
-  protected String getUploadPath()
-  {
-    String realPath = getIniString("upload_tmp_dir");
-
-    if (realPath == null) {
-      if (getRequest() != null)
-        realPath = getRequest().getRealPath("/WEB-INF/upload");
-      else
-        realPath = "/tmp/caucho/upload";
-    }
-
-    return realPath;
   }
 
   /**
@@ -1629,7 +1657,7 @@ public class Env {
    */
   public SessionArrayValue createSession(String sessionId, boolean create)
   {
-    long now = Alarm.getCurrentTime();
+    long now = _quercus.getCurrentTime();
 
     SessionCallback callback = getSessionCallback();
 
@@ -6013,7 +6041,7 @@ public class Env {
   {
     int mask = 1 << B_WARNING;
 
-    if ((_errorMask & mask) != 0) {
+    if ((getErrorMask() & mask) != 0) {
       if (log.isLoggable(Level.FINER)) {
         QuercusException e = new QuercusException(msg);
 
@@ -6031,7 +6059,7 @@ public class Env {
   {
     int mask = 1 << B_WARNING;
 
-    if ((_errorMask & mask) != 0) {
+    if ((getErrorMask() & mask) != 0) {
       if (log.isLoggable(Level.FINER)) {
         QuercusException e = new QuercusException(msg);
 
@@ -6172,7 +6200,7 @@ public class Env {
    */
   public int getErrorMask()
   {
-    return _errorMask;
+    return getIni("error_reporting").toInt();
   }
 
   /**
@@ -6180,10 +6208,10 @@ public class Env {
    */
   public int setErrorMask(int mask)
   {
-    int oldMask = _errorMask;
-
-    _errorMask = mask;
-
+    int oldMask = getErrorMask();
+    
+    setIni("error_reporting", LongValue.create(mask));
+    
     return oldMask;
   }
 
@@ -6288,13 +6316,15 @@ public class Env {
   {
     int mask = 1 << code;
 
+    int errorMask = getErrorMask();
+    
     if (log.isLoggable(Level.FINEST)) {
       QuercusException e = new QuercusException(loc + msg);
 
       log.log(Level.FINEST, e.toString(), e);
     }
 
-    if ((_errorMask & mask) != 0) {
+    if ((errorMask & mask) != 0) {
       if (log.isLoggable(Level.FINE))
         log.fine(this + " " + loc + msg);
     }
@@ -6339,7 +6369,7 @@ public class Env {
       }
     }
 
-    if ((_errorMask & mask) != 0) {
+    if ((errorMask & mask) != 0) {
       try {
         String fullMsg = (getLocationPrefix(location, loc)
                           + getCodeName(mask) + msg);
@@ -6783,12 +6813,12 @@ public class Env {
 
   public long getMicroTime()
   {
-    long nanoTime = Alarm.getExactTimeNanoseconds();
+    long nanoTime = _quercus.getExactTimeNanoseconds();
 
     if (_firstMicroTime <= 0) {
       _firstNanoTime = nanoTime;
 
-      _firstMicroTime = Alarm.getExactTime() * 1000
+      _firstMicroTime = _quercus.getExactTime() * 1000
                         + (_firstNanoTime % 1000000L) / 1000;
 
       return _firstMicroTime;

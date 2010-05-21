@@ -53,7 +53,7 @@ import javax.inject.Scope;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Names;
 import com.caucho.config.inject.AbstractBean;
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
@@ -153,7 +153,7 @@ public class BeanConfig {
   /**
    * backwards compat
    */
-  public void setType(Class cl)
+  public void setType(Class<?> cl)
   {
     setClass(cl);
   }
@@ -161,14 +161,14 @@ public class BeanConfig {
   /**
    * Sets the component implementation class.
    */
-  public void setClass(Class cl)
+  public void setClass(Class<?> cl)
   {
     _cl = cl;
 
     if (_name == null)
       _name = Introspector.decapitalize(cl.getSimpleName());
 
-    Class type = getBeanConfigClass();
+    Class<?> type = getBeanConfigClass();
 
     if (type != null && ! type.isAssignableFrom(cl))
       throw new ConfigException(L.l("'{0}' is not a valid instance of '{1}'",
@@ -183,9 +183,9 @@ public class BeanConfig {
       return _cl;
   }
 
-  public AbstractBean<?> getComponent()
+  public Bean<?> getComponent()
   {
-    return (AbstractBean<?>) _bean;
+    return _bean;
   }
 
   /**
@@ -237,7 +237,7 @@ public class BeanConfig {
     }
   }
 
-  public void setScopeType(Class cl)
+  public void setScopeType(Class<?> cl)
   {
     if (cl == null)
       throw new ConfigException(L.l("'{0}' is an invalid scope.  The scope must be a valid @Scope annotation."));
@@ -323,13 +323,13 @@ public class BeanConfig {
   /**
    * Returns the configured component factory.
    */
-  public AbstractBean getComponentFactory()
+  private Bean getComponentFactory()
   {
-    return (AbstractBean) _bean;
+    return _bean;
   }
 
   // XXX: temp for OSGI
-  public boolean isService()
+  private boolean isService()
   {
     return _isService;
   }
@@ -381,16 +381,16 @@ public class BeanConfig {
     setMbeanInterface(cl);
   }
 
-  public void setMbeanInterface(Class cl)
+  public void setMbeanInterface(Class<?> cl)
   {
   }
 
-  public Class getBeanConfigClass()
+  public Class<?> getBeanConfigClass()
   {
     return _beanConfigClass;
   }
 
-  public void setBeanConfigClass(Class cl)
+  public void setBeanConfigClass(Class<?> cl)
   {
     _beanConfigClass = cl;
   }
@@ -400,7 +400,7 @@ public class BeanConfig {
    */
   public void setUri(String uri)
   {
-    Class beanConfigClass = getBeanConfigClass();
+    Class<?> beanConfigClass = getBeanConfigClass();
 
     if (beanConfigClass == null) {
       throw new ConfigException(L.l("'{0}' does not support the 'uri' attribute because its bean-config-class is undefined",
@@ -447,7 +447,7 @@ public class BeanConfig {
     return _uri;
   }
 
-  public void addCustomBean(CustomBeanConfig customBean)
+  public void addCustomBean(CustomBeanConfig<?> customBean)
   {
     _customBean = customBean;
   }
@@ -492,7 +492,7 @@ public class BeanConfig {
     introspect();
 
     InjectManager beanManager = InjectManager.create();
-    BeanFactory factory =  beanManager.createBeanFactory(_cl);
+    BeanBuilder factory =  beanManager.createBeanFactory(_cl);
 
     _annotatedType = factory.getAnnotatedType();
 

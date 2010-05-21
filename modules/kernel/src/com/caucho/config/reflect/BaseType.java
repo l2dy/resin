@@ -52,8 +52,22 @@ abstract public class BaseType
   
   private LinkedHashSet<Type> _typeSet;
   
+  public static BaseType createForTarget(Type type, 
+                                         HashMap<String,BaseType> paramMap)
+  {
+    return create(type, paramMap, true);
+  }
+  
+  public static BaseType createForSource(Type type, 
+                                         HashMap<String,BaseType> paramMap)
+  {
+//  return create(type, paramMap, false);
+    return create(type, paramMap, false);
+  }
+    
   public static BaseType create(Type type, 
-                                HashMap<String,BaseType> paramMap)
+                                HashMap<String,BaseType> paramMap,
+                                boolean isClassFillParamObject)
   {
     if (type instanceof Class<?>) {
       Class<?> cl = (Class<?>) type;
@@ -63,12 +77,16 @@ abstract public class BaseType
       if (typeParam == null || typeParam.length == 0)
 	return ClassType.create(cl);
 
+      if (! isClassFillParamObject)
+        return createClass(cl);
+      
       BaseType []args = new BaseType[typeParam.length];
 
       HashMap<String,BaseType> newParamMap = new HashMap<String,BaseType>();
 
       for (int i = 0; i < args.length; i++) {
-	args[i] = ClassType.OBJECT_TYPE;
+        // ioc/0246
+        args[i] = TargetObjectType.OBJECT_TYPE;
 	
 	if (args[i] == null) {
 	  throw new NullPointerException("unsupported BaseType: " + type);
@@ -77,7 +95,7 @@ abstract public class BaseType
 	newParamMap.put(typeParam[i].getName(), args[i]);
       }
 
-      return new ParamType(cl, args, newParamMap);
+      return new GenericParamType(cl, args, newParamMap);
     }
     else if (type instanceof ParameterizedType) {
       ParameterizedType pType = (ParameterizedType) type;
@@ -89,7 +107,7 @@ abstract public class BaseType
       BaseType []args = new BaseType[typeArgs.length];
 
       for (int i = 0; i < args.length; i++) {
-	args[i] = create(typeArgs[i], paramMap);
+	args[i] = create(typeArgs[i], paramMap, true);
 	
 	if (args[i] == null) {
 	  throw new NullPointerException("unsupported BaseType: " + type);
@@ -109,7 +127,7 @@ abstract public class BaseType
     else if (type instanceof GenericArrayType) {
       GenericArrayType aType = (GenericArrayType) type;
 
-      BaseType baseType = create(aType.getGenericComponentType(), paramMap);
+      BaseType baseType = create(aType.getGenericComponentType(), paramMap, isClassFillParamObject);
       Class<?> rawType = Array.newInstance(baseType.getRawClass(), 0).getClass();
       
       return new ArrayType(baseType, rawType);
@@ -133,7 +151,7 @@ abstract public class BaseType
 	baseBounds = new BaseType[bounds.length];
 
 	for (int i = 0; i < bounds.length; i++)
-	  baseBounds[i] = create(bounds[i], paramMap);
+	  baseBounds[i] = create(bounds[i], paramMap, true);
       }
       else
 	baseBounds = new BaseType[0];
@@ -170,7 +188,7 @@ abstract public class BaseType
     HashMap<String,BaseType> newParamMap = new HashMap<String,BaseType>();
 
     for (int i = 0; i < args.length; i++) {
-      args[i] = create(typeParam[i], newParamMap);
+      args[i] = create(typeParam[i], newParamMap, true);
 	
       if (args[i] == null) {
 	throw new NullPointerException("unsupported BaseType: " + type);
@@ -178,8 +196,10 @@ abstract public class BaseType
 	
       newParamMap.put(typeParam[i].getName(), args[i]);
     }
+    
+    // ioc/07f2
 
-    return new ParamType(type, args, newParamMap);
+    return new GenericParamType(type, args, newParamMap);
   }
 
   private static BaseType []toBaseType(Type []types,
@@ -191,7 +211,7 @@ abstract public class BaseType
     BaseType []baseTypes = new BaseType[types.length];
 
     for (int i = 0; i < types.length; i++) {
-      baseTypes[i] = create(types[i], paramMap);
+      baseTypes[i] = create(types[i], paramMap, true);
     }
 
     return baseTypes;
@@ -213,8 +233,46 @@ abstract public class BaseType
   {
     return false;
   }
-
-  abstract public boolean isMatch(Type type);
+  
+  /**
+   * Returns true for a generic type like MyBean<X> or MyBean<?>
+   */
+  public boolean isGeneric()
+  {
+    return false;
+  }
+  
+  /**
+   * Returns true for a variable type like X
+   */
+  public boolean isVariable()
+  {
+    return false;
+  }
+  
+  /**
+   * Returns true for a raw type like MyBean where the class definition 
+   * is MyBean<X>.
+   */
+  public boolean isGenericRaw()
+  {
+    return false;
+  }
+  
+  public boolean isPrimitive()
+  {
+    return false;
+  }
+  
+  public boolean isObject()
+  {
+    return false;
+  }
+  
+  protected BaseType []getWildcardBounds()
+  {
+    return NULL_PARAM;
+  }
 
   public boolean isAssignableFrom(BaseType type)
   {
@@ -226,7 +284,7 @@ abstract public class BaseType
    */
   public boolean isParamAssignableFrom(BaseType type)
   {
-    return isAssignableFrom(type);
+    return equals(type);
   }
 
   public Type toType()
@@ -261,11 +319,6 @@ abstract public class BaseType
   protected void fillTypeClosure(InjectManager manager, Set<Type> typeSet)
   {
     typeSet.add(toType());
-  }
-  
-  public BaseType findClass(InjectManager manager, Class<?> cl)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
   }
 
   public String getSimpleName()

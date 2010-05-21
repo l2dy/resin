@@ -29,46 +29,70 @@
 
 package com.caucho.ejb.inject;
 
-import com.caucho.config.inject.BeanWrapper;
-import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.inject.ScopeAdapterBean;
-import com.caucho.config.program.Arg;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.xml.XmlConfigContext;
-import com.caucho.util.L10N;
-import javax.enterprise.inject.spi.*;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Type;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Set;
 
-import javax.enterprise.context.spi.Contextual;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.PassivationCapable;
+
+import com.caucho.config.inject.ManagedBeanImpl;
+import com.caucho.config.inject.ScopeAdapterBean;
+import com.caucho.ejb.session.AbstractSessionContext;
+import com.caucho.inject.Module;
 
 /**
  * Internal implementation for a Bean
  */
-public class SessionBeanImpl<X> extends BeanWrapper<X>
-  implements ScopeAdapterBean<X>, PassivationCapable, EjbGeneratedBean
+@Module
+public class SessionBeanImpl<X,T>
+  implements ScopeAdapterBean<T>, Bean<T>, PassivationCapable, EjbGeneratedBean
 {
-  private static final L10N L = new L10N(SessionBeanImpl.class);
-
-  public SessionBeanImpl(ManagedBeanImpl<X> bean)
+  private AbstractSessionContext<X,T> _context;
+  private ManagedBeanImpl<X> _bean;
+  private LinkedHashSet<Type> _types = new LinkedHashSet<Type>();
+  
+  public SessionBeanImpl(AbstractSessionContext<X,T> context,
+                         ManagedBeanImpl<X> bean,
+                         Set<Type> apiList)
   {
-    super(bean.getBeanManager(), bean);
+    _context = context;
+    _bean = bean;
+    
+    _types.addAll(apiList);
+  }
+  
+  protected ManagedBeanImpl<X> getBean()
+  {
+    return _bean;
+  }
+  
+  @Override
+  public Set<Type> getTypes()
+  {
+    return _types;
   }
 
   @Override
-  public X getScopeAdapter(Bean<?> topBean, CreationalContext<X> context)
+  public T getScopeAdapter(Bean<?> topBean, CreationalContext<T> context)
   {
     return null;
   }
 
   @Override
-  public X create(CreationalContext context)
+  public T create(CreationalContext<T> env)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return _context.createProxy(env);
+  }
+  
+  @Override
+  public void destroy(T instance, CreationalContext<T> env)
+  {
+    _context.destroyProxy(instance, env);
   }
 
   /**
@@ -76,6 +100,67 @@ public class SessionBeanImpl<X> extends BeanWrapper<X>
    */
   public Set<InjectionPoint> getInjectionPoints()
   {
-    return getBean().getInjectionPoints();
+    // ejb/1210
+    // return getBean().getInjectionPoints();
+    
+    HashSet<InjectionPoint> injectionPoints = new HashSet<InjectionPoint>();
+    
+    return injectionPoints;
+  }
+
+  @Override
+  public Class<?> getBeanClass()
+  {
+    return getBean().getBeanClass();
+  }
+
+  @Override
+  public String getName()
+  {
+    return getBean().getName();
+  }
+
+  @Override
+  public Set<Annotation> getQualifiers()
+  {
+    return getBean().getQualifiers();
+  }
+
+  @Override
+  public Class<? extends Annotation> getScope()
+  {
+    return getBean().getScope();
+  }
+
+  @Override
+  public Set<Class<? extends Annotation>> getStereotypes()
+  {
+    return getBean().getStereotypes();
+  }
+
+  @Override
+  public boolean isAlternative()
+  {
+    return getBean().isAlternative();
+  }
+
+  @Override
+  public boolean isNullable()
+  {
+    return false;
+  }
+
+  @Override
+  public String getId()
+  {
+    return getBean().getId();
+  }
+  
+  @Override
+  public String toString()
+  {
+    return (getClass().getSimpleName()
+            + "[" + getBeanClass().getSimpleName()
+            + ", " + getQualifiers() + "]");
   }
 }

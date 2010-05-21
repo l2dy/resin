@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2004 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,4 +46,5 @@ public @interface EJB {
   String beanName() default "";
   String mappedName() default "";
   String description() default "";
+  String lookup() default "";
 }

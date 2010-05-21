@@ -41,8 +41,8 @@ import javax.management.ObjectName;
 import com.caucho.admin.RemoteAdminService;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
-import com.caucho.config.inject.BeanFactory;
-import com.caucho.config.inject.CurrentLiteral;
+import com.caucho.config.inject.BeanBuilder;
+import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.config.types.Period;
@@ -230,11 +230,11 @@ class WatchdogManager implements AlarmListener {
         auth = _management.getAdminAuthenticator();
 
       if (auth != null) {
-        BeanFactory<Authenticator> factory = webBeans.createBeanFactory(Authenticator.class);
+        BeanBuilder<Authenticator> factory = webBeans.createBeanFactory(Authenticator.class);
 
         factory.type(Authenticator.class);
         factory.type(AdminAuthenticator.class);
-        factory.binding(CurrentLiteral.CURRENT);
+        factory.binding(DefaultLiteral.DEFAULT);
 
         webBeans.addBean(factory.singleton(auth));
       }

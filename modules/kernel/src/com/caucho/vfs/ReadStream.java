@@ -72,6 +72,7 @@ public final class ReadStream extends InputStream
   private StreamImpl _source;
   private long _position;
 
+  private boolean _isEnableReadTime;
   private long _readTime;
 
   private Reader _readEncoding;
@@ -223,6 +224,9 @@ public final class ReadStream extends InputStream
    */
   public long getReadTime()
   {
+    if (! _isEnableReadTime)
+      throw new UnsupportedOperationException("last read-time is disabled");
+    
     return _readTime;
   }
 
@@ -232,6 +236,14 @@ public final class ReadStream extends InputStream
   public void clearReadTime()
   {
     _readTime = 0;
+  }
+  
+  /**
+   * Enables setting the read time on every reads.
+   */
+  public void setEnableReadTime(boolean isEnable)
+  {
+    _isEnableReadTime = isEnable;
   }
 
   /**
@@ -452,7 +464,9 @@ public final class ReadStream extends InputStream
 
         if (len > 0) {
           _position += len;
-          _readTime = Alarm.getCurrentTime();
+          
+          if (_isEnableReadTime)
+            _readTime = Alarm.getCurrentTime();
         }
 
         return len;
@@ -1075,7 +1089,9 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      _readTime = Alarm.getCurrentTime();
+      
+      if (_isEnableReadTime)
+        _readTime = Alarm.getCurrentTime();
 
       return true;
     }
@@ -1092,16 +1108,16 @@ public final class ReadStream extends InputStream
 
    * @return true on data or end of file, false on timeout
    */
-  public boolean fillWithTimeout(long timeout)
+  public int fillWithTimeout(long timeout)
     throws IOException
   {
     if (_readOffset < _readLength)
-      return true;
+      return _readLength - _readOffset;
 
     if (_readBuffer == null) {
       _readOffset = 0;
       _readLength = 0;
-      return false;
+      return -1;
     }
 
     if (_sibling != null)
@@ -1112,7 +1128,7 @@ public final class ReadStream extends InputStream
 
     if (source == null) {
       // return true on end of file
-      return true;
+      return -1;
     }
 
     int readLength
@@ -1122,18 +1138,21 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      _readTime = Alarm.getCurrentTime();
-      return true;
+      
+      if (_isEnableReadTime)
+        _readTime = Alarm.getCurrentTime();
+      
+      return readLength;
     }
     else if (readLength == READ_TIMEOUT) {
       // timeout
       _readLength = 0;
-      return false;
+      return 0;
     }
     else {
       // return false on end of file
       _readLength = 0;
-      return false;
+      return -1;
     }
   }
 
@@ -1177,7 +1196,9 @@ public final class ReadStream extends InputStream
     if (readLength >= 0) {
       _readLength += readLength;
       _position += readLength;
-      _readTime = Alarm.getCurrentTime();
+      
+      if (_isEnableReadTime)
+        _readTime = Alarm.getCurrentTime();
       return true;
     }
     else if (readLength == READ_TIMEOUT) {
@@ -1218,7 +1239,9 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      _readTime = Alarm.getCurrentTime();
+      
+      if (_isEnableReadTime)
+        _readTime = Alarm.getCurrentTime();
       return true;
     }
     else {
@@ -1243,7 +1266,9 @@ public final class ReadStream extends InputStream
     if (readLength > 0) {
       _readLength = readLength;
       _position += readLength;
-      _readTime = Alarm.getCurrentTime();
+      
+      if (_isEnableReadTime)
+        _readTime = Alarm.getCurrentTime();
       return true;
     }
     else {
@@ -1321,7 +1346,7 @@ public final class ReadStream extends InputStream
   /**
    * Lists all named attributes.
    */
-  public Iterator getAttributeNames()
+  public Iterator<String> getAttributeNames()
     throws IOException
   {
     if (_sibling != null)

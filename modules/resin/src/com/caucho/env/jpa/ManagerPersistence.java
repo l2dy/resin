@@ -47,7 +47,7 @@ import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.LineConfigException;
 import com.caucho.config.Names;
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
@@ -59,7 +59,6 @@ import com.caucho.loader.EnvironmentEnhancerListener;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.loader.enhancer.ScanClass;
 import com.caucho.loader.enhancer.ScanListener;
-import com.caucho.loader.enhancer.ScanMatch;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.IoUtil;
 import com.caucho.vfs.Path;
@@ -247,12 +246,12 @@ public class ManagerPersistence
   public void configurePersistenceRoots()
   {
     ArrayList<Path> rootList = new ArrayList<Path>();
-    
+
     synchronized (_pendingRootList) {
       rootList.addAll(_pendingRootList);
       _pendingRootList.clear();
     }
-    
+
     for (Path root : rootList) {
       parsePersistenceConfig(root);
     }
@@ -264,6 +263,11 @@ public class ManagerPersistence
   private void parsePersistenceConfig(Path root)
   {
     Path persistenceXml = root.lookup("META-INF/persistence.xml");
+    
+    if (root.getFullPath().endsWith("WEB-INF/classes/")
+        && ! persistenceXml.canRead()) {
+      persistenceXml = root.lookup("../persistence.xml");
+    }
 
     if (! persistenceXml.canRead())
       return;
@@ -359,14 +363,14 @@ public class ManagerPersistence
     try {
       InjectManager beanManager = InjectManager.create(_classLoader);
       
-      BeanFactory<EntityManagerFactory> emfFactory;
+      BeanBuilder<EntityManagerFactory> emfFactory;
       emfFactory = beanManager.createBeanFactory(EntityManagerFactory.class);
 
       emfFactory.binding(CurrentLiteral.CURRENT);
       emfFactory.binding(Names.create(pUnit.getName()));
       beanManager.addBean(emfFactory.singleton(pUnit.getEntityManagerFactoryProxy()));
 
-      BeanFactory<EntityManager> emFactory;
+      BeanBuilder<EntityManager> emFactory;
       emFactory = beanManager.createBeanFactory(EntityManager.class);
 
       emFactory.binding(CurrentLiteral.CURRENT);
@@ -531,9 +535,11 @@ public class ManagerPersistence
    * Returns true if the root is a valid scannable root.
    */
   @Override
-  public boolean isRootScannable(Path root)
+  public boolean isRootScannable(Path root, String packageRoot)
   {
-    if (root.lookup("META-INF/persistence.xml").canRead()) {
+    if (root.lookup("META-INF/persistence.xml").canRead()
+        || (root.getFullPath().endsWith("WEB-INF/classes/")
+            && root.lookup("../persistence.xml").canRead())) {
       _pendingRootList.add(root);
     }
 
@@ -541,7 +547,8 @@ public class ManagerPersistence
   }
 
   @Override
-  public ScanClass scanClass(Path root, String className, int modifiers)
+  public ScanClass scanClass(Path root, String packageRoot,
+                             String className, int modifiers)
   {
     return null;
   }

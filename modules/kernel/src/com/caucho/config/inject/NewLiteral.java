@@ -30,18 +30,29 @@
 package com.caucho.config.inject;
 
 import javax.enterprise.inject.New;
+import javax.enterprise.util.AnnotationLiteral;
 
 /**
  * Represents the @New annotation
  */
-public class NewLiteral {
-  public static final New NEW = new New() {
-      public Class annotationType() { return New.class; }
-      public Class value() { return null; }
-      public String toString() { return "@New()"; }
-    };
-
-  private NewLiteral()
+public class NewLiteral extends AnnotationLiteral<New> implements New {
+  public static final NewLiteral NEW = new NewLiteral(New.class);
+  
+  private Class<?> _value;
+  
+  public NewLiteral(Class<?> value)
   {
+    _value = value;
+  }
+  
+  @Override
+  public Class<?> value()
+  {
+    return _value;
+  }
+  
+  public String toString()
+  {
+    return "@New(" + value() + ")";
   }
 }

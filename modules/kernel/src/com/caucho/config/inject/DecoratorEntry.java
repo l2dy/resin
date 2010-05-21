@@ -29,40 +29,34 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.j2ee.*;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.reflect.BaseType;
-import com.caucho.util.*;
-
-import java.lang.annotation.*;
-import java.lang.reflect.*;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.HashSet;
 import java.util.Set;
-import java.util.logging.*;
 
 import javax.enterprise.inject.spi.Decorator;
+
+import com.caucho.config.reflect.BaseType;
+import com.caucho.inject.Module;
 
 /**
  * Represents an introspected Decorator
  */
+@Module
 public class DecoratorEntry<X> {
-  private static final Logger log
-    = Logger.getLogger(WebComponent.class.getName());
-  private static final L10N L = new L10N(WebComponent.class);
-
-  private static final Class []NULL_ARG = new Class[0];
-
   private Decorator<X> _decorator;
 
   private ArrayList<QualifierBinding> _bindings
     = new ArrayList<QualifierBinding>();
 
   private BaseType _delegateType;
+  
+  private boolean _isEnabled;
+  
+  private Set<BaseType> _decoratedTypes = new LinkedHashSet<BaseType>();
 
-  public DecoratorEntry(Decorator<X> decorator,
+  public DecoratorEntry(InjectManager manager, Decorator<X> decorator,
                         BaseType delegateType)
   {
     _decorator = decorator;
@@ -73,7 +67,11 @@ public class DecoratorEntry<X> {
     }
 
     if (_bindings.size() == 0)
-      _bindings.add(new QualifierBinding(CurrentLiteral.CURRENT));
+      _bindings.add(new QualifierBinding(DefaultLiteral.DEFAULT));
+    
+    for (Type type: decorator.getDecoratedTypes()) {
+      _decoratedTypes.add(manager.createSourceBaseType(type));
+    }
   }
 
   public Decorator<X> getDecorator()
@@ -85,9 +83,27 @@ public class DecoratorEntry<X> {
   {
     return _delegateType;
   }
+  
+  public Set<BaseType> getDecoratedTypes()
+  {
+    return _decoratedTypes;
+  }
 
+  public boolean isEnabled()
+  {
+    return _isEnabled;
+  }
+  
+  public void setEnabled(boolean isEnabled)
+  {
+    _isEnabled = isEnabled;
+  }
+  
   public boolean isMatch(Annotation []bindingAnn)
   {
+    if (! _isEnabled)
+      return false;
+    
     for (QualifierBinding binding : _bindings) {
       if (! isMatch(binding, bindingAnn)) {
         return false;
@@ -105,5 +121,10 @@ public class DecoratorEntry<X> {
     }
 
     return false;
+  }
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _decorator + "]";
   }
 }

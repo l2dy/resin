@@ -51,7 +51,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.ejb.cfg.EjbConfigManager;
 import com.caucho.ejb.cfg.EjbRootConfig;
 import com.caucho.ejb.protocol.EjbProtocolManager;
-import com.caucho.ejb.server.AbstractServer;
+import com.caucho.ejb.server.AbstractEjbBeanManager;
 import com.caucho.java.WorkDir;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
@@ -83,10 +83,10 @@ class EjbScanClass extends AbstractScanClass {
   
   private Path _root;
   private String _className;
-  private EjbContainer _ejbContainer;
+  private EjbManager _ejbContainer;
   private boolean _isEjb;
   
-  EjbScanClass(Path root, String className, EjbContainer container)
+  EjbScanClass(Path root, String className, EjbManager container)
   {
     _root = root;
     _className = className;

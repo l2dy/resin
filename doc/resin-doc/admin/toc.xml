@@ -21,6 +21,11 @@
       <item link="starting-resin-apache.xtp" title="Apache HTTPd"
             description="Using Apache HTTPd with Resin"
             reference="starting-resin-apache-ref.xtp"/>
+
+      <item link="starting-resin-iis-7.xtp" title="IIS 7 Plugin"
+            description="Using Microsoft IIS 7 with Resin"
+            reference="starting-resin-iis-7-ref.xtp"/>
+
     </item>
 
     <item link="migration.xtp" title="Migrating"
@@ -129,16 +134,14 @@
     <item link="scheduled-tasks.xtp" title="Scheduled tasks"
           description="Scheduled tasks"/>
     
-    <item link="cluster.xtp" title="Clustering"
-          description="Clustering and load balancing of multiple coordinated Resin servers"
-          reference="cluster-ref.xtp">
-    
-      <item link="cluster-overview.xtp" title="Overview"
-        description="Overview of Resin's triad-based clustering architecture"/>
-    
-      <item link="cluster-load-balancer.xtp" title="Load Balancing"
-          description="HTTP load balancing to a Resin cluster"/>
-      
+    <item link="clustering.xtp" title="Clustering"
+          description="Clustering and load balancing of multiple coordinated Resin servers">  
+      <item link="clustering-overview.xtp" title="Overview"
+        description="Overview of Resin's clustering, load-balancing, elastic-computing and distributed caching features"/>
+      <item link="clustering-ref.xtp" title="Clustering Tags Reference"
+        description="Resin clustering and load-balancing tags reference"/>
+      <item link="clustering-deployment-ref.xtp" title="Clustered Deployment Reference"
+        description="ANT and Maven clustered deployment API reference"/>
     </item>
     
     <item link="resin-admin.xtp" title="resin-admin"

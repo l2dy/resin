@@ -31,22 +31,94 @@ package com.caucho.ejb.session;
 import javax.ejb.EJBException;
 import javax.ejb.EJBHome;
 import javax.ejb.EJBLocalHome;
+import javax.ejb.EJBLocalObject;
+import javax.ejb.EJBObject;
 import javax.ejb.SessionContext;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.xml.rpc.handler.MessageContext;
 
+import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.util.L10N;
 
 /**
  * Abstract base class for an session context
  */
-abstract public class AbstractSessionContext extends AbstractContext implements
-    SessionContext {
+abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
+  implements SessionContext
+{
   private static final L10N L = new L10N(AbstractSessionContext.class);
+
+  private transient AbstractSessionManager<X> _manager;
+  private transient InjectManager _injectManager;
+  private Class<T> _api;
+  private SessionProxyFactory<T> _proxyFactory;
+
+  protected AbstractSessionContext(AbstractSessionManager<X> manager,
+                                   Class<T> api)
+  {
+    assert(manager != null);
+
+    _manager = manager;
+    _api = api;
+    
+    _injectManager = InjectManager.create();
+    _proxyFactory = manager.createProxyFactory(this);
+  }
+
+  @Override
+  public AbstractSessionManager<X> getServer()
+  {
+    return _manager;
+  }
+  
+  public InjectManager getInjectManager()
+  {
+    return _injectManager;
+  }
+
+  /*
+   * Returns the API for the context
+   */
+  public Class<T> getApi()
+  {
+    return _api;
+  }
+  
+  public T createProxy(CreationalContext<T> env)
+  {
+    return _proxyFactory.__caucho_createProxy(env);
+  }
+  
+  public void destroyProxy(T instance, CreationalContext<T> env)
+  {
+  }
+  
+  public X newInstance(CreationalContext<X> env)
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+    
+    try {
+      return _manager.newInstance(env);
+    } finally {
+      thread.setContextClassLoader(oldLoader);
+    }
+  }
+  
+  @Override
+  public void destroy()
+    throws Exception
+  {
+    _proxyFactory.__caucho_destroy();
+    
+    super.destroy();
+  }
 
   /**
    * Returns the EJBHome stub for the container.
    */
+  @Override
   public EJBHome getEJBHome()
   {
     throw new EJBException(L.l("EJBHome does not exist for this class"));
@@ -55,23 +127,46 @@ abstract public class AbstractSessionContext extends AbstractContext implements
   /**
    * Returns the EJBLocalHome stub for the container.
    */
+  @Override
   public EJBLocalHome getEJBLocalHome()
   {
     throw new EJBException(L.l("EJBLocalHome does not exist for this class"));
   }
 
-  public <T> T getBusinessObject(Class<T> type)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
+  @Override
   public MessageContext getMessageContext()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
+  @Override
   public boolean wasCancelCalled()
   {
     return false;
+  }
+
+  @Override
+  public <Z> Z getBusinessObject(Class<Z> businessInterface)
+      throws IllegalStateException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  @Override
+  public EJBLocalObject getEJBLocalObject() throws IllegalStateException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  @Override
+  public EJBObject getEJBObject() throws IllegalStateException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _api.getName() + "]";
   }
 }

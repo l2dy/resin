@@ -31,15 +31,20 @@ package com.caucho.hmtp;
 
 import java.io.Serializable;
 
+import com.caucho.inject.Module;
+
 /**
  * Authentication result returns the jid on success
  */
+@Module
+@SuppressWarnings("serial")
 public class AuthResult implements Serializable {
   private final String _jid;
 
   /**
    * null constructor for Hessian.
    */
+  @SuppressWarnings("unused")
   private AuthResult()
   {
     _jid = null;
@@ -48,7 +53,7 @@ public class AuthResult implements Serializable {
   /**
    * login packet
    */
-  public AuthResult(String jid)
+  public AuthResult(final String jid)
   {
     _jid = jid;
   }
@@ -61,7 +66,7 @@ public class AuthResult implements Serializable {
   @Override
   public String toString()
   {
-    StringBuilder sb = new StringBuilder();
+    final StringBuilder sb = new StringBuilder();
 
     sb.append(getClass().getSimpleName());
     sb.append("[");

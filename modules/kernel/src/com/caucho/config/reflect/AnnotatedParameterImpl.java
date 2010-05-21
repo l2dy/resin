@@ -56,6 +56,7 @@ public class AnnotatedParameterImpl<T>
     super(type, null, annList);
 
     _callable = callable;
+    _position = position;
   }
 
   @Override

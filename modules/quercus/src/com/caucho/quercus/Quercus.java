@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,7 +44,7 @@ public class Quercus
   extends QuercusContext
 {
   private static final Logger log
-    = Logger.getLogger(CliQuercus.class.getName());
+    = Logger.getLogger(Quercus.class.getName());
 
   private String _fileName;
   private String []_args;
@@ -69,6 +69,9 @@ public class Quercus
       printUsage();
       return;
     }
+    
+    quercus.init();
+    quercus.start();
 
     if (quercus.getFileName() != null) {
       quercus.execute();

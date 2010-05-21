@@ -29,7 +29,7 @@
 
 package com.caucho.jca.cfg;
 
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.CurrentLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
@@ -122,7 +122,7 @@ public class ConnectionFactoryConfig extends BeanConfig {
   {
     super.init();
 
-    Bean comp = getComponent();
+    Bean<?> comp = getComponent();
 
     InjectManager manager = InjectManager.create();
 
@@ -130,7 +130,7 @@ public class ConnectionFactoryConfig extends BeanConfig {
       = (ManagedConnectionFactory) manager.getReference(comp);
 
     if (managedFactory instanceof ResourceAdapterAssociation) {
-      Class cl = managedFactory.getClass();
+      Class<?> cl = managedFactory.getClass();
 
       ResourceAdapter ra = findResourceAdapter(cl);
 
@@ -187,7 +187,7 @@ public class ConnectionFactoryConfig extends BeanConfig {
       connectionFactory = cm.init(managedFactory);
       cm.start();
 
-      BeanFactory factory
+      BeanBuilder factory
         = manager.createBeanFactory(connectionFactory.getClass());
 
       if (getName() != null) {

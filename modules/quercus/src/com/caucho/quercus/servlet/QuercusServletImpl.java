@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,21 +40,17 @@ import com.caucho.quercus.QuercusRuntimeException;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.QuercusValueException;
 import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.Value;
 import com.caucho.quercus.page.QuercusPage;
+import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.FilePath;
 import com.caucho.vfs.Path;
-import com.caucho.vfs.StreamImpl;
 import com.caucho.vfs.Vfs;
-import com.caucho.vfs.VfsStream;
 import com.caucho.vfs.WriteStream;
-import com.caucho.vfs.WriterStreamImpl;
 
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
-import javax.servlet.GenericServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpServlet;
@@ -80,7 +76,7 @@ public class QuercusServletImpl extends HttpServlet
   /**
    * initialize the script manager.
    */
-  public void init(ServletConfig config)
+  public final void init(ServletConfig config)
     throws ServletException
   {
     _config = config;
@@ -93,12 +89,18 @@ public class QuercusServletImpl extends HttpServlet
     getQuercus().setPwd(pwd);
 
     // need to set these for non-Resin containers
-    if (! getQuercus().isResin()) {
+    if (! Alarm.isTest() && ! getQuercus().isResin()) {
       Vfs.setPwd(pwd);
       WorkDir.setLocalWorkDir(pwd.lookup("WEB-INF/work"));
     }
 
     getQuercus().init();
+    getQuercus().start();
+  }
+  
+  protected void initImpl(ServletConfig config)
+    throws ServletException
+  {
   }
 
   /**
@@ -296,14 +298,14 @@ public class QuercusServletImpl extends HttpServlet
   {
     synchronized (this) {
       if (_quercus == null)
-	_quercus = new QuercusContext();
+        _quercus = new QuercusContext();
     }
 
     return _quercus;
   }
 
   /**
-   * Gets the script manager.
+   * Destroys the quercus instance.
    */
   public void destroy()
   {

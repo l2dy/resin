@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,7 +30,6 @@
 package javax.enterprise.context.spi;
 
 import java.lang.annotation.Annotation;
-import javax.enterprise.inject.spi.InjectionTarget;
 
 /**
  * Represents a bean scope, storing the bean instances available to the

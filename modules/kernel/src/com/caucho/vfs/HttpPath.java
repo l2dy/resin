@@ -407,7 +407,10 @@ public class HttpPath extends FilesystemPath {
       }
     }
     
-    long now = Alarm.getCurrentTime();
+    long now;
+    
+    now = Alarm.getCurrentTime();
+    
     synchronized (_cacheEntry) {
       try {
         if (_cacheEntry.expires > now)

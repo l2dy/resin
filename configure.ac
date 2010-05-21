@@ -162,6 +162,12 @@ AC_SUBST(JAVA_HOME)
 
 JAVA_EXE="$JAVA_HOME/bin/java"
 
+$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
+
+if test $? = "0"; then
+  JAVA_EXE="$JAVA_EXE -d64"
+fi
+
 AC_SUBST(JAVA_EXE)
 
 #
@@ -600,7 +606,7 @@ fi
 # Java 1.6 check
 #
 
-echo -n "checking if ${JAVA_EXE} is Java 1.6... "
+echo $ECHO_N "checking if ${JAVA_EXE} is Java 1.6... "
 
 tmpname="/tmp/java$$.out"
 	       	
@@ -618,7 +624,7 @@ echo "yes"
 #
 # 64bit heuristics
 #
-echo -n "checking if Java is 64-bit... "
+echo $ECHO_N "checking if Java is 64-bit... "
 
 tmpname="/tmp/java$$.out"
 	       	
@@ -738,81 +744,83 @@ if test -z "${LD_SHLIB}"; then
 
   case "$target_os" in
     linux*)
-	LD_SHLIB=${CC}
-	
-	if test -n "$b64"; then
-  	  CFLAGS="$CFLAGS -m64 -fPIC"
-	  LDFLAGS_SHLIB="-shared -fPIC"
-	fi
-	if test -n "$b64_jni"; then
-  	  CFLAGS_JNI="$CFLAGS_JNI -m64 -fPIC"
-	  LDFLAGS_SHLIB="-shared -fPIC"
-   	fi
-	;;
-	
-    *solaris*)
-	if test -n "$is_gcc"; then
-	    CFLAGS_SHLIB="-fPIC"
-	    
-	   if test -n "$b64"; then
-  	     CFLAGS="$CFLAGS -m64"
-	   fi
-           if test -n "$b64_jni"; then
-  	     CFLAGS_JNI="$CFLAGS_JNI -m64"
-   	   fi
-	else
-	    CFLAGS_SHLIB="-KPIC"
-	    
-	   if test -n "$b64"; then
-  	     CFLAGS="$CFLAGS -xarch=v9"
-	   fi
-	   if test -n "$b64_jni"; then
-  	     CFLAGS_JNI="$CFLAGS_JNI -xarch=v9"
-   	   fi
-	fi
+      LD_SHLIB=${CC}
 
-	if test -n "$is_gnu_ld"; then
-	    LDFLAGS_SHLIB="-shared"
-        else
-	    LDFLAGS_SHLIB="-G -fPIC"
-	fi
-	;;
+      if test -n "$b64"; then
+        CFLAGS="$CFLAGS -m64 -fPIC"
+        LDFLAGS_SHLIB="-shared -fPIC"
+      fi
+      if test -n "$b64_jni"; then
+        CFLAGS_JNI="$CFLAGS_JNI -m64 -fPIC"
+        LDFLAGS_SHLIB="-shared -fPIC"
+      fi
+      ;;
+
+    *solaris*)
+      if test -n "$is_gcc"; then
+        CFLAGS_SHLIB="-fPIC"
+
+        if test -n "$b64"; then
+          CFLAGS="$CFLAGS -m64 -G -fPIC"
+          LDFLAGS_SHLIB="-m64"
+        fi
+        if test -n "$b64_jni"; then
+          CFLAGS_JNI="$CFLAGS_JNI -m64 -G -fPIC"
+          LDFLAGS_SHLIB="-m64"
+        fi
+      else
+        CFLAGS_SHLIB="-KPIC"
+
+        if test -n "$b64"; then
+          CFLAGS="$CFLAGS -xarch=v9"
+        fi
+        if test -n "$b64_jni"; then
+          CFLAGS_JNI="$CFLAGS_JNI -xarch=v9"
+        fi
+      fi
+
+      if test -n "$is_gnu_ld"; then
+        LDFLAGS_SHLIB="$LDFLAGS_SHLIB -shared"
+      else
+        LDFLAGS_SHLIB="$LDFLAGS_SHLIB -shared -fPIC"
+      fi
+      ;;
 
     darwin*)
-        CFLAGS_SHLIB="-DSHARED_MODULE"
-	LD_SHLIB=${CC}
- 	LDFLAGS_SHLIB="-dynamiclib -undefined suppress -flat_namespace"
-	if test -n "$b64"; then
-  	  CFLAGS="$CFLAGS -arch x86_64"
-  	  LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
-	fi
-	if test -n "$b64_jni"; then
-  	  CFLAGS_JNI="$CFLAGS_JNI -m64"
-  	  LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
-   	fi
-        ;;
+      CFLAGS_SHLIB="-DSHARED_MODULE"
+      LD_SHLIB=${CC}
+      LDFLAGS_SHLIB="-dynamiclib -undefined suppress -flat_namespace"
+      if test -n "$b64"; then
+        CFLAGS="$CFLAGS -arch x86_64"
+        LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
+      fi
+      if test -n "$b64_jni"; then
+        CFLAGS_JNI="$CFLAGS_JNI -m64"
+        LDFLAGS_SHLIB="-arch x86_64 $LDFLAGS_SHLIB"
+      fi
+      ;;
 
     *freebsd*)
-        CFLAGS="$CFLAGS -fPIC"
-        ;;
+      CFLAGS="$CFLAGS -fPIC"
+      ;;
 
     *aix*)
-	if test -z "$is_gcc"; then
-	   CFLAGS_SHLIB="-bexpall"
-	else
-	    CFLAGS_SHLIB="-fpic"
-	fi
-	LDFLAGS_SHLIB=""
-	;;
+      if test -z "$is_gcc"; then
+        CFLAGS_SHLIB="-bexpall"
+      else
+        CFLAGS_SHLIB="-fpic"
+      fi
+      LDFLAGS_SHLIB=""
+      ;;
 
     *hpux*)
-	if test -z "$is_gcc"; then
-	    CFLAGS_SHLIB="+z"
-	else
-	    CFLAGS_SHLIB="-fpic"
-	fi
-	LDFLAGS_SHLIB="-b"
-	;;
+      if test -z "$is_gcc"; then
+        CFLAGS_SHLIB="+z"
+      else
+        CFLAGS_SHLIB="-fpic"
+      fi
+      LDFLAGS_SHLIB="-b"
+      ;;
   esac
 
   case "$target_cpu" in
@@ -871,10 +879,10 @@ fi
 # Check if cp accepts -u
 #
 CP=`which cp`
-echo -n "checking if $CP accepts -u... "
+echo $ECHO_N "checking if $CP accepts -u... "
 
 touch /tmp/cp.test.$$.src
-$CP -u /tmp/cp.test.$$.src /tmp/cp.test.$$.dest
+$CP -u /tmp/cp.test.$$.src /tmp/cp.test.$$.dest 1>/dev/null 2>/dev/null
 if test $? = "0"; then
   CP_U_FLAG=-u
   AC_SUBST(CP_U_FLAG)
@@ -1012,75 +1020,80 @@ AC_ARG_ENABLE(jni,
 [  --enable-jni    Turn on jni],
 [case "${enableval}" in
  yes) JNI=true ;;
- no)  JNI="" ;;
+ no)  JNI=false ;; 
  *) AC_MSG_ERROR(bad value ${enableval} for --enable-jni) ;;
  esac],[JNI=""])
 
 JNI_INCLUDE_DIR=""
 
-if test -n "$JNI_INCLUDE"; then
-  JNI=yes
-  for x in $JNI_INCLUDE; do
-    y=${x:2}
-    if test -n "$JNI_INCLUDE_DIR"; then
-      JNI_INCLUDE_DIR="$JNI_INCLUDE_DIR $y"
-    else
-      JNI_INCLUDE_DIR="$y"
+if test "$JNI" != "false" ; then
+  if test -n "$JNI_INCLUDE"; then
+    JNI=yes
+    for x in $JNI_INCLUDE; do
+      y=${x:2}
+      if test -n "$JNI_INCLUDE_DIR"; then
+        JNI_INCLUDE_DIR="$JNI_INCLUDE_DIR $y"
+      else
+        JNI_INCLUDE_DIR="$y"
+      fi
+    done;
+  elif test -r "$JAVA_HOME/include/jni_md.h"; then
+    JNI_INCLUDE_DIR="${JAVA_HOME}/include"
+    JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
+    JNI=yes
+    echo "checking for JNI in $JAVA_HOME/include ... found"
+  elif test -r "$JAVA_HOME/include/$jni_os/jni_md.h"; then
+    JNI_INCLUDE_DIR="${JAVA_HOME}/include"
+    JNI_INCLUDE="-I$JAVA_HOME/include -I$JAVA_HOME/include/$jni_os"
+    JNI=yes
+    echo "checking for JNI in $JAVA_HOME/include/$jni_os ... found"
+  elif test -r "/System/Library/Frameworks/JavaVM.framework/Headers/jni_md.h"; then
+    # Darwin
+    echo "checking for JNI in /System/Library/Frameworks/JavaVM.framework/Headers ... found"
+    JNI_INCLUDE_DIR="/System/Library/Frameworks/JavaVM.framework/Headers"
+    JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
+    JNI=yes
+  elif test -r "$JAVA_HOME/../Headers/jni_md.h"; then
+    # Darwin
+    echo "checking for JNI in $JAVA_HOME/../Headers ... found"
+    JNI_INCLUDE_DIR="$JAVA_HOME/../Headers"
+    JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
+    JNI=yes
+  elif test -r "$JAVA_HOME/include/jni.h"; then
+    JNI_INCLUDE_DIR="$JAVA_HOME/include"
+    JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
+    JNI=yes
+    echo "checking for JNI in $JAVA_HOME/include ... found"
+  else
+    JNI=""
+    AC_MSG_ERROR([
+
+    *** Can't find JNI directory in JAVA_HOME=${JAVA_HOME}
+    *** JNI is expected in ${JAVA_HOME}/include/$jni_os
+  ])
+  fi
+
+  HAS_JVMTI=""
+
+  for x in $JNI_INCLUDE_DIR; do
+    if test -r "$x/jvmti.h"; then
+      HAS_JVMTI="yes"
     fi
   done;
-elif test -r "$JAVA_HOME/include/jni_md.h"; then
-  JNI_INCLUDE_DIR="${JAVA_HOME}/include"
-  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
-  JNI=yes
-  echo "checking for JNI in $JAVA_HOME/include ... found"
-elif test -r "$JAVA_HOME/include/$jni_os/jni_md.h"; then
-  JNI_INCLUDE_DIR="${JAVA_HOME}/include"
-  JNI_INCLUDE="-I$JAVA_HOME/include -I$JAVA_HOME/include/$jni_os"
-  JNI=yes
-  echo "checking for JNI in $JAVA_HOME/include/$jni_os ... found"
-elif test -r "/System/Library/Frameworks/JavaVM.framework/Headers/jni_md.h"; then
-  # Darwin
-  echo "checking for JNI in /System/Library/Frameworks/JavaVM.framework/Headers ... found"
-  JNI_INCLUDE_DIR="/System/Library/Frameworks/JavaVM.framework/Headers"
-  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
-  JNI=yes
-elif test -r "$JAVA_HOME/../Headers/jni_md.h"; then
-  # Darwin
-  echo "checking for JNI in $JAVA_HOME/../Headers ... found"
-  JNI_INCLUDE_DIR="$JAVA_HOME/../Headers"
-  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
-  JNI=yes
-elif test -r "$JAVA_HOME/include/jni.h"; then
-  JNI_INCLUDE_DIR="$JAVA_HOME/include"
-  JNI_INCLUDE="-I${JNI_INCLUDE_DIR}"
-  JNI=yes
-  echo "checking for JNI in $JAVA_HOME/include ... found"
-else
-  JNI=""
-  AC_MSG_ERROR([
 
-  *** Can't find JNI directory in JAVA_HOME=${JAVA_HOME}
-  *** JNI is expected in ${JAVA_HOME}/include/$jni_os
-])
-fi
-
-HAS_JVMTI=""
-
-for x in $JNI_INCLUDE_DIR; do
-  if test -r "$x/jvmti.h"; then
-    HAS_JVMTI="yes"
+  if test -n "$HAS_JVMTI"; then
+    echo "Using JVMTI for class reloading"
+    
+    CFLAGS="$CFLAGS -DHAS_JVMTI"
+  else
+    AC_MSG_ERROR([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
   fi
-done;
-
-if test -n "$HAS_JVMTI"; then
-  echo "Using JVMTI for class reloading"
-  
-  CFLAGS="$CFLAGS -DHAS_JVMTI"
-else
-  AC_MSG_ERROR([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
 fi
 
-if test -n "$JNI"; then
+if test "$JNI" = "false" ; then
+  resin_pro_plugins=""
+  echo "JNI disabled by --disable-jni"
+elif test -n "$JNI"; then
   plugins="$plugins resin_os"
 else
   resin_pro_plugins=""
@@ -1393,13 +1406,13 @@ if test -n "resin_init_d"; then
   echo "      init: ${resin_init_d}"
 fi
 
-echo ""
-
-if test -z "JNI"; then
+if test "$JNI" = "false" ; then
+  echo 
+  echo "  *** JNI disabled by --disable-jni"
+elif test -z "$JNI"; then
   echo "  *** No JNI has been found in JAVA_HOME=${JAVA_HOME}"
   echo "  *** JNI libraries cannot be compiled"
 else  
-
   echo "  JAVA_HOME: ${JAVA_HOME}"
   echo ""
 

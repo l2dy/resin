@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -354,6 +354,11 @@ public class JavaClassDef extends ClassDef {
   public void setPhpClass(boolean isPhpClass)
   {
     _isPhpClass = isPhpClass;
+  }
+  
+  public boolean isPhpClass()
+  {
+    return _isPhpClass;
   }
 
   public JavaClassDef getComponentDef()

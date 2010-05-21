@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,6 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.program.BeanArg;
-
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -41,16 +38,17 @@ import java.util.Set;
 
 import javax.enterprise.context.spi.Context;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.event.ObserverException;
 import javax.enterprise.event.Observes;
 import javax.enterprise.event.Reception;
 import javax.enterprise.event.TransactionPhase;
-import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.InjectionPoint;
-import javax.enterprise.inject.spi.ObserverMethod;
+
+import com.caucho.config.bytecode.ScopeProxy;
+import com.caucho.config.program.BeanArg;
 
 /**
  * Internal implementation for a producer Bean
@@ -64,8 +62,10 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   private Type _type;
   private Set<Annotation> _qualifiers;
 
-  private BeanArg []_args;
+  private BeanArg<X> []_args;
   private boolean _isIfExists;
+  
+  private TransactionPhase _transactionPhase = TransactionPhase.IN_PROGRESS;
 
   ObserverMethodImpl(InjectManager beanManager,
                      Bean<X> bean,
@@ -98,11 +98,18 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   {
     return _bean;
   }
+  
+  @Override
+  public Class<X> getBeanClass()
+  {
+    return (Class<X>) _bean.getBeanClass();
+  }
 
   /**
    * Returns the observed event type
    */
-  public Type getObservedEventType()
+  @Override
+  public Type getObservedType()
   {
     return _type;
   }
@@ -110,6 +117,7 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   /**
    * Returns the observed event bindings
    */
+  @Override
   public Set<Annotation> getObservedQualifiers()
   {
     return _qualifiers;
@@ -135,13 +143,20 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
       AnnotatedParameter<?> param = parameters.get(i);
 
       Observes observes = param.getAnnotation(Observes.class);
-
+      
       if (observes != null) {
         _isIfExists = observes.notifyObserver() == Reception.IF_EXISTS;
+        _transactionPhase = observes.during();
       }
       else {
-        _args[i] = new BeanArg(param.getBaseType(),
-                               _beanManager.getQualifiers(param.getAnnotations()));
+        InjectionPoint ip = new InjectionPointImpl(_beanManager,
+                                                   _bean,
+                                                   param);
+
+        _args[i] = new BeanArg<X>(_beanManager,
+                                  param.getBaseType(),
+                                  _beanManager.getQualifiers(param.getAnnotations()),
+                                  ip);
       }
     }
   }
@@ -149,12 +164,17 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   /**
    * Send the event notification.
    */
+  @Override
   public void notify(T event)
   {
     Object instance = getInstance();
 
     if (instance == null)
       return;
+    
+    if (instance instanceof ScopeProxy) {
+      instance = ((ScopeProxy) instance).__caucho_getDelegate();
+    }
 
     Method method = _method.getJavaMember();
 
@@ -164,19 +184,24 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
       String loc = (method.getDeclaringClass().getSimpleName() + "."
                     + method.getName() + ": ");
 
-      throw new InjectionException(loc + e.getMessage(), e.getCause());
+      throw new ObserverException(loc + e.toString(), e.getCause());
     } catch (RuntimeException e) {
       throw e;
     } catch (InvocationTargetException e) {
+      Throwable exn = e.getCause();
+      
+      if (exn instanceof RuntimeException)
+        throw (RuntimeException) exn;
+      
       String loc = (method.getDeclaringClass().getSimpleName() + "."
                     + method.getName() + ": ");
 
-      throw new InjectionException(loc + e.getMessage(), e.getCause());
+      throw new ObserverException(loc + exn.toString(), exn.getCause());
     } catch (Exception e) {
       String loc = (method.getDeclaringClass().getSimpleName() + "."
                     + method.getName() + ": ");
 
-      throw new InjectionException(loc + e.getMessage(), e.getCause());
+      throw new ObserverException(loc + e.toString(), e.getCause());
     }
   }
 
@@ -186,7 +211,7 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
     Class<?> type = bean.getBeanClass();
 
     if (_isIfExists) {
-      Class scopeType = bean.getScope();
+      Class<? extends Annotation>scopeType = bean.getScope();
       Context context = _beanManager.getContext(scopeType);
 
       if (context != null)
@@ -195,7 +220,7 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
         return null;
     }
 
-    CreationalContext env
+    CreationalContext<X> env
       = _beanManager.createCreationalContext(getParentBean());
 
     return _beanManager.getReference(getParentBean(), type, env);
@@ -208,11 +233,11 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
 
     Object []args = new Object[_args.length];
 
-    CreationalContext<?> env
+    CreationalContext<X> env
       = _beanManager.createCreationalContext(getParentBean());
     
     for (int i = 0; i < _args.length; i++) {
-      BeanArg arg = _args[i];
+      BeanArg<X> arg = _args[i];
 
       if (arg != null)
         args[i] = arg.eval(env);
@@ -226,14 +251,19 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   @Override
   public Reception getReception()
   {
-    return Reception.ALWAYS;
+    if (_isIfExists)
+      return Reception.IF_EXISTS;
+    else
+      return Reception.ALWAYS;
   }
 
+  @Override
   public TransactionPhase getTransactionPhase()
   {
-    return TransactionPhase.IN_PROGRESS;
+    return _transactionPhase;
   }
 
+  /*
   public Set<InjectionPoint> getInjectionPoints()
   {
     throw new UnsupportedOperationException(getClass().getName());
@@ -243,7 +273,9 @@ public class ObserverMethodImpl<X, T> extends AbstractObserverMethod<T> {
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
+  */
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _method + "]";

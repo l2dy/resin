@@ -28,40 +28,37 @@
  */
 package com.caucho.ejb.session;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.logging.Level;
+import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 
-import javax.ejb.Timer;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.InjectionTarget;
+import javax.enterprise.inject.spi.Interceptor;
 
-import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.timer.ScheduleIntrospector;
-import com.caucho.config.timer.TimeoutCaller;
-import com.caucho.config.timer.TimerTask;
-import com.caucho.ejb.EJBExceptionWrapper;
+import com.caucho.ejb.SessionPool;
 import com.caucho.ejb.inject.StatelessBeanImpl;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.util.L10N;
 
 /**
  * Server home container for a stateless session bean
  */
-public class StatelessManager<T> extends SessionServer<T> {
+public class StatelessManager<X> extends AbstractSessionManager<X> {
   private static final L10N L = new L10N(StatelessManager.class);
 
-  protected static Logger log
+  private static Logger log
     = Logger.getLogger(StatelessManager.class.getName());
-
-  private StatelessContext<T> _homeContext;
-  private StatelessProvider<T> _remoteProvider;
+  
+  private int _sessionIdleMax = 16;
+  private int _sessionConcurrentMax = -1;
+  private long _sessionConcurrentTimeout = -1;
 
   /**
    * Creates a new stateless server.
@@ -73,10 +70,13 @@ public class StatelessManager<T> extends SessionServer<T> {
    * @param config
    *          the session configuration from the ejb.xml
    */
-  public StatelessManager(EjbContainer ejbContainer, 
-                         AnnotatedType<T> annotatedType)
+  public StatelessManager(EjbManager ejbContainer, 
+                          AnnotatedType<X> annotatedType,
+                          Class<?> proxyImplClass)
   {
-    super(ejbContainer, annotatedType);
+    super(ejbContainer, annotatedType, proxyImplClass);
+    
+    introspect();
   }
 
   @Override
@@ -84,73 +84,93 @@ public class StatelessManager<T> extends SessionServer<T> {
   {
     return "stateless:";
   }
+  
+  public int getSessionIdleMax()
+  {
+    return _sessionIdleMax;
+  }
+  
+  public int getSessionConcurrentMax()
+  {
+    return _sessionConcurrentMax;
+  }
+  
+  public long getSessionConcurrentTimeout()
+  {
+    return _sessionConcurrentTimeout;
+  }
+  
+  @Override
+  protected <T> StatelessContext<X,T> getSessionContext(Class<T> api)
+  {
+    return (StatelessContext<X,T>) super.getSessionContext(api);
+  }
 
   /**
    * Returns the JNDI proxy object to create instances of the local interface.
    */
   @Override
-  public Object getLocalProxy(Class api)
+  public <T> Object getLocalJndiProxy(Class<T> api)
   {
-    StatelessProvider provider = getStatelessContext().getProvider(api);
+    StatelessContext<X,T> context = getSessionContext(api);
 
-    return new StatelessProviderProxy(provider);
+    return new StatelessProviderProxy<X,T>(context.createProxy(null));
   }
 
   /**
    * Returns the object implementation
    */
   @Override
-  public Object getLocalObject(Class<?> api)
+  public <T> T getLocalProxy(Class<T> api)
   {
-    return getStatelessContext().getProvider(api);
+    return getSessionContext(api).createProxy(null);
   }
 
   @Override
-  protected Bean<T> createBean(ManagedBeanImpl<T> mBean, Class<?> api)
+  protected <T> Bean<T> createBean(ManagedBeanImpl<X> mBean,
+                                   Class<T> api,
+                                   Set<Type> apiList)
   {
-    StatelessProvider<T> provider = getStatelessContext().getProvider(api);
+    StatelessContext<X,T> context = getSessionContext(api);
 
-    if (provider == null)
+    if (context == null)
       throw new NullPointerException(L.l("'{0}' is an unknown api for {1}",
-          api, getStatelessContext()));
+          api, this));
 
-    StatelessBeanImpl<T> statelessBean
-      = new StatelessBeanImpl<T>(this, mBean, api, provider);
+    StatelessBeanImpl<X,T> statelessBean
+      = new StatelessBeanImpl<X,T>(this, mBean, api, apiList, context);
 
     return statelessBean;
   }
 
-  protected InjectionTarget createSessionComponent(Class api, Class beanClass)
+  @Override
+  protected Class<?> getContextClass()
   {
-    StatelessProvider provider = getStatelessContext().getProvider(api);
-
-    return new StatelessComponent(provider, beanClass);
+    return StatelessContext.class;
   }
-
+  
   /**
-   * Returns the 3.0 remote stub for the container
+   * Called by the StatelessProxy on initialization.
    */
-  public Object getRemoteObject()
+  public <T> StatelessPool<X,T> createStatelessPool(StatelessContext<X,T> context,
+                                                    List<Interceptor<?>> interceptorBeans)
   {
-    if (_remoteProvider != null)
-      return _remoteProvider.__caucho_get();
-    else
-      return null;
+    return new StatelessPool<X,T>(this, context, interceptorBeans);
   }
 
   /**
    * Returns the remote stub for the container
    */
   @Override
-  public Object getRemoteObject(Class api, String protocol)
+  public <T> T getRemoteObject(Class<T> api, String protocol)
   {
     if (api == null)
       return null;
 
-    StatelessProvider provider = getStatelessContext().getProvider(api);
+    StatelessContext<X,T> context = getSessionContext(api);
 
-    if (provider != null) {
-      Object result = provider.__caucho_get();
+    if (context != null) {
+      T result = context.createProxy(null);
 
       return result;
     } else {
@@ -162,14 +182,13 @@ public class StatelessManager<T> extends SessionServer<T> {
   /**
    * Returns the remote object.
    */
+  /*
   @Override
   public Object getRemoteObject(Object key)
   {
-    if (_remoteProvider != null)
-      return _remoteProvider.__caucho_get();
-    else
-      return null;
+    throw new UnsupportedOperationException(getClass().getName());
   }
+  */
 
   @Override
   public void init() throws Exception
@@ -177,22 +196,39 @@ public class StatelessManager<T> extends SessionServer<T> {
     super.init();
 
     ArrayList<Class<?>> remoteApiList = getRemoteApiList();
+  }
 
-    if (remoteApiList.size() > 0) {
-      Class<?> api = remoteApiList.get(0);
+  private void introspect()
+  {
+    AnnotatedType<?> annType = getAnnotatedType();
+    SessionPool sessionPool = annType.getAnnotation(SessionPool.class);
 
-      // XXX: concept of unique remote api not correct.
-      _remoteProvider = getStatelessContext().getProvider(api);
+    if (sessionPool != null) {
+      if (sessionPool.maxIdle() >= 0)
+        _sessionIdleMax = sessionPool.maxIdle();
+      
+      if (sessionPool.maxConcurrent() >= 0)
+        _sessionConcurrentMax = sessionPool.maxConcurrent();
+      
+      if (sessionPool.maxConcurrentTimeout() >= 0)
+        _sessionConcurrentTimeout = sessionPool.maxConcurrentTimeout();
     }
+  }
+
+  @Override
+  protected <T> StatelessContext<X,T> createSessionContext(Class<T> api)
+  {
+    return new StatelessContext<X,T>(this, api);
   }
 
   @Override
   protected void postStart()
   {
-    ScheduleIntrospector introspector = new ScheduleIntrospector();
+    //ScheduleIntrospector introspector = new ScheduleIntrospector();
 
+    /*
     InjectManager manager = InjectManager.create();
-    AnnotatedType<T> type = manager.createAnnotatedType(getEjbClass());
+    AnnotatedType<X> type = manager.createAnnotatedType(getEjbClass());
     ArrayList<TimerTask> timers;
 
     timers = introspector.introspect(new StatelessTimeoutCaller(), type);
@@ -202,65 +238,45 @@ public class StatelessManager<T> extends SessionServer<T> {
         task.start();
       }
     }
-  }
-
-  public AbstractContext getContext()
-  {
-    return getStatelessContext();
+    */
   }
 
   @Override
   public AbstractContext getContext(Object key, boolean forceLoad)
   {
-    return getStatelessContext();
+    return getContext();
   }
 
-  @Override
-  public AbstractSessionContext getSessionContext()
+  // XXX
+  public Object[] getInterceptorBindings(List<Interceptor<?>> interceptorBeans,
+                                         CreationalContextImpl parentEnv)
   {
-    return getStatelessContext();
+    int size = interceptorBeans.size();
+    
+    if (size == 0)
+      return null;
+    
+    Object []interceptors = new Object[size];
+    
+    for (int i = 0; i < size; i++) {
+      Interceptor bean = interceptorBeans.get(i);
+      
+      interceptors[i] = getInjectManager().getReference(bean, parentEnv); 
+    }
+    
+    return interceptors;
   }
-  
+
+  /*
   public void destroy()
   {
     super.destroy();
     
     try {
-      getStatelessContext().destroy();
+      getContext().destroy();
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
     }
   }
-
-  private StatelessContext getStatelessContext()
-  {
-    synchronized (this) {
-      if (_homeContext == null) {
-        try {
-          Class<?>[] param = new Class[] { StatelessManager.class };
-          Constructor<?> cons = _contextImplClass.getConstructor(param);
-
-          _homeContext = (StatelessContext) cons.newInstance(this);
-        } catch (Exception e) {
-          throw new EJBExceptionWrapper(e);
-        }
-      }
-    }
-    
-    return _homeContext;
-  }
-
-  class StatelessTimeoutCaller implements TimeoutCaller {
-    public void timeout(Method method, Timer timer)
-      throws InvocationTargetException, IllegalAccessException
-    {
-      getContext().__caucho_timeout_callback(method, timer);
-    }
-
-    public void timeout(Method method) throws InvocationTargetException,
-        IllegalAccessException
-    {
-      getContext().__caucho_timeout_callback(method);
-    }
-  }
+  */
 }

@@ -34,6 +34,7 @@ import com.caucho.quercus.annotation.NotNull;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.*;
+import com.caucho.quercus.lib.MiscModule;
 import com.caucho.quercus.lib.UrlModule;
 import com.caucho.quercus.lib.string.StringModule;
 import com.caucho.quercus.module.AbstractQuercusModule;
@@ -42,6 +43,7 @@ import com.caucho.quercus.module.IniDefinition;
 import com.caucho.quercus.resources.StreamContextResource;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
+import com.caucho.vfs.FilePath;
 import com.caucho.vfs.NotFoundPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
@@ -1387,8 +1389,8 @@ public class FileModule extends AbstractQuercusModule {
       }
 
       if (mode.startsWith("r")) {
-        if (useIncludePath)
-          path = env.lookupInclude(filename.toStringValue());
+        if (useIncludePath && path == null)
+          path = env.lookupInclude(filename);
 
         if (path == null) {
           env.warning(L.l("{0} cannot be read", filename));
@@ -2060,12 +2062,32 @@ public class FileModule extends AbstractQuercusModule {
    *
    * @param path the path to check
    */
-  public static boolean is_executable(@NotNull Path path)
+  public static boolean is_executable(Env env,
+                                      @NotNull Path path)
   {
-    if (path == null)
+    if (path == null || ! path.exists())
       return false;
+    
+    if (Path.isWindows()) {
+      // XXX: PHP appears to be looking for the "MZ" magic number in the header
+      String tail = path.getTail();
 
-    return path.isExecutable();
+      return tail.endsWith(".exe")
+             || tail.endsWith(".com")
+             || tail.endsWith(".bat")
+             || tail.endsWith(".cmd");
+    }
+    else {
+      String cmd = "if [ -x "
+                   + path.getNativePath()
+                   + " ]; then echo 1; else echo 0; fi";
+
+      String result = MiscModule.shell_exec(env, cmd).toString();
+
+      result = result.trim();
+
+      return result.length() == 1 && result.charAt(0) == '1';
+    }
   }
 
   /**
@@ -2231,7 +2253,9 @@ public class FileModule extends AbstractQuercusModule {
    * @param path the temp name of the uploaded file
    * @param dst the destination path
    */
-  public static boolean move_uploaded_file(Env env, @NotNull Path src, @NotNull Path dst)
+  public static boolean move_uploaded_file(Env env,
+                                           @NotNull Path src,
+                                           @NotNull Path dst)
   {
     // php/1665, php/1666
 
@@ -2244,11 +2268,10 @@ public class FileModule extends AbstractQuercusModule {
     String tail = src.getTail();
 
     src = env.getUploadDirectory().lookup(tail);
-
+    
     try {
       if (src.canRead()) {
-        src.renameTo(dst);
-        return true;
+        return src.renameTo(dst);
       }
       else
         return false;
@@ -2392,7 +2415,7 @@ public class FileModule extends AbstractQuercusModule {
       }
 
       skipToEndOfLine(ch, is);
-
+      
       return sb;
     }
     else {
@@ -2429,26 +2452,45 @@ public class FileModule extends AbstractQuercusModule {
           }
 
         }
+        else if (ch == '"') {
+          StringValue result = env.createUnicodeBuilder();
+          
+          String value = sb.toString().trim();
+
+          result.append(getIniConstant(env, value));
+
+          for (ch = is.read(); ch >= 0 && ch != '"'; ch = is.read()) {
+            result.append((char) ch);
+          }
+
+          skipToEndOfLine(ch, is);
+          
+          return result;
+        }
         else
           sb.append((char) ch);
       }
 
       String value = sb.toString().trim();
 
-      if (value.equalsIgnoreCase("null"))
-        return env.getEmptyString();
-      else if (value.equalsIgnoreCase("true")
-               || value.equalsIgnoreCase("yes"))
-        return env.createString("1");
-      else if (value.equalsIgnoreCase("false")
-               || value.equalsIgnoreCase("no"))
-        return env.getEmptyString();
-
-      if (env.isDefined(value))
-        return env.createString(env.getConstant(value).toString());
-      else
-        return env.createString(value);
+      return env.createString(getIniConstant(env, value));
     }
+  }
+  
+  private static String getIniConstant(Env env, String value)
+  {
+    if (value.equalsIgnoreCase("null"))
+      return "";
+    else if (value.equalsIgnoreCase("true")
+             || value.equalsIgnoreCase("yes"))
+      return "1";
+    else if (value.equalsIgnoreCase("false")
+             || value.equalsIgnoreCase("no"))
+      return "";
+    else if (env.isDefined(value))
+      return env.getConstant(value).toString();
+    else
+      return value;
   }
 
   private static boolean isValidIniKeyChar(char ch)
@@ -2908,7 +2950,8 @@ public class FileModule extends AbstractQuercusModule {
   /**
    * Creates a temporary file.
    */
-  public static Value tempnam(Env env, Path dir, String prefix)
+  @ReturnNullAsFalse
+  public static String tempnam(Env env, Path dir, String prefix)
   {
     // php/160u
 
@@ -2921,7 +2964,7 @@ public class FileModule extends AbstractQuercusModule {
     catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
 
-      return BooleanValue.FALSE;
+      return null;
     }
 
     try {
@@ -2931,11 +2974,11 @@ public class FileModule extends AbstractQuercusModule {
 
       env.addCleanup(new RemoveFile(path));
 
-      return env.createString(path.getTail());
+      return path.getNativePath();
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
 
-      return BooleanValue.FALSE;
+      return null;
     }
   }
 
@@ -2965,7 +3008,8 @@ public class FileModule extends AbstractQuercusModule {
   /**
    * sets the time to the current time
    */
-  public static boolean touch(Path path,
+  public static boolean touch(Env env,
+                              Path path,
                               @Optional int time,
                               @Optional int atime)
   {
@@ -2976,7 +3020,7 @@ public class FileModule extends AbstractQuercusModule {
         if (time > 0)
           path.setLastModified(1000L * time);
         else
-          path.setLastModified(Alarm.getCurrentTime());
+          path.setLastModified(env.getCurrentTime());
       }
       else {
         WriteStream ws = path.openWrite();

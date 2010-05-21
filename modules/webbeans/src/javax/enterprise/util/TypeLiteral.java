@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,29 +40,36 @@ import java.lang.reflect.*;
  */
 public abstract class TypeLiteral<T>
 {
+  private transient Type _type;
+  
   public final Type getType()
   {
-    Type type = getClass().getGenericSuperclass();
+    if (_type == null) {
+      Type type = getClass().getGenericSuperclass();
 
-    if (type instanceof ParameterizedType) {
-      ParameterizedType pType = (ParameterizedType) type;
+      if (type instanceof ParameterizedType) {
+        ParameterizedType pType = (ParameterizedType) type;
 
-      return pType.getActualTypeArguments()[0];
+        _type = pType.getActualTypeArguments()[0];
+      }
+      else
+        throw new UnsupportedOperationException(type.toString());
     }
-    else
-      throw new UnsupportedOperationException(type.toString());
+    
+    return _type;
   }
 
+  @SuppressWarnings("unchecked")
   public final Class<T> getRawType()
   {
     Type type = getType();
 
-    if (type instanceof Class)
-      return (Class) type;
+    if (type instanceof Class<?>)
+      return (Class<T>) type;
     else if (type instanceof ParameterizedType) {
       ParameterizedType pType = (ParameterizedType) type;
 
-      return (Class) pType.getRawType();
+      return (Class<T>) pType.getRawType();
     }
     else
       throw new UnsupportedOperationException(type.toString());
@@ -79,10 +86,10 @@ public abstract class TypeLiteral<T>
   {
     if (this == o)
       return true;
-    else if (! (o instanceof TypeLiteral))
+    else if (! (o instanceof TypeLiteral<?>))
       return false;
 
-    TypeLiteral lit = (TypeLiteral) o;
+    TypeLiteral<?> lit = (TypeLiteral<?>) o;
 
     return getType().equals(lit.getType());
   }

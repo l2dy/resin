@@ -33,39 +33,26 @@ import static javax.ejb.TransactionAttributeType.REQUIRED;
 
 import java.io.IOException;
 
-import com.caucho.config.gen.BusinessMethodGenerator;
-import com.caucho.config.gen.EjbCallChain;
-import com.caucho.config.gen.XaCallChain;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+
+import com.caucho.config.gen.AspectGenerator;
+import com.caucho.config.gen.XaFactory;
+import com.caucho.config.gen.XaGenerator;
+import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 
 /**
  * Represents the xa interception
  */
-public class MessageXaCallChain extends XaCallChain
+@Module
+public class MessageXaCallChain<X> extends XaGenerator<X>
 {
-  public MessageXaCallChain(BusinessMethodGenerator bizMethod,
-			    EjbCallChain next)
+  public MessageXaCallChain(XaFactory<X> factory,
+                            AnnotatedMethod<? super X> method,
+                            AspectGenerator<X> next)
   {
-    super(bizMethod, next);
+    super(factory, method, next, null);
   }
-  
-  /**
-   * Sets the transaction type
-   */
-  /*
-  public void setTransactionType(TransactionAttributeType xa)
-  {
-    if (xa == null
-	|| REQUIRED.equals(xa)
-	|| NOT_SUPPORTED.equals(xa)) {
-      super.setTransactionType(xa);
-    }
-    else
-      throw ConfigException.create(getBusinessMethod().getApiMethod().getMethod(),
-				L.l("'{0}' is not an allowed transaction type for message beans",
-				    xa));
-  }
-  */
 
   @Override
   public void generatePreCall(JavaWriter out)

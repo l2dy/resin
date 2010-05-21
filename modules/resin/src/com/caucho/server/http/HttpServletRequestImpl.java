@@ -58,23 +58,22 @@ import javax.servlet.ServletRequestAttributeListener;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 
 import com.caucho.config.scope.ScopeRemoveListener;
 import com.caucho.i18n.CharacterEncoding;
-import com.caucho.network.listen.TcpDuplexController;
-import com.caucho.network.listen.TcpDuplexHandler;
 import com.caucho.network.listen.SocketLink;
+import com.caucho.network.listen.SocketLinkDuplexController;
+import com.caucho.network.listen.SocketLinkDuplexListener;
 import com.caucho.security.AbstractLogin;
-import com.caucho.security.Authenticator;
 import com.caucho.security.Login;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.servlet.DuplexContext;
-import com.caucho.servlet.DuplexListener;
+import com.caucho.servlet.JanusContext;
+import com.caucho.servlet.JanusListener;
+import com.caucho.servlet.JanusServletRequest;
 import com.caucho.servlet.WebSocketContext;
 import com.caucho.servlet.WebSocketListener;
 import com.caucho.servlet.WebSocketServletRequest;
@@ -955,6 +954,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Collection<Part> getParts()
     throws IOException, ServletException
   {
+    if ( ! getWebApp().doMultipartForm())
+      throw new ServletException("multipart-form is disabled; check <multipart-form> configuration tag.");
+
     if (! getContentType().startsWith("multipart/form-data"))
       throw new ServletException("Content-Type must be of 'multipart/form-data'.");
 
@@ -976,13 +978,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Part getPart(String name)
     throws IOException, ServletException
   {
-    if (! getContentType().startsWith("multipart/form-data"))
-      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
-
-    if (_filledForm == null)
-      _filledForm = parseQuery();
-
-    for (Part part : _parts) {
+    for (Part part : getParts()) {
       if (name.equals(part.getName()))
         return part;
     }
@@ -1777,7 +1773,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public boolean isAsyncStarted()
   {
-    return _request.isCometActive();
+    AbstractHttpRequest request = _request;
+    
+    return request != null && request.isCometActive();
   }
 
   /**
@@ -1912,7 +1910,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     WebSocketContextImpl duplex
       = new WebSocketContextImpl(this, _response, listener);
 
-    TcpDuplexController controller = _request.startDuplex(duplex);
+    SocketLinkDuplexController controller = _request.startDuplex(duplex);
     duplex.setController(controller);
 
     try {
@@ -1920,25 +1918,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     } catch (IOException e) {
       throw new RuntimeException(e);
     }
-
-    return duplex;
-  }
-
-  public DuplexContext startDuplex(DuplexListener listener)
-  {
-    if (log.isLoggable(Level.FINE))
-      log.fine(this + " upgrade HTTP to " + listener);
-
-    if (_response.getStatus() != 101)
-      _response.setStatus(101);
-
-    _response.setContentLength(0);
-
-    DuplexContextImpl duplex
-      = new DuplexContextImpl(this, _response, listener);
-
-    TcpDuplexController controller = _request.startDuplex(duplex);
-    duplex.setController(controller);
 
     return duplex;
   }
@@ -2223,24 +2202,25 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     }
   }
 
-  static class DuplexContextImpl implements DuplexContext, TcpDuplexHandler {
+  /*
+  static class DuplexContextImpl implements SocketLinkDuplexListener {
     private final HttpServletRequestImpl _request;
     private final HttpServletResponseImpl _response;
 
-    private final DuplexListener _listener;
+    private final SocketLinkDuplexListener _listener;
 
-    private TcpDuplexController _controller;
+    private SocketLinkDuplexController _controller;
 
     DuplexContextImpl(HttpServletRequestImpl request,
                       HttpServletResponseImpl response,
-                      DuplexListener listener)
+                      SocketLinkDuplexListener listener)
     {
       _request = request;
       _response = response;
       _listener = listener;
     }
 
-    public void setController(TcpDuplexController controller)
+    public void setController(SocketLinkDuplexController controller)
     {
       _controller = controller;
     }
@@ -2270,21 +2250,21 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       _controller.complete();
     }
 
-    public void onRead(TcpDuplexController duplex)
+    public void onRead(SocketLinkDuplexController duplex)
       throws IOException
     {
       do {
-        _listener.onRead(this);
+        _listener.onMessage(this);
       } while (_request.getAvailable() > 0);
     }
 
-    public void onComplete(TcpDuplexController duplex)
+    public void onComplete(SocketLinkDuplexController duplex)
       throws IOException
     {
       _listener.onComplete(this);
     }
 
-    public void onTimeout(TcpDuplexController duplex)
+    public void onTimeout(SocketLinkDuplexController duplex)
       throws IOException
     {
       _listener.onTimeout(this);
@@ -2295,17 +2275,39 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     {
       return getClass().getSimpleName() + "[" + _listener + "]";
     }
+
+    @Override
+    public InputStream getInputStream() throws IOException
+    {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public OutputStream getOutputStream() throws IOException
+    {
+      // TODO Auto-generated method stub
+      return null;
+    }
+
+    @Override
+    public void onStart(SocketLinkDuplexController context) throws IOException
+    {
+      // TODO Auto-generated method stub
+      
+    }
   }
+  */
 
   static class WebSocketContextImpl
-    implements WebSocketContext, TcpDuplexHandler
+    implements WebSocketContext, SocketLinkDuplexListener
   {
     private final HttpServletRequestImpl _request;
     private final HttpServletResponseImpl _response;
 
     private final WebSocketListener _listener;
 
-    private TcpDuplexController _controller;
+    private SocketLinkDuplexController _controller;
 
     WebSocketContextImpl(HttpServletRequestImpl request,
                          HttpServletResponseImpl response,
@@ -2316,7 +2318,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       _listener = listener;
     }
 
-    public void setController(TcpDuplexController controller)
+    public void setController(SocketLinkDuplexController controller)
     {
       _controller = controller;
     }
@@ -2334,13 +2336,13 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     public InputStream getInputStream()
       throws IOException
     {
-      return _request.getInputStream();
+      return _controller.getReadStream();
     }
 
     public OutputStream getOutputStream()
       throws IOException
     {
-      return _response.getOutputStream();
+      return _controller.getWriteStream();
     }
 
     public void complete()
@@ -2354,7 +2356,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       _listener.onStart(this);
     }
 
-    public void onRead(TcpDuplexController duplex)
+    public void onRead(SocketLinkDuplexController duplex)
       throws IOException
     {
       do {
@@ -2362,13 +2364,13 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       } while (_request.getAvailable() > 0);
     }
 
-    public void onComplete(TcpDuplexController duplex)
+    public void onComplete(SocketLinkDuplexController duplex)
       throws IOException
     {
       _listener.onComplete(this);
     }
 
-    public void onTimeout(TcpDuplexController duplex)
+    public void onTimeout(SocketLinkDuplexController duplex)
       throws IOException
     {
       _listener.onTimeout(this);
@@ -2378,6 +2380,16 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     public String toString()
     {
       return getClass().getSimpleName() + "[" + _listener + "]";
+    }
+
+    /* (non-Javadoc)
+     * @see com.caucho.network.listen.SocketLinkDuplexListener#onStart(com.caucho.network.listen.SocketLinkDuplexController)
+     */
+    @Override
+    public void onStart(SocketLinkDuplexController context) throws IOException
+    {
+      // TODO Auto-generated method stub
+      
     }
   }
 }

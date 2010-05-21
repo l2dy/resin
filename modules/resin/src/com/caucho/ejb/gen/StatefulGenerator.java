@@ -32,53 +32,107 @@ package com.caucho.ejb.gen;
 import java.io.IOException;
 import java.util.ArrayList;
 
-import com.caucho.config.gen.ApiClass;
-import com.caucho.config.gen.View;
-import com.caucho.java.JavaWriter;
 import javax.ejb.Stateful;
+import javax.enterprise.inject.spi.AnnotatedType;
+
+import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
+import com.caucho.util.L10N;
 
 /**
  * Generates the skeleton for a stateful bean.
  */
-public class StatefulGenerator extends SessionGenerator {
-  public StatefulGenerator(String ejbName, ApiClass ejbClass,
-                           ArrayList<ApiClass> localApi,
-                           ArrayList<ApiClass> remoteApi) {
-    super(ejbName, ejbClass, localApi, remoteApi, Stateful.class
-        .getSimpleName());
+@Module
+public class StatefulGenerator<X> extends SessionGenerator<X> 
+{
+  private static final L10N L = new L10N(StatefulGenerator.class);
+  
+  private final AspectBeanFactory<X> _aspectBeanFactory;
+  
+  public StatefulGenerator(String ejbName, AnnotatedType<X> beanType,
+                           ArrayList<AnnotatedType<? super X>> localApi,
+                           ArrayList<AnnotatedType<? super X>> remoteApi)
+  {
+    super(ejbName, beanType, localApi, remoteApi, 
+          Stateful.class.getSimpleName());
+    
+    InjectManager manager = InjectManager.create();
+    
+    _aspectBeanFactory = new StatefulAspectBeanFactory<X>(manager, getBeanType());
   }
 
-  public boolean isStateless() {
+  @Override
+  protected AspectBeanFactory<X> getAspectBeanFactory()
+  {
+    return _aspectBeanFactory;
+  }
+  
+  @Override
+  public boolean isStateless()
+  {
+    return false;
+  }
+  
+  @Override
+  protected boolean isTimerSupported()
+  {
     return false;
   }
 
+  public String getContextClassName()
+  {
+    return getClassName();
+  }
+
+  /**
+   * True if the implementation is a proxy, i.e. an interface stub which
+   * calls an instance class.
+   */
   @Override
-  protected View createLocalView(ApiClass api) {
-    return new StatefulView(this, api);
+  public boolean isProxy()
+  {
+    return true;
   }
 
   @Override
-  protected View createRemoteView(ApiClass api) {
-    return new StatefulView(this, api);
+  public String getViewClassName()
+  {
+    return "StatefulProxy";
   }
+
+  @Override
+  public String getBeanClassName()
+  {
+    // XXX: 4.0.7
+    // return getViewClass().getJavaClass().getSimpleName() + "__Bean";
+    return getBeanType().getJavaClass().getName();
+  }
+  
+  //
+  // introspection
+  //
 
   /**
    * Scans for the @Local interfaces
    */
   @Override
-  protected ArrayList<ApiClass> introspectLocalDefault() {
-    ArrayList<ApiClass> apiClass = new ArrayList<ApiClass>();
-
-    apiClass.add(getBeanClass());
-
-    return apiClass;
+  protected AnnotatedType<? super X> introspectLocalDefault() 
+  {
+    return getBeanType();
   }
+  
+  //
+  // Java code generation
+  //
 
   /**
    * Generates the stateful session bean
    */
   @Override
-  public void generate(JavaWriter out) throws IOException {
+  public void generate(JavaWriter out) throws IOException
+  {
     generateTopComment(out);
 
     out.println();
@@ -91,84 +145,112 @@ public class StatefulGenerator extends SessionGenerator {
     out.println();
     out.println("import javax.ejb.*;");
     out.println("import javax.transaction.*;");
+    out.println("import javax.enterprise.context.spi.CreationalContext;");
 
-    out.println();
-    out.println("public class " + getClassName());
-    out.println("  extends StatefulContext");
+    generateClassHeader(out);
+    
     out.println("{");
     out.pushDepth();
 
-    out.println();
-    out.println("public " + getClassName() + "(StatefulManager server)");
-    out.println("{");
-    out.pushDepth();
+    generateContextPrologue(out);
 
-    out.println("super(server);");
-
-    for (View view : getViews()) {
-      view.generateContextHomeConstructor(out);
-    }
-
-    out.popDepth();
-    out.println("}");
-
-    out.println();
-    out
-        .println("public " + getClassName() + "(" + getClassName()
-            + " context)");
-    out.println("{");
-    out.pushDepth();
-
-    out.println("super(context.getStatefulManager());");
-
-    generateContextObjectConstructor(out);
-
-    out.popDepth();
-    out.println("}");
-
-    for (View view : getViews()) {
-      view.generateContextPrologue(out);
-    }
-
-    generateCreateProvider(out);
-    generateViews(out);
+    generateClassContent(out);
 
     generateDependency(out);
 
     out.popDepth();
     out.println("}");
   }
-
-  protected void generateCreateProvider(JavaWriter out) throws IOException {
+  
+  private void generateClassHeader(JavaWriter out) 
+    throws IOException
+  {
     out.println();
-    out.println("@Override");
-    out.println("public StatefulProvider getProvider(Class api)");
+    out.println("public class " + getClassName() + "<T>");
+
+    if (hasNoInterfaceView())
+      out.println("  extends " + getBeanType().getJavaClass().getName());
+
+    out.print("  implements SessionProxyFactory<T>, com.caucho.config.gen.CandiEnhancedBean");
+
+    for (AnnotatedType<? super X> api : getLocalApi()) {
+      out.print(", " + api.getJavaClass().getName());
+    }
+    out.println();
+  }
+
+  @Override
+  protected void generateClassContent(JavaWriter out)
+    throws IOException
+  {
+    out.println("private transient StatefulManager _manager;");
+    out.println("private transient StatefulContext _context;");
+
+    out.println("private " + getBeanClassName() + " _bean;");
+
+    out.println("private transient boolean _isActive;");
+    
+    generateConstructor(out);
+    
+    generateProxyFactory(out);
+
+    generateBeanPrologue(out);
+    
+    generateBusinessMethods(out);
+  }
+
+  private void generateConstructor(JavaWriter out)
+    throws IOException
+  {
+    // generateProxyConstructor(out);
+    
+    out.println();
+    out.print("public " + getClassName() + "(StatefulManager manager, ");
+    out.println("StatefulContext context)");
     out.println("{");
     out.pushDepth();
 
-    for (View view : getViews()) {
-      StatefulView sView = (StatefulView) view;
-
-      sView.generateCreateProvider(out, "api");
-    }
-
-    out.println();
-    out.println("return super.getProvider(api);");
+    out.println("_manager = manager;");
+    out.println("_context = context;");
 
     out.popDepth();
     out.println("}");
+
+    out.println();
+    out.println("private " + getClassName() + "(StatefulManager manager"
+                + ", StatefulContext context"
+                + ", CreationalContext<T> env)");
+    out.println("{");
+    out.pushDepth();
+    
+    out.println("_manager = manager;");
+    out.println("_context = context;");
+
+    out.println("_bean = (" + getBeanClassName() + ") _manager.newInstance(env);");
+    
+    generateContextObjectConstructor(out);
+
+    out.popDepth();
+    out.println("}");
+    
+    generateInject(out);
+    generatePostConstruct(out);
+    
+    out.println();
+    out.println("@Override");
+    out.println("public void __caucho_destroy()");
+    out.println("{");
+    out.println("}");
   }
 
-  /**
-   * Creates any additional code in the constructor
-   */
-  public void generateContextObjectConstructor(JavaWriter out)
-      throws IOException {
-    for (View view : getViews()) {
-      view.generateContextObjectConstructor(out);
-    }
-  }
-
-  protected void generateContext(JavaWriter out) {
+  private void generateProxyFactory(JavaWriter out)
+    throws IOException
+  {
+    out.println();
+    out.println("@Override");
+    out.println("public T __caucho_createProxy(CreationalContext<T> env)");
+    out.println("{");
+    out.println("  return (T) new " + getClassName() + "(_manager, _context, env);");
+    out.println("}");
   }
 }

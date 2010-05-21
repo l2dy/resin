@@ -29,49 +29,75 @@
 
 package com.caucho.ejb.gen;
 
-import com.caucho.config.gen.*;
-import com.caucho.config.*;
-import com.caucho.config.types.InjectionTarget;
-import com.caucho.java.JavaWriter;
-import com.caucho.util.L10N;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collection;
 
-import javax.ejb.*;
-import java.io.IOException;
-import java.util.*;
+import javax.ejb.LocalBean;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedType;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.gen.AspectGenerator;
+import com.caucho.config.gen.BeanGenerator;
+import com.caucho.config.reflect.AnnotatedTypeUtil;
+import com.caucho.inject.Module;
+import com.caucho.util.L10N;
 
 /**
  * Generates the skeleton for a session bean.
  */
-abstract public class SessionGenerator extends BeanGenerator {
+@Module
+abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   private static final L10N L = new L10N(SessionGenerator.class);
+  
+  private boolean _hasNoInterfaceView;
 
-  private ArrayList<ApiClass> _localApi = new ArrayList<ApiClass>();
-
-  private ArrayList<ApiClass> _remoteApi = new ArrayList<ApiClass>();
-
-  private ArrayList<View> _views = new ArrayList<View>();
+  private ArrayList<AnnotatedType<? super X>> _localApi;
+  private ArrayList<AnnotatedType<? super X>> _remoteApi;
+  
+  private ArrayList<AnnotatedMethod<? super X>> _annotatedMethods
+    = new ArrayList<AnnotatedMethod<? super X>>();
 
   protected String _contextClassName = "dummy";
 
-  public SessionGenerator(String ejbName, ApiClass ejbClass,
-                          ArrayList<ApiClass> localApi,
-                          ArrayList<ApiClass> remoteApi, String beanType) {
-    super(toFullClassName(ejbName, ejbClass.getSimpleName(), beanType),
-        ejbClass);
+  private final NonBusinessAspectBeanFactory<X> _nonBusinessAspectBeanFactory;
+
+  private final ArrayList<AspectGenerator<X>> _businessMethods 
+    = new ArrayList<AspectGenerator<X>>();
+
+  public SessionGenerator(String ejbName, 
+                          AnnotatedType<X> beanType,
+                          ArrayList<AnnotatedType<? super X>> localApi,
+                          ArrayList<AnnotatedType<? super X>> remoteApi, 
+                          String beanTypeName)
+  {
+    super(toFullClassName(ejbName, beanType.getJavaClass().getName(), beanTypeName),
+          beanType);
 
     _contextClassName = "dummy";
 
-    _localApi = new ArrayList<ApiClass>(localApi);
+    _localApi = new ArrayList<AnnotatedType<? super X>>(localApi);
 
-    _remoteApi = new ArrayList<ApiClass>(remoteApi);
-  }
+    _remoteApi = new ArrayList<AnnotatedType<? super X>>(remoteApi);
+
+    _nonBusinessAspectBeanFactory 
+      = new NonBusinessAspectBeanFactory<X>(getBeanType());
+   }
 
   public static String toFullClassName(String ejbName, String className,
-                                       String beanType) {
+                                       String beanType)
+  {
     StringBuilder sb = new StringBuilder();
 
-    sb.append("_ejb.");
-
+    sb.append(className);
+    
+    sb.append("__");
+    
+    // XXX: restore this to distinguish similar beans
+    /*
     if (!Character.isJavaIdentifierStart(ejbName.charAt(0)))
       sb.append('_');
 
@@ -89,478 +115,250 @@ abstract public class SessionGenerator extends BeanGenerator {
     sb.append(".");
     sb.append(className);
     sb.append("__");
+    */
+    
     sb.append(beanType);
-    sb.append("Context");
+    sb.append("Proxy");
 
     return sb.toString();
   }
 
-  public boolean isStateless() {
+  public boolean isStateless() 
+  {
     return false;
   }
 
+  public boolean hasNoInterfaceView()
+  {
+    return _hasNoInterfaceView;
+  }
+  
   /**
    * Returns the local API list.
    */
-  public ArrayList<ApiClass> getLocalApi() {
+  public ArrayList<AnnotatedType<? super X>> getLocalApi()
+  {
     return _localApi;
   }
 
   /**
    * Returns the remote API list.
    */
-  public ArrayList<ApiClass> getRemoteApi() {
+  public ArrayList<AnnotatedType<? super X>> getRemoteApi()
+  {
     return _remoteApi;
   }
-
+  
   /**
-   * Returns the views
+   * Returns the merged annotated methods
    */
-  public ArrayList<View> getViews() {
-    return _views;
+  protected ArrayList<AnnotatedMethod<? super X>> getAnnotatedMethods()
+  {
+    return _annotatedMethods;
   }
 
   /**
-   * Returns the view matching the given class
+   * Returns the introspected methods
    */
-  public View getView(Class api) {
-    for (View view : _views) {
-      if (view.getViewClass().getName().equals(api.getName()))
-        return view;
-    }
-
-    return null;
+  @Override
+  public ArrayList<AspectGenerator<X>> getMethods()
+  {
+    return _businessMethods;
   }
 
   /**
    * Introspects the bean.
    */
   @Override
-  public void introspect() {
+  public void introspect()
+  {
     super.introspect();
+    
+    if (getBeanType().isAnnotationPresent(LocalBean.class) 
+        && ! getBeanType().getJavaClass().isInterface())
+      _hasNoInterfaceView = true;
+        
+    if (_localApi.size() == 0 && _remoteApi.size() == 0)
+      _hasNoInterfaceView = true;
 
-    if (_localApi.size() == 0 && _remoteApi.size() == 0) {
-      _localApi = introspectLocalDefault();
+    if (_hasNoInterfaceView) {
+      AnnotatedType<? super X> localDefault = introspectLocalDefault();
+      
+      if (localDefault.getJavaClass().isInterface())
+        _localApi.add(localDefault); 
+      else
+        // we still want to introspect the methods, but don't add it as
+        // a local api because it will be treated as an interface later
+        introspectType(localDefault);
+    }
+    
+    for (AnnotatedType<? super X> type : _localApi)
+      introspectType(type);
+    
+    for (AnnotatedType<? super X> type : _remoteApi)
+      introspectType(type);
+    
+    introspectImpl();
+    
+    // this comes after the other introspection classes because all it
+    // does is catch private timer methods and generate aspect wrappers
+    // that wouldn't normally be generated if the method didn't have
+    // timer behavior associated.
+    if (isTimerSupported())
+      introspectTimerMethods();
+  }
+  
+  private void introspectType(AnnotatedType<? super X> type)
+  {
+    for (AnnotatedMethod<? super X> method : type.getMethods())
+      introspectMethod(method);
+  }
+  
+  private void introspectMethod(AnnotatedMethod<? super X> method)
+  {
+    AnnotatedMethod<? super X> oldMethod 
+      = findMethod(_annotatedMethods, method);
+    
+    if (oldMethod != null) {
+      // XXX: merge annotations
+      return;
+    }
+    
+    AnnotatedMethod<? super X> baseMethod
+      = findMethod(getBeanType().getMethods(), method);
+    
+    if (baseMethod == null)
+      throw new IllegalStateException(L.l("{0} does not have a matching base method in {1}",
+                                          method, getBeanType()));
+    
+    // XXX: merge annotations
+    
+    _annotatedMethods.add(baseMethod);
+  }
+
+  
+  /**
+   * Introspects the APIs methods, producing a business method for
+   * each.
+   */
+  private void introspectImpl()
+  {
+    for (AnnotatedMethod<? super X> method : getAnnotatedMethods()) {
+      introspectMethodImpl(method);
     }
   }
 
-  /**
-   * Generates the views for the bean
-   */
-  @Override
-  public void createViews() {
-    for (ApiClass api : _localApi) {
-      View view = createLocalView(api);
+  private void introspectMethodImpl(AnnotatedMethod<? super X> apiMethod)
+  {
+    Method javaMethod = apiMethod.getJavaMember();
 
-      _views.add(view);
+    if (isBusinessMethod(javaMethod)) {
+      addBusinessMethod(apiMethod);
     }
-
-    for (ApiClass api : _remoteApi) {
-      View view = createRemoteView(api);
-
-      _views.add(view);
-    }
-
-    for (View view : _views)
-      view.introspect();
-  }
-
-  /**
-   * Generates the local view for the given class
-   */
-  protected View createLocalView(ApiClass api) {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Generates the remote view for the given class
-   */
-  protected View createRemoteView(ApiClass api) {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Scans for the @Local interfaces
-   */
-  protected ArrayList<ApiClass> introspectLocalDefault() {
-    throw new ConfigException(L
-        .l("'{0}' does not have any interfaces defined.", getBeanClass()
-            .getName()));
-  }
-
-  /**
-   * Scans for the @Local interfaces
-   */
-  private ArrayList<ApiClass> introspectLocalApi() {
-    ArrayList<ApiClass> apiList = new ArrayList<ApiClass>();
-
-    Local local = (Local) getBeanClass().getAnnotation(Local.class);
-    Remote remote = (Remote) getBeanClass().getAnnotation(Remote.class);
-
-    if (local != null && local.value().length > 0) {
-      for (Class<?> api : local.value()) {
-        apiList.add(new ApiClass(api));
+    else {
+      if (javaMethod.getName().startsWith("ejb")) {
+        throw new ConfigException(L.l("{0}: '{1}' must not start with 'ejb'.  The EJB spec reserves all methods starting with ejb.",
+                                      javaMethod.getDeclaringClass(),
+                                      javaMethod.getName()));
       }
+    
+      int modifiers = javaMethod.getModifiers();
 
-      return apiList;
+      if (! Modifier.isPublic(modifiers) && ! Modifier.isPrivate(modifiers))
+        addNonBusinessMethod(apiMethod);
     }
+  }
+  
+  private void introspectTimerMethods()
+  {
+    for (AnnotatedMethod<? super X> method : getAnnotatedMethods()) {
+      introspectTimerMethod(method);
+    }    
+  }
+  
+  private void introspectTimerMethod(AnnotatedMethod<? super X> apiMethod)
+  {
+    Method javaMethod = apiMethod.getJavaMember();
+      
+    int modifiers = javaMethod.getModifiers();
 
-    boolean hasRemote = remote != null;
+    if (! isBusinessMethod(javaMethod) && ! Modifier.isPublic(modifiers))
+      addScheduledMethod(apiMethod);
+  }
+  
+  protected void addBusinessMethod(AnnotatedMethod<? super X> method)
+  {
+    AspectGenerator<X> bizMethod = getAspectBeanFactory().create(method);
+      
+    if (bizMethod != null)
+      _businessMethods.add(bizMethod);
+  }
 
-    for (ApiClass api : getBeanClass().getInterfaces()) {
-      if (api.getJavaClass().isAnnotationPresent(Local.class))
-        apiList.add(api);
-      if (api.getJavaClass().isAnnotationPresent(Remote.class))
-        hasRemote = true;
-    }
+  protected void addNonBusinessMethod(AnnotatedMethod<? super X> method)
+  {
+    AspectGenerator<X> nonBizMethod 
+      = _nonBusinessAspectBeanFactory.create(method);
+      
+    // XXX seems weird to add this to the _businessMethods, but the generation
+    // is correct.
+    if (nonBizMethod != null)
+      _businessMethods.add(nonBizMethod);
+  } 
 
-    if (apiList.size() > 0 || hasRemote)
-      return apiList;
-
-    ApiClass singleApi = null;
-    for (ApiClass api : getBeanClass().getInterfaces()) {
-      Class javaApi = api.getJavaClass();
-
-      if (javaApi.equals(java.io.Serializable.class))
-        continue;
-      if (javaApi.equals(java.io.Externalizable.class))
-        continue;
-      if (javaApi.equals(javax.ejb.SessionBean.class))
-        continue;
-      if (javaApi.getName().startsWith("javax.ejb."))
-        continue;
-      if (javaApi.isAnnotationPresent(Remote.class)) {
-        continue;
+  protected void addScheduledMethod(AnnotatedMethod<? super X> method)
+  {
+    AspectGenerator<X> bizMethod = 
+      getScheduledAspectBeanFactory().create(method);
+      
+    if (bizMethod != null)
+      _businessMethods.add(bizMethod);
+  }
+  
+  private AnnotatedMethod<? super X> 
+  findMethod(Collection<AnnotatedMethod<? super X>> methodList,
+             AnnotatedMethod<? super X> method)
+  {
+    for (AnnotatedMethod<? super X> oldMethod : methodList) {
+      if (AnnotatedTypeUtil.isMatch(oldMethod, method)) {
+        return oldMethod;
       }
-
-      if (singleApi != null) {
-        throw new ConfigException(
-            L
-                .l(
-                   "{0}: does not have a unique local API.  Both '{1}' and '{2}' are local.",
-                   getBeanClass().getName(), singleApi.getName(), api.getName()));
-      }
-
-      singleApi = api;
     }
+    
+    return null;
+  }
 
-    if (singleApi != null) {
-      apiList.add(singleApi);
+  protected AnnotatedType<? super X> introspectLocalDefault()
+  {
+    return getBeanType();
+  }
 
-      return apiList;
+  protected AspectBeanFactory<X> getScheduledAspectBeanFactory()
+  {
+    throw new UnsupportedOperationException();
+  }
+  
+  abstract protected boolean isTimerSupported();
+  abstract protected AspectBeanFactory<X> getAspectBeanFactory();
+  
+  // abstract protected void generateBody(JavaWriter out) throws IOException;
+  
+  public static boolean isBusinessMethod(Method method)
+  {
+    if (method.getDeclaringClass().equals(Object.class))
+      return false;
+    if (method.getDeclaringClass().getName().startsWith("javax.ejb."))
+      return false;
+    if (method.getName().startsWith("ejb")) {
     }
+    
+    int modifiers = method.getModifiers();
 
-    // XXX: only for stateful?
-    // apiList.add(getBeanClass());
-
-    return apiList;
-  }
-
-  /**
-   * Scans for the @Remote interfaces
-   */
-  private ArrayList<ApiClass> introspectRemoteApi() {
-    ArrayList<ApiClass> apiList = new ArrayList<ApiClass>();
-
-    Remote remote = (Remote) getBeanClass().getAnnotation(Remote.class);
-
-    if (remote != null && remote.value().length > 0) {
-      for (Class api : remote.value()) {
-        apiList.add(new ApiClass(api));
-      }
-
-      return apiList;
-    }
-
-    for (ApiClass api : getBeanClass().getInterfaces()) {
-      Class javaApi = api.getJavaClass();
-
-      if (java.io.Serializable.class.equals(javaApi))
-        continue;
-      else if (java.io.Externalizable.class.equals(javaApi))
-        continue;
-      else if (javaApi.getName().startsWith("javax.ejb"))
-        continue;
-
-      if (javaApi.isAnnotationPresent(Remote.class) || remote != null)
-        apiList.add(api);
-    }
-
-    if (apiList.size() > 0)
-      return apiList;
-
-    return apiList;
-  }
-
-  abstract protected void generateContext(JavaWriter out) throws IOException;
-
-  protected void generateNewInstance(JavaWriter out, String suffix)
-      throws IOException {
-  }
-
-  protected void generateNewRemoteInstance(JavaWriter out, String suffix)
-      throws IOException {
-    // ejb/0g27
-    /*
-     * if (_bean.getRemoteHome() == null && _bean.getRemoteList().size() == 0)
-     * return;
-     */
-    out.println();
-    out.println("protected Object _caucho_newRemoteInstance" + suffix + "()");
-    out.println("{");
-    out.pushDepth();
-
-    out.println(_contextClassName + " cxt = new " + _contextClassName
-        + "(_server);");
-
-    if (isStateless())
-      out.println("Bean bean = new Bean(cxt);");
-    else
-      out.println("Bean bean = new Bean(cxt, null);");
-
-    out.println("cxt._ejb_free(bean);");
-
-    out.println();
-
-    /*
-     * Class retType = getReturnType(); if ("RemoteHome".equals(_prefix))
-     * out.println("return (" + retType.getName() + ") cxt.getRemoteView();");
-     * else if ("LocalHome".equals(_prefix)) out.println("return (" +
-     * retType.getName() + ") cxt.getLocalView();"); else throw new
-     * IOException(L.l("trying to create unknown type {0}", _prefix));
-     */
-
-    out.println("return cxt.createRemoteView" + suffix + "();");
-
-    out.popDepth();
-    out.println("}");
-  }
-
-  /**
-   * Generates injection initialization.
-   */
-  protected void generateInitInjection(JavaWriter out) throws IOException {
-    /*
-     * // ejb/0fd0 out.println();
-     * out.println("private void __caucho_initInjection()"); out.println("{");
-     * out.pushDepth();
-     * 
-     * out.println("try {"); out.pushDepth();
-     * 
-     * out.println("java.lang.reflect.Field field;"); out.println();
-     * 
-     * for (EnvEntry envEntry : _bean.getEnvEntries()) { InjectionTarget
-     * injectionTarget = envEntry.getInjectionTarget();
-     * 
-     * if (injectionTarget == null) continue;
-     * 
-     * String value = envEntry.getEnvEntryValue();
-     * 
-     * // ejb/0fd4 if (value == null) continue;
-     * 
-     * Class cl = envEntry.getEnvEntryType();
-     * 
-     * generateInjection(out, injectionTarget, value, cl, true); }
-     * 
-     * // ejb/0f54 for (ResourceRef resourceRef : _bean.getResourceRefs()) {
-     * InjectionTarget injectionTarget = resourceRef.getInjectionTarget();
-     * 
-     * if (injectionTarget == null) continue;
-     * 
-     * String value = "com.caucho.naming.Jndi.lookup(\"java:comp/env/" +
-     * resourceRef.getResRefName() + "\")";
-     * 
-     * if (value == null) continue;
-     * 
-     * Class cl = resourceRef.getResType();
-     * 
-     * generateInjection(out, injectionTarget, value, cl, false); }
-     * 
-     * out.popDepth(); out.println("} catch (Throwable e) {");out.println(
-     * "  __caucho_log.log(java.util.logging.Level.FINE, e.toString(), e);");
-     * out.println("  throw com.caucho.ejb.EJBExceptionWrapper.create(e);");
-     * out.println("}");
-     * 
-     * out.popDepth(); out.println("}");
-     */
-  }
-
-  /**
-   * Generates an individual injection.
-   */
-  protected void generateInjection(JavaWriter out,
-                                   InjectionTarget injectionTarget,
-                                   String value, Class cl,
-                                   boolean isEscapeString) throws IOException {
-    // ejb/0fd1, ejb/0fd3
-    value = generateTypeCasting(value, cl, isEscapeString);
-
-    String s = injectionTarget.getInjectionTargetName();
-
-    out.println("try {");
-    out.pushDepth();
-
-    String methodName = "set" + Character.toUpperCase(s.charAt(0));
-
-    if (s.length() > 1)
-      methodName += s.substring(1);
-
-    generateCallReflectionGetMethod(out, "method", methodName, "new Class[] { "
-        + cl.getName() + ".class }", "getClass().getSuperclass()");
-
-    out.println("method.setAccessible(true);");
-
-    out.print("method.invoke(this, ");
-    out.print(value);
-    out.println(");");
-
-    out.popDepth();
-    out.println("} catch (NoSuchMethodException e1) {");
-    out.pushDepth();
-
-    java.lang.reflect.Field field = null;
-
-    try {
-      field = cl.getDeclaredField("TYPE");
-    } catch (NoSuchFieldException e) {
-    }
-
-    boolean isPrimitiveWrapper = false;
-
-    if (field != null && Class.class.isAssignableFrom(field.getType())) { // if
-      // (cl.isPrimitive())
-      isPrimitiveWrapper = true;
-    }
-
-    // ejb/0fd2
-    if (isPrimitiveWrapper) {
-      out.println("try {");
-      out.pushDepth();
-
-      // ejb/0fd2 vs ejb/0fd3
-      generateCallReflectionGetMethod(out, "method", methodName,
-                                      "new Class[] { " + cl.getName()
-                                          + ".TYPE }",
-                                      "getClass().getSuperclass()");
-
-      out.println("method.setAccessible(true);");
-
-      out.print("method.invoke(this, ");
-      out.print(value);
-      out.println(");");
-
-      out.popDepth();
-      out.println("} catch (NoSuchMethodException e2) {");
-      out.pushDepth();
-    }
-
-    out.print("field  = getClass().getSuperclass().getDeclaredField(\"");
-    out.print(s);
-    out.println("\");");
-
-    out.println("field.setAccessible(true);");
-
-    out.print("field.set(this, ");
-    out.print(value);
-    out.println(");");
-
-    // ejb/0fd2 vs ejb/0fd3
-    if (isPrimitiveWrapper) { // if (! cl.equals(String.class)) {
-      out.popDepth();
-      out.println("}");
-    }
-
-    out.popDepth();
-    out.println("}");
-  }
-
-  /**
-   * Generates a call to get a class method.
-   */
-  protected void generateCallReflectionGetMethod(JavaWriter out,
-                                                 String methodVar,
-                                                 String methodName,
-                                                 String paramVar,
-                                                 String classVar)
-      throws IOException {
-    out.print("java.lang.reflect.Method ");
-    out.print(methodVar);
-    out.print(" = com.caucho.ejb.util.EjbUtil.getMethod(");
-    out.print(classVar);
-    out.print(", \"");
-    out.print(methodName);
-    out.print("\", ");
-    out.print(paramVar);
-    out.println(");");
-  }
-
-  /**
-   * Generates reflection to access a class method.
-   */
-  protected void generateReflectionGetMethod(JavaWriter out) throws IOException {
-    // moved to EjbUtil
-  }
-
-  /**
-   * Makes private methods accessible before invoking them.
-   */
-  protected void generateInvokeMethod(JavaWriter out) throws IOException {
-    out.println();
-    out
-        .println("private static void invokeMethod(Bean bean, String methodName, Class paramTypes[], Object paramValues[])");
-    out.println("{");
-    out.pushDepth();
-
-    out.println("try {");
-    out.pushDepth();
-
-    out
-        .println("java.lang.reflect.Method m = com.caucho.ejb.util.EjbUtil.getMethod(bean.getClass(), methodName, paramTypes);");
-    out.println("m.setAccessible(true);");
-    out.println("m.invoke(bean, paramValues);");
-
-    out.popDepth();
-    out.println("} catch (Exception e) {");
-    out.pushDepth();
-
-    out
-        .println("__caucho_log.log(java.util.logging.Level.FINE, e.toString(), e);");
-    out.println("throw com.caucho.ejb.EJBExceptionWrapper.create(e);");
-
-    out.popDepth();
-    out.println("}");
-
-    out.popDepth();
-    out.println("}");
-  }
-
-  /**
-   * Returns true if the method is implemented.
-   */
-  public boolean hasMethod(String methodName, Class[] paramTypes) {
-    return getBeanClass().hasMethod(methodName, paramTypes);
-  }
-
-  private String generateTypeCasting(String value, Class<?> cl,
-                                     boolean isEscapeString) {
-    if (cl.equals(String.class)) {
-      if (isEscapeString)
-        value = "\"" + value + "\"";
-    } else if (cl.equals(Character.class))
-      value = "'" + value + "'";
-    else if (cl.equals(Byte.class))
-      value = "(byte) " + value;
-    else if (cl.equals(Short.class))
-      value = "(short) " + value;
-    else if (cl.equals(Integer.class))
-      value = "(int) " + value;
-    else if (cl.equals(Long.class))
-      value = "(long) " + value;
-    else if (cl.equals(Float.class))
-      value = "(float) " + value;
-    else if (cl.equals(Double.class))
-      value = "(double) " + value;
-
-    return value;
+    if (! Modifier.isPublic(modifiers))
+      return false;
+    
+    if (Modifier.isFinal(modifiers) || Modifier.isStatic(modifiers))
+      return false;
+    
+    return true;
   }
 }

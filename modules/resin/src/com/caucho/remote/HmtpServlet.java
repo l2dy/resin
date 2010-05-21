@@ -55,6 +55,8 @@ import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.http.HttpServletRequestImpl;
 import com.caucho.server.http.HttpServletResponseImpl;
+import com.caucho.servlet.JanusContext;
+import com.caucho.servlet.JanusListener;
 import com.caucho.servlet.WebSocketContext;
 import com.caucho.servlet.WebSocketListener;
 import com.caucho.util.L10N;

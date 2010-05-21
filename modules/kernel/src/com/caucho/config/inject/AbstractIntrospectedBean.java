@@ -35,18 +35,23 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ejb.Stateful;
+import javax.ejb.Stateless;
+import javax.ejb.Singleton;
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.NormalScope;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.Alternative;
 import javax.enterprise.inject.Any;
+import javax.enterprise.inject.Specializes;
 import javax.enterprise.inject.Stereotype;
+import javax.enterprise.inject.Typed;
 import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.BeanManager;
@@ -58,6 +63,7 @@ import javax.inject.Scope;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Names;
+import com.caucho.config.bytecode.ScopeAdapter;
 import com.caucho.config.reflect.BaseType;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -78,14 +84,12 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     = new HashSet<Class<?>>();
 
   public static final Annotation []CURRENT_ANN
-    = new Annotation[] { CurrentLiteral.CURRENT };
+    = new Annotation[] { DefaultLiteral.DEFAULT };
 
   // AnnotatedType for ManagedBean, AnnotatedMethod for produces
   private Annotated _annotated;
 
   private BaseType _baseType;
-
-  private Set<BaseType> _types;
 
   private Set<Type> _typeClasses;
 
@@ -98,6 +102,8 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     = new ArrayList<Annotation>();
 
   private String _name;
+  
+  private boolean _isAlternative;
 
   private String _passivationId;
 
@@ -106,23 +112,79 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
                                   Annotated annotated)
   {
     super(manager);
+    
     _annotated = annotated;
     
+    /*
     if (type instanceof Class<?>) {
       // ioc/024d
       _baseType = manager.createClassBaseType((Class<?>) type);
     }
     else
       _baseType = manager.createBaseType(type);
+      */
     
-    _typeClasses = _baseType.getTypeClosure(manager);
+    _baseType = manager.createSourceBaseType(type);
+    
+    LinkedHashSet<Type> baseTypes = new LinkedHashSet<Type>();
+    
+    for (Type closureType : annotated.getTypeClosure()) {
+      baseTypes.add(manager.createSourceBaseType(closureType).toType());
+    }
+    
+    Typed typed = annotated.getAnnotation(Typed.class);
+    
+    if (typed != null) {
+      _typeClasses = fillTyped(baseTypes,
+                               typed.value());
+    }
+    else {
+      _typeClasses = baseTypes;
+    }
   }
 
+  private LinkedHashSet<Type> fillTyped(Set<Type> closure,
+                                        Class<?> []values)
+  {
+    LinkedHashSet<Type> typeClasses = new LinkedHashSet<Type>();
+  
+    for (Class<?> cl : values) {
+      fillType(typeClasses, closure, cl);
+    }
+
+    /*
+    if (isClass)
+      typeClasses.add(Object.class);
+      */
+    
+    typeClasses.add(Object.class);
+    
+    return typeClasses;
+  }
+  
+  private void fillType(LinkedHashSet<Type> types, 
+                        Set<Type> closure,
+                        Class<?> cl)
+  {
+    for (Type type : closure) {
+      if (type.equals(cl)) {
+        types.add(type);
+      }
+      else if (type instanceof BaseType) {
+        BaseType baseType = (BaseType) type;
+        
+        if (baseType.getRawClass().equals(cl))
+          types.add(type);
+      }
+    }
+  }
+  
   public BaseType getBaseType()
   {
     return _baseType;
   }
 
+  @Override
   public Class<?> getBeanClass()
   {
     return _baseType.getRawClass();
@@ -154,21 +216,10 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     return _annotated;
   }
 
-  /*
-  protected AnnotatedType getAnnotatedType()
-  {
-    return  new BeanTypeImpl(getTargetType(), getIntrospectionClass());
-  }
-  */
-
-  protected Class<?> getIntrospectionClass()
-  {
-    return getTargetClass();
-  }
-
   /**
    * Gets the bean's EL qualifier name.
    */
+  @Override
   public String getName()
   {
     return _name;
@@ -177,6 +228,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   /**
    * Returns the bean's qualifier types
    */
+  @Override
   public Set<Annotation> getQualifiers()
   {
     Set<Annotation> set = new LinkedHashSet<Annotation>();
@@ -188,6 +240,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     return set;
   }
 
+  @Override
   public String getId()
   {
     if (_passivationId == null)
@@ -196,6 +249,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     return _passivationId;
   }
 
+  @Override
   public void setPassivationId(String passivationId)
   {
     _passivationId = passivationId;
@@ -216,18 +270,9 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     return set;
   }
 
-  /**
-   * Returns an array of the qualifier annotations
-   */
-  public Annotation []getQualifierArray()
+  private Annotated getIntrospectedAnnotated()
   {
-    if (_qualifiers == null || _qualifiers.size() == 0)
-      return new Annotation[] { CurrentLiteral.CURRENT };
-
-    Annotation []qualifiers = new Annotation[_qualifiers.size()];
-    _qualifiers.toArray(qualifiers);
-
-    return qualifiers;
+    return _annotated;
   }
 
   /**
@@ -242,72 +287,19 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   /**
    * Returns the types that the bean implements
    */
+  @Override
   public Set<Type> getTypes()
   {
     return _typeClasses;
   }
-
-  /**
-   * Returns the types that the bean implements
-   */
-  public Set<BaseType> getGenericTypes()
+  
+  @Override
+  public boolean isAlternative()
   {
-    return _types;
+    return _isAlternative;
   }
 
-  /**
-   * Introspects all the types implemented by the class
-   */
-  protected void introspectTypes(Type type)
-  {
-    introspectTypes(type, null);
-  }
-
-  /**
-   * Introspects all the types implemented by the class
-   */
-  private void introspectTypes(Type type, HashMap<String,BaseType> paramMap)
-  {
-    if (type == null || _reservedTypes.contains(type))
-      return;
-    
-    BaseType baseType = addType(type, paramMap);
-
-    if (baseType == null)
-      return;
-
-    HashMap<String,BaseType> newParamMap = baseType.getParamMap();
-    Class<?> cl = baseType.getRawClass();
-
-    introspectTypes(cl.getGenericSuperclass(), newParamMap);
-
-    for (Type iface : cl.getGenericInterfaces()) {
-      introspectTypes(iface, newParamMap);
-    }
-  }
-
-  protected BaseType addType(Type type, HashMap<String,BaseType> paramMap)
-  {
-    BaseType baseType = BaseType.create(type, paramMap);
-
-    if (baseType == null)
-      return null;
-
-    if (_types.contains(baseType))
-      return null;
-
-    _types.add(baseType);
-
-    /*
-    if (! _typeClasses.contains(baseType.getRawClass()))
-      _typeClasses.add(baseType.getRawClass());
-    */
-    if (! _typeClasses.contains(baseType.toType()))
-      _typeClasses.add(baseType.toType());
-
-    return baseType;
-  }
-
+  @Override
   public void introspect()
   {
     super.introspect();
@@ -315,19 +307,23 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     introspect(getIntrospectedAnnotated());
   }
 
-  protected Annotated getIntrospectedAnnotated()
-  {
-    return _annotated;
-  }
-
   protected void introspect(Annotated annotated)
   {
     introspectScope(annotated);
     introspectQualifiers(annotated);
     introspectName(annotated);
+    
+    if (annotated.isAnnotationPresent(Alternative.class))
+      _isAlternative = true;
+    
     introspectStereotypes(annotated);
-
+    introspectSpecializes(annotated);
+    
     introspectDefault();
+    
+    if (getScope().isAnnotationPresent(NormalScope.class)) {
+      ScopeAdapter.validateType(annotated.getBaseType());
+    }
   }
 
   /**
@@ -437,12 +433,65 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
           throw new ConfigException(L.l("'{0}' is not allowed on @Stereotype '{1}' because stereotypes may not have @Qualifier annotations",
                                         ann, stereotype));
         }
+        
+        if (annType.equals(Alternative.class))
+          _isAlternative = true;
       }
     }
 
     if (_scope == null)
       _scope = scope;
-}
+  }
+
+  /**
+   * Adds the stereotypes from the bean's annotations
+   */
+  protected void introspectSpecializes(Annotated annotated)
+  {
+    if (! annotated.isAnnotationPresent(Specializes.class))
+      return;
+
+    /*
+    if (annotated.isAnnotationPresent(Named.class)) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because it also implements @Named.",
+                                    getTargetName()));
+    }
+    */
+    
+    Type baseType = annotated.getBaseType();
+    
+    if (! (baseType instanceof Class<?>)) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because '{1}' is not a class.",
+                                    getTargetName(), baseType));
+    }
+    
+    Class<?> baseClass = (Class<?>) baseType;
+    Class<?> parentClass = baseClass.getSuperclass();
+
+    if (baseClass.getSuperclass() == null ||
+        baseClass.getSuperclass().equals(Object.class)) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because the superclass '{1}' is not a managed bean.",
+                                    getTargetName(), baseClass.getSuperclass()));
+    }
+    
+    if ((annotated.isAnnotationPresent(Stateless.class)
+         != parentClass.isAnnotationPresent(Stateless.class))) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because the bean is a @Stateless bean but its parent is not.",
+                                    getTargetName()));
+    }
+    
+    if ((annotated.isAnnotationPresent(Stateful.class)
+         != parentClass.isAnnotationPresent(Stateful.class))) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because the bean is a @Stateful bean but its parent is not.",
+                                    getTargetName()));
+    }
+    
+    if ((annotated.isAnnotationPresent(Singleton.class)
+         != parentClass.isAnnotationPresent(Singleton.class))) {
+      throw new ConfigException(L.l("{0}: invalid @Specializes bean because the bean is a @Singleton bean but its parent is not.",
+                                    getTargetName()));
+    }
+  }
 
   protected void introspectDefault()
   {
@@ -471,12 +520,15 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
 
   protected String getDefaultName()
   {
-    String name = getTargetSimpleName();
+    Class<?> targetClass = getTargetClass();
     
-    if ("".equals(name)) {
-      log.info("TYPE:" + name + " " + this + " " + _baseType);
-    }
-
+    String name;
+    
+    if (targetClass.isAnnotationPresent(Specializes.class))
+      name = targetClass.getSuperclass().getSimpleName();
+    else
+      name = targetClass.getSimpleName();
+    
     return Character.toLowerCase(name.charAt(0)) + name.substring(1);
   }
 
@@ -487,14 +539,16 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   /**
    * Returns true if the bean can be null
    */
+  @Override
   public boolean isNullable()
   {
-    return false;
+    return ! getBeanClass().isPrimitive();
   }
 
   /**
    * Returns true if the bean is serializable
    */
+  @Override
   public boolean isPassivationCapable()
   {
     return Serializable.class.isAssignableFrom(getTargetClass());
@@ -503,6 +557,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   /**
    * Instantiate the bean.
    */
+  @Override
   public T create(CreationalContext<T> env)
   {
     throw new UnsupportedOperationException(getClass().getName());
@@ -516,42 +571,6 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   {
   }
 
-  /**
-   * Call destroy
-   */
-  /*
-  public void destroy(T instance)
-  {
-  }
-  */
-
-  /**
-   * Inject the bean.
-   */
-/*
-  public void inject(T instance)
-  {
-  }
-*/
-
-  /**
-   * Call post-construct
-   */
-/*
-  public void postConstruct(T instance)
-  {
-  }
-*/
-
-  /**
-   * Call pre-destroy
-   */
-/*
-  public void preDestroy(T instance)
-  {
-  }
-*/
-
   public void dispose(T instance)
   {
   }
@@ -559,6 +578,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   /**
    * Returns the set of injection points, for validation.
    */
+  @Override
   public Set<InjectionPoint> getInjectionPoints()
   {
     return new HashSet<InjectionPoint>();
@@ -613,6 +633,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   }
 
   static class MethodNameComparator implements Comparator<AnnotatedMethod<?>> {
+    @Override
     public int compare(AnnotatedMethod<?> a, AnnotatedMethod<?> b)
     {
       return a.getJavaMember().getName().compareTo(b.getJavaMember().getName());
@@ -620,6 +641,7 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
   }
 
   static class AnnotationComparator implements Comparator<Annotation> {
+    @Override
     public int compare(Annotation a, Annotation b)
     {
       Class<?> annTypeA = a.annotationType();

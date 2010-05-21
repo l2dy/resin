@@ -65,6 +65,8 @@ class HttpStream extends StreamImpl {
   // Time the stream was saved
   private static long _saveTime;
   
+  private static boolean _isKeepaliveAllowed;
+  
   private long _socketTimeout = 30000L;
 
   private boolean _isSSL;
@@ -96,7 +98,7 @@ class HttpStream extends StreamImpl {
   private MemoryStream _tempStream;
 
   // true if keepalive is allowed
-  private boolean _isKeepalive = true;
+  private boolean _isKeepalive = _isKeepaliveAllowed;
   // true after the request has been sent
   private boolean _didGet;
   // content length from the returned response
@@ -150,6 +152,11 @@ class HttpStream extends StreamImpl {
     return new HttpStreamWrapper(stream);
   }
 
+  public static void setAllowKeepalive(boolean isAllowKeepalive)
+  {
+    _isKeepaliveAllowed = isAllowKeepalive;
+  }
+  
   /**
    * Opens a new HTTP stream for reading and writing, i.e. a POST request.
    *
@@ -190,20 +197,24 @@ class HttpStream extends StreamImpl {
       }
     }
 
-    if (stream == null) {
-    }
-    // if the stream is still valid, use it
-    else if (Alarm.getCurrentTime() < streamTime + 5000) {
-      stream.init(path);
-      return stream;
-    }
-    // if the stream has timed out, close it
-    else {
-      try {
-        stream._isKeepalive = false;
-        stream.close();
-      } catch (IOException e) {
-        log.log(Level.FINE, e.toString(), e);
+    if (stream != null) {
+      long now;
+      
+      now = Alarm.getCurrentTime();
+      
+      if (now < streamTime + 5000) {
+        // if the stream is still valid, use it
+        stream.init(path);
+        return stream;
+      }
+      else {
+        // if the stream has timed out, close it
+        try {
+          stream._isKeepalive = false;
+          stream.close();
+        } catch (IOException e) {
+          log.log(Level.FINE, e.toString(), e);
+        }
       }
     }
 
@@ -871,12 +882,13 @@ class HttpStream extends StreamImpl {
       }
     }
 
-    if (com.caucho.util.Alarm.isTest())
-      _isKeepalive = false; // XXX:
-    
     if (_isKeepalive) {
       HttpStream oldSaved;
-      long now = Alarm.getCurrentTime();
+      
+      long now;
+      
+      now = Alarm.getCurrentTime();
+      
       synchronized (LOCK) {
         oldSaved = _savedStream;
         _savedStream = this;

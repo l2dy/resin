@@ -33,6 +33,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.config.Config;
@@ -55,7 +56,7 @@ public class ProtocolPortConfig extends SocketLinkListener
     = Logger.getLogger(ProtocolPortConfig.class.getName());
 
   // The protocol
-  private Class _protocolClass;
+  private Class<?> _protocolClass;
   private ContainerProgram _init;
   private Protocol _protocol;
 
@@ -66,7 +67,7 @@ public class ProtocolPortConfig extends SocketLinkListener
   /**
    * Sets protocol class.
    */
-  public void setType(Class cl)
+  public void setType(Class<?> cl)
   {
     setClass(cl);
   }
@@ -74,7 +75,7 @@ public class ProtocolPortConfig extends SocketLinkListener
   /**
    * Sets protocol class.
    */
-  public void setClass(Class cl)
+  public void setClass(Class<?> cl)
   {
     Config.validate(cl, AbstractProtocol.class);
 
@@ -111,7 +112,7 @@ public class ProtocolPortConfig extends SocketLinkListener
       Protocol protocol
         = (Protocol) webBeans.createTransientObjectNoInit(_protocolClass);
       */
-      InjectionTarget target = webBeans.createManagedBean(_protocolClass);
+      InjectionTarget target = webBeans.createInjectionTarget(_protocolClass);
       CreationalContext env = webBeans.createCreationalContext(null);
 
       AbstractProtocol protocol = (AbstractProtocol) target.produce(env);
@@ -126,5 +127,7 @@ public class ProtocolPortConfig extends SocketLinkListener
     }
     else
       throw new ConfigException(L.l("protocol requires either a class"));
+    
+    super.init();
   }
 }

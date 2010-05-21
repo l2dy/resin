@@ -71,7 +71,7 @@ public class JmtpServlet extends GenericServlet {
                       ServletResponse response)
     throws IOException, ServletException
   {
-    WebSocketServletRequest wsRequest = (WebSocketServletRequest) request;
+    JanusServletRequest wsRequest = (JanusServletRequest) request;
 
     Actor actor;
 
@@ -86,7 +86,7 @@ public class JmtpServlet extends GenericServlet {
     wsRequest.startWebSocket(listener);
   }
 
-  static class Listener implements WebSocketListener {
+  static class Listener implements JanusListener {
     private Actor _actor;
     private ActorStream _actorStream;
 
@@ -101,11 +101,11 @@ public class JmtpServlet extends GenericServlet {
       _actor = actor;
     }
 
-    public void onStart(WebSocketContext context)
+    public void onStart(JanusContext context)
       throws IOException
     {
-      _is = context.getInputStream();
-      _os = context.getOutputStream();
+      _is = context.openMessageInputStream();
+      _os = context.openMessageOutputStream();
 
       _jmtpReader = new JmtpReader(_is);
       _jmtpWriter = new JmtpWriter(_os);
@@ -114,18 +114,18 @@ public class JmtpServlet extends GenericServlet {
       _actorStream = _actor.getActorStream();
     }
 
-    public void onRead(WebSocketContext context)
+    public void onMessage(JanusContext context)
       throws IOException
     {
       _jmtpReader.readPacket(_actorStream);
     }
 
-    public void onComplete(WebSocketContext context)
+    public void onComplete(JanusContext context)
       throws IOException
     {
     }
 
-    public void onTimeout(WebSocketContext context)
+    public void onTimeout(JanusContext context)
       throws IOException
     {
     }

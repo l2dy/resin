@@ -153,6 +153,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the connection id.  Primarily for debugging.
    */
+  @Override
   public int getId()
   {
     return _connectionId;
@@ -227,6 +228,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the state.
    */
+  @Override
   public SocketLinkState getState()
   {
     return _state;
@@ -278,11 +280,13 @@ public class TcpSocketLink extends AbstractSocketLink
     return _state.isCometActive() && ! _isCompleteRequested;
   }
 
+  @Override
   public boolean isCometSuspend()
   {
     return _state.isCometSuspend();
   }
 
+  @Override
   public boolean isCometComplete()
   {
     return _state.isCometComplete();
@@ -314,6 +318,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the local address of the socket.
    */
+  @Override
   public InetAddress getLocalAddress()
   {
     return _socket.getLocalAddress();
@@ -322,6 +327,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the local host name.
    */
+  @Override
   public String getLocalHost()
   {
     return _socket.getLocalHost();
@@ -330,6 +336,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the socket's local TCP port.
    */
+  @Override
   public int getLocalPort()
   {
     return _socket.getLocalPort();
@@ -338,6 +345,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the socket's remote address.
    */
+  @Override
   public InetAddress getRemoteAddress()
   {
     return _socket.getRemoteAddress();
@@ -364,6 +372,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Returns the socket's remote port
    */
+  @Override
   public int getRemotePort()
   {
     return _socket.getRemotePort();
@@ -552,7 +561,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Handles a new connection/socket from the client.
    */
-  RequestState handleRequests()
+  RequestState handleRequests(boolean isKeepalive)
     throws IOException
   {
     Thread thread = Thread.currentThread();
@@ -563,7 +572,7 @@ public class TcpSocketLink extends AbstractSocketLink
       // clear the interrupted flag
       Thread.interrupted();
 
-      result = handleRequestsImpl();
+      result = handleRequestsImpl(isKeepalive);
     } catch (ClientDisconnectException e) {
       _port.addLifetimeClientDisconnectCount();
 
@@ -596,17 +605,19 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Handles a new connection/socket from the client.
    */
-  private RequestState handleRequestsImpl()
+  private RequestState handleRequestsImpl(boolean isKeepalive)
     throws IOException
   {
     RequestState result = null;
 
     do {
+      result = RequestState.REQUEST;
+      
       if (_port.isClosed()) {
         return RequestState.EXIT;
       }
 
-      if ((result = processKeepalive()) != RequestState.REQUEST) {
+      if (isKeepalive && (result = processKeepalive()) != RequestState.REQUEST) {
         return result;
       }
 
@@ -622,6 +633,8 @@ public class TcpSocketLink extends AbstractSocketLink
       if (_state.isCometActive() && toSuspend()) {
         return RequestState.THREAD_DETACHED;
       }
+      
+      isKeepalive = true;
     } while (_state.isKeepaliveAllocated());
 
     return result;
@@ -669,8 +682,16 @@ public class TcpSocketLink extends AbstractSocketLink
     SocketLinkListener port = _port;
 
     // quick timed read to see if data is already available
-    if (port.keepaliveThreadRead(getReadStream())) {
+    int available = port.keepaliveThreadRead(getReadStream());
+    
+    if (available > 0) {
       return RequestState.REQUEST;
+    }
+    else if (available < 0) {
+      setStatState(null);
+      close();
+      
+      return RequestState.EXIT;
     }
 
     _idleStartTime = Alarm.getCurrentTime();
@@ -845,6 +866,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Wakes the connection (comet-style).
    */
+  @Override
   public boolean wake()
   {
     if (! _state.isComet())
@@ -895,18 +917,27 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * Starts a full duplex (tcp style) request for hmtp/xmpp
    */
-  public TcpDuplexController startDuplex(TcpDuplexHandler handler)
+  @Override
+  public SocketLinkDuplexController startDuplex(SocketLinkDuplexListener handler)
   {
     _state = _state.toDuplex(this);
 
-    TcpDuplexController duplex = new TcpDuplexController(this, handler);
+    SocketLinkDuplexController duplex = new SocketLinkDuplexController(this, handler);
 
     _controller = duplex;
 
-    if (log.isLoggable(Level.FINER))
-      log.finer(this + " starting duplex");
-
     _duplexReadTask = new DuplexReadTask(duplex);
+    
+    if (log.isLoggable(Level.FINER))
+      log.finer(this + " starting duplex " + handler);
+
+    try {
+      handler.onStart(duplex);
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
 
     return duplex;
   }
@@ -943,8 +974,9 @@ public class TcpSocketLink extends AbstractSocketLink
     SocketLinkState state = _state;
     _state = _state.toClosed(this);
 
-    if (state.isClosed())
+    if (state.isClosed() || state.isIdle()) {
       return;
+    }
 
     QSocket socket = _socket;
 
@@ -960,25 +992,27 @@ public class TcpSocketLink extends AbstractSocketLink
     if (controller != null)
       controller.closeImpl();
 
+    _duplexReadTask = null;
+
     SocketLinkListener port = getPort();
 
     if (log.isLoggable(Level.FINER)) {
       if (port != null)
-        log.finer(dbgId() + " closing connection " + this + ", total=" + port.getConnectionCount());
+        log.finer(dbgId() + "closing connection " + this + ", total=" + port.getConnectionCount());
       else
-        log.finer(dbgId() + " closing connection " + this);
+        log.finer(dbgId() + "closing connection " + this);
     }
 
     try {
       getWriteStream().close();
     } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
+      log.log(Level.FINER, e.toString(), e);
     }
 
     try {
       getReadStream().close();
     } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
+      log.log(Level.FINER, e.toString(), e);
     }
 
     if (socket != null) {
@@ -987,7 +1021,7 @@ public class TcpSocketLink extends AbstractSocketLink
       try {
         socket.close();
       } catch (Throwable e) {
-        log.log(Level.FINE, e.toString(), e);
+        log.log(Level.FINER, e.toString(), e);
       }
     }
   }
@@ -1034,7 +1068,7 @@ public class TcpSocketLink extends AbstractSocketLink
         _dbgId = (getClass().getSimpleName() + "[id=" + getId()
                   + "," + serverId + "] ");
       else
-        _dbgId = (getClass().getSimpleName() + "[id=" + getId() + "]");
+        _dbgId = (getClass().getSimpleName() + "[id=" + getId() + "] ");
     }
 
     return _dbgId;
@@ -1043,7 +1077,7 @@ public class TcpSocketLink extends AbstractSocketLink
   @Override
   public String toString()
   {
-    return "TcpConnection[id=" + _id + "," + _port.toURL() + "," + _state + "]";
+    return getClass().getSimpleName() + "[id=" + _id + "," + _port.toURL() + "," + _state + "]";
   }
 
   enum RequestState {
@@ -1106,6 +1140,7 @@ public class TcpSocketLink extends AbstractSocketLink
   }
 
   class AcceptTask extends ConnectionReadTask {
+    @Override
     public void run()
     {
       SocketLinkListener port = _port;
@@ -1144,7 +1179,8 @@ public class TcpSocketLink extends AbstractSocketLink
 
         _request.onStartConnection();
 
-        result = handleRequests();
+        boolean isKeepalive = false;
+        result = handleRequests(isKeepalive);
 
         if (result == RequestState.THREAD_DETACHED) {
           return result;
@@ -1193,7 +1229,8 @@ public class TcpSocketLink extends AbstractSocketLink
     public RequestState doTask()
       throws IOException
     {
-      RequestState result = handleRequests();
+      boolean isKeepalive = true;
+      RequestState result = handleRequests(isKeepalive);
 
       if (result == RequestState.THREAD_DETACHED) {
         return result;
@@ -1210,13 +1247,14 @@ public class TcpSocketLink extends AbstractSocketLink
   }
 
   class DuplexReadTask extends ConnectionReadTask {
-    private final TcpDuplexController _duplex;
+    private final SocketLinkDuplexController _duplex;
 
-    DuplexReadTask(TcpDuplexController duplex)
+    DuplexReadTask(SocketLinkDuplexController duplex)
     {
       _duplex = duplex;
     }
 
+    @Override
     public void run()
     {
       runThread();
@@ -1239,7 +1277,9 @@ public class TcpSocketLink extends AbstractSocketLink
 
         if (position == readStream.getPosition()) {
           log.warning(_duplex + " was not processing any data. Shutting down.");
+          setStatState(null);
           close();
+          
           return RequestState.EXIT;
         }
       }

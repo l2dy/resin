@@ -29,30 +29,16 @@
 
 package com.caucho.config.inject;
 
-import com.caucho.config.*;
-import com.caucho.config.j2ee.*;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.type.*;
-import com.caucho.config.types.*;
-import com.caucho.config.gen.*;
-import com.caucho.util.*;
-import com.caucho.config.bytecode.*;
-import com.caucho.config.cfg.*;
-import com.caucho.config.event.*;
+import java.lang.annotation.Annotation;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
-import java.lang.reflect.*;
-import java.lang.annotation.*;
-import java.util.*;
-import java.util.logging.*;
-
-import javax.annotation.*;
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.inject.Produces;
 import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
+
+import com.caucho.inject.Module;
 
 /**
  * NewBean represents the SimpleBean created through the @New interface.
@@ -62,16 +48,23 @@ import javax.enterprise.inject.spi.InjectionTarget;
  * <li>interceptor bindings are defined by annotations
  *
  */
-public class NewBean extends InjectionTargetImpl
+@Module
+public class NewBean<X> extends AbstractIntrospectedBean<X>
 {
-  private AnnotatedType _beanType;
+  private InjectionTargetBuilder<X> _target;
+  private LinkedHashSet<Annotation> _qualifiers;
 
-  NewBean(InjectManager inject, AnnotatedType beanType)
+  NewBean(InjectManager inject, AnnotatedType<X> beanType)
   {
-    super(inject, beanType);
+    super(inject, beanType.getBaseType(), beanType);
 
-    _beanType = beanType;
+    _target = new InjectionTargetBuilder<X>(inject, beanType, this);
+    
+    // validation
+    _target.getInjectionPoints();
 
+    _qualifiers = new LinkedHashSet<Annotation>();
+    _qualifiers.add(new NewLiteral(beanType.getJavaClass()));
     //addBinding(NewLiteral.NEW);
     //setScopeType(Dependent.class);
 
@@ -95,40 +88,29 @@ public class NewBean extends InjectionTargetImpl
   {
     return Dependent.class;
   }
+  
+  /**
+   * The qualifiers are @New
+   */
+  @Override
+  public Set<Annotation> getQualifiers()
+  {
+    return _qualifiers;
+  }
 
   //
   // introspection overrides
   //
 
   /**
-   * @New disables produces introspection.
-   */
-  /*
-  @Override
-  protected void introspectProduces(Set<AnnotatedMethod> methods)
-  {
-  }
-  */
-
-  /**
-   * @New disables observer introspection.
-   */
-  /*
-  @Override
-  protected void introspectObservers(Set<AnnotatedMethod> methods)
-  {
-  }
-  */
-
-  /**
    * Creates a new instance of the component.
    */
   @Override
-  public Object create(CreationalContext env)
+  public X create(CreationalContext<X> env)
   {
-    InjectionTarget target = this;
+    InjectionTarget<X> target = _target;
 
-    Object value = target.produce(env);
+    X value = target.produce(env);
     target.inject(value, env);
     target.postConstruct(value);
 

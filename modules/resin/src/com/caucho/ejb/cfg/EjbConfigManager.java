@@ -33,7 +33,7 @@ import java.util.*;
 import java.util.logging.*;
 
 import com.caucho.config.*;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.loader.*;
 import com.caucho.util.*;
 import com.caucho.vfs.*;
@@ -46,15 +46,15 @@ public class EjbConfigManager extends EjbConfig {
   private static final Logger log
     = Logger.getLogger(EjbConfigManager.class.getName());
 
-  private HashMap<Path,EjbRootConfig> _rootConfigMap
+  private final HashMap<Path,EjbRootConfig> _rootConfigMap
     = new HashMap<Path,EjbRootConfig>();
 
-  private ArrayList<EjbRootConfig> _rootPendingList
+  private final ArrayList<EjbRootConfig> _rootPendingList
     = new ArrayList<EjbRootConfig>();
   
-  private ArrayList<Path> _pathPendingList = new ArrayList<Path>();
+  private final ArrayList<Path> _pathPendingList = new ArrayList<Path>();
 
-  public EjbConfigManager(EjbContainer ejbContainer)
+  public EjbConfigManager(EjbManager ejbContainer)
   {
     super(ejbContainer);
   }
@@ -71,9 +71,18 @@ public class EjbConfigManager extends EjbConfig {
       _rootConfigMap.put(root, rootConfig);
       _rootPendingList.add(rootConfig);
 
-      Path ejbJar = root.lookup("META-INF/ejb-jar.xml");
-      if (ejbJar.canRead())
-	addEjbPath(ejbJar);
+      String ejbModuleName = getEjbModuleName(root);
+
+      Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
+
+      if (ejbJarXml.canRead()) {
+        EjbJar ejbJar = configurePath(root, ejbModuleName);
+
+        rootConfig.setModuleName(ejbJar.getModuleName());
+      }
+      else {
+        rootConfig.setModuleName(ejbModuleName);
+      }
     }
 
     return rootConfig;
@@ -87,7 +96,7 @@ public class EjbConfigManager extends EjbConfig {
 
     for (EjbRootConfig rootConfig : pendingList) {
       for (String className : rootConfig.getClassNameList()) {
-	addIntrospectableClass(className);
+        addIntrospectableClass(className, rootConfig.getModuleName());
       }
     }
 
@@ -102,12 +111,53 @@ public class EjbConfigManager extends EjbConfig {
    * Adds a path for an EJB config file to the config list.
    */
   @Override
-  public void addEjbPath(Path path)
+  public void addEjbPath(Path root)
   {
-    if (_pathPendingList.contains(path))
+    if (_pathPendingList.contains(root))
       return;
 
-    _pathPendingList.add(path);
+    _pathPendingList.add(root);
+  }
+
+  private String getEjbModuleName(Path root)
+  {
+    if (root instanceof JarPath) {
+      String jarName = ((JarPath) root).getContainer().getTail();
+
+      return jarName.substring(0, jarName.length() - ".jar".length());
+    }
+
+    return root.getTail();
+  }
+
+  private EjbJar configurePath(Path root)
+  {
+    return configurePath(root, getEjbModuleName(root));
+  }
+
+  private EjbJar configurePath(Path root, String ejbModuleName)
+  {
+    if (root.getScheme().equals("jar"))
+      root.setUserPath(root.getURL());
+
+    Path path = root.lookup("META-INF/ejb-jar.xml");
+
+    Environment.addDependency(path);
+
+    EjbJar ejbJar = new EjbJar(this, ejbModuleName);
+
+    try {
+      if (log.isLoggable(Level.FINE))
+        log.fine(this + " reading " + root.getURL());
+
+      new Config().configure(ejbJar, path, getSchema());
+
+      return ejbJar;
+    } catch (ConfigException e) {
+      throw e;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
   }
 
   private void configurePaths()
@@ -116,32 +166,7 @@ public class EjbConfigManager extends EjbConfig {
     _pathPendingList.clear();
 
     for (Path path : pathList) {
-      if (path.getScheme().equals("jar"))
-	path.setUserPath(path.getURL());
-
-      Environment.addDependency(path);
-
-      String ejbModuleName;
-
-      if (path instanceof JarPath) {
-	ejbModuleName = ((JarPath) path).getContainer().getPath();
-      }
-      else {
-	ejbModuleName = path.getPath();
-      }
-
-      EjbJar ejbJar = new EjbJar(this, ejbModuleName);
-
-      try {
-	if (log.isLoggable(Level.FINE))
-	  log.fine(this + " reading " + path.getURL());
-
-	new Config().configure(ejbJar, path, getSchema());
-      } catch (ConfigException e) {
-	throw e;
-      } catch (Exception e) {
-	throw ConfigException.create(e);
-      }
+      configurePath(path);
     }
   }
 }

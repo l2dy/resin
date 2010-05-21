@@ -13,6 +13,34 @@
 
 <s2 title="4.0.7 - snapshot">
 <ul>
+<li>iis: fixed bug preventing iis from serving web-apps defined with web-app tag (#3890)</li>
+<li>iis: allow IIS to choose when to use chunked encoding (#3871)</li>
+<li>iis: 64 bit IIS Handler build provided (#3846)</li>
+<li>iis: fixed aberrant behaviour of servlets with IIS7 (#2694, rep by mitch)</li>
+<li>iis: fixed bug preventing iis plugin from sending data larger 20kb(#3178, rep gert)</li>
+<li>iis: fixed bug preventing static content from being served by the plugin(#3889)</li>
+<li>iis: fixed bug was preventing use of virtual hosts with ports in IIS + Resin setup(#3951)</li>
+<li>init.d: added "status" to init.d/resin (#3841, rep by Matt Pangaro)</li>
+<li>init.d: test for log_daemon_msg directly (#3932, #4012)</li>
+<li>proxy-cache: no longer disable cache on exception (#3957, rep by Dave Hintemeyer)</li>
+<li>rewrite: add &lt;resin:IfMBeanEnabled> (#4042, rep by stbu)</li>
+<li>rewrite: add &lt;resin:MovedPermanently> (#4023)</li>
+<li>ssl: jsse doesn't understand Socket.shutdownOutput (#4030, rep by Martin Morawetz)</li>
+<li>jpa: Persistence.getPersistenceUtil() (#4038, rep by Kaj Hejer)</li>
+<li>hmux: Thread.dumpStack() in HMUX with JSP data after sendRedirect (#4025, rep by vicsanca)</li>
+<li>http: catch ClientDisconnectException during finish/skip (#4029, rep by iRideSnow)</li>
+<li>network: keepalive-timeout was incorrectly applied to initial read (#4001, rep by Jamie Novak)</li>
+<li>quercus: WWW-Authenticate does not work (#4000, rep by hm2k)</li>
+<li>quercus: NullPointerException in Alarm (after Glassfish redeploy) (#3711, rep by ashamash)</li>
+<li>quercus: quercus-4.0.6.war incorrect version reporting (#4033)</li>
+<li>quercus: date_format() does not use user-set default time zone (#4034, rep by sblommers)</li>
+<li>quercus: report as php 5.2.1 (#3916, rep by derickso)</li>
+<li>quercus: parse_ini_file does not replace PHP Constants (#3878, rep by ice-breaker)</li>
+<li>quercus: PHP clone object is ignored? (#3607, rep by sblommers)</li>
+<li>quercus: error_display in php.ini (#4037, rep by wml)</li>
+<li>quercus: java.lang.NullPointerException on drupal admin/user/permissions (#4020, #4035, rep by alberto, sblommers)</li>
+<li>quercus: is_executable is broken (#3979, rep by domdorn)</li>
+<li>quercus: Wordpress MU Settings link causes exception (#3918, rep by chiefgeek)</li>
 </ul>
 </s2>
 

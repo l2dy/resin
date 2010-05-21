@@ -30,8 +30,8 @@
 package com.caucho.ejb.protocol;
 
 import com.caucho.config.ConfigException;
-import com.caucho.ejb.manager.EjbContainer;
-import com.caucho.ejb.server.AbstractServer;
+import com.caucho.ejb.manager.EjbManager;
+import com.caucho.ejb.server.AbstractEjbBeanManager;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
@@ -47,7 +47,7 @@ public class ProtocolContainer {
   protected String _urlPrefix;
   private Path _workPath;
 
-  public void setServerManager(EjbContainer container)
+  public void setServerManager(EjbManager container)
   {
     _manager = container.getProtocolManager();
   }
@@ -93,14 +93,14 @@ public class ProtocolContainer {
   /**
    * Adds a server to the protocol.
    */
-  public void addServer(AbstractServer server)
+  public void addServer(AbstractEjbBeanManager server)
   {
   }
 
   /**
    * Removes a server from the protocol.
    */
-  public void removeServer(AbstractServer server)
+  public void removeServer(AbstractEjbBeanManager server)
   {
   }
   

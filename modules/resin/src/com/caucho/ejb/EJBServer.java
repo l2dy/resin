@@ -37,7 +37,7 @@ import com.caucho.config.types.FileSetType;
 import com.caucho.config.types.JndiBuilder;
 import com.caucho.config.types.PathPatternType;
 import com.caucho.config.types.Period;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.ejb.metadata.Bean;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
@@ -79,7 +79,7 @@ public class EJBServer
   protected static EnvironmentLocal<String> _localURL =
     new EnvironmentLocal<String>("caucho.url");
   
-  private EjbContainer _ejbContainer;
+  private EjbManager _ejbContainer;
   private AmberContainer _amberContainer;
 
   private String _entityManagerJndiName = "java:comp/EntityManager";
@@ -118,7 +118,7 @@ public class EJBServer
   public EJBServer()
     throws ConfigException
   {
-    _ejbContainer = EjbContainer.create();
+    _ejbContainer = EjbManager.create();
     // _amberContainer = AmberContainer.create();
     
     _urlPrefix = _localURL.get();
@@ -245,42 +245,6 @@ public class EJBServer
   public String getURLPrefix()
   {
     return _urlPrefix;
-  }
-
-  /**
-   * Sets the directory for the *.ejb files.
-   */
-  public void setConfigDirectory(Path dir)
-    throws ConfigException
-  {
-    FileSetType fileSet = new FileSetType();
-
-    fileSet.setDir(dir);
-
-    fileSet.addInclude(new PathPatternType("**/*.ejb"));
-
-    Path pwd = Vfs.lookup();
-
-    String dirPath = dir.getPath();
-    String pwdPath = pwd.getPath();
-
-    if (dirPath.startsWith(pwdPath)) {
-      String prefix = dirPath.substring(pwdPath.length());
-
-      fileSet.setUserPathPrefix(prefix);
-    }
-
-    _ejbContainer.getConfigManager().addFileSet(fileSet);
-  }
-
-  /**
-   * Adds an ejb descriptor.
-   */
-  public void addEJBDescriptor(String ejbDescriptor)
-  {
-    Path path = _mergePath.lookup(ejbDescriptor);
-
-    _ejbContainer.getConfigManager().addEjbPath(path);
   }
 
   /**

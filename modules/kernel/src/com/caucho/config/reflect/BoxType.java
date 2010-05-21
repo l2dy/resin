@@ -55,12 +55,6 @@ public class BoxType extends ClassType
   {
     return _boxType;
   }
-   
-  @Override
-  public boolean isMatch(Type type)
-  {
-    return _boxType.equals(type);
-  }
 
   @Override
   public boolean isParamAssignableFrom(BaseType type)
@@ -91,14 +85,11 @@ public class BoxType extends ClassType
   }
 
   @Override
-  public BaseType findClass(InjectManager manager, Class<?> cl)
+  public boolean isPrimitive()
   {
-    if (_boxType.equals(cl))
-      return this;
-    else
-      return null;
+    return true;
   }
-
+  
   @Override
   public void fillTypeClosure(InjectManager manager, Set<Type> typeSet)
   {

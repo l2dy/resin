@@ -89,7 +89,7 @@ public class InitialContextFactoryImpl implements InitialContextFactory
         try {
           AbstractModel javaComp = model.createSubcontext("java:comp");
           AbstractModel java = model.createSubcontext("java:");
-          // server/158i
+          // env/0g8i
           java.bind("comp", javaComp);
 
           // #3486, support/1101
@@ -107,6 +107,7 @@ public class InitialContextFactoryImpl implements InitialContextFactory
   /**
    * Returns the initial context for the current thread.
    */
+  @Override
   public Context getInitialContext(Hashtable<?,?> env)
     throws NamingException
   {

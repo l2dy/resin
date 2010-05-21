@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2009 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,30 +30,48 @@
 package com.caucho.config.inject;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Type;
 import java.lang.reflect.Member;
-import java.util.Set;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.HashSet;
-import javax.enterprise.inject.spi.*;
-import javax.inject.Named;
-import javax.inject.Qualifier;
+import java.util.Set;
+
+import javax.decorator.Delegate;
+import javax.enterprise.inject.spi.Annotated;
+import javax.enterprise.inject.spi.AnnotatedField;
+import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+
+import com.caucho.inject.Module;
 
 /**
  */
+@Module
 public class InjectionPointImpl<T> implements InjectionPoint
 {
   private final InjectManager _manager;
   
+  private InjectionTargetBuilder<T> _target;
   private final Bean<T> _bean;
   private final Annotated _annotated;
   private final Member _member;
-  private final HashSet<Annotation> _bindings = new HashSet<Annotation>();
+  private final HashSet<Annotation> _qualifiers = new HashSet<Annotation>();
 
   InjectionPointImpl(InjectManager manager,
                      Bean<T> bean,
                      AnnotatedField<T> field)
   {
     this(manager, bean, field, field.getJavaMember());
+  }
+
+  InjectionPointImpl(InjectManager manager,
+                     InjectionTargetBuilder<T> target,
+                     AnnotatedField<T> field)
+  {
+    this(manager, target.getBean(), field, field.getJavaMember());
+    
+    _target = target;
   }
 
   InjectionPointImpl(InjectManager manager,
@@ -64,9 +82,18 @@ public class InjectionPointImpl<T> implements InjectionPoint
   }
 
   InjectionPointImpl(InjectManager manager,
-                     Bean<T> bean,
-                     Annotated annotated,
-                     Member member)
+                     InjectionTargetBuilder<T> target,
+                     AnnotatedParameter<?> param)
+  {
+    this(manager, target.getBean(), param, param.getDeclaringCallable().getJavaMember());
+    
+    _target = target;
+  }
+
+  public InjectionPointImpl(InjectManager manager,
+                            Bean<T> bean,
+                            Annotated annotated,
+                            Member member)
   {
     _manager = manager;
     _bean = bean;
@@ -77,7 +104,7 @@ public class InjectionPointImpl<T> implements InjectionPoint
 
     for (Annotation ann : annotated.getAnnotations()) {
       if (_manager.isQualifier(ann.annotationType())) {
-        _bindings.add(ann);
+        _qualifiers.add(ann);
         
         // ioc/5006
         /*
@@ -89,7 +116,7 @@ public class InjectionPointImpl<T> implements InjectionPoint
     }
 
     if (! isQualifier) {
-      _bindings.add(DefaultLiteral.DEFAULT);
+      _qualifiers.add(DefaultLiteral.DEFAULT);
     }
   }
 
@@ -97,6 +124,7 @@ public class InjectionPointImpl<T> implements InjectionPoint
    * Returns the declared type of the injection point, e.g. an
    * injected field's type.
    */
+  @Override
   public Type getType()
   {
     return _annotated.getBaseType();
@@ -105,23 +133,32 @@ public class InjectionPointImpl<T> implements InjectionPoint
   /**
    * Returns the declared bindings on the injection point.
    */
+  @Override
   public Set<Annotation> getQualifiers()
   {
-    return _bindings;
+    return _qualifiers;
   }
 
   /**
    * Returns the owning bean for the injection point.
    */
+  @Override
   public Bean<?> getBean()
   {
-    return _bean;
+    if (_bean != null)
+      return _bean;
+    else if (_target != null)
+      return _target.getBean();
+    else {
+      return null;
+    }
   }
 
   /**
    * Returns the Field for field injection, the Method for method injection,
    * and Constructor for constructor injection.
    */
+  @Override
   public Member getMember()
   {
     return _member;
@@ -130,19 +167,24 @@ public class InjectionPointImpl<T> implements InjectionPoint
   /**
    * Returns all annotations on the injection point.
    */
+  @Override
   public Annotated getAnnotated()
   {
     return _annotated;
   }
 
+  @Override
   public boolean isDelegate()
   {
-    return false;
+    return _annotated.isAnnotationPresent(Delegate.class);
   }
 
+  @Override
   public boolean isTransient()
   {
-    return false;
+    int modifiers = _member.getModifiers();
+    
+    return Modifier.isTransient(modifiers);
   }
 
   @Override

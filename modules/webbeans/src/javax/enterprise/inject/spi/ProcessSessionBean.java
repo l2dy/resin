@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,6 @@
 
 package javax.enterprise.inject.spi;
 
-import java.lang.annotation.Annotation;
-
 /**
  * {@link javax.enterprise.inject.spi.Extension} callback while processing
  * a managed bean.
@@ -46,9 +44,8 @@ import java.lang.annotation.Annotation;
  * }
  * </pre></code>
  */
-public interface ProcessSessionBean<X> extends ProcessBean<Object>
+public interface ProcessSessionBean<X> extends ProcessManagedBean<Object>
 {
-  public AnnotatedType<X> getAnnotatedSessionBeanClass();
   public String getEjbName();
   public SessionBeanType getSessionBeanType();
 }

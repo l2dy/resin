@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.decorator.Delegate;
 import javax.ejb.MessageDriven;
 import javax.ejb.Startup;
 import javax.ejb.Stateless;
@@ -41,6 +42,9 @@ import javax.ejb.Stateful;
 import javax.enterprise.event.Observes;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.Specializes;
+import javax.enterprise.inject.Stereotype;
+import javax.inject.Inject;
 import javax.inject.Named;
 
 import com.caucho.inject.Jndi;
@@ -137,6 +141,9 @@ class InjectScanClass implements ScanClass
       if (_registerAnnotationSet.contains(annType)) {
         _isRegisterRequired = true;
       }
+      else if (annType.isAnnotationPresent(Stereotype.class)) {
+        _isRegisterRequired = true;
+      }
     } catch (ClassNotFoundException e) {
       log.log(Level.FINER, e.toString(), e);
     }
@@ -215,7 +222,10 @@ class InjectScanClass implements ScanClass
   }
 
   static {
+    _registerAnnotationSet.add(Inject.class);
     _registerAnnotationSet.add(Named.class);
+    _registerAnnotationSet.add(Specializes.class);
+    _registerAnnotationSet.add(Delegate.class);
     _registerAnnotationSet.add(Startup.class);
     _registerAnnotationSet.add(Jndi.class);
     _registerAnnotationSet.add(MBean.class);

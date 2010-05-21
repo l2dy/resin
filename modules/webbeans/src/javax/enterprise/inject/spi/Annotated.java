@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -54,12 +54,12 @@ public interface Annotated
   public <T extends Annotation> T getAnnotation(Class<T> annotationType);
 
   /**
+   * Returns the specified annotation or null if no annotation is declared
+   */
+  public boolean isAnnotationPresent(Class<? extends Annotation> annotationType);
+
+  /**
    * Returns the set of declared annotations.
    */
   public Set<Annotation> getAnnotations();
-
-  /**
-   * Returns true if the annotation is declared on the object.
-   */
-  public boolean isAnnotationPresent(Class<? extends Annotation> annotationType);
 }

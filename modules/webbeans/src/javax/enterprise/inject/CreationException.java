@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2007 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,6 +35,8 @@ package javax.enterprise.inject;
  */
 public class CreationException extends InjectionException
 {
+  private static final long serialVersionUID = 1002854668862145298L;
+
   public CreationException()
   {
   }

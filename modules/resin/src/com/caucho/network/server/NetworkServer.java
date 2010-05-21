@@ -30,14 +30,13 @@
 package com.caucho.network.server;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.config.inject.BeanFactory;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.DynamicClassLoader;
@@ -71,7 +70,7 @@ public class NetworkServer
 
   private Throwable _configException;
 
-  private long _shutdownWaitMax = 60 * 1000;
+  // private long _shutdownWaitMax = 60 * 1000;
 
   // private ServerAdmin _admin;
 
@@ -112,7 +111,7 @@ public class NetworkServer
       
       _injectManager = InjectManager.create();
       
-      BeanFactory<NetworkServer> beanFactory
+      BeanBuilder<NetworkServer> beanFactory
         = _injectManager.createBeanFactory(NetworkServer.class);
       // factory.deployment(Standard.class);
       beanFactory.type(NetworkServer.class);
@@ -141,7 +140,7 @@ public class NetworkServer
   /**
    * Returns the classLoader
    */
-  public ClassLoader getClassLoader()
+  public EnvironmentClassLoader getClassLoader()
   {
     return _classLoader;
   }

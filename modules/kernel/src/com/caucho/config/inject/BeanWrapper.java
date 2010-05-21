@@ -29,120 +29,41 @@
 
 package com.caucho.config.inject;
 
-import javax.enterprise.inject.spi.*;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.Set;
 
-import javax.enterprise.context.spi.Contextual;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Annotated;
+import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.InjectionPoint;
+
+import com.caucho.inject.Module;
 
 /**
  * Internal implementation for a Bean
  */
-public class BeanWrapper<T> extends AbstractBean<T>
+@Module
+public class BeanWrapper<T> extends BeanAdapter<T,T>
 {
-  private final Bean<T> _bean;
-
   public BeanWrapper(InjectManager manager, Bean<T> bean)
   {
-    super(manager);
-
-    _bean = bean;
-  }
-
-  protected Bean<T> getBean()
-  {
-    return _bean;
+    super(manager, bean);
   }
 
   //
   // from javax.enterprise.inject.InjectionTarget
   //
 
+  @Override
   public T create(CreationalContext<T> env)
   {
     return getBean().create(env);
   }
 
+  @Override
   public void destroy(T instance, CreationalContext<T> env)
   {
     getBean().destroy(instance, env);
   }
-
-  //
-  // metadata for the bean
-  //
-
-  public Annotated getAnnotated()
-  {
-    Bean bean = getBean();
-
-    if (bean instanceof AnnotatedBean)
-      return ((AnnotatedBean) bean).getAnnotated();
-    else
-      return null;
-  }
-
-  public Set<Annotation> getQualifiers()
-  {
-    return getBean().getQualifiers();
-  }
-
-  public Set<Class<? extends Annotation>> getStereotypes()
-  {
-    return getBean().getStereotypes();
-  }
-
-  public Set<InjectionPoint> getInjectionPoints()
-  {
-    return getBean().getInjectionPoints();
-  }
-
-  public String getName()
-  {
-    return getBean().getName();
-  }
-
-  public boolean isAlternative()
-  {
-    return getBean().isAlternative();
-  }
-
-  /**
-   * Returns true if the bean can be null
-   */
-  public boolean isNullable()
-  {
-    return getBean().isNullable();
-  }
-
-  /**
-   * Returns the bean's scope type.
-   */
-  public Class<? extends Annotation> getScope()
-  {
-    return getBean().getScope();
-  }
-
-  /**
-   * Returns the types that the bean exports for bindings.
-   */
-  public Set<Type> getTypes()
-  {
-    return getBean().getTypes();
-  }
-
-  public Class getBeanClass()
-  {
-    return getBean().getBeanClass();
-  }
-
-  /*
-  @Override
-  public String toString()
-  {
-    return getClass().getSimpleName() + "[" + _bean + "]";
-  }
-  */
 }

@@ -30,7 +30,8 @@
 package com.caucho.server.e_app;
 
 import com.caucho.config.ConfigException;
-import com.caucho.ejb.manager.EjbContainer;
+import com.caucho.ejb.manager.EjbManager;
+import com.caucho.inject.Module;
 import com.caucho.java.WorkDir;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.*;
@@ -52,6 +53,7 @@ import java.util.logging.Logger;
 /**
  * An enterprise application (ear)
  */
+@Module
 public class EnterpriseApplication
   implements EnvironmentBean, EnvironmentDeployInstance
 {
@@ -71,13 +73,7 @@ public class EnterpriseApplication
 
   private String _name;
 
-  private String _ejbServerJndiName = "java:comp/env/cmp";
-
   private Path _rootDir;
-
-  private Path _earPath;
-
-  private String _prefix = "";
 
   private EarDeployController _controller;
 
@@ -87,10 +83,6 @@ public class EnterpriseApplication
   private String _version;
 
   private String _libraryDirectory;
-
-  private boolean _hasModule;
-
-  // private WarDirApplicationGenerator _warDeploy;
 
   private ArrayList<Path> _ejbPaths
     = new ArrayList<Path>();
@@ -111,12 +103,10 @@ public class EnterpriseApplication
   EnterpriseApplication(WebAppContainer container,
                         EarDeployController controller, String name)
   {
-    if (container == null || controller == null)
-      throw new NullPointerException();
-
     _container = container;
 
     _controller = controller;
+    
     _name = name;
 
     ClassLoader parentLoader;
@@ -127,28 +117,39 @@ public class EnterpriseApplication
       parentLoader = Thread.currentThread().getContextClassLoader();
 
     _loader = EnvironmentClassLoader.create(parentLoader, "eapp:" + name);
+    
+    if (_controller != null) {
+      Path entAppRoot = _controller.getRootDirectory(); 
 
-    _webappsPath = _controller.getRootDirectory().lookup("webapps");
-    WorkDir.setLocalWorkDir(_controller.getRootDirectory().lookup("META-INF/work"),
-                            _loader);
+      // XXX: restrict to META-INF?
+      ResourceLoader loader = new ResourceLoader(_loader, entAppRoot);
+      loader.init();
+
+      _webappsPath = entAppRoot.lookup("webapps");
+      WorkDir.setLocalWorkDir(entAppRoot.lookup("META-INF/work"),
+                              _loader);
+    }
 
     _lifecycle = new Lifecycle(log, toString(), Level.INFO);
 
-    if (controller.getArchivePath() != null)
-      Environment.addDependency(new Depend(controller.getArchivePath()), _loader);
+    if (_controller != null && _controller.getArchivePath() != null)
+      Environment.addDependency(new Depend(_controller.getArchivePath()), _loader);
 
     _localEApp.set(this, _loader);
   }
-
-  /*
-  // ejb/0fa0
-  public EnterpriseApplication()
+  
+  public static EnterpriseApplication create(String name)
   {
-    _lifecycle = new Lifecycle(log, toString(), Level.INFO);
+    EnterpriseApplication application = _localEApp.getLevel();
+    
+    if (application == null) {
+      application = new EnterpriseApplication(null, null, name);
+    }
+    
+    return application;
   }
-  */
 
-  public static EnterpriseApplication getLocal()
+  public static EnterpriseApplication getCurrent()
   {
     return _localEApp.get();
   }
@@ -191,7 +192,6 @@ public class EnterpriseApplication
    */
   public void setEjbServerJndiName(String name)
   {
-    _ejbServerJndiName = name;
   }
 
   /**
@@ -231,7 +231,6 @@ public class EnterpriseApplication
    */
   public void setEarPath(Path earPath)
   {
-    _earPath = earPath;
   }
 
   /**
@@ -247,7 +246,6 @@ public class EnterpriseApplication
    */
   public void setPrefix(String prefix)
   {
-    _prefix = prefix;
   }
 
   /**
@@ -298,8 +296,6 @@ public class EnterpriseApplication
    */
   public Module createModule()
   {
-    _hasModule = true;
-
     return new Module();
   }
 
@@ -428,7 +424,7 @@ public class EnterpriseApplication
     }
 
     if (_ejbPaths.size() != 0) {
-      EjbContainer ejbContainer = EjbContainer.create();
+      EjbManager ejbContainer = EjbManager.create();
 
       for (Path path : _ejbPaths) {
         ejbContainer.addRoot(path);
@@ -544,8 +540,10 @@ public class EnterpriseApplication
 
       getClassLoader().start();
 
-      for (WebAppController webApp : _webApps) {
-        _container.getWebAppGenerator().update(webApp.getContextPath());
+      if (_container != null) {
+        for (WebAppController webApp : _webApps) {
+          _container.getWebAppGenerator().update(webApp.getContextPath());
+        }
       }
     } finally {
       _lifecycle.toActive();
@@ -647,11 +645,6 @@ public class EnterpriseApplication
     return null;
   }
 
-  private void addDepend(Path path)
-  {
-    _loader.addDependency(new com.caucho.vfs.Depend(path));
-  }
-
   /**
    * Returns the webapps for the enterprise-application.
    */
@@ -707,7 +700,7 @@ public class EnterpriseApplication
       ArrayList<WebAppController> webApps = _webApps;
       _webApps = null;
 
-      if (webApps != null) {
+      if (webApps != null && _container != null) {
         for (WebAppController webApp : webApps) {
           _container.getWebAppGenerator().update(webApp.getContextPath());
         }
@@ -815,7 +808,7 @@ public class EnterpriseApplication
       return;
 
     _ejbPaths.add(ejbPath);
-    EjbContainer ejbContainer = EjbContainer.create();
+    EjbManager ejbContainer = EjbManager.create();
 
     ejbContainer.addRoot(ejbPath);
   }
