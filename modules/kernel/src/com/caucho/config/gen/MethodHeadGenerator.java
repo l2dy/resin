@@ -76,23 +76,7 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
     
     String prefix = "";
     String suffix = "";
-    
-    /*
-    if (isAsync()) {
-      suffix = "__caucho_async";
-      
-      generateHeader(out, "");
-
-      out.println("{");
-      out.pushDepth();
-
-      generateAsync(out);
-
-      out.popDepth();
-      out.println("}");
-    }
-    */
-
+ 
     int modifiers = getJavaMethod().getModifiers();
     String accessModifier = null;
     
@@ -117,7 +101,7 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
     out.println("{");
     out.pushDepth();
 
-    generateContent(out);
+    generateContent(out, prologueMap);
 
     out.popDepth();
     out.println("}");

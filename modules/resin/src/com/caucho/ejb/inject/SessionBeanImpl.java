@@ -31,17 +31,27 @@ package com.caucho.ejb.inject;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.Specializes;
+import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.PassivationCapable;
 
+import com.caucho.config.event.EventManager;
+import com.caucho.config.inject.CreationalContextImpl;
+import com.caucho.config.inject.InjectEnvironmentBean;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.ScopeAdapterBean;
+import com.caucho.config.reflect.AnnotatedMethodImpl;
+import com.caucho.config.reflect.AnnotatedParameterImpl;
+import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.ejb.session.AbstractSessionContext;
 import com.caucho.inject.Module;
 
@@ -50,7 +60,8 @@ import com.caucho.inject.Module;
  */
 @Module
 public class SessionBeanImpl<X,T>
-  implements ScopeAdapterBean<T>, Bean<T>, PassivationCapable, EjbGeneratedBean
+  implements ScopeAdapterBean<T>, Bean<T>, PassivationCapable, EjbGeneratedBean,
+             InjectEnvironmentBean
 {
   private AbstractSessionContext<X,T> _context;
   private ManagedBeanImpl<X> _bean;
@@ -58,12 +69,20 @@ public class SessionBeanImpl<X,T>
   
   public SessionBeanImpl(AbstractSessionContext<X,T> context,
                          ManagedBeanImpl<X> bean,
-                         Set<Type> apiList)
+                         Set<Type> apiList,
+                         AnnotatedType<X> extAnnType)
   {
     _context = context;
     _bean = bean;
     
     _types.addAll(apiList);
+    
+    introspectObservers(bean.getAnnotatedType(), extAnnType);
+  }
+  
+  public InjectManager getCdiManager()
+  {
+    return _context.getInjectManager();
   }
   
   protected ManagedBeanImpl<X> getBean()
@@ -78,7 +97,7 @@ public class SessionBeanImpl<X,T>
   }
 
   @Override
-  public T getScopeAdapter(Bean<?> topBean, CreationalContext<T> context)
+  public T getScopeAdapter(Bean<?> topBean, CreationalContextImpl<T> context)
   {
     return null;
   }
@@ -86,13 +105,33 @@ public class SessionBeanImpl<X,T>
   @Override
   public T create(CreationalContext<T> env)
   {
-    return _context.createProxy(env);
+    T value;
+    
+    if (env instanceof CreationalContextImpl<?>)
+      value = _context.createProxy((CreationalContextImpl<T>) env);
+    else
+      value = _context.createProxy(null);
+    
+    if (env != null)
+      env.push(value);
+    
+    return value;
   }
   
   @Override
-  public void destroy(T instance, CreationalContext<T> env)
+  public void destroy(T instance, CreationalContext<T> cxt)
   {
+    CreationalContextImpl<T> env;
+    
+    if (cxt instanceof CreationalContextImpl<?>)
+      env = (CreationalContextImpl<T>) cxt;
+    else
+      env = null;
+    
     _context.destroyProxy(instance, env);
+    
+    if (env != null)
+      env.release();
   }
 
   /**
@@ -100,12 +139,14 @@ public class SessionBeanImpl<X,T>
    */
   public Set<InjectionPoint> getInjectionPoints()
   {
-    // ejb/1210
-    // return getBean().getInjectionPoints();
+    // ejb/1210, ioc/05al
+    return getBean().getInjectionPoints();
     
+    /*
     HashSet<InjectionPoint> injectionPoints = new HashSet<InjectionPoint>();
     
     return injectionPoints;
+    */
   }
 
   @Override
@@ -154,6 +195,49 @@ public class SessionBeanImpl<X,T>
   public String getId()
   {
     return getBean().getId();
+  }
+  
+  /**
+   * Introspects the methods for any @Produces
+   */
+  private void introspectObservers(AnnotatedType<X> beanType,
+                                   AnnotatedType<X> extAnnType)
+  {
+    EventManager eventManager = _context.getModuleInjectManager().getEventManager();
+
+    for (AnnotatedMethod<? super X> beanMethod : beanType.getMethods()) {
+      if (! beanMethod.getJavaMember().getDeclaringClass().equals(beanType.getJavaClass())
+          && ! beanType.isAnnotationPresent(Specializes.class)) {
+        continue;
+      }
+      
+      AnnotatedMethod<? super X> apiMethod
+        = AnnotatedTypeUtil.findMethod(extAnnType, beanMethod);
+      
+      if (apiMethod == null)
+        apiMethod = beanMethod;
+      else if (apiMethod instanceof AnnotatedMethodImpl<?>) {
+        // ioc/0b0h
+        AnnotatedMethodImpl<? super X> apiMethodImpl
+          = (AnnotatedMethodImpl<? super X>) apiMethod;
+        
+        apiMethodImpl.addAnnotations(beanMethod.getAnnotations());
+        
+        for (int i = 0; i < apiMethod.getParameters().size(); i++) {
+          AnnotatedParameterImpl<?> paramImpl
+            = (AnnotatedParameterImpl<?>) apiMethod.getParameters().get(i);
+          AnnotatedParameter<?> beanParam = beanMethod.getParameters().get(i);
+          
+          paramImpl.addAnnotations(beanParam.getAnnotations());
+        }
+      }
+        
+      
+      int param = EventManager.findObserverAnnotation(apiMethod);
+      
+      if (param >= 0)
+        eventManager.addObserver(this, apiMethod);
+    }
   }
   
   @Override

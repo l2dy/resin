@@ -43,6 +43,11 @@ public abstract class ValueExpression extends Expression {
     throws PropertyNotFoundException,
            ELException;
 
+  public ValueReference getValueReference(ELContext context)
+  {
+    return null;
+  }
+
   public abstract boolean isReadOnly(ELContext context)
     throws PropertyNotFoundException,
            ELException;

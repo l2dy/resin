@@ -28,10 +28,14 @@
  */
 package com.caucho.config.gen;
 
+import java.io.IOException;
+import java.util.HashMap;
+
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 
 /**
  * Manages aspect factories for a bean.
@@ -52,6 +56,11 @@ public interface AspectBeanFactory<X> {
    * Returns the generated bean name.
    */
   public String getGeneratedClassName();
+
+  /**
+   * Returns the instance class name.
+   */
+  public String getInstanceClassName();
   
   /**
    * Returns true for a proxied instance
@@ -82,4 +91,37 @@ public interface AspectBeanFactory<X> {
    * Creates an aspect generator.
    */
   public AspectGenerator<X> create(AnnotatedMethod<? super X> method);
+
+  /**
+   * Generates final closing information.
+   */
+  public void generateInject(JavaWriter out, 
+                             HashMap<String, Object> hashMap)
+    throws IOException;
+
+  /**
+   * Generates final initialization information.
+   */
+  public void generatePostConstruct(JavaWriter out, 
+                                    HashMap<String, Object> hashMap)
+    throws IOException;
+
+  /**
+   * Generates final closing information.
+   */
+  public void generatePreDestroy(JavaWriter out, 
+                                 HashMap<String, Object> hashMap)
+    throws IOException;
+
+  /**
+   * Generates final closing information.
+   */
+  public void generateEpilogue(JavaWriter out, 
+                               HashMap<String, Object> hashMap)
+    throws IOException;
+
+  /**
+   * Returns true if the factory forces enhancement.
+   */
+  public boolean isEnhanced();
 }

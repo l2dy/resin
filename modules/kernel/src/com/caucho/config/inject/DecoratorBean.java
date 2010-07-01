@@ -46,6 +46,7 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Decorator;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.inject.Qualifier;
+import javax.interceptor.Interceptor;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.reflect.AnnotatedFieldImpl;
@@ -61,6 +62,8 @@ public class DecoratorBean<T> implements Decorator<T>
 {
   private static final L10N L = new L10N(DecoratorBean.class);
 
+  private InjectManager _cdiManager;
+  
   private Class<T> _type;
 
   private Bean<T> _bean;
@@ -79,11 +82,12 @@ public class DecoratorBean<T> implements Decorator<T>
   public DecoratorBean(InjectManager beanManager,
                        Class<T> type)
   {
+    _cdiManager = beanManager;
     _type = type;
 
     _bean = beanManager.createManagedBean(type);
 
-    init();
+    // init();
   }
 
   //
@@ -182,6 +186,9 @@ public class DecoratorBean<T> implements Decorator<T>
   @Override
   public Set<InjectionPoint> getInjectionPoints()
   {
+    if (_delegateInjectionPoint != null)
+      bind();
+    
     return _bean.getInjectionPoints();
   }
 
@@ -201,18 +208,10 @@ public class DecoratorBean<T> implements Decorator<T>
   @Override
   public Type getDelegateType()
   {
+    if (_delegateInjectionPoint == null)
+      bind();
+    
     return _delegateInjectionPoint.getType();
-  }
-
-  /**
-   * Returns the type of the delegated object
-   */
-  private Class<?> getDelegateClass()
-  {
-    if (_delegateField != null)
-      return _delegateField.getType();
-    else
-      return null;
   }
 
   /**
@@ -229,49 +228,28 @@ public class DecoratorBean<T> implements Decorator<T>
   
   public InjectionPoint getDelegateInjectionPoint()
   {
+    if (_delegateInjectionPoint != null)
+      bind();
+    
     return _delegateInjectionPoint;
   }
 
-  /**
-   * Sets the delegate for an object
-   */
-  private void setDelegate(Object instance,
-                          Object delegate)
+  public void bind()
   {
-    if (! _type.isAssignableFrom(instance.getClass())) {
-      throw new ConfigException(L.l("{0} is an invalid @Decorator instance because it does not extend the implementation class {1}",
-                                    instance.getClass().getName(),
-                                    _type.getName()));
-    }
-
-    if (! getDelegateClass().isAssignableFrom(delegate.getClass())) {
-      throw new ConfigException(L.l("{0} is an invalid @Decorator delegate because it does not implement the delegate {1}",
-                                    delegate.getClass().getName(),
-                                    getDelegateType()));
-    }
-
-    try {
-      if (_delegateField != null)
-        _delegateField.set(instance, delegate);
-      else if (_delegateMethod != null)
-        _delegateMethod.invoke(instance, delegate);
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  //
-  // introspection
-  //
-
-  public void init()
-  {
+    if (_delegateInjectionPoint != null)
+      return;
     // _bean.init();
 
     introspect();
 
-    if (_delegateField == null && _delegateMethod == null)
+    if (_delegateField == null
+        && _delegateMethod == null
+        && _delegateConstructor == null)
       throw new ConfigException(L.l("{0} is missing a @Delegate field.  All @Decorators need a @Delegate field for a delegate injection",
+                                    _type.getName()));
+    
+    if (_type.isAnnotationPresent(Interceptor.class))
+      throw new ConfigException(L.l("{0} is an invalid @Delegate because it has an @Interceptor annotation.",
                                     _type.getName()));
   }
 
@@ -283,7 +261,7 @@ public class DecoratorBean<T> implements Decorator<T>
       if (ip.isDelegate()) {
         if (_delegateInjectionPoint != null)
           throw new ConfigException(L.l("{0}: @Decorator field '{1}' conflicts with earlier field '{2}'."
-                                        + " A decorator must have exactly on delegate field.",
+                                        + " A decorator must have exactly one delegate field.",
                                         ip.getBean().getBeanClass().getName(),
                                         ip.getMember().getName(),
                                         _delegateInjectionPoint.getMember().getName()));
@@ -317,13 +295,33 @@ public class DecoratorBean<T> implements Decorator<T>
       for (Type type : selfType.getTypeClosure(manager)) {
         BaseType baseType = manager.createSourceBaseType(type);
         
-        if (baseType.getRawClass().isInterface()
-            && ! baseType.getRawClass().equals(Serializable.class)
-            && baseType.isAssignableFrom(delegateType)) {
+        if (! baseType.getRawClass().isInterface())
+          continue;
+        if (baseType.getRawClass().equals(Serializable.class))
+          continue;
+        
+        if (baseType.isAssignableFrom(delegateType)) {
           _typeSet.add(type);
+        }
+        else if (isDeclaredInterface(selfType, baseType)){
+          // ioc/0i5a
+          // only types declared directly are errors
+          throw new ConfigException(L.l("{0}: '{1}' is an Decorator type not implemented by the delegate {2}",
+                                        _type, baseType, delegateType));
         }
       }
     }
+  }
+  
+  private boolean isDeclaredInterface(BaseType selfType, BaseType baseType)
+  {
+    for (Class<?> iface : selfType.getRawClass().getInterfaces()) {
+      if (iface.equals(baseType.getRawClass()))
+        return true;
+      
+    }
+    
+    return false;
   }
 
   private void introspectDelegateField()

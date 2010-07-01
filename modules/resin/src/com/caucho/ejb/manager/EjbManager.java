@@ -44,6 +44,7 @@ import javax.jms.ConnectionFactory;
 import com.caucho.amber.manager.AmberContainer;
 import com.caucho.amber.manager.AmberPersistenceUnit;
 import com.caucho.config.ConfigException;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.cfg.EjbConfigManager;
 import com.caucho.ejb.cfg.EjbRootConfig;
 import com.caucho.ejb.protocol.EjbProtocolManager;
@@ -53,7 +54,6 @@ import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
 import com.caucho.loader.EnvironmentLocal;
-import com.caucho.loader.SimpleLoader;
 import com.caucho.loader.enhancer.ScanClass;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.util.CharBuffer;
@@ -82,8 +82,6 @@ public class EjbManager implements ScanListener, EnvironmentListener {
 
   private final EjbConfigManager _configManager;
   private final EjbProtocolManager _protocolManager;
-
-  private AmberPersistenceUnit _ejbPersistenceUnit;
 
   private final HashSet<String> _ejbUrls = new HashSet<String>();
 
@@ -131,6 +129,8 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     _classLoader.addScanListener(this);
 
     Environment.addEnvironmentListener(this);
+    
+    EjbModule.create("default");
   }
 
   /**
@@ -220,35 +220,6 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   }
 
   /**
-   * Returns the amber persistence unit for ejb.
-   */
-  public AmberPersistenceUnit createEjbPersistenceUnit()
-  {
-    if (_ejbPersistenceUnit == null) {
-      try {
-        AmberContainer amber = AmberContainer.create(_classLoader);
-
-        _ejbPersistenceUnit = amber.createPersistenceUnit("resin-ejb");
-        _ejbPersistenceUnit.setBytecodeGenerator(false);
-        ClassLoader loader = SimpleLoader.create(getWorkDir());
-        _ejbPersistenceUnit.setEnhancedLoader(loader);
-        _ejbPersistenceUnit.initLoaders();
-        // _ejbPersistenceUnit.setTableCacheTimeout(_entityCacheTimeout);
-      } catch (RuntimeException e) {
-        throw e;
-      } catch (Exception e) {
-        throw ConfigException.create(e);
-      }
-    }
-
-    return _ejbPersistenceUnit;
-  }
-
-  //
-  // configuration
-  //
-
-  /**
    * true if beans should be auto-compiled
    */
   public void setAutoCompile(boolean isAutoCompile)
@@ -292,14 +263,6 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   }
 
   /**
-   * Sets the JMS connection factory for the container.
-   */
-  public ConnectionFactory getJmsConnectionFactory()
-  {
-    return _jmsConnectionFactory;
-  }
-
-  /**
    * Sets the consumer maximum for the container.
    */
   public void setMessageConsumerMax(int consumerMax)
@@ -328,10 +291,17 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   //
   // Bean configuration and management
   //
-
-  public <T> void createBean(AnnotatedType<T> type, InjectionTarget<T> injectionTarget)
+  
+  public boolean isConfiguredBean(Class<?> beanType)
   {
-    _configManager.addAnnotatedType(type, injectionTarget);
+    return _configManager.isConfiguredBean(beanType);
+  }
+
+  public <T> void createBean(AnnotatedType<T> type, 
+                             InjectionTarget<T> injectionTarget)
+  {
+    // XXX moduleName
+    _configManager.addAnnotatedType(type, type, injectionTarget, "");
   }
 
   //
@@ -347,44 +317,24 @@ public class EjbManager implements ScanListener, EnvironmentListener {
 
     getProtocolManager().addServer(server);
   }
-
-  /**
-   * Returns the server specified by the ejbName, or null if not found.
-   */
-  public AbstractEjbBeanManager getServer(String ejbName)
+  
+  public AbstractEjbBeanManager<?> getServerByEjbName(String name)
   {
-    for (AbstractEjbBeanManager server : _serverList) {
-      if (server.getEJBName().equals(ejbName)) {
+    for (AbstractEjbBeanManager<?> server : _serverList) {
+      if (server.getEJBName().equals(name))
         return server;
-      }
     }
-
-    return null;
+    
+    if (_parentContainer != null)
+      return _parentContainer.getServerByEjbName(name);
+    else
+      return null;
   }
-
-  /**
-   * Returns the server specified by the path and ejbName, or null if not found.
-   */
-  public AbstractEjbBeanManager getServer(Path path, String ejbName)
-  {
-    String mappedName = path.getFullPath() + "#" + ejbName;
-
-    for (AbstractEjbBeanManager server : _serverList) {
-      if (mappedName.equals(server.getId())) {
-        return server;
-      }
-    }
-
-    return null;
-  }
-
-  //
-  // ScanListener
-  //
 
   /**
    * Since EJB doesn't bytecode enhance, it's priority 1
    */
+  @Override
   public int getScanPriority()
   {
     return 1;
@@ -393,7 +343,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   /**
    * Adds a root URL
    */
-  public void addRoot(Path root)
+  public void configureRootPath(Path root)
   {
     if (root.getURL().endsWith(".jar"))
       root = JarPath.create(root);
@@ -401,7 +351,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     // XXX: ejb/0fbn
     Path ejbJar = root.lookup("META-INF/ejb-jar.xml");
     if (ejbJar.canRead()) {
-      getConfigManager().addEjbPath(root);
+      getConfigManager().configureRootPath(root);
     }
 
     _ejbUrls.add(root.getURL());
@@ -418,9 +368,14 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   @Override
   public boolean isRootScannable(Path root, String packageRoot)
   {
+    Path scanRoot = root;
+    
+    if (packageRoot != null)
+      scanRoot = scanRoot.lookup(packageRoot.replace('.', '/'));
+      
     if (_scannableRoots == null) {
       if (! Boolean.TRUE.equals(_localScanAll.get())) {
-        if (! root.lookup("META-INF/ejb-jar.xml").canRead()) {
+        if (! scanRoot.lookup("META-INF/ejb-jar.xml").canRead()) {
           return false;
         }
       }     
@@ -430,7 +385,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
       }
     }
     else {
-      Path path = root;
+      Path path = scanRoot;
 
       if (root instanceof JarPath)
         path = ((JarPath) root).getContainer();
@@ -440,9 +395,9 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     }
     
     if (log.isLoggable(Level.FINE))
-      log.fine("EJB scanning '" + root + "'");
+        log.fine("EJB scanning '" + root + "'");
 
-    EjbRootConfig context = _configManager.createRootConfig(root);
+    EjbRootConfig context = _configManager.createRootConfig(scanRoot);
 
     if (context.isScanComplete())
       return false;
@@ -464,9 +419,13 @@ public class EjbManager implements ScanListener, EnvironmentListener {
       return new EjbScanClass(root, className, this);
   }
 
+  @Override
   public boolean isScanMatchAnnotation(CharBuffer annotationName)
   {
     if (annotationName.matches("javax.ejb.Stateless")) {
+      return true;
+    }
+    if (annotationName.matches("javax.ejb.Singleton")) {
       return true;
     }
     else if (annotationName.matches("javax.ejb.Stateful")) {
@@ -510,12 +469,23 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     _configManager.start();
   }
 
+  private void bind()
+  {
+    config();
+    
+    InjectManager.create().bind();
+    
+    for (AbstractEjbBeanManager server : _serverList) {
+      server.bind();
+    }
+  }
+
   public void start() throws ConfigException
   {
     try {
-      AmberContainer.create().start();
+      // AmberContainer.create().start();
 
-      config();  // ejb/4200
+      bind();  // ejb/4200
 
       Thread thread = Thread.currentThread();
       ClassLoader oldLoader = thread.getContextClassLoader();
@@ -589,6 +559,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
    */
   public void environmentBind(EnvironmentClassLoader loader)
   {
+    bind();
   }
 
   /**

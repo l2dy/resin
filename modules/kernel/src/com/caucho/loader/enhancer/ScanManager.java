@@ -95,10 +95,13 @@ public class ScanManager {
       packagePath = packageRoot.replace('.', '/');
 
     if (root instanceof JarPath) {
+      JarPath jarRoot = (JarPath) root;
+      Path jar = jarRoot.getContainer();
+      
       JarByteCodeMatcher matcher
         = new JarByteCodeMatcher(loader, root, packageRoot, listeners);
     
-      scanForJarClasses(((JarPath) root).getContainer(), packageRoot,
+      scanForJarClasses(jar, packageRoot,
                         scanner, matcher);
     }
     else {
@@ -122,6 +125,10 @@ public class ScanManager {
     try {
       if (path.isDirectory()) {
         for (String name : path.list()) {
+          if (name.indexOf(':') >= 0) {
+            continue;
+          }
+          
           scanForClasses(root, path.lookup(name), classScanner, matcher);
         }
 

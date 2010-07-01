@@ -29,6 +29,7 @@
 
 package com.caucho.config.inject;
 
+import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
@@ -56,6 +57,8 @@ import com.caucho.util.Base64;
 import com.caucho.util.L10N;
 import com.caucho.util.NullOutputStream;
 import com.caucho.util.Sha256OutputStream;
+import com.caucho.vfs.Vfs;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Common bean introspection for Produces and ManagedBean.
@@ -135,6 +138,11 @@ abstract public class AbstractBean<T>
   {
     return null;
   }
+  
+  public Class<?> getJavaClass()
+  {
+    return null;
+  }
 
   public Set<Annotation> getQualifiers()
   {
@@ -179,33 +187,48 @@ abstract public class AbstractBean<T>
 
   protected String calculatePassivationId()
   {
-    Sha256OutputStream os = new Sha256OutputStream(new NullOutputStream());
-    PrintWriter out = new PrintWriter(new OutputStreamWriter(os));
+    try {
+      Sha256OutputStream os = new Sha256OutputStream(new NullOutputStream());
+      WriteStream out = Vfs.openWrite(os);
 
-    // XXX: getTypes?
-    out.print(getBeanClass());
+      out.print(getJavaClass());
 
-    if (getName() != null) {
-      out.print(";name=");
-      out.print(getName());
+      ArrayList<String> typeList = new ArrayList<String>();
+
+      for (Type type : getTypes()) {
+        typeList.add(type.toString());
+      }
+      Collections.sort(typeList);
+
+      for (String typeString : typeList) {
+        out.print(";");
+        out.print(typeString);
+      }
+
+      if (getName() != null) {
+        out.print(";name=");
+        out.print(getName());
+      }
+
+      ArrayList<String> annList = new ArrayList<String>();
+
+      for (Annotation ann : getQualifiers()) {
+        annList.add(bindingToString(ann));
+      }
+
+      Collections.sort(annList);
+
+      for (String annString : annList) {
+        out.print(";");
+        out.print(annString);
+      }
+
+      out.close();
+
+      return Base64.encodeFromByteArray(os.getDigest());
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
     }
-
-    ArrayList<String> annList = new ArrayList<String>();
-
-    for (Annotation ann : getQualifiers()) {
-      annList.add(bindingToString(ann));
-    }
-
-    Collections.sort(annList);
-
-    for (String annString : annList) {
-      out.print(";");
-      out.print(annString);
-    }
-
-    out.close();
-
-    return Base64.encodeFromByteArray(os.getDigest());
   }
 
   private String bindingToString(Annotation ann)

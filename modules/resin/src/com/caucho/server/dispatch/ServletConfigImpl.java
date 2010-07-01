@@ -32,6 +32,7 @@ package com.caucho.server.dispatch;
 import com.caucho.config.*;
 import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.CreationalContextImpl;
+import com.caucho.config.inject.OwnerCreationalContext;
 import com.caucho.config.annotation.DisableConfig;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
@@ -914,6 +915,10 @@ public class ServletConfigImpl
       }
       else if (_protocolConfig != null || _protocolFactory != null) {
       }
+      else {
+        // XXX: should allow soap
+        throw error(L.l("'{0}' must implement javax.servlet.Servlet or have a <protocol>.  All servlets must implement the Servlet interface.", _servletClassName));
+      }
       /*
       else if (_servletClass.isAnnotationPresent(WebService.class)) {
         // update protocol for "soap"?
@@ -922,8 +927,6 @@ public class ServletConfigImpl
         // update protocol for "soap"?
       }
       */
-      else
-        throw error(L.l("'{0}' must implement javax.servlet.Servlet or have a <protocol>.  All servlets must implement the Servlet interface.", _servletClassName));
 
       /*
       if (Modifier.isAbstract(_servletClass.getModifiers()))
@@ -1233,7 +1236,7 @@ public class ServletConfigImpl
   {
     if (_bean != null) {
       // XXX: need to ask manager?
-      CreationalContext env = CreationalContextImpl.create();
+      CreationalContextImpl<?> env = new OwnerCreationalContext(_bean);
       
       return _bean.create(env);
     }
@@ -1254,12 +1257,16 @@ public class ServletConfigImpl
 
       _comp = inject.createInjectionTarget(servletClass);
 
-      CreationalContext env = CreationalContextImpl.create();
+      CreationalContextImpl env = new OwnerCreationalContext(null);
 
       try {
         // server/1b40
-        servlet = _comp.produce(env);
-        _comp.inject(servlet, env);
+        if (_comp != null) {
+          servlet = _comp.produce(env);
+          _comp.inject(servlet, env);
+        }
+        else
+          servlet = servletClass.newInstance();
       } catch (InjectionException e) {
         throw ConfigException.createConfig(e);
       }

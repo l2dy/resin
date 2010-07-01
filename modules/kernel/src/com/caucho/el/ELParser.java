@@ -112,27 +112,27 @@ public class ELParser
   public Expr parseInterpolate()
     throws ELParseException
   {
-    CharBuffer text = CharBuffer.allocate();
-    CharBuffer exprString = CharBuffer.allocate();
+    CharBuffer text = new CharBuffer();
+    CharBuffer exprString = new CharBuffer();
     Expr expr = null;
     int ch;
 
     while ((ch = read()) >= 0) {
       if (_checkEscape && ch == '\\') {
-	ch = read();
+        ch = read();
 
-	if (ch == '$' || ch == '#' || ch == '\\')
-	  text.append((char) ch);
-	else {
-	  text.append('\\');
-	  unread();
-	}
+        if (ch == '$' || ch == '#' || ch == '\\')
+          text.append((char) ch);
+        else {
+          text.append('\\');
+          unread();
+        }
       }
       else if (ch == '$' || ch == '#') {
-	int origChar = ch;
-	
+        int origChar = ch;
+
         ch = read();
-        
+
         if (ch == '{') {
           if (text.length() > 0) {
             StringLiteral right = new StringLiteral(text.toString());
@@ -149,28 +149,28 @@ public class ELParser
 
           for (ch = read(); ch > 0 && ch != '}'; ch = read()) {
             exprString.append((char) ch);
-	    
-	    if (ch == '\'' || ch == '"') {
-	      int end = ch;
 
-	      for (ch = read(); ch > 0 && ch != end; ch = read()) {
-		exprString.append((char) ch);
+            if (ch == '\'' || ch == '"') {
+              int end = ch;
 
-		if (ch == '\\') {
-		  ch = read();
-		  if (ch > 0)
-		    exprString.append((char) ch);
-		}
-	      }
+              for (ch = read(); ch > 0 && ch != end; ch = read()) {
+                exprString.append((char) ch);
 
-	      if (ch > 0)
-		exprString.append((char) ch);
-	    }
-	  }
+                if (ch == '\\') {
+                  ch = read();
+                  if (ch > 0)
+                    exprString.append((char) ch);
+                }
+              }
 
-	  if (ch != '}')
-	    throw error(L.l("expected '}' at end of EL expression",
-			    exprString));
+              if (ch > 0)
+                exprString.append((char) ch);
+            }
+          }
+
+          if (ch != '}')
+            throw error(L.l("expected '}' at end of EL expression",
+                            exprString));
 
           Expr right = create(exprString.toString()).parseExpr();
 
@@ -216,41 +216,41 @@ public class ELParser
       
       switch (token) {
       case '?':
-	{
-	  Expr trueExpr = parseExpr();
-	  token = scanToken();
-	  if (token != ':')
-	    throw error(L.l("Expected ':' at {0}.  Conditional syntax is 'expr ? expr : expr'.", badChar(token)));
-	  Expr falseExpr = parseExpr();
+      {
+        Expr trueExpr = parseExpr();
+        token = scanToken();
+        if (token != ':')
+          throw error(L.l("Expected ':' at {0}.  Conditional syntax is 'expr ? expr : expr'.", badChar(token)));
+        Expr falseExpr = parseExpr();
 
-	  left = new ConditionalExpr(left, trueExpr, falseExpr);
-	}
-	break;
-	
+        left = new ConditionalExpr(left, trueExpr, falseExpr);
+      }
+      break;
+
       case Expr.OR:
-	left = parseOrExpr(token, left, parseTerm());
-	break;
+        left = parseOrExpr(token, left, parseTerm());
+        break;
 
       case Expr.AND:
-	left = parseAndExpr(token, left, parseTerm());
-	break;
+        left = parseAndExpr(token, left, parseTerm());
+        break;
 
       case Expr.EQ: case Expr.NE: case Expr.LT:
       case Expr.LE: case Expr.GT: case Expr.GE:
-	left = parseCmpExpr(token, left, parseTerm());
-	break;
-        
+        left = parseCmpExpr(token, left, parseTerm());
+        break;
+
       case Expr.ADD: case Expr.SUB:
-	left = parseAddExpr(token, left, parseTerm());
-	break;
+        left = parseAddExpr(token, left, parseTerm());
+        break;
 
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	left = parseMulExpr(token, left, parseTerm());
-	break;
+        left = parseMulExpr(token, left, parseTerm());
+        break;
 
       default:
         _peek = token;
-	return left;
+        return left;
       }
     }
   }
@@ -267,30 +267,30 @@ public class ELParser
       switch (token) {
       case Expr.OR:
         left = new BooleanExpr(code, left, right);
-	code = token;
-	right = parseTerm();
-	break;
-        
+        code = token;
+        right = parseTerm();
+        break;
+
       case Expr.AND:
-	right = parseAndExpr(token, right, parseTerm());
-	break;
-        
+        right = parseAndExpr(token, right, parseTerm());
+        break;
+
       case Expr.EQ: case Expr.NE:
       case Expr.LT: case Expr.GT:
       case Expr.LE: case Expr.GE:
-	right = parseCmpExpr(token, right, parseTerm());
-	break;
-        
+        right = parseCmpExpr(token, right, parseTerm());
+        break;
+
       case Expr.ADD: case Expr.SUB:
-	right = parseAddExpr(token, right, parseTerm());
-	break;
+        right = parseAddExpr(token, right, parseTerm());
+        break;
 
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	right = parseMulExpr(token, right, parseTerm());
-	break;
+        right = parseMulExpr(token, right, parseTerm());
+        break;
 
       default:
-	_peek = token;
+        _peek = token;
         return new BooleanExpr(code, left, right);
       }
     }
@@ -308,26 +308,26 @@ public class ELParser
       switch (token) {
       case Expr.AND:
         left = new BooleanExpr(code, left, right);
-	code = token;
-	right = parseTerm();
-	break;
-        
+        code = token;
+        right = parseTerm();
+        break;
+
       case Expr.EQ: case Expr.NE:
       case Expr.LT: case Expr.GT:
       case Expr.LE: case Expr.GE:
-	right = parseCmpExpr(token, right, parseTerm());
-	break;
-        
+        right = parseCmpExpr(token, right, parseTerm());
+        break;
+
       case Expr.ADD: case Expr.SUB:
-	right = parseAddExpr(token, right, parseTerm());
-	break;
+        right = parseAddExpr(token, right, parseTerm());
+        break;
 
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	right = parseMulExpr(token, right, parseTerm());
-	break;
+        right = parseMulExpr(token, right, parseTerm());
+        break;
 
       default:
-	_peek = token;
+        _peek = token;
         return new BooleanExpr(code, left, right);
       }
     }
@@ -346,23 +346,23 @@ public class ELParser
       case Expr.EQ: case Expr.NE:
       case Expr.GT: case Expr.LT:
       case Expr.LE: case Expr.GE:
-	left = CmpExpr.create(code, left, right);
-          
-	code = token;
-	right = parseTerm();
-	break;
-        
+        left = CmpExpr.create(code, left, right);
+
+        code = token;
+        right = parseTerm();
+        break;
+
       case Expr.ADD: case Expr.SUB:
-	right = parseAddExpr(token, right, parseTerm());
-	break;
+        right = parseAddExpr(token, right, parseTerm());
+        break;
 
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	right = parseMulExpr(token, right, parseTerm());
-	break;
+        right = parseMulExpr(token, right, parseTerm());
+        break;
 
       default:
-	_peek = token;
-	return CmpExpr.create(code, left, right);
+        _peek = token;
+        return CmpExpr.create(code, left, right);
       }
     }
   }
@@ -378,18 +378,18 @@ public class ELParser
       int token = scanToken();
       switch (token) {
       case Expr.ADD: case Expr.SUB:
-	left = BinaryExpr.create(code, left, right);
-	code = token;
-	right = parseTerm();
-	break;
+        left = BinaryExpr.create(code, left, right);
+        code = token;
+        right = parseTerm();
+        break;
 
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	right = parseMulExpr(token, right, parseTerm());
-	break;
+        right = parseMulExpr(token, right, parseTerm());
+        break;
 
       default:
-	_peek = token;
-	return BinaryExpr.create(code, left, right);
+        _peek = token;
+        return BinaryExpr.create(code, left, right);
       }
     }
   }
@@ -405,14 +405,14 @@ public class ELParser
       int token = scanToken();
       switch (token) {
       case Expr.MUL: case Expr.DIV: case Expr.MOD:
-	left = BinaryExpr.create(code, left, right);
-	right = parseTerm();
-	code = token;
-	break;
+        left = BinaryExpr.create(code, left, right);
+        right = parseTerm();
+        code = token;
+        break;
 
       default:
-	_peek = token;
-	return BinaryExpr.create(code, left, right);
+        _peek = token;
+        return BinaryExpr.create(code, left, right);
       }
     }
   }
@@ -433,12 +433,12 @@ public class ELParser
       switch (token) {
       case '[':
       {
-	Expr expr = parseExpr();
+        Expr expr = parseExpr();
         token = scanToken();
-	if (token != ']')
-	  throw error(L.l("Expected `]' at {0}.  All open array braces must have matching closing brace.", badChar(token)));
+        if (token != ']')
+          throw error(L.l("Expected `]' at {0}.  All open array braces must have matching closing brace.", badChar(token)));
 
-	term = term.createField(expr);
+        term = term.createField(expr);
         break;
       }
       
@@ -462,16 +462,16 @@ public class ELParser
           ch = skipWhitespace(read());
         }
         
-	if (ch != ')')
-	  throw error(L.l("Expected `)' at {0}.  All functions must have matching closing parenthesis.", badChar(ch)));
+        if (ch != ')')
+          throw error(L.l("Expected `)' at {0}.  All functions must have matching closing parenthesis.", badChar(ch)));
 
         // token = scanToken();
 
         Expr []args = (Expr []) argList.toArray(new Expr[argList.size()]);
 
-	Expr expr = term.createMethod(args);
+        Expr expr = term.createMethod(args);
         if (expr == null)
-	  throw error(L.l("Method call not supported in this context `{0}'.",
+          throw error(L.l("Method call not supported in this context `{0}'.",
                           term));
         term = expr;
         break;
@@ -482,7 +482,7 @@ public class ELParser
         int ch = skipWhitespace(read());
         
         if (! Character.isJavaIdentifierStart((char) ch))
-	  throw error(L.l("Expected `]' at {0}.  Field references must be identifiers.", badChar(ch)));
+          throw error(L.l("Expected `]' at {0}.  Field references must be identifiers.", badChar(ch)));
 
         String field = readName(ch);
 
@@ -516,25 +516,25 @@ public class ELParser
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
       {
-	long value = 0;
-	double exp = 1;
+        long value = 0;
+        double exp = 1;
         int digits = 0;
 
-	for (; ch >= '0' && ch <= '9'; ch = read())
-	  value = 10 * value + ch - '0';
+        for (; ch >= '0' && ch <= '9'; ch = read())
+          value = 10 * value + ch - '0';
 
         if (ch != '.' && ch != 'e' && ch != 'E') {
           unread();
           return new LongLiteral(value);
         }
         
-	if (ch == '.') {
-	  for (ch = read(); ch >= '0' && ch <= '9'; ch = read()) {
-	    value = 10 * value + ch - '0';
-	    exp *= 10;
+        if (ch == '.') {
+          for (ch = read(); ch >= '0' && ch <= '9'; ch = read()) {
+            value = 10 * value + ch - '0';
+            exp *= 10;
             digits--;
-	  }
-	}
+          }
+        }
 
         if (ch == 'e' || ch == 'E') {
           int sign = 1;
@@ -558,8 +558,8 @@ public class ELParser
           return new DoubleLiteral((double) value * (double) exp);
         }
         
-	unread();
-	return new DoubleLiteral((double) value / (double) exp);
+        unread();
+        return new DoubleLiteral((double) value / (double) exp);
       }
 
     case '-':
@@ -573,17 +573,19 @@ public class ELParser
 
     case '(':
       {
-	Expr expr = parseExpr();
-	if ((ch = scanToken()) != ')')
-	  throw error(L.l("Expected `)' at {0}.  All open parentheses must have matching closing parentheses.", badChar(ch)));
-	
-	return expr;
+        Expr expr = parseExpr();
+        if ((ch = scanToken()) != ')')
+          throw error(L.l("Expected `)' at {0}.  All open parentheses must have matching closing parentheses.", badChar(ch)));
+        
+        return expr;
       }
 
     case '\'': case '"':
       {
-	int end = ch;
-	CharBuffer cb = new CharBuffer();
+        int end = ch;
+        CharBuffer cb = _cb;
+        cb.clear();
+        
         for (ch = read(); ch >= 0; ch = read()) {
           if (ch == '\\')
             cb.append((char) read());
@@ -597,14 +599,16 @@ public class ELParser
           }
         }
 
-	return new StringLiteral(cb.toString());
+        return new StringLiteral(cb.toString());
       }
 
     default:
       if (! Character.isJavaIdentifierStart((char) ch) && ch != ':')
-	throw error(L.l("Unexpected character at {0}.", badChar(ch)));
+        throw error(L.l("Unexpected character at {0}.", badChar(ch)));
       
-      CharBuffer cb = CharBuffer.allocate();
+      CharBuffer cb = _cb;
+      cb.clear();
+      
       for (;
            Character.isJavaIdentifierPart((char) ch) || ch == ':';
            ch = read())
@@ -612,7 +616,7 @@ public class ELParser
 
       unread();
 
-      String name = cb.close();
+      String name = cb.toString();
 
       if (name.equals("null"))
         return new NullLiteral();
@@ -625,33 +629,33 @@ public class ELParser
       else if (name.equals("empty"))
         return UnaryExpr.create(Expr.EMPTY, parseTerm());
       else {
-	VariableMapper varMapper = _elContext.getVariableMapper();
-	
-	ValueExpression valueExpr = null;
+        VariableMapper varMapper = _elContext.getVariableMapper();
 
-	if (varMapper != null)
-	  valueExpr = varMapper.resolveVariable(name);
+        ValueExpression valueExpr = null;
 
-	if (valueExpr != null)
-	  return new ValueExpr(name, valueExpr);
-	
+        if (varMapper != null)
+          valueExpr = varMapper.resolveVariable(name);
+
+        if (valueExpr != null)
+          return new ValueExpr(name, valueExpr);
+
         Expr expr = createImplicitObjectExpr(name);
 
         if (expr != null)
           return expr;
 
-	try {
-	  Method method = getStaticMethod(name);
+        try {
+          Method method = getStaticMethod(name);
 
-	  if (method != null)
-	    return new StaticMethodExpr(method);
-	  else
-	    return new IdExpr(name);
-	} catch (Exception e) {
-	  log.log(Level.FINEST, e.toString(), e);
-	  
-	  return new IdExpr(name);
-	}
+          if (method != null)
+            return new StaticMethodExpr(method);
+          else
+            return new IdExpr(name);
+        } catch (Exception e) {
+          log.log(Level.FINEST, e.toString(), e);
+
+          return new IdExpr(name);
+        }
       }
     }
   }
@@ -680,8 +684,8 @@ public class ELParser
 
       int p = name.indexOf(':');
       if (p > 0) {
-	prefix = name.substring(0, p);
-	localName = name.substring(p + 1);
+        prefix = name.substring(0, p);
+        localName = name.substring(p + 1);
       }
       
       method = funMapper.resolveFunction(prefix, localName);
@@ -716,47 +720,47 @@ public class ELParser
     case '!':
       ch = read();
       if (ch == '=')
-	return Expr.NE;
+        return Expr.NE;
       else
         return Expr.NOT;
       
     case '=':
       ch = read();
       if (ch == '=')
-	return Expr.EQ;
+        return Expr.EQ;
       else
-	throw error(L.l("expected '==' at '={0}'", badChar(ch)));
+        throw error(L.l("expected '==' at '={0}'", badChar(ch)));
       
     case '&':
       ch = read();
       if (ch == '&')
-	return Expr.AND;
+        return Expr.AND;
       else
-	throw error(L.l("expected '&&' at '&{0}'", badChar(ch)));
+        throw error(L.l("expected '&&' at '&{0}'", badChar(ch)));
       
     case '|':
       ch = read();
       if (ch == '|')
-	return Expr.OR;
+        return Expr.OR;
       else
-	throw error(L.l("expected '||' at '|{0}'", badChar(ch)));
+        throw error(L.l("expected '||' at '|{0}'", badChar(ch)));
 
     case '<':
       ch = read();
       if (ch == '=')
-	return Expr.LE;
+        return Expr.LE;
       else {
-	unread();
-	return Expr.LT;
+        unread();
+        return Expr.LT;
       }
 
     case '>':
       ch = read();
       if (ch == '=')
-	return Expr.GE;
+        return Expr.GE;
       else {
-	unread();
-	return Expr.GT;
+        unread();
+        return Expr.GT;
       }
 
     case '[':
@@ -783,30 +787,30 @@ public class ELParser
 
     default:
       if (Character.isJavaIdentifierStart((char) ch)) {
-	String name = readName(ch);
+        String name = readName(ch);
 
-	if (name.equals("div"))
-	  return Expr.DIV;
-	else if (name.equals("mod"))
-	  return Expr.MOD;
-	else if (name.equals("eq"))
-	  return Expr.EQ;
-	else if (name.equals("ne"))
-	  return Expr.NE;
-	else if (name.equals("lt"))
-	  return Expr.LT;
-	else if (name.equals("le"))
-	  return Expr.LE;
-	else if (name.equals("gt"))
-	  return Expr.GT;
-	else if (name.equals("ge"))
-	  return Expr.GE;
-	else if (name.equals("and"))
-	  return Expr.AND;
-	else if (name.equals("or"))
-	  return Expr.OR;
-	else
-	  throw error(L.l("expected binary operation at `{0}'", name));
+        if (name.equals("div"))
+          return Expr.DIV;
+        else if (name.equals("mod"))
+          return Expr.MOD;
+        else if (name.equals("eq"))
+          return Expr.EQ;
+        else if (name.equals("ne"))
+          return Expr.NE;
+        else if (name.equals("lt"))
+          return Expr.LT;
+        else if (name.equals("le"))
+          return Expr.LE;
+        else if (name.equals("gt"))
+          return Expr.GT;
+        else if (name.equals("ge"))
+          return Expr.GE;
+        else if (name.equals("and"))
+          return Expr.AND;
+        else if (name.equals("or"))
+          return Expr.OR;
+        else
+          throw error(L.l("expected binary operation at `{0}'", name));
       }
 
       unread();

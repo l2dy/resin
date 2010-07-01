@@ -53,6 +53,6 @@ public interface Interceptor<T> extends Bean<T>
    * Invokes the callback
    */
   public Object intercept(InterceptionType type,
-			  T instance,
-			  InvocationContext ctx);
+                          T instance,
+                          InvocationContext ctx);
 }

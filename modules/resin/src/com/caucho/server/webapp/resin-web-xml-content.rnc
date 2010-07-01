@@ -5,7 +5,7 @@ namespace rcore = "http://caucho.com/ns/resin/core"
 
 namespace xsi = "http://www.w3.org/2001/XMLSchema-instance"
 
-include "../resin/env.rnc"
+include "classpath:com/caucho/config/cfg/env.rnc"
 include "web-xml-j2ee.rnc"
 
 ## l_web-app should probably be handled in web-xml.rnc as Servlet 2.3
@@ -949,7 +949,7 @@ r_session-config = element session-config {
      | element cookie-use-context-path { r_boolean-Type })?
 
   & (attribute cookie-path { string }
-     | element cookie-pathdport { string })?
+     | element cookie-path { string })?
 
   & (attribute cookie-port { string }
      | element cookie-port { string })?

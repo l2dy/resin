@@ -644,6 +644,8 @@
         <include name="lib/jsf-api.jar"/>
         <include name="lib/jsf-impl.jar"/>
         <include name="lib/jsf.LICENSE"/>
+        <include name="lib/hibernate-validation-api-4.0.2.GA.jar"/>
+        <include name="lib/validation-api-1.0.0.GA.jar"/>
         <include name="lib/webutil.jar"/>
         <include name="lib/webservices-api.jar"/>
         <include name="lib/webservices-extra-api.jar"/>
@@ -1195,6 +1197,7 @@
           overwrite="true">
       <filterset>
         <filter token="JAVA_HOME" value="/usr/lib/jvm/java-6-sun"/>
+        <filter token="JAVA_EXE" value="$JAVA_HOME/bin/java"/>
         <filter token="resin_home" value="/usr/share/resin"/>
         <filter token="resin_root" value="/var/www"/>
         <filter token="resin_log" value="/var/log/resin"/>

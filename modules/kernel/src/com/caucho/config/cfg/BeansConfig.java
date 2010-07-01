@@ -34,6 +34,7 @@ import java.util.ArrayList;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.inject.Alternative;
+import javax.enterprise.inject.Stereotype;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Interceptor;
 
@@ -44,7 +45,7 @@ import com.caucho.config.inject.DecoratorBean;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.InterceptorBean;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.types.CustomBeanConfig;
+import com.caucho.config.xml.XmlBeanConfig;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -63,7 +64,8 @@ public class BeansConfig {
   private ArrayList<Class<?>> _deployList
     = new ArrayList<Class<?>>();
 
-  private ArrayList<Interceptor<?>> _interceptorList;
+  private ArrayList<Class<?>> _interceptorList
+    = new ArrayList<Class<?>>();
 
   private ArrayList<Class<?>> _decoratorList
     = new ArrayList<Class<?>>();
@@ -146,7 +148,7 @@ public class BeansConfig {
   /**
    * Adds a namespace bean
    */
-  public void addCustomBean(CustomBeanConfig<?> bean)
+  public void addCustomBean(XmlBeanConfig<?> bean)
   {
   }
 
@@ -197,12 +199,13 @@ public class BeansConfig {
     
     _decoratorList.clear();
 
-    update();
-
-    if (_interceptorList != null) {
-      _injectManager.setInterceptorList(_interceptorList);
-      _interceptorList = null;
+    for (Class<?> cl : _interceptorList) {
+      _injectManager.addInterceptorClass(cl);
     }
+    
+    _interceptorList.clear();
+
+    update();
   }
 
   public void update()
@@ -216,33 +219,13 @@ public class BeansConfig {
         _pendingClasses.clear();
 
         for (Class<?> cl : pendingClasses) {
-          /*
-          if (injectManager.getWebComponent(cl) != null)
-            continue;
-          */
-
           ManagedBeanImpl<?> bean;
-
-          /*
-          if (cl.isAnnotationPresent(Singleton.class))
-            component = new SingletonClassComponent(cl);
-          else
-          */
-          /*
-          component = new SimpleBean(cl);
-
-          component.setFromClass(true);
-          component.init();
-          */
+          
           bean = injectManager.createManagedBean(cl);
 
           injectManager.addBean(bean);
 
-          for (Bean<?> producerBean : bean.getProducerBeans()) {
-            injectManager.addBean(producerBean);
-          }
-
-          //_pendingComponentList.add(component);
+          bean.introspectProduces();
         }
       }
     } catch (Exception e) {
@@ -253,12 +236,17 @@ public class BeansConfig {
   public <T> void addInterceptor(Class<T> cl)
   {
     if (_interceptorList == null)
-      _interceptorList = new ArrayList<Interceptor<?>>();
+      _interceptorList = new ArrayList<Class<?>>();
+    
+    if (cl.isInterface())
+      throw new ConfigException(L.l("'{0}' is not valid because <interceptors> can only contain interceptor implementations",
+                                    cl.getName()));
 
-    InterceptorBean<T> bean = new InterceptorBean<T>(_injectManager, cl);
-    bean.init();
-
-    _interceptorList.add(bean);
+    if (_interceptorList.contains(cl))
+      throw new ConfigException(L.l("'{0}' is a duplicate interceptor. Interceptors may not be listed twice in the beans.xml",
+                                    cl.getName()));
+      
+    _interceptorList.add(cl);
   }
 
   @Override
@@ -275,21 +263,6 @@ public class BeansConfig {
     {
       addInterceptor(cl);
     }
-
-    public void addCustomBean(CustomBeanConfig<?> config)
-    {
-      Class<?> cl = config.getClassType();
-
-      if (cl.isInterface())
-        throw new ConfigException(L.l("'{0}' is not valid because <Interceptors> can only contain interceptor implementations",
-                                      cl.getName()));
-
-      if (! cl.isAnnotationPresent(javax.interceptor.Interceptor.class))
-        throw new ConfigException(L.l("'{0}' must have an @Interceptor annotation because it is an interceptor implementation",
-                                      cl.getName()));
-
-      addInterceptor(cl);
-    }
   }
 
   public class Decorators {
@@ -299,10 +272,19 @@ public class BeansConfig {
 
     public void addClass(Class<?> cl)
     {
+      if (_decoratorList.contains(cl))
+        throw new ConfigException(L.l("'{0}' is a duplicate decorator. Decorators may not be listed twice in the beans.xml",
+                                      cl.getName()));
+        
       _decoratorList.add(cl);
     }
 
-    public void addCustomBean(CustomBeanConfig<?> config)
+    public void addDecorator(Class<?> cl)
+    {
+      addClass(cl);
+    }
+
+    public void addCustomBean(XmlBeanConfig<?> config)
     {
       Class<?> cl = config.getClassType();
 
@@ -343,9 +325,11 @@ public class BeansConfig {
   public class AlternativesConfig {
     public void addClass(Class<?> cl)
     {
-      if (cl.isAnnotation())
+      if (cl.isAnnotation() && ! cl.isAnnotationPresent(Stereotype.class)) {
+        // CDI TCK allows the stereotype in <class>
         throw new ConfigException(L.l("'{0}' is an invalid alternative because it is an annotation.",
                                       cl.getName()));
+      }
       
       if (! cl.isAnnotationPresent(Alternative.class))
         throw new ConfigException(L.l("'{0}' is an invalid alternative because it does not have an @Alternative annotation.",

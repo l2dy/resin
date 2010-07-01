@@ -36,6 +36,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.servlet.Servlet;
@@ -48,8 +49,10 @@ import javax.servlet.http.HttpSession;
 import javax.servlet.jsp.JspContext;
 import javax.servlet.jsp.PageContext;
 
+import com.caucho.config.ConfigException;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.OwnerCreationalContext;
 import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.java.JavaCompiler;
 import com.caucho.jsp.cfg.JspPropertyGroup;
@@ -114,10 +117,10 @@ abstract public class PageManager {
       _autoCompile = jspPropertyGroup.isAutoCompile();
 
       if (jspPropertyGroup.getJspMax() > 0)
-	_pageCacheMax = jspPropertyGroup.getJspMax();
+        _pageCacheMax = jspPropertyGroup.getJspMax();
 
       if (jspPropertyGroup.getDependencyCheckInterval() != Long.MIN_VALUE)
-	interval = jspPropertyGroup.getDependencyCheckInterval();
+        interval = jspPropertyGroup.getDependencyCheckInterval();
     }
 
     if (interval < 0)
@@ -163,12 +166,12 @@ abstract public class PageManager {
   }
 
   public PageContextImpl allocatePageContext(Servlet servlet,
-					     ServletRequest request,
-					     ServletResponse response,
-					     String errorPageURL,
-					     boolean needsSession,
-					     int buffer,
-					     boolean autoFlush)
+                                             ServletRequest request,
+                                             ServletResponse response,
+                                             String errorPageURL,
+                                             boolean needsSession,
+                                             int buffer,
+                                             boolean autoFlush)
   {
     PageContextImpl pc = _freePages.allocate();
 
@@ -188,14 +191,14 @@ abstract public class PageManager {
    * The jsp page context initialization.
    */
   public PageContextImpl allocatePageContext(Servlet servlet,
-					     WebApp app,
-					     ServletRequest request,
-					     ServletResponse response,
-					     String errorPageURL,
-					     HttpSession session,
-					     int buffer,
-					     boolean autoFlush,
-					     boolean isPrintNullAsBlank)
+                                             WebApp app,
+                                             ServletRequest request,
+                                             ServletResponse response,
+                                             String errorPageURL,
+                                             HttpSession session,
+                                             int buffer,
+                                             boolean autoFlush,
+                                             boolean isPrintNullAsBlank)
   {
     PageContextImpl pc = _freePages.allocate();
 
@@ -203,7 +206,7 @@ abstract public class PageManager {
       pc = new PageContextImpl();
 
     pc.initialize(servlet, app, request, response, errorPageURL,
-		  session, buffer, autoFlush, isPrintNullAsBlank);
+                  session, buffer, autoFlush, isPrintNullAsBlank);
 
     return pc;
   }
@@ -214,7 +217,7 @@ abstract public class PageManager {
       pc.release();
 
       if (pc instanceof PageContextImpl)
-	_freePages.free((PageContextImpl) pc);
+        _freePages.free((PageContextImpl) pc);
     }
   }
 
@@ -259,8 +262,8 @@ abstract public class PageManager {
     * @return the compiled JSP (or XTP) page.
     */
   public Page getPage(String uri, String pageURI,
-		      Path path,
-		      ServletConfig config)
+                      Path path,
+                      ServletConfig config)
     throws Exception
   {
     return getPage(uri, pageURI, path, config, null);
@@ -277,8 +280,8 @@ abstract public class PageManager {
     * @return the compiled JSP (or XTP) page.
     */
   public Page getPage(String uri, String pageURI, Path path,
-		      ServletConfig config,
-		      ArrayList<PersistentDependency> dependList)
+                      ServletConfig config,
+                      ArrayList<PersistentDependency> dependList)
     throws Exception
   {
     LruCache<String,Entry> cache = _cache;
@@ -287,9 +290,9 @@ abstract public class PageManager {
       initPageManager();
       
       synchronized (this) {
-	if (_cache == null)
-	  _cache = new LruCache<String,Entry>(_pageCacheMax);
-	cache = _cache;
+        if (_cache == null)
+          _cache = new LruCache<String,Entry>(_pageCacheMax);
+        cache = _cache;
       }
     }
 
@@ -299,8 +302,8 @@ abstract public class PageManager {
       entry = cache.get(uri);
 
       if (entry == null) {
-	entry = new Entry(uri);
-	cache.put(uri, entry);
+        entry = new Entry(uri);
+        cache.put(uri, entry);
       }
     }
 
@@ -329,15 +332,15 @@ abstract public class PageManager {
       String rawClassName = pageURI;
 
       if (path.getPath().startsWith(appDir.getPath()))
-	rawClassName = path.getPath().substring(appDir.getPath().length());
+        rawClassName = path.getPath().substring(appDir.getPath().length());
 
       String className = JavaCompiler.mangleName("jsp/" + rawClassName);
 
       page = createPage(path, pageURI, className, config, dependList);
 
       if (page == null) {
-	log.fine("Jsp[] cannot create page " + path.getURL());
-	
+        log.fine("Jsp[] cannot create page " + path.getURL());
+        
         throw new FileNotFoundException(getWebApp().getContextPath() + pageURI);
       }
 
@@ -348,19 +351,21 @@ abstract public class PageManager {
       page._caucho_isModified();
 
       try {
-	InjectManager beanManager = InjectManager.create();
-	
-	InjectionTarget inject = beanManager.createInjectionTarget(page.getClass());
+        InjectManager beanManager = InjectManager.create();
+        
+        InjectionTarget inject = beanManager.createInjectionTarget(page.getClass());
 
-	CreationalContext<?> env = CreationalContextImpl.create();
+        CreationalContext<?> env = new OwnerCreationalContext(null);
 
-	inject.inject(page, env);
-	
-	inject.postConstruct(page);
+        inject.inject(page, env);
+        
+        inject.postConstruct(page);
+      } catch (InjectionException e) {
+        throw ConfigException.createConfig(e);
       } catch (RuntimeException e) {
-	throw e;
+        throw e;
       } catch (Exception e) {
-	throw new RuntimeException(e);
+        throw new RuntimeException(e);
       }
 
       entry.setPage(page);
@@ -378,8 +383,8 @@ abstract public class PageManager {
    * and XtpManager define this for their specific needs.
    */
   abstract Page createPage(Path path, String uri, String className,
-			   ServletConfig config,
-			   ArrayList<PersistentDependency> dependList)
+                           ServletConfig config,
+                           ArrayList<PersistentDependency> dependList)
     throws Exception;
 
   void killPage(HttpServletRequest request,
@@ -410,7 +415,7 @@ abstract public class PageManager {
         try {
           if (page != null && ! page.isDead()) {
             page.destroy();
-	  }
+          }
         } catch (Exception e) {
           log.log(Level.WARNING, e.toString(), e);
         }
@@ -434,7 +439,7 @@ abstract public class PageManager {
       _page = page;
       
       if (page != null)
-	page._caucho_setEntry(this);
+        page._caucho_setEntry(this);
     }
     
     Page getPage()
@@ -447,12 +452,12 @@ abstract public class PageManager {
       long now = Alarm.getCurrentTime();
 
       if (now < _lastAccessTime + ACCESS_INTERVAL)
-	return;
+        return;
 
       _lastAccessTime = now;
 
       if (_cache != null)
-	_cache.get(_key);
+        _cache.get(_key);
     }
 
     public void removeEvent()
@@ -464,7 +469,7 @@ abstract public class PageManager {
         if (log.isLoggable(Level.FINE))
           log.fine("dropping page " + page);
         
-	page.setDead();
+        page.setDead();
         page.destroy();
       }
     }

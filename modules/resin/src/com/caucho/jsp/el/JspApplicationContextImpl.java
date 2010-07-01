@@ -29,8 +29,10 @@
 
 package com.caucho.jsp.el;
 
+import com.caucho.config.inject.InjectManager;
 import com.caucho.jsp.PageManager;
 import com.caucho.jsp.TaglibManager;
+import com.caucho.loader.EnvironmentLocal;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 
@@ -42,6 +44,9 @@ import javax.servlet.jsp.JspApplicationContext;
 public class JspApplicationContextImpl implements JspApplicationContext
 {
   private static final L10N L = new L10N(JspApplicationContextImpl.class);
+  
+  private static final EnvironmentLocal<JspApplicationContextImpl> _contextLocal
+    = new EnvironmentLocal<JspApplicationContextImpl>();
   
   private final WebApp _webApp;
   
@@ -59,7 +64,18 @@ public class JspApplicationContextImpl implements JspApplicationContext
   {
     _webApp = webApp;
 
-    _expressionFactory = new JspExpressionFactoryImpl(this);
+    InjectManager injectManager = _webApp.getBeanManager();
+    
+    ExpressionFactory factory = new JspExpressionFactoryImpl(this);
+    
+    _expressionFactory = injectManager.wrapExpressionFactory(factory);
+    
+    _contextLocal.set(this);
+  }
+  
+  public static JspApplicationContextImpl getCurrent()
+  {
+    return _contextLocal.get();
   }
 
   //
@@ -101,6 +117,7 @@ public class JspApplicationContextImpl implements JspApplicationContext
   /**
    * Adds an ELContextListener.
    */
+  @Override
   public void addELContextListener(ELContextListener listener)
   {
     if (_hasRequest)
@@ -109,8 +126,8 @@ public class JspApplicationContextImpl implements JspApplicationContext
     ELContextListener []listenerArray
       = new ELContextListener[_listenerArray.length + 1];
     System.arraycopy(_listenerArray, 0,
-		     listenerArray, 0,
-		     _listenerArray.length);
+                     listenerArray, 0,
+                     _listenerArray.length);
 
     listenerArray[_listenerArray.length] = listener;
     
@@ -120,13 +137,14 @@ public class JspApplicationContextImpl implements JspApplicationContext
   public ELContextListener []getELListenerArray()
   {
     _hasRequest = true;
-    
+
     return _listenerArray;
   }
   
   /**
    * Adds an ELResolver
    */
+  @Override
   public void addELResolver(ELResolver resolver)
   {
     if (_hasRequest)
@@ -134,8 +152,8 @@ public class JspApplicationContextImpl implements JspApplicationContext
     
     ELResolver []resolverArray = new ELResolver[_resolverArray.length + 1];
     System.arraycopy(_resolverArray, 0,
-		     resolverArray, 0,
-		     _resolverArray.length);
+                     resolverArray, 0,
+                     _resolverArray.length);
 
     resolverArray[_resolverArray.length] = resolver;
     
@@ -150,11 +168,13 @@ public class JspApplicationContextImpl implements JspApplicationContext
   /**
    * Gets the expression factory
    */
+  @Override
   public ExpressionFactory getExpressionFactory()
   {
     return _expressionFactory;
   }
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _webApp + "]";

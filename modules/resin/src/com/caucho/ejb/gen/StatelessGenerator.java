@@ -32,6 +32,7 @@ package com.caucho.ejb.gen;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -48,6 +49,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.gen.AspectBeanFactory;
 import com.caucho.config.gen.LifecycleInterceptor;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.InterceptorRuntimeBean;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 import com.caucho.util.L10N;
@@ -70,9 +72,10 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
   public StatelessGenerator(String ejbName, 
                             AnnotatedType<X> beanType,
                             ArrayList<AnnotatedType<? super X>> localApi,
+                            AnnotatedType<X> localBean,
                             ArrayList<AnnotatedType<? super X>> remoteApi)
   {
-    super(ejbName, beanType, localApi, remoteApi, 
+    super(ejbName, beanType, localApi, localBean, remoteApi, 
           Stateless.class.getSimpleName());
     
     InjectManager manager = InjectManager.create();
@@ -279,8 +282,8 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
 
   private void generateBody(JavaWriter out) throws IOException
   {
-    out.println("private static final java.util.logging.Logger __caucho_log = java.util.logging.Logger.getLogger(\""
-                + getFullClassName() + "\");");
+    generateClassStaticFields(out);
+    
     out.println("private static final boolean __caucho_isFiner = __caucho_log.isLoggable(java.util.logging.Level.FINER);");
     
     out.println();
@@ -291,10 +294,11 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
     generateConstructor(out);
 
     generateProxyPool(out);
+    
+    HashMap<String,Object> map = new HashMap<String,Object>();
 
-    generateBusinessMethods(out);
-
-    generateContextPrologue(out);
+    generateBusinessMethods(out, map);
+    // generateDestroy(out, map);
 
     /*
     out.println();
@@ -333,6 +337,15 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
     out.println("<?>>();");
     
     out.println();
+    out.print("private static final ");
+    out.print("java.util.ArrayList<");
+    out.printClass(InterceptorRuntimeBean.class);
+    out.println("<?>> __caucho_interceptor_static_beans");
+    out.print("  = new java.util.ArrayList<");
+    out.printClass(InterceptorRuntimeBean.class);
+    out.println("<?>>();");
+    
+    out.println();
     out.println("public " + getClassName() + "(StatelessManager manager"
                 + ", StatelessContext context)");
     out.println("{");
@@ -348,7 +361,7 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
 
     out.println();
     out.println("@Override");
-    out.println("public T __caucho_createProxy(javax.enterprise.context.spi.CreationalContext<T> env)");
+    out.println("public T __caucho_createProxy(com.caucho.config.inject.CreationalContextImpl<T> env)");
     out.println("{");
     out.println("  return (T) this;");
     out.println("}");

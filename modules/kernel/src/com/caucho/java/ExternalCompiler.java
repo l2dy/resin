@@ -89,7 +89,7 @@ public class ExternalCompiler extends AbstractJavaCompiler {
 
       ArrayList<String> args = _compiler.getArgs();
       if (args != null)
-	argList.addAll(args);
+        argList.addAll(args);
 
       ArrayList<String> envList = new ArrayList();
 
@@ -123,30 +123,30 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       String classPath = normalizeClassPath(_compiler.getClassPath(), ! chdir);
 
       envList.add("CLASSPATH=" + classPath);
-      
+
       if (_compiler.getCompiler().endsWith("groovyc")) {
-	argList.add("--classpath");
-	argList.add(classPath);
+        argList.add("--classpath");
+        argList.add(classPath);
       }
       else {
-	argList.add("-classpath");
-	argList.add(classPath);
+        argList.add("-classpath");
+        argList.add(classPath);
       }
-      
+
       argList.add("-d");
       argList.add(normalizePath(_compiler.getClassDirName(), ! chdir));
 
       for (int i = 0; i < paths.length; i++) {
-	if (chdir)
-	  argList.add(paths[i]);
-	else {
-	  Path javaPath = _compiler.getSourceDir().lookup(paths[i]);
-	  argList.add(javaPath.getNativePath());
-	}
+        if (chdir)
+          argList.add(paths[i]);
+        else {
+          Path javaPath = _compiler.getSourceDir().lookup(paths[i]);
+          argList.add(javaPath.getNativePath());
+        }
       }
 
       if (log.isLoggable(Level.FINE))
-	log.fine(String.valueOf(argList));
+        log.fine(String.valueOf(argList));
 
       _process = executeCompiler(argList, envList, chdir);
       if (_process != null) {
@@ -178,7 +178,7 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       }
       /*
       finally {
-	
+
         if (alarm != null)
           alarm.dequeue();
       }
@@ -190,23 +190,23 @@ public class ExternalCompiler extends AbstractJavaCompiler {
 
       error.close();
       tempStream.close();
-	
-      if (log.isLoggable(Level.FINE)) {
-	ReadStream read = tempStream.openReadAndSaveBuffer();
-	CharBuffer cb = new CharBuffer();
-	int ch;
 
-	while ((ch = read.read()) >= 0)
-	  cb.append((char) ch);
-	read.close();
-	final String msg = cb.toString();
-	
-	new com.caucho.loader.ClassLoaderContext(_compiler.getClassLoader()) {
-	  public void run()
-	  {
-	    log.fine(msg);
-	  }
-	};
+      if (log.isLoggable(Level.FINE)) {
+        ReadStream read = tempStream.openReadAndSaveBuffer();
+        CharBuffer cb = new CharBuffer();
+        int ch;
+
+        while ((ch = read.read()) >= 0)
+          cb.append((char) ch);
+        read.close();
+        final String msg = cb.toString();
+
+        new com.caucho.loader.ClassLoaderContext(_compiler.getClassLoader()) {
+          public void run()
+          {
+            log.fine(msg);
+          }
+        };
       }
 
       ReadStream read = tempStream.openReadAndSaveBuffer();
@@ -219,61 +219,61 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       read.close();
 
       if (errors != null)
-	errors = errors.trim();
+        errors = errors.trim();
 
       if (status == 0 && classFile.getLength() > 0) {
-	if (errors != null && ! errors.equals("")) {
-	  final String msg = errors;
-	
-	  new com.caucho.loader.ClassLoaderContext(_compiler.getClassLoader()) {
-	    public void run()
-	    {
-	      log.warning(msg);
-	    }
-	  };
-	}
+        if (errors != null && ! errors.equals("")) {
+          final String msg = errors;
 
-	return;
+          new com.caucho.loader.ClassLoaderContext(_compiler.getClassLoader()) {
+            public void run()
+            {
+              log.warning(msg);
+            }
+          };
+        }
+
+        return;
       }
-      
+
       if (errors == null || errors.equals("")) {
-	CharBuffer cb = new CharBuffer();
-          
-	if (status == 0) {
-	  cb.append("Compilation for '" + className + "' did not generate a .class file.\n");
-	  cb.append("Make sure the `package' matches the directory.\n");
-	}
-	else
-	  cb.append("Unknown compiler error executing:\n");
-          
-	for (int i = 0; i < argList.size(); i++)
-	  cb.append(" " + argList.get(i) + "\n");
-          
-	read = tempStream.openReadAndSaveBuffer();
-	int ch;
-	while ((ch = read.read()) >= 0)
-	  cb.append((char) ch);
-	read.close();
-	errors = cb.toString();
+        CharBuffer cb = new CharBuffer();
+
+        if (status == 0) {
+          cb.append("Compilation for '" + className + "' did not generate a .class file.\n");
+          cb.append("Make sure the `package' matches the directory.\n");
+        }
+        else
+          cb.append("Unknown compiler error executing:\n");
+
+        for (int i = 0; i < argList.size(); i++)
+          cb.append(" " + argList.get(i) + "\n");
+
+        read = tempStream.openReadAndSaveBuffer();
+        int ch;
+        while ((ch = read.read()) >= 0)
+          cb.append((char) ch);
+        read.close();
+        errors = cb.toString();
       }
       else if (errors.indexOf("command not found") >= 0) {
-	throw new JavaCompileException(L.l("Resin can't execute the compiler `{0}'.  This usually means that the compiler is not in the operating system's PATH or the compiler is incorrectly specified in the configuration.  You may need to add the full path to <java compiler='{0}'/>.\n\n{1}", argList.get(0), errors));
+        throw new JavaCompileException(L.l("Resin can't execute the compiler `{0}'.  This usually means that the compiler is not in the operating system's PATH or the compiler is incorrectly specified in the configuration.  You may need to add the full path to <java compiler='{0}'/>.\n\n{1}", argList.get(0), errors));
       }
 
       throw new JavaCompileException(errors);
     } finally {
       if (_inputStream != null) {
-	try {
-	  _inputStream.close();
-	} catch (Throwable e) {
-	}
+        try {
+          _inputStream.close();
+        } catch (Throwable e) {
+        }
       }
-      
+
       if (_errorStream != null) {
-	try {
-	  _errorStream.close();
-	} catch (Throwable e) {
-	}
+        try {
+          _errorStream.close();
+        } catch (Throwable e) {
+        }
       }
 
       if (_process != null) {
@@ -358,23 +358,23 @@ public class ExternalCompiler extends AbstractJavaCompiler {
   {
     if (_inputStream != null) {
       try {
-	_inputStream.close();
+        _inputStream.close();
       } catch (Throwable e) {
       }
     }
       
     if (_errorStream != null) {
       try {
-	_errorStream.close();
+        _errorStream.close();
       } catch (Throwable e) {
       }
     }
 
     if (_process != null) {
       try {
-	_process.destroy();
+        _process.destroy();
       } catch (Throwable e) {
-	log.log(Level.FINE, e.toString(), e);
+        log.log(Level.FINE, e.toString(), e);
       }
     }
   }
@@ -387,9 +387,9 @@ public class ExternalCompiler extends AbstractJavaCompiler {
    * @return a Java Process representing the compiler.
    */
   private Process executeCompiler(ArrayList<String> argList,
-				  ArrayList<String> envList,
-				  boolean chdir)
-    throws IOException
+                                  ArrayList<String> envList,
+                                  boolean chdir)
+  throws IOException
   {
     String []args;
 
@@ -402,8 +402,8 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       cb.append(_compiler.getSourceDirName());
       cb.append(";");
       for (int i = 0; i < argList.size(); i++) {
-	cb.append(" ");
-	cb.append(argList.get(i));
+        cb.append(" ");
+        cb.append(argList.get(i));
       }
       args = new String[3];
       args[0] = "/bin/sh";
@@ -414,7 +414,7 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       args = new String[argList.size()];
       argList.toArray(args);
     }
-    
+
     String []envp = new String[envList.size()];
     envList.toArray(envp);
 
@@ -457,14 +457,14 @@ public class ExternalCompiler extends AbstractJavaCompiler {
       if (tail > head) {
         String segment = classPath.substring(head, tail);
 
-	segment = normalizePath(segment, generateRelative);
+        segment = normalizePath(segment, generateRelative);
 
-	if (segment != null) {
-	  if (cb.length() != 0)
-	    cb.append(sep);
-      
-	  cb.append(segment);
-	}
+        if (segment != null) {
+          if (cb.length() != 0)
+            cb.append(sep);
+
+          cb.append(segment);
+        }
       }
 
       head = tail + 1;
@@ -511,11 +511,11 @@ public class ExternalCompiler extends AbstractJavaCompiler {
     {
       try {
       } finally {
-	_isDone = true;
+        _isDone = true;
 
-	synchronized (this) {
-	  notifyAll();
-	}
+        synchronized (this) {
+          notifyAll();
+        }
       }
     }
   }

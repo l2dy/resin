@@ -31,6 +31,7 @@ package com.caucho.config.reflect;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -46,33 +47,30 @@ import com.caucho.inject.Module;
 @Module
 public class AnnotatedElementImpl implements Annotated
 {
-  private static final Set<Annotation> NULL_ANN_SET
-    = Collections.unmodifiableSet(new LinkedHashSet<Annotation>());
+  private static final AnnotationSet NULL_ANN_SET
+    = new AnnotationSet();
   
   private Type _type;
 
   private Set<Type> _typeSet;
 
-  private LinkedHashSet<Annotation> _annSet;
+  private AnnotationSet _annSet;
 
-  protected AnnotatedElementImpl(Type type,
+  public AnnotatedElementImpl(Type type,
                                  Annotated annotated,
                                  Annotation []annList)
   {
     _type = type;
 
-    if (annList == null)
-      annList = new Annotation[0];
-
     if (annotated != null) {
       Set<Annotation> annSet = annotated.getAnnotations();
       
       if (annSet != null && annSet.size() > 0) {
-        _annSet = new LinkedHashSet<Annotation>(annSet);
+        _annSet = new AnnotationSet(annSet);
       }
     }
     else if (annList != null && annList.length > 0) {
-      _annSet = new LinkedHashSet<Annotation>();
+      _annSet = new AnnotationSet();
       
       for (Annotation ann : annList) {
         _annSet.add(ann);
@@ -105,38 +103,38 @@ public class AnnotatedElementImpl implements Annotated
     return _typeSet;
   }
 
+  public void addAnnotations(Collection<Annotation> annSet)
+  {
+    for (Annotation ann : annSet)
+      addAnnotation(ann);
+  }
+
+  public void addAnnotations(Annotation []annSet)
+  {
+    for (Annotation ann : annSet)
+      addAnnotation(ann);
+  }
+  
   public void addAnnotation(Annotation newAnn)
   {
     if (_annSet == null)
-      _annSet = new LinkedHashSet<Annotation>();
+      _annSet = new AnnotationSet();
     
-    for (Annotation oldAnn : _annSet) {
-      if (newAnn.annotationType().equals(oldAnn.annotationType())) {
-        _annSet.remove(oldAnn);
-        _annSet.add(newAnn);
-        return;
-      }
-    }
-
-    _annSet.add(newAnn);
+    _annSet.replace(newAnn);
   }
 
   public void removeAnnotation(Annotation ann)
   {
     if (_annSet == null)
       return;
-    
-    for (Annotation oldAnn : _annSet) {
-      if (ann.annotationType().equals(oldAnn.annotationType())) {
-        _annSet.remove(oldAnn);
-        return;
-      }
-    }
+
+    _annSet.remove(ann);
   }
 
   public void clearAnnotations()
   {
-    _annSet = null;
+    if (_annSet != null)
+      _annSet.clear();
   }
 
   /**
@@ -161,13 +159,7 @@ public class AnnotatedElementImpl implements Annotated
     if (_annSet == null)
       return null;
     
-    for (Annotation ann : _annSet) {
-      if (annType.equals(ann.annotationType())) {
-        return (T) ann;
-      }
-    }
-
-    return null;
+    return (T) _annSet.getAnnotation(annType);
   }
 
   /**
@@ -179,12 +171,7 @@ public class AnnotatedElementImpl implements Annotated
     if (_annSet == null)
       return false;
     
-    for (Annotation ann : _annSet) {
-      if (annType.equals(ann.annotationType()))
-        return true;
-    }
-
-    return false;
+    return _annSet.isAnnotationPresent(annType);
   }
 
   @Override

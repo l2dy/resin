@@ -29,13 +29,15 @@
 
 package com.caucho.config.gen;
 
-import javax.enterprise.context.spi.CreationalContext;
+import com.caucho.config.inject.CreationalContextImpl;
 
 /**
  * Interface for a Candi enhanced bean.
  */
 public interface CandiEnhancedBean {
-  public void __caucho_inject(Object []delegates, CreationalContext<?> parentEnv);
+  public void __caucho_inject(Object []delegates, CreationalContextImpl<?> parentEnv);
   
   public void __caucho_postConstruct();
+  
+  public void __caucho_destroy(CreationalContextImpl<?> env);
 }

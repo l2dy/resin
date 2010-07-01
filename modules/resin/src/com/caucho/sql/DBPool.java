@@ -39,11 +39,11 @@ import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.SingletonBean;
 import com.caucho.config.types.InitParam;
 import com.caucho.config.types.Period;
-import com.caucho.jca.pool.ConnectionPool;
 import com.caucho.jca.ra.ResourceManagerImpl;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.management.server.JdbcDriverMXBean;
 import com.caucho.naming.Jndi;
+import com.caucho.transaction.ConnectionPool;
 import com.caucho.transaction.TransactionManagerImpl;
 import com.caucho.util.L10N;
 import com.caucho.config.inject.HandleAware;
@@ -778,6 +778,7 @@ public class DBPool
     // factory.stereotype(CauchoDeployment.class);
 
     manager.addBean(factory.singleton(this));
+    
 
     _queryAdmin.register();
     _databaseAdmin.register();
@@ -879,13 +880,13 @@ public class DBPool
   private DataSource getDataSource()
   {
     if (_dataSource == null ||
-	_resinDataSource != null && _resinDataSource.isClosed()) {
+        _resinDataSource != null && _resinDataSource.isClosed()) {
       _dataSource = _localDataSourceImpl.get();
 
       if (_dataSource instanceof DataSourceImpl)
-	_resinDataSource = (DataSourceImpl) _dataSource;
+        _resinDataSource = (DataSourceImpl) _dataSource;
       else
-	_resinDataSource = null;
+        _resinDataSource = null;
 
       if (_dataSource == null)
         throw new IllegalStateException(L.l("DBPool `{0}' no longer exists.",

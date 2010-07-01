@@ -46,21 +46,25 @@ import javax.enterprise.context.NormalScope;
 import javax.enterprise.context.RequestScoped;
 import javax.enterprise.context.SessionScoped;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.util.AnnotationLiteral;
 import javax.inject.Scope;
+import javax.inject.Singleton;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Names;
 import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.BeanBuilder;
+import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.program.PropertyStringProgram;
 import com.caucho.config.program.PropertyValueProgram;
 import com.caucho.config.type.TypeFactory;
-import com.caucho.config.types.CustomBeanConfig;
+import com.caucho.config.xml.XmlBeanConfig;
 import com.caucho.inject.Module;
 import com.caucho.naming.Jndi;
 import com.caucho.util.L10N;
@@ -82,7 +86,7 @@ public class BeanConfig {
   private String _mbeanName;
   private Class<?> _beanConfigClass;
 
-  private CustomBeanConfig _customBean;
+  private XmlBeanConfig _customBean;
 
   private InjectManager _beanManager;
 
@@ -90,7 +94,7 @@ public class BeanConfig {
 
   private String _name;
 
-  private ArrayList<Annotation> _bindingList
+  private ArrayList<Annotation> _qualifierList
     = new ArrayList<Annotation>();
 
   private ArrayList<Annotation> _stereotypeList
@@ -102,6 +106,7 @@ public class BeanConfig {
   private ContainerProgram _init;
 
   private AnnotatedType<?> _annotatedType;
+  private Annotated _extAnnotated;
   protected Bean<?> _bean;
 
   // XXX: temp for osgi
@@ -138,8 +143,6 @@ public class BeanConfig {
   public void setName(String name)
   {
     _name = name;
-
-    _bindingList.add(Names.create(name));
   }
 
   /**
@@ -193,12 +196,12 @@ public class BeanConfig {
    */
   public void addBinding(Annotation binding)
   {
-    _bindingList.add(binding);
+    _qualifierList.add(binding);
   }
 
   public ArrayList<Annotation> getBindingList()
   {
-    return _bindingList;
+    return _qualifierList;
   }
 
   public ArrayList<Annotation> getStereotypeList()
@@ -211,8 +214,10 @@ public class BeanConfig {
    */
   public void setScope(String scope)
   {
-    if ("singleton".equals(scope))
+    if ("singleton".equals(scope)) {
       _scope = javax.inject.Singleton.class;
+     //  addAnnotation(new AnnotationLiteral<Startup>() {});
+    }
     else if ("dependent".equals(scope))
       _scope = Dependent.class;
     else if ("request".equals(scope))
@@ -447,7 +452,7 @@ public class BeanConfig {
     return _uri;
   }
 
-  public void addCustomBean(CustomBeanConfig<?> customBean)
+  public void addCustomBean(XmlBeanConfig<?> customBean)
   {
     _customBean = customBean;
   }
@@ -492,17 +497,23 @@ public class BeanConfig {
     introspect();
 
     InjectManager beanManager = InjectManager.create();
-    BeanBuilder factory =  beanManager.createBeanFactory(_cl);
+    BeanBuilder builder =  beanManager.createBeanFactory(_cl);
 
-    _annotatedType = factory.getAnnotatedType();
+    if (builder == null)
+      return;
+    _annotatedType = builder.getAnnotatedType();
 
     if (_name != null) {
-      factory.name(_name);
-
       // server/2n00
       if (! Map.class.isAssignableFrom(_cl))
         addOptionalStringProperty("name", _name);
     }
+    
+    if (getCdiNamed() != null) {
+      // env/02s7
+      builder.name(getCdiNamed());
+    }
+
 
     /*
     if (getMBeanName() != null)
@@ -514,22 +525,30 @@ public class BeanConfig {
         && ! _annotatedType.isAnnotationPresent(Stateful.class)
         && ! _annotatedType.isAnnotationPresent(Stateless.class)
         && ! _annotatedType.isAnnotationPresent(MessageDriven.class)) {
-      factory.annotation(new Startup() {
-          public Class annotationType() { return Startup.class; }
-        });
+      builder.annotation(new StartupLiteral());
     }
 
-    for (Annotation binding : _bindingList) {
-      factory.binding(binding);
+    for (Annotation qualifier : _qualifierList) {
+      builder.binding(qualifier);
     }
+    
+    if (_name != null)
+      builder.binding(Names.create(_name));
+    
+    if (_qualifierList.size() == 0)
+      builder.binding(DefaultLiteral.DEFAULT);
 
     for (Annotation stereotype : _stereotypeList) {
-      factory.stereotype(stereotype.annotationType());
+      builder.stereotype(stereotype.annotationType());
     }
 
     if (_scope != null) {
-      factory.scope(_scope);
+      builder.scope(_scope);
       // comp.setScope(_beanManager.getScopeContext(_scope));
+    }
+    
+    if (Singleton.class == _scope) {
+      builder.annotation(new StartupLiteral());
     }
 
     /*
@@ -544,10 +563,11 @@ public class BeanConfig {
     */
 
     if (_init != null)
-      factory.init(_init);
+      builder.init(_init);
 
-    _bean = factory.bean();
-
+    _bean = builder.bean();
+    _extAnnotated = builder.getExtendedAnnotated();
+    
     introspectPostInit();
 
     deploy();
@@ -564,6 +584,11 @@ public class BeanConfig {
       throw ConfigException.create(e);
     }
   }
+  
+  protected String getCdiNamed()
+  {
+    return _name;
+  }
 
   /**
    * Introspection after the init has been set and before the @PostConstruct
@@ -577,7 +602,7 @@ public class BeanConfig {
   {
     if (_bean != null) {
       // ejb/1030
-      getBeanManager().addBean(_bean);
+      getBeanManager().addBean(_bean,  _extAnnotated);
     }
   }
 
@@ -633,5 +658,9 @@ public class BeanConfig {
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _cl + "]";
+  }
+  
+  static class StartupLiteral extends AnnotationLiteral<Startup> implements Startup {
+    
   }
 }

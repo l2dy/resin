@@ -3,7 +3,7 @@ namespace local = ""
 
 namespace xsi = "http://www.w3.org/2001/XMLSchema-instance"
 
-include "../resin/javaee.rnc"
+include "classpath:com/caucho/config/cfg/javaee.rnc"
 
 javaee_auth-constraint = element auth-constraint {
   attribute id { string }?,
@@ -254,6 +254,8 @@ javaee_web-app-Content =
   & javaee_jndi-environment-refs-Group
 
   & javaee_message-destination*
+
+  & javaee_module-name?
 
   & javaee_locale-encoding-mapping-list?
 

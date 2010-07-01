@@ -28,19 +28,24 @@
 
 package com.caucho.ejb.cfg;
 
-import com.caucho.config.ConfigException;
-import com.caucho.util.L10N;
+import javax.ejb.Singleton;
+import javax.ejb.Stateful;
+import javax.ejb.Stateless;
+import javax.enterprise.inject.spi.AnnotatedType;
 
-import javax.annotation.PostConstruct;
+import com.caucho.config.ConfigException;
+import com.caucho.config.reflect.AnnotatedTypeImpl;
+import com.caucho.config.reflect.ReflectionAnnotatedFactory;
+import com.caucho.util.L10N;
 
 /**
  * Proxy for an ejb bean configuration.  This proxy is needed to handle
  * the merging of ejb definitions.
  */
 public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
-  private static final L10N L = new L10N(EjbBeanConfigProxy.class);
-
-  private EjbSessionBean _session;
+  private static final L10N L = new L10N(EjbSessionConfigProxy.class);
+  
+  private String _sessionType;
   
   /**
    * Creates a new session bean configuration.
@@ -49,40 +54,68 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
   {
     super(config, ejbModuleName);
   }
-
-  /**
-   * Initializes and configures the session bean.
-   */
-  @PostConstruct
-  @Override
-  public void init()
+  
+  public void setSessionType(String sessionType)
   {
-    EjbBean oldBean = getConfig().getBeanConfig(getEJBName());
-
-    if (oldBean == null) {
-      _session = new EjbSessionBean(getConfig(), getEJBModuleName());
-      _session.setEJBName(getEJBName());
-      _session.setLocation(getLocation());
-      _session.setAllowPOJO(getConfig().isAllowPOJO());
-    }
-    else if (! (oldBean instanceof EjbSessionBean)) {
-      throw new ConfigException(L.l("session bean '{0}' conflicts with prior {1} bean at {2}.",
-				    getEJBName(), oldBean.getEJBKind(),
-				    oldBean.getLocation()));
-    }
+    if ("Stateless".equals(sessionType))
+      _sessionType = sessionType;
+    else if ("Stateful".equals(sessionType))
+      _sessionType = sessionType;
+    else if ("Singleton".equals(sessionType))
+      _sessionType = sessionType;
     else
-      _session = (EjbSessionBean) oldBean;
-
-    _session.addDependencyList(getDependencyList());
-
-    getBuilderProgram().configure(_session);
+      throw new ConfigException(L.l("'{0}' is an unknown sessionType",
+                                    sessionType));
   }
-
-  /**
-   * Returns the session config.
-   */
-  public EjbSessionBean getSession()
+  
+  @Override
+  public void configure()
   {
-    return _session;
+    EjbBean<?> ejbBean = getConfig().getBeanConfig(getEjbName());
+    
+    if (ejbBean == null) {
+      ejbBean = createEjbBean(getEjbClass());
+      
+      if (getEjbName() != null) {
+        // ioc/0p65
+        ejbBean.setEJBName(getEjbName());
+      }
+      
+      getConfig().setBeanConfig(getEjbName(), ejbBean);
+    }
+    
+  }
+  
+  private <T> EjbBean<T> createEjbBean(Class<T> ejbClass)
+  {
+    AnnotatedType<T> rawAnnType
+      = ReflectionAnnotatedFactory.introspectSimpleType(ejbClass);
+    
+    AnnotatedTypeImpl<T> annType = AnnotatedTypeImpl.create(rawAnnType);
+    
+    String name = getEjbName();
+    String description = null;
+    String mappedName = null;
+
+    if ("Stateless".equals(_sessionType)) {
+      Stateless stateless = new StatelessLiteral(name, mappedName, description);
+      annType.addAnnotation(stateless);
+      
+      return new EjbStatelessBean<T>(getConfig(), rawAnnType, annType, stateless.name());
+    }
+    else if ("Stateful".equals(_sessionType)) {
+      Stateful stateful = new StatefulLiteral(name, mappedName, description);
+      annType.addAnnotation(stateful);
+      
+      return new EjbStatefulBean<T>(getConfig(), rawAnnType, annType, stateful.name());
+    }
+    else if ("Singleton".equals(_sessionType)) {
+      Singleton singleton = new SingletonLiteral(name, mappedName, description);
+      annType.addAnnotation(singleton);
+      
+      return new EjbSingletonBean<T>(getConfig(), rawAnnType, annType, singleton.name());
+    }
+    
+    throw new UnsupportedOperationException(_sessionType);
   }
 }

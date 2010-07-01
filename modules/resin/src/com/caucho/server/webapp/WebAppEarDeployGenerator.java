@@ -56,8 +56,8 @@ public class WebAppEarDeployGenerator extends DeployGenerator<WebAppController> 
    * Creates the new host deploy.
    */
   public WebAppEarDeployGenerator(DeployContainer<WebAppController> deployContainer,
-				  WebAppContainer container,
-				  EarDeployGenerator earDeploy)
+                                  WebAppContainer container,
+                                  EarDeployGenerator earDeploy)
     throws Exception
   {
     super(deployContainer);
@@ -153,6 +153,7 @@ public class WebAppEarDeployGenerator extends DeployGenerator<WebAppController> 
   /**
    * Returns the current array of webApp entries.
    */
+  @Override
   public WebAppController generateController(String name)
   {
     for (EarDeployController earController : _earContainer.getControllers()) {
@@ -161,7 +162,7 @@ public class WebAppEarDeployGenerator extends DeployGenerator<WebAppController> 
       webAppController = earController.findWebAppController(name);
 
       if (webAppController != null)
-	return webAppController;
+        return webAppController;
     }
 
     return null;

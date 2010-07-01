@@ -37,8 +37,11 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.util.logging.Logger;
 
 import javax.enterprise.inject.Any;
+import javax.enterprise.inject.Specializes;
+import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 
@@ -52,6 +55,7 @@ import com.caucho.inject.Module;
  */
 @Module
 public class WebComponent {
+  private static final Logger log = Logger.getLogger(WebComponent.class.getName());
   private InjectManager _beanManager;
 
   private Class<?> _rawType;
@@ -66,21 +70,34 @@ public class WebComponent {
     _rawType = rawType;
   }
 
-  public void addComponent(BaseType type, Bean<?> bean)
+  public void addComponent(BaseType type, Annotated annotated, Bean<?> bean)
   {
     for (BeanEntry beanEntry : _beanList) {
-      if (beanEntry.getType().equals(type) && beanEntry.isMatch(bean))
+      if (beanEntry.getType().equals(type) && beanEntry.isMatch(bean)) {
         return;
+      }
     }
 
-    if (bean instanceof ProducesBean<?,?>
-        && ((ProducesBean<?,?>) bean).isInjectionPoint()) {
-      _injectionPointEntry = new BeanEntry(type, bean);
+    if (bean instanceof ProducesMethodBean<?,?>
+        && ((ProducesMethodBean<?,?>) bean).isInjectionPoint()) {
+      _injectionPointEntry = new BeanEntry(type, annotated, bean);
     }
     
-    _beanList.add(new BeanEntry(type, bean));
+    _beanList.add(new BeanEntry(type, annotated, bean));
     
     Collections.sort(_beanList);
+  }
+  
+  public void resolveSpecializes()
+  {
+    for (int i = _beanList.size() - 1; i >= 0; i--) {
+      BeanEntry entry = _beanList.get(i);
+      
+      Annotated ann = entry.getAnnotated();
+      
+      if (ann == null || ! ann.isAnnotationPresent(Specializes.class))
+        continue;
+    }
   }
 
   public void createProgram(ArrayList<ConfigProgram> initList,
@@ -111,11 +128,19 @@ public class WebComponent {
       beans.add(_injectionPointEntry.getBean());
       return beans;
     }
+    
+    boolean isVariable = ! type.isGenericRaw();
 
     for (BeanEntry beanEntry : _beanList) {
       if (beanEntry.isMatch(type, qualifiers)) {
         if (beans == null)
           beans = new LinkedHashSet<Bean<?>>();
+        
+        if (isVariable && ! beanEntry.getType().isGenericVariable()) {
+          // ioc/024k
+          isVariable = false;
+          beans.clear();
+        }
 
         beans.add(beanEntry.getBean());
       }
@@ -192,12 +217,15 @@ public class WebComponent {
   class BeanEntry implements Comparable<BeanEntry> {
     private Bean<?> _bean;
     private BaseType _type;
+    private Annotated _annotated;
     private QualifierBinding []_qualifiers;
 
-    BeanEntry(BaseType type, Bean<?> bean)
+    BeanEntry(BaseType type,
+              Annotated annotated,
+              Bean<?> bean)
     {
       _type = type;
-
+      _annotated = annotated;
       _bean = bean;
 
       Set<Annotation> qualifiers = bean.getQualifiers();
@@ -215,6 +243,11 @@ public class WebComponent {
       return _bean;
     }
 
+    Annotated getAnnotated()
+    {
+      return _annotated;
+    }
+    
     BaseType getType()
     {
       return _type;

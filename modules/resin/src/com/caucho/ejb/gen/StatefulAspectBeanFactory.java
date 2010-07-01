@@ -61,6 +61,15 @@ public class StatefulAspectBeanFactory<X> extends CandiAspectBeanFactory<X>
   @Override
   public String getGeneratedClassName()
   {
+    return getBeanType().getJavaClass().getName() + "__StatefulProxy";
+  }
+  
+  /**
+   * Returns the generated bean name
+   */
+  @Override
+  public String getInstanceClassName()
+  {
     return getBeanType().getJavaClass().getName();
   }
   
@@ -76,7 +85,9 @@ public class StatefulAspectBeanFactory<X> extends CandiAspectBeanFactory<X>
   @Override
   public String getBeanInstance()
   {
-    return "bean";
+      // ioc/05as
+  //  return "bean";
+    return "_bean";
   }
   
   /**

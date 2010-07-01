@@ -30,6 +30,7 @@ package com.caucho.ejb.util;
 
 import javax.ejb.EJBException;
 import javax.ejb.EJBTransactionRequiredException;
+import javax.ejb.EJBTransactionRolledbackException;
 import javax.ejb.SessionSynchronization;
 import javax.ejb.TransactionRolledbackLocalException;
 import javax.transaction.HeuristicMixedException;
@@ -37,12 +38,13 @@ import javax.transaction.HeuristicRollbackException;
 import javax.transaction.RollbackException;
 import javax.transaction.Status;
 import javax.transaction.Synchronization;
+import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 import javax.transaction.xa.XAResource;
 
-import com.caucho.jca.pool.UserTransactionProxy;
 import com.caucho.transaction.TransactionImpl;
 import com.caucho.transaction.TransactionManagerImpl;
+import com.caucho.transaction.UserTransactionProxy;
 import com.caucho.util.L10N;
 
 /**
@@ -264,6 +266,28 @@ public class XAManager {
   }
 
   /**
+   * Mark the transaction for rollback
+   */
+  public void markRollback()
+  {
+    try {
+      if (_ut.getStatus() == Status.STATUS_ACTIVE)
+        _ut.setRollbackOnly();
+    } catch (SystemException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+  
+  public void rethrowEjbException(Exception e, boolean isClientXa)
+  {
+    if (isClientXa) {
+      throw new EJBTransactionRolledbackException(e.getMessage(), e);
+    }
+    else
+      throw new EJBException(e);
+  }
+
+  /**
    * Commits transaction.
    */
   public void commit()
@@ -283,6 +307,23 @@ public class XAManager {
       throw new TransactionRolledbackLocalException(e.getMessage(), e);
     } catch (HeuristicRollbackException e) {
       throw new TransactionRolledbackLocalException(e.getMessage(), e);
+    } catch (Exception e) {
+      throw new EJBException(e);
+    }
+  }
+
+  /**
+   * Commits transaction.
+   */
+  public void rollback()
+  {
+    try {
+      TransactionImpl xa = getTransaction();
+      
+      if (xa != null)
+        _ut.rollback();
+    } catch (RuntimeException e) {
+      throw e;
     } catch (Exception e) {
       throw new EJBException(e);
     }

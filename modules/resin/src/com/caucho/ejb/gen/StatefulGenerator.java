@@ -31,12 +31,14 @@ package com.caucho.ejb.gen;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.ejb.Stateful;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.gen.AspectBeanFactory;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.ejb.session.StatefulHandle;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 import com.caucho.util.L10N;
@@ -47,15 +49,14 @@ import com.caucho.util.L10N;
 @Module
 public class StatefulGenerator<X> extends SessionGenerator<X> 
 {
-  private static final L10N L = new L10N(StatefulGenerator.class);
-  
   private final AspectBeanFactory<X> _aspectBeanFactory;
   
   public StatefulGenerator(String ejbName, AnnotatedType<X> beanType,
                            ArrayList<AnnotatedType<? super X>> localApi,
+                           AnnotatedType<X> localBean,
                            ArrayList<AnnotatedType<? super X>> remoteApi)
   {
-    super(ejbName, beanType, localApi, remoteApi, 
+    super(ejbName, beanType, localApi, localBean, remoteApi, 
           Stateful.class.getSimpleName());
     
     InjectManager manager = InjectManager.create();
@@ -140,24 +141,24 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
 
     out.println();
     out.println("import com.caucho.config.*;");
+    out.println("import com.caucho.config.inject.CreationalContextImpl;");
     out.println("import com.caucho.ejb.*;");
     out.println("import com.caucho.ejb.session.*;");
     out.println();
     out.println("import javax.ejb.*;");
     out.println("import javax.transaction.*;");
-    out.println("import javax.enterprise.context.spi.CreationalContext;");
 
     generateClassHeader(out);
     
     out.println("{");
     out.pushDepth();
 
-    generateContextPrologue(out);
-
+    generateClassStaticFields(out);
+    
     generateClassContent(out);
 
     generateDependency(out);
-
+    
     out.popDepth();
     out.println("}");
   }
@@ -171,7 +172,7 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
     if (hasNoInterfaceView())
       out.println("  extends " + getBeanType().getJavaClass().getName());
 
-    out.print("  implements SessionProxyFactory<T>, com.caucho.config.gen.CandiEnhancedBean");
+    out.print("  implements SessionProxyFactory<T>, com.caucho.config.gen.CandiEnhancedBean, java.io.Serializable");
 
     for (AnnotatedType<? super X> api : getLocalApi()) {
       out.print(", " + api.getJavaClass().getName());
@@ -190,16 +191,34 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
 
     out.println("private transient boolean _isActive;");
     
-    generateConstructor(out);
+    HashMap<String,Object> map = new HashMap<String,Object>();
+    
+    generateContentImpl(out, map);
+    
+    generateSerialization(out);
+  }
+  
+  protected void generateContentImpl(JavaWriter out,
+                                     HashMap<String,Object> map)
+    throws IOException
+  {
+    
+    generateConstructor(out, map);
     
     generateProxyFactory(out);
 
-    generateBeanPrologue(out);
+    generateBeanPrologue(out, map);
+
+    generateBusinessMethods(out, map);
     
-    generateBusinessMethods(out);
+    generateEpilogue(out, map);
+    generateInject(out, map);
+    generatePostConstruct(out, map);
+    generateDestroy(out, map);
   }
 
-  private void generateConstructor(JavaWriter out)
+  private void generateConstructor(JavaWriter out,
+                                   HashMap<String,Object> map)
     throws IOException
   {
     // generateProxyConstructor(out);
@@ -212,6 +231,9 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
 
     out.println("_manager = manager;");
     out.println("_context = context;");
+    
+    out.println("if (__caucho_exception != null)");
+    out.println("  throw __caucho_exception;");
 
     out.popDepth();
     out.println("}");
@@ -219,7 +241,7 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
     out.println();
     out.println("private " + getClassName() + "(StatefulManager manager"
                 + ", StatefulContext context"
-                + ", CreationalContext<T> env)");
+                + ", CreationalContextImpl<T> env)");
     out.println("{");
     out.pushDepth();
     
@@ -232,15 +254,6 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
 
     out.popDepth();
     out.println("}");
-    
-    generateInject(out);
-    generatePostConstruct(out);
-    
-    out.println();
-    out.println("@Override");
-    out.println("public void __caucho_destroy()");
-    out.println("{");
-    out.println("}");
   }
 
   private void generateProxyFactory(JavaWriter out)
@@ -248,9 +261,45 @@ public class StatefulGenerator<X> extends SessionGenerator<X>
   {
     out.println();
     out.println("@Override");
-    out.println("public T __caucho_createProxy(CreationalContext<T> env)");
+    out.println("public T __caucho_createProxy(CreationalContextImpl<T> env)");
     out.println("{");
     out.println("  return (T) new " + getClassName() + "(_manager, _context, env);");
+    out.println("}");
+  }
+ 
+  @Override
+  public void generateDestroy(JavaWriter out, HashMap<String,Object> map)
+    throws IOException
+  {
+    super.generateDestroy(out, map);
+
+    out.println();
+    out.println("@Override");
+    out.println("public void __caucho_destroy() {}");
+  }
+  
+  @Override
+  protected void generateDestroyImpl(JavaWriter out)
+    throws IOException
+  {
+    super.generateDestroyImpl(out);
+  
+    out.println("_manager.destroy(_bean, env);");
+    out.println("_bean = null;");
+  }
+  
+  private void generateSerialization(JavaWriter out)
+    throws IOException
+  {
+    out.println("private Object writeReplace()");
+    out.println("{");
+    out.pushDepth();
+    
+    out.print("return new ");
+    out.printClass(StatefulHandle.class);
+    out.println("(_manager.getEJBName(), null);");
+    
+    out.popDepth();
     out.println("}");
   }
 }

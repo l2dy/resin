@@ -79,7 +79,7 @@ public class EnterpriseApplication
 
   private Path _webappsPath;
 
-  private WebAppContainer _container;
+  private WebAppContainer _webAppContainer;
   private String _version;
 
   private String _libraryDirectory;
@@ -103,7 +103,7 @@ public class EnterpriseApplication
   EnterpriseApplication(WebAppContainer container,
                         EarDeployController controller, String name)
   {
-    _container = container;
+    _webAppContainer = container;
 
     _controller = controller;
     
@@ -372,11 +372,9 @@ public class EnterpriseApplication
   /**
    * Sets the config exception.
    */
+  @Override
   public void setConfigException(Throwable e)
   {
-    if (e != null)
-      e.printStackTrace();
-
     _configException = e;
 
     for (WebAppController controller : _webApps) {
@@ -409,45 +407,60 @@ public class EnterpriseApplication
     if (! _lifecycle.toInit())
       return;
 
-    Vfs.setPwd(_rootDir, _loader);
+    try {
+      Vfs.setPwd(_rootDir, _loader);
 
-    _loader.addJarManifestClassPath(_rootDir);
+      _loader.addJarManifestClassPath(_rootDir);
 
-    // server/13bb vs TCK
-    if ("1.4".equals(_version)) {
-      // XXX: tck ejb30/persistence/basic needs to add the lib/*.jar
-      // to find the META-INF/persistence.xml
-      fillDefaultLib();
-    }
-    else {
-      fillDefaultModules();
-    }
-
-    if (_ejbPaths.size() != 0) {
-      EjbManager ejbContainer = EjbManager.create();
-
-      for (Path path : _ejbPaths) {
-        ejbContainer.addRoot(path);
-        _loader.addJar(path);
+      // server/13bb vs TCK
+      if ("1.4".equals(_version)) {
+        // XXX: tck ejb30/persistence/basic needs to add the lib/*.jar
+        // to find the META-INF/persistence.xml
+        fillDefaultLib();
+      }
+      else {
+        fillDefaultModules();
       }
 
-      _loader.validate();
+      EjbManager ejbManager = EjbManager.create();
+
+      if (_ejbPaths.size() != 0) {
+        for (Path path : _ejbPaths) {
+          // ejbManager.addRoot(path);
+          _loader.addJar(path);
+        }
+
+        _loader.validate();
 
       // XXX:??
       /*
-      Path ejbJar = _rootDir.lookup("META-INF/ejb-jar.xml");
-      if (ejbJar.canRead()) {
-        ejbContainer.addRoot(path);
-      }
       */
 
-      // starts with the environment
-      // ejbServer.start();
-    }
+        // starts with the environment
+        // ejbServer.start();
+      }
+    
+      // ioc/0p63
+      Path ejbJar = _rootDir.lookup("META-INF/ejb-jar.xml");
 
-    // updates the invocation caches
-    if (_container != null)
-      _container.clearCache();
+      if (ejbJar.canRead()) {
+        ejbManager.configureRootPath(_rootDir);
+      }
+
+      _loader.start();
+
+      // updates the invocation caches
+      if (_webAppContainer != null)
+        _webAppContainer.clearCache();
+    } catch (Exception e) {
+      _configException = ConfigException.create(e);
+      
+      log.log(Level.WARNING, e.toString(), e);
+      
+      _loader.setConfigException(_configException);
+    }
+    
+    fillErrors();
   }
 
   private void fillDefaultModules()
@@ -521,6 +534,7 @@ public class EnterpriseApplication
   /**
    * Configures the application.
    */
+  @Override
   public void start()
   {
     if (! _lifecycle.toStarting())
@@ -532,24 +546,46 @@ public class EnterpriseApplication
     try {
       thread.setContextClassLoader(getClassLoader());
 
+      getClassLoader().start();
+
       for (int i = 0; i < _webConfigList.size(); i++) {
         WebModule web = _webConfigList.get(i);
 
         initWeb(web);
       }
 
-      getClassLoader().start();
-
-      if (_container != null) {
+      if (_webAppContainer != null) {
         for (WebAppController webApp : _webApps) {
-          _container.getWebAppGenerator().update(webApp.getContextPath());
+          _webAppContainer.getWebAppGenerator().updateNoStart(webApp.getContextPath());
+        }
+      }
+      
+      if (_configException != null) {
+        for (WebAppController controller : _webApps) {
+          controller.setConfigException(_configException);
         }
       }
     } finally {
-      _lifecycle.toActive();
+      if (_configException != null)
+        _lifecycle.toError();
+      else
+        _lifecycle.toActive();
 
       thread.setContextClassLoader(oldLoader);
+      
+      if (_configException != null)
+        throw ConfigException.create(_configException);
     }
+  }
+  
+  private void fillErrors()
+  {
+    if (_configException != null) {
+      for (WebAppController controller : _webApps) {
+        controller.setConfigException(_configException);
+      }
+    }
+
   }
 
   void initWeb(WebModule web)
@@ -612,8 +648,8 @@ public class EnterpriseApplication
       controller = new WebAppController(contextUrl,
                                         contextUrl,
                                         path,
-                                        _container);
-
+                                        _webAppContainer);
+      
       _webApps.add(controller);
     }
 
@@ -700,9 +736,9 @@ public class EnterpriseApplication
       ArrayList<WebAppController> webApps = _webApps;
       _webApps = null;
 
-      if (webApps != null && _container != null) {
+      if (webApps != null && _webAppContainer != null) {
         for (WebAppController webApp : webApps) {
-          _container.getWebAppGenerator().update(webApp.getContextPath());
+          _webAppContainer.getWebAppGenerator().update(webApp.getContextPath());
         }
       }
     } finally {
@@ -810,6 +846,6 @@ public class EnterpriseApplication
     _ejbPaths.add(ejbPath);
     EjbManager ejbContainer = EjbManager.create();
 
-    ejbContainer.addRoot(ejbPath);
+    //ejbContainer.addRoot(ejbPath);
   }
 }

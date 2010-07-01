@@ -85,18 +85,18 @@ public class MessageGenerator<X> extends BeanGenerator<X> {
       char ch = ejbName.charAt(i);
 
       if (ch == '/')
-	sb.append('.');
+        sb.append('.');
       else if (Character.isJavaIdentifierPart(ch))
-	sb.append(ch);
+        sb.append(ch);
       else
-	sb.append('_');
+        sb.append('_');
     }
 
     sb.append(".");
     sb.append(className);
     */
     sb.append(className);
-    sb.append("__BeanProxy");
+    sb.append("__MessageProxy");
 
     return sb.toString();
   }
@@ -241,8 +241,8 @@ public class MessageGenerator<X> extends BeanGenerator<X> {
     
     out.println();
     out.println("public class " + getClassName()
-		+ " extends " + getBeanType().getJavaClass().getName()
-		+ " implements MessageEndpoint, CauchoMessageEndpoint");
+                + " extends " + getBeanType().getJavaClass().getName()
+                + " implements MessageEndpoint, CauchoMessageEndpoint");
     out.println("{");
     out.pushDepth();
 
@@ -266,15 +266,17 @@ public class MessageGenerator<X> extends BeanGenerator<X> {
     generateBeanPrologue(out, map);
 
     out.println();
-    out.println("public " + getClassName() + "(MessageManager server)");
+    //out.println("public " + getClassName() + "(MessageManager server)");
+    out.println("public " + getClassName() + "()");
     out.println("{");
     out.pushDepth();
 
-    out.println("_server = server;");
-
+    // out.println("_server = server;");
+    /*
     if (MessageDrivenBean.class.isAssignableFrom(getBeanType().getJavaClass())) {
       out.println("setMessageDrivenContext(server.getMessageContext());");
     }
+    */
 
     generateBeanConstructor(out);
 
@@ -291,19 +293,19 @@ public class MessageGenerator<X> extends BeanGenerator<X> {
     /*
     for (AspectGenerator<X> bizMethod : _view.getMethods()) {
       if (REQUIRED.equals(bizMethod.getXa().getTransactionType())) {
-	Method api = bizMethod.getApiMethod().getJavaMember();
-	
-	out.print("_xaMethods.add(");
-	out.printClass(api.getDeclaringClass());
-	out.print(".class.getMethod(\"");
-	out.print(api.getName());
-	out.print("\", new Class[] { ");
+        Method api = bizMethod.getApiMethod().getJavaMember();
 
-	for (Class<?> cl : api.getParameterTypes()) {
-	  out.printClass(cl);
-	  out.print(".class, ");
-	}
-	out.println("}));");
+        out.print("_xaMethods.add(");
+        out.printClass(api.getDeclaringClass());
+        out.print(".class.getMethod(\"");
+        out.print(api.getName());
+        out.print("\", new Class[] { ");
+
+        for (Class<?> cl : api.getParameterTypes()) {
+          out.printClass(cl);
+          out.print(".class, ");
+        }
+        out.println("}));");
       }
     }
     */
@@ -393,5 +395,15 @@ public class MessageGenerator<X> extends BeanGenerator<X> {
   private AnnotatedMethod<? super X> getImplMethod(String name, Class<?> []param)
   {
     return AnnotatedTypeUtil.findMethod(getBeanType(), name, param);
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.config.gen.BeanGenerator#getAspectBeanFactory()
+   */
+  @Override
+  protected AspectBeanFactory<X> getAspectBeanFactory()
+  {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

@@ -92,7 +92,7 @@ public class ClassType extends BaseType
   @Override
   public boolean isAssignableFrom(BaseType type)
   {
-    if (type.isWildcard()) {
+    if (type.isWildcard() || type.isVariable()) {
       for (BaseType bound : type.getWildcardBounds()) {
         if (! isAssignableFrom(bound))
           return false;
@@ -104,8 +104,8 @@ public class ClassType extends BaseType
       return false;
     else if (type.getParameters().length > 0) {
       for (BaseType param : type.getParameters()) {
-	if (! OBJECT_TYPE.isParamAssignableFrom(param))
-	  return false;
+        if (! OBJECT_TYPE.isParamAssignableFrom(param))
+          return false;
       }
 
       return true;
@@ -117,8 +117,10 @@ public class ClassType extends BaseType
   @Override
   public boolean isParamAssignableFrom(BaseType type)
   {
-    if (type.isWildcard()) {
-      boolean isMatchBound = false;
+    // ioc/024d
+    if (type.isWildcard() || type.isVariable()) {
+      // ioc/0i3q
+      boolean isMatchBound = true; // false;
 
       for (BaseType bound : type.getWildcardBounds()) {
         // ioc/024d

@@ -29,6 +29,7 @@
 
 package com.caucho.config.inject;
 
+import java.lang.annotation.Annotation;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.logging.Level;
@@ -39,6 +40,7 @@ import javax.ejb.MessageDriven;
 import javax.ejb.Startup;
 import javax.ejb.Stateless;
 import javax.ejb.Stateful;
+import javax.enterprise.context.NormalScope;
 import javax.enterprise.event.Observes;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
@@ -46,7 +48,10 @@ import javax.enterprise.inject.Specializes;
 import javax.enterprise.inject.Stereotype;
 import javax.inject.Inject;
 import javax.inject.Named;
+import javax.inject.Qualifier;
+import javax.inject.Scope;
 
+import com.caucho.config.inject.InjectScanManager.AnnType;
 import com.caucho.inject.Jndi;
 import com.caucho.inject.MBean;
 import com.caucho.loader.enhancer.ScanClass;
@@ -80,6 +85,10 @@ class InjectScanClass implements ScanClass
   private boolean _isRegisterRequired;
   private boolean _isRegistered;
   
+  private boolean _isObserves;
+  
+  private boolean _isVeto;
+  
   InjectScanClass(String className, InjectScanManager manager)
   {
     _className = className;
@@ -112,6 +121,16 @@ class InjectScanClass implements ScanClass
     return _isRegisterRequired;
   }
   
+  public boolean isRegistered()
+  {
+    return _isRegistered;
+  }
+  
+  public boolean isObserves()
+  {
+    return _isObserves;
+  }
+  
   @Override
   public void addInterface(char[] buffer, int offset, int length)
   {
@@ -132,17 +151,32 @@ class InjectScanClass implements ScanClass
   public void addClassAnnotation(char[] buffer, int offset, int length)
   {
     try {
-      ClassLoader loader = _scanManager.getInjectManager().getClassLoader();
+      AnnType annType = _scanManager.loadAnnotation(buffer, offset, length);
       
-      String className = new String(buffer, offset, length);
+      if (annType == null)
+        return;
       
-      Class<?> annType = Class.forName(className, false, loader);
-      
-      if (_registerAnnotationSet.contains(annType)) {
+      if (_registerAnnotationSet.contains(annType.getType())) {
+        if (annType.getType() == Observes.class)
+          _isObserves = true;
+        
         _isRegisterRequired = true;
+        return;
       }
-      else if (annType.isAnnotationPresent(Stereotype.class)) {
-        _isRegisterRequired = true;
+      
+      for (Annotation ann : annType.getAnnotations()) {
+        Class<? extends Annotation> metaAnnType = ann.annotationType();
+      
+        if (metaAnnType == Stereotype.class) {
+          _isRegisterRequired = true;
+        }
+        else if (metaAnnType == Scope.class) {
+          _isRegisterRequired = true;
+        }
+        else if (metaAnnType == NormalScope.class) {
+          // ioc/02a3
+          _isRegisterRequired = true;
+        }
       }
     } catch (ClassNotFoundException e) {
       log.log(Level.FINER, e.toString(), e);
@@ -160,6 +194,7 @@ class InjectScanClass implements ScanClass
     }
     else if (isMatch(buffer, offset, length, OBSERVES)) {
       _isRegisterRequired = true;
+      _isObserves = true;
     }
   }
 
@@ -191,7 +226,7 @@ class InjectScanClass implements ScanClass
   {
     if (_isScanClass && ! _isRegistered) {
       _isRegistered = true;
-      
+
       _scanManager.addDiscoveredClass(this);
     }
     
@@ -233,5 +268,6 @@ class InjectScanClass implements ScanClass
     _registerAnnotationSet.add(Stateful.class);
     _registerAnnotationSet.add(javax.ejb.Singleton.class);
     _registerAnnotationSet.add(MessageDriven.class);
+    _registerAnnotationSet.add(Qualifier.class);
   }
 }

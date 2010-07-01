@@ -44,8 +44,8 @@ package javax.enterprise.inject.spi;
  * }
  * </pre></code>
  */
-public interface ProcessProducerMethod<X,T> extends ProcessBean<T>
+public interface ProcessProducerMethod<T,X> extends ProcessBean<X>
 {
-  public AnnotatedMethod<X> getAnnotatedProducerMethod();
-  public AnnotatedParameter<X> getAnnotatedDisposedParameter();
+  public AnnotatedMethod<T> getAnnotatedProducerMethod();
+  public AnnotatedParameter<T> getAnnotatedDisposedParameter();
 }

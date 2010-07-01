@@ -29,11 +29,16 @@
 
 package com.caucho.config.el;
 
-import java.beans.*;
-import java.util.*;
-import javax.el.*;
+import java.beans.FeatureDescriptor;
+import java.util.ArrayList;
+import java.util.Iterator;
 
-import com.caucho.config.inject.InjectManager;
+import javax.el.ELContext;
+import javax.el.ELException;
+import javax.el.ELResolver;
+import javax.el.PropertyNotFoundException;
+import javax.el.PropertyNotWritableException;
+
 import com.caucho.config.xml.XmlConfigContext;
 
 /**
@@ -45,7 +50,7 @@ public class ConfigContextResolver extends ELResolver {
   }
   
   public Class<?> getCommonPropertyType(ELContext context,
-					Object base)
+                                        Object base)
   {
     return Object.class;
   }
@@ -59,8 +64,8 @@ public class ConfigContextResolver extends ELResolver {
   }
 
   public Class<?> getType(ELContext context,
-			  Object base,
-			  Object property)
+                          Object base,
+                          Object property)
   {
     Object value = getValue(context, base, property);
 
@@ -71,10 +76,10 @@ public class ConfigContextResolver extends ELResolver {
   }
 
   public Object getValue(ELContext context,
-			 Object base,
-			 Object property)
+                         Object base,
+                         Object property)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
     if (base != null || ! (property instanceof String))
       return null;
@@ -98,21 +103,21 @@ public class ConfigContextResolver extends ELResolver {
   }
 
   public boolean isReadOnly(ELContext context,
-			    Object base,
-			    Object property)
+                            Object base,
+                            Object property)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
     return true;
   }
 
   public void setValue(ELContext context,
-		       Object base,
-		       Object property,
-		       Object value)
+                       Object base,
+                       Object property,
+                       Object value)
     throws PropertyNotFoundException,
-	   PropertyNotWritableException,
-	   ELException
+           PropertyNotWritableException,
+           ELException
   {
   }
 }

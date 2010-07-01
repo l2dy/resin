@@ -67,8 +67,7 @@ public class VarType<D extends GenericDeclaration> extends BaseType
   public boolean isWildcard()
   {
     // ioc/024j vs ioc/024k
-    return true;
-    // return false;
+    return false;
   }
   
   @Override
@@ -126,7 +125,7 @@ public class VarType<D extends GenericDeclaration> extends BaseType
     
     for (BaseType bound : _bounds) {
       if (! bound.isAssignableFrom(type)) {
-	return false;
+        return false;
       }
     }
     

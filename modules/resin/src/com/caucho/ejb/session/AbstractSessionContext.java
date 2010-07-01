@@ -34,9 +34,10 @@ import javax.ejb.EJBLocalHome;
 import javax.ejb.EJBLocalObject;
 import javax.ejb.EJBObject;
 import javax.ejb.SessionContext;
-import javax.enterprise.context.spi.CreationalContext;
 import javax.xml.rpc.handler.MessageContext;
 
+import com.caucho.config.gen.CandiEnhancedBean;
+import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.util.L10N;
@@ -51,6 +52,7 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
 
   private transient AbstractSessionManager<X> _manager;
   private transient InjectManager _injectManager;
+  private transient ClassLoader _classLoader;
   private Class<T> _api;
   private SessionProxyFactory<T> _proxyFactory;
 
@@ -59,11 +61,12 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
   {
     assert(manager != null);
 
+    _classLoader = Thread.currentThread().getContextClassLoader();
+    
     _manager = manager;
     _api = api;
     
     _injectManager = InjectManager.create();
-    _proxyFactory = manager.createProxyFactory(this);
   }
 
   @Override
@@ -76,6 +79,11 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
   {
     return _injectManager;
   }
+  
+  public InjectManager getModuleInjectManager()
+  {
+    return _manager.getModuleInjectManager();
+  }
 
   /*
    * Returns the API for the context
@@ -85,21 +93,43 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
     return _api;
   }
   
-  public T createProxy(CreationalContext<T> env)
+  @Override
+  public Class<?> getInvokedBusinessInterface()
   {
+    return getApi();
+  }
+  
+  void bind()
+  {
+    if (_proxyFactory == null)
+      _proxyFactory = _manager.createProxyFactory(this);
+  }
+  
+  public T createProxy(CreationalContextImpl<T> env)
+  {
+    if (_proxyFactory == null)
+      bind();
+    
     return _proxyFactory.__caucho_createProxy(env);
   }
   
-  public void destroyProxy(T instance, CreationalContext<T> env)
+  public void destroyProxy(T instance, CreationalContextImpl<T> env)
   {
+    if (instance instanceof CandiEnhancedBean) {
+      CandiEnhancedBean candiInstance = (CandiEnhancedBean) instance;
+      
+      candiInstance.__caucho_destroy(env);
+    }
   }
   
-  public X newInstance(CreationalContext<X> env)
+  public X newInstance(CreationalContextImpl<X> env)
   {
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
     
     try {
+      thread.setContextClassLoader(_classLoader);
+      
       return _manager.newInstance(env);
     } finally {
       thread.setContextClassLoader(oldLoader);
@@ -110,7 +140,8 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
   public void destroy()
     throws Exception
   {
-    _proxyFactory.__caucho_destroy();
+    if (_proxyFactory != null)
+      _proxyFactory.__caucho_destroy();
     
     super.destroy();
   }
@@ -147,9 +178,17 @@ abstract public class AbstractSessionContext<X,T> extends AbstractContext<X>
 
   @Override
   public <Z> Z getBusinessObject(Class<Z> businessInterface)
-      throws IllegalStateException
+    throws IllegalStateException
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    AbstractSessionContext<?,Z> context = 
+      getServer().getSessionContext(businessInterface);
+    
+    if (context == null)
+      throw new IllegalStateException(L.l("{0} is not a valid local interface or no-interface view for {1}",
+                                          businessInterface.getName(),
+                                          getServer().getEjbClass().getName()));
+    
+    return context.createProxy(null);
   }
 
   @Override

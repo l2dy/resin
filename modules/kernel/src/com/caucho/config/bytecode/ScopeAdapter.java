@@ -34,10 +34,13 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ejb.Remove;
 import javax.enterprise.inject.spi.Bean;
 
 import com.caucho.bytecode.CodeWriterAttribute;
@@ -46,7 +49,9 @@ import com.caucho.bytecode.JavaClassLoader;
 import com.caucho.bytecode.JavaField;
 import com.caucho.bytecode.JavaMethod;
 import com.caucho.config.ConfigException;
+import com.caucho.config.gen.CandiUtil;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.config.reflect.BaseType;
 import com.caucho.inject.Module;
 import com.caucho.loader.DynamicClassLoader;
@@ -64,21 +69,59 @@ public class ScopeAdapter {
   private static final Logger log 
     = Logger.getLogger(ScopeAdapter.class.getName());
 
+  private final Class<?> _beanClass;
   private final Class<?> _cl;
+  private final Class<?> []_types;
 
   private Class<?> _proxyClass;
   private Constructor<?> _proxyCtor;
-
-  private ScopeAdapter(Class<?> cl)
+  
+  private ScopeAdapter(Class<?> beanClass, Class<?> cl, Class<?> []types)
   {
+    _types = types;
+    
+    _beanClass = beanClass;
     _cl = cl;
 
-    generateProxy(cl);
+    generateProxy(_cl, types);
+  }
+  
+  public static ScopeAdapter create(Bean<?> bean)
+  {
+    Set<Type> types = bean.getTypes();
+    
+    ArrayList<Class<?>> classList = new ArrayList<Class<?>>();
+    
+    Class<?> beanClass = bean.getBeanClass();
+    Class<?> cl = null;
+    
+    for (Type type : types) {
+      Class<?> rawClass = CandiUtil.getRawClass(type);
+      
+      if (rawClass.equals(Object.class))
+        continue;
+      
+      classList.add(rawClass);
+      
+      if (cl == null
+          || cl.isAssignableFrom(rawClass)
+          || cl.isInterface() && ! rawClass.isInterface()
+          || (cl.getName().startsWith("java") 
+              && ! rawClass.getName().startsWith("java"))) {
+        cl = rawClass;
+      }
+    }
+    
+    Class<?> []classes = new Class<?>[classList.size()];
+    
+    classList.toArray(classes);
+    
+    return new ScopeAdapter(beanClass, cl, classes);
   }
 
   public static ScopeAdapter create(Class<?> cl)
   {
-    ScopeAdapter adapter = new ScopeAdapter(cl);
+    ScopeAdapter adapter = new ScopeAdapter(cl, cl, new Class<?>[] { cl });
 
     return adapter;
   }
@@ -109,7 +152,7 @@ public class ScopeAdapter {
     }
   }
 
-  private void generateProxy(Class<?> cl)
+  private void generateProxy(Class<?> cl, Class<?> []types)
   {
     try {
       Constructor<?> zeroCtor = null;
@@ -132,6 +175,10 @@ public class ScopeAdapter {
       String typeClassName = cl.getName().replace('.', '/');
       
       String thisClassName = typeClassName + "__ResinScopeProxy";
+      
+      if (thisClassName.startsWith("java"))
+        thisClassName = "cdi/" + thisClassName;
+      
       String cleanName = thisClassName.replace('/', '.');
       
       boolean isPackagePrivate = false;
@@ -175,8 +222,10 @@ public class ScopeAdapter {
         jClass.setSuperClass(superClassName);
         jClass.setThisClass(thisClassName);
 
-        if (cl.isInterface())
-          jClass.addInterface(typeClassName);
+        for (Class<?> iface : types) {
+          if (iface.isInterface())
+            jClass.addInterface(iface.getName().replace('.', '/'));
+        }
         
         jClass.addInterface(ScopeProxy.class.getName().replace('.', '/'));
 
@@ -203,16 +252,20 @@ public class ScopeAdapter {
         code.invokespecial(superClassName, "<init>", "()V", 1, 0);
         code.addReturn();
         code.close();
-        
-        createGetDelegateMethod(jClass);
 
-        for (Method method : _cl.getMethods()) {
+        createGetDelegateMethod(jClass);
+        createSerialize(jClass);
+
+        for (Method method : getMethods(_types)) {
           if (Modifier.isStatic(method.getModifiers()))
             continue;
           if (Modifier.isFinal(method.getModifiers()))
             continue;
 
-          createProxyMethod(jClass, method, cl.isInterface());
+          if (isRemoveMethod(_beanClass, method))
+            createRemoveProxyMethod(jClass, method, method.getDeclaringClass().isInterface());
+          else
+            createProxyMethod(jClass, method, method.getDeclaringClass().isInterface());
         }
 
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -248,11 +301,67 @@ public class ScopeAdapter {
       throw new RuntimeException(e);
     }
   }
+  
+  private ArrayList<Method> getMethods(Class<?> []types)
+  {
+    ArrayList<Method> methodList = new ArrayList<Method>();
+    
+    for (Class<?> type : types) {
+      if (Object.class.equals(type))
+        continue;
+      
+      for (Method method : type.getMethods()) {
+        if (Modifier.isStatic(method.getModifiers()))
+          continue;
+        
+        if (Modifier.isPrivate(method.getModifiers()))
+          continue;
+        
+        Method oldMethod = AnnotatedTypeUtil.findMethod(methodList, method);
+        
+        if (oldMethod == null) {
+          methodList.add(method);
+          continue;
+        }
+        
+        if (method.getDeclaringClass().isAssignableFrom(oldMethod.getDeclaringClass())) {
+          continue;
+        }
+        else {
+          methodList.remove(oldMethod);
+          methodList.add(method);
+          continue;
+        }
+      }
+    }
+    
+    return methodList;
+  }
+
+  private boolean isRemoveMethod(Class<?> beanClass, Method method)
+  {
+    if (method.isAnnotationPresent(Remove.class)) {
+      return true;
+    }
+    
+    try {
+      Method beanMethod = beanClass.getMethod(method.getName(), method.getParameterTypes());
+      
+      return beanMethod.isAnnotationPresent(Remove.class);
+    } catch (Exception e) {
+      log.log(Level.FINEST, e.toString(), e);
+      
+      return false;
+    }
+  }
 
   private void createProxyMethod(JavaClass jClass,
                                  Method method,
                                  boolean isInterface)
   {
+    if (method.getName().equals("writeReplace") && method.getParameterTypes().length == 0)
+      return;
+    
     String descriptor = createDescriptor(method);
 
     JavaMethod jMethod = jClass.createMethod(method.getName(),
@@ -269,12 +378,9 @@ public class ScopeAdapter {
     code.getField(jClass.getThisClass(), "_factory",
                   "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
     
-    code.pushNull();
-    code.pushNull();
-
     code.invoke("com/caucho/config/inject/InjectManager$ReferenceFactory",
                 "create",
-                "(Lcom/caucho/config/inject/CreationalContextImpl;Ljavax/enterprise/inject/spi/InjectionPoint;)Ljava/lang/Object;",
+                "()Ljava/lang/Object;",
                 3, 1);
 
     code.cast(method.getDeclaringClass().getName().replace('.', '/'));
@@ -352,6 +458,33 @@ public class ScopeAdapter {
     code.close();
   }
 
+  private void createRemoveProxyMethod(JavaClass jClass,
+                                       Method method,
+                                       boolean isInterface)
+  {
+    String descriptor = createDescriptor(method);
+
+    JavaMethod jMethod = jClass.createMethod(method.getName(),
+                                             descriptor);
+    jMethod.setAccessFlags(Modifier.PUBLIC);
+
+    Class<?> []parameterTypes = method.getParameterTypes();
+
+    CodeWriterAttribute code = jMethod.createCodeWriter();
+    code.setMaxLocals(1 + 2 * parameterTypes.length);
+    code.setMaxStack(3 + 2 * parameterTypes.length);
+
+    code.newInstance("java/lang/UnsupportedOperationException");
+    code.dup();
+    code.invokespecial("java/lang/UnsupportedOperationException",
+                       "<init>",
+                       "()V",
+                       3, 1);
+    code.addThrow();
+
+    code.close();
+  }
+
   private void createGetDelegateMethod(JavaClass jClass)
   {
     String descriptor = "()Ljava/lang/Object;";
@@ -368,13 +501,40 @@ public class ScopeAdapter {
     code.getField(jClass.getThisClass(), "_factory",
                   "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
 
-    code.pushNull();
-    code.pushNull();
-
     code.invoke("com/caucho/config/inject/InjectManager$ReferenceFactory",
                 "create",
-                "(Lcom/caucho/config/inject/CreationalContextImpl;Ljavax/enterprise/inject/spi/InjectionPoint;)Ljava/lang/Object;",
+                "()Ljava/lang/Object;",
                 3, 1);
+
+    code.addObjectReturn();
+
+    code.close();
+  }
+
+  private void createSerialize(JavaClass jClass)
+  {
+    String descriptor = "()Ljava/lang/Object;";
+
+    JavaMethod jMethod = jClass.createMethod("writeReplace",
+                                             descriptor);
+    
+    jMethod.setAccessFlags(Modifier.PRIVATE);
+
+    CodeWriterAttribute code = jMethod.createCodeWriter();
+    code.setMaxLocals(1);
+    code.setMaxStack(3);
+
+    code.newInstance("com/caucho/config/bytecode/ScopeProxyHandle");
+    code.dup();
+    
+    code.pushObjectVar(0);
+    code.getField(jClass.getThisClass(), "_factory",
+                  "Lcom/caucho/config/inject/InjectManager$ReferenceFactory;");
+    
+    code.invokespecial("com/caucho/config/bytecode/ScopeProxyHandle",
+                       "<init>",
+                       "(Lcom/caucho/config/inject/InjectManager$ReferenceFactory;)V",
+                       3, 1);
 
     code.addObjectReturn();
 
@@ -387,7 +547,7 @@ public class ScopeAdapter {
 
     sb.append("(");
 
-    for (Class param : method.getParameterTypes()) {
+    for (Class<?> param : method.getParameterTypes()) {
       sb.append(createDescriptor(param));
     }
 
@@ -397,7 +557,7 @@ public class ScopeAdapter {
     return sb.toString();
   }
 
-  private String createDescriptor(Class cl)
+  private String createDescriptor(Class<?> cl)
   {
     if (cl.isArray())
       return "[" + createDescriptor(cl.getComponentType());
@@ -410,7 +570,8 @@ public class ScopeAdapter {
     return "L" + cl.getName().replace('.', '/') + ";";
   }
 
-  private static HashMap<Class,String> _prim = new HashMap<Class,String>();
+  private static HashMap<Class<?>,String> _prim
+    = new HashMap<Class<?>,String>();
 
   static {
     _prim.put(boolean.class, "Z");

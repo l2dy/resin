@@ -33,8 +33,10 @@ import com.caucho.config.*;
 import com.caucho.config.attribute.*;
 import com.caucho.config.program.*;
 import com.caucho.config.types.RawString;
-import com.caucho.config.types.CustomBeanConfig;
 import com.caucho.config.types.AnnotationConfig;
+import com.caucho.config.xml.XmlBeanConfig;
+import com.caucho.config.xml.XmlBeanType;
+import com.caucho.el.Expr;
 import com.caucho.loader.*;
 import com.caucho.util.*;
 import com.caucho.vfs.*;
@@ -68,8 +70,8 @@ public class TypeFactory implements AddLoaderListener
 
   private static final String RESIN_NS = "http://caucho.com/ns/resin";
 
-  private static final HashMap<Class,ConfigType> _primitiveTypes
-    = new HashMap<Class,ConfigType>();
+  private static final HashMap<Class<?>,ConfigType<?>> _primitiveTypes
+    = new HashMap<Class<?>,ConfigType<?>>();
 
   private static final EnvironmentLocal<TypeFactory> _localFactory
     = new EnvironmentLocal<TypeFactory>();
@@ -90,11 +92,14 @@ public class TypeFactory implements AddLoaderListener
   private final HashMap<String,ConfigType> _typeMap
     = new HashMap<String,ConfigType>();
 
-  private final HashMap<String,CustomBeanType> _customBeanMap
-    = new HashMap<String,CustomBeanType>();
+  private final HashMap<String,XmlBeanType> _customBeanMap
+    = new HashMap<String,XmlBeanType>();
 
   private final ConcurrentHashMap<QName,ConfigType> _attrMap
     = new ConcurrentHashMap<QName,ConfigType>();
+  
+  private final ConcurrentHashMap<QName,Class<?>> _customClassMap
+    = new ConcurrentHashMap<QName,Class<?>>();
 
   private final HashMap<QName,Attribute> _listAttrMap
     = new HashMap<QName,Attribute>();
@@ -119,7 +124,7 @@ public class TypeFactory implements AddLoaderListener
   private TypeFactory(ClassLoader loader)
   {
     _loader = Environment.getEnvironmentClassLoader(loader);
-
+    
     _localFactory.set(this, loader);
 
     if (_loader != null) {
@@ -138,8 +143,8 @@ public class TypeFactory implements AddLoaderListener
    */
   public static ConfigType<?> getType(Object bean)
   {
-    if (bean instanceof CustomBeanConfig)
-      return ((CustomBeanConfig) bean).getConfigType();
+    if (bean instanceof XmlBeanConfig)
+      return ((XmlBeanConfig) bean).getConfigType();
     else if (bean instanceof AnnotationConfig)
       return ((AnnotationConfig) bean).getConfigType();
 
@@ -162,6 +167,14 @@ public class TypeFactory implements AddLoaderListener
   public static ConfigType<?> getType(Type type)
   {
     return getType((Class) type);
+  }
+
+  /**
+   * Returns the appropriate strategy.
+   */
+  public static Class<?> loadClass(QName qName)
+  {
+    return getFactory().loadClassImpl(qName);
   }
 
   /**
@@ -201,9 +214,9 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns an environment type.
    */
-  public ConfigType getEnvironmentType(QName name)
+  public ConfigType<?> getEnvironmentType(QName name)
   {
-    ConfigType type = _attrMap.get(name);
+    ConfigType<?> type = _attrMap.get(name);
 
     if (type != null)
       return type == NotFoundConfigType.NULL ? null : type;
@@ -272,10 +285,14 @@ public class TypeFactory implements AddLoaderListener
       String pkg = uri.substring("urn:java:".length());
       String className = name.getLocalName();
 
-      Class cl = loadClassImpl(pkg, className);
+      Class<?> cl = loadClassImpl(pkg, className);
 
       if (cl != null) {
-        return getType(cl);
+        type = getType(cl);
+        
+        _attrMap.put(name, type);
+        
+        return type;
       }
     }
 
@@ -295,7 +312,7 @@ public class TypeFactory implements AddLoaderListener
       if (attr != null)
         return attr;
 
-      ConfigType type = getEnvironmentType(name);
+      ConfigType<?> type = getEnvironmentType(name);
 
       if (type == null)
         return null;
@@ -319,7 +336,7 @@ public class TypeFactory implements AddLoaderListener
       if (attr != null)
         return attr;
 
-      ConfigType type = getEnvironmentType(name);
+      ConfigType<?> type = getEnvironmentType(name);
 
       if (type == null)
         return null;
@@ -357,22 +374,56 @@ public class TypeFactory implements AddLoaderListener
     return attr;
   }
 
-  private Class loadClassImpl(String pkg, String name)
+  private Class<?> loadClassImpl(QName qName)
   {
-    String className = pkg + "." + name;
+    Class<?> cl = _customClassMap.get(qName);
+    
+    if (cl != null)
+      return cl == void.class ? null : cl;
+    
+    String uri = qName.getNamespaceURI();
+    String localName = qName.getLocalName();
 
+    if (! uri.startsWith("urn:java:"))
+      throw new IllegalStateException(L.l("'{0}' is an unexpected namespace, expected 'urn:java:...'", uri));
+
+    String packageName = uri.substring("uri:java:".length());
+    
+    cl = loadClassImpl(packageName, localName);
+    
+    if (cl != null)
+      _customClassMap.put(qName, cl);
+    else
+      _customClassMap.put(qName, void.class);
+    
+    return cl;
+  }
+  
+  private Class<?> loadClassImpl(String pkg, String name)
+  {
     ClassLoader loader = _loader;
 
     if (_loader == null)
       loader = _systemClassLoader;
 
     ArrayList<String> pkgList = loadPackageList(pkg);
+    
+    DynamicClassLoader dynLoader = null;
+    
+    if (loader instanceof DynamicClassLoader)
+      dynLoader = (DynamicClassLoader) loader;
 
     for (String pkgName : pkgList) {
       try {
-        Class cl = Class.forName(pkgName + '.' + name, false, loader);
+        Class<?> cl;
+        
+        if (dynLoader != null)
+          cl = dynLoader.loadClassImpl(pkgName + '.' + name, false);
+        else
+          cl = Class.forName(pkgName + '.' + name, false, loader);
 
-        return cl;
+        if (cl != null)
+          return cl;
       } catch (ClassNotFoundException e) {
         log.log(Level.ALL, e.toString(), e);
       }
@@ -445,7 +496,7 @@ public class TypeFactory implements AddLoaderListener
     }
   }
 
-  private ConfigType createType(Class type)
+  private ConfigType createType(Class<?> type)
   {
     PropertyEditor editor = null;
 
@@ -476,7 +527,7 @@ public class TypeFactory implements AddLoaderListener
     else if (FlowBean.class.isAssignableFrom(type))
       return new FlowBeanType(type);
     else if (type.isArray()) {
-      Class compType = type.getComponentType();
+      Class<?> compType = type.getComponentType();
 
       return new ArrayType(getType(compType), compType);
     }
@@ -486,17 +537,19 @@ public class TypeFactory implements AddLoaderListener
     else if (type.isInterface()) {
       return new InterfaceType(type);
     }
+    else if (type == ConfigProgram.class)
+      return new ConfigProgramType(type);
     else if (Modifier.isAbstract(type.getModifiers())) {
       return new AbstractBeanType(type);
     }
     else
-      return new BeanType(type);
+      return new InlineBeanType(type);
   }
 
   /**
    * Returns the Java bean property editor
    */
-  private static PropertyEditor findEditor(Class type)
+  private static PropertyEditor findEditor(Class<?> type)
   {
     // none of the caucho classes has a ProperyEditorManager
 
@@ -509,24 +562,24 @@ public class TypeFactory implements AddLoaderListener
   /**
    * Returns the appropriate strategy.
    */
-  public static CustomBeanType getCustomBeanType(Class type)
+  public static <T> XmlBeanType<T> getCustomBeanType(Class<T> type)
   {
     TypeFactory factory = getFactory(type.getClassLoader());
 
     return factory.getCustomBeanTypeImpl(type);
   }
 
-  private CustomBeanType getCustomBeanTypeImpl(Class type)
+  private <T> XmlBeanType<T> getCustomBeanTypeImpl(Class<T> type)
   {
     synchronized (_customBeanMap) {
-      CustomBeanType beanType = _customBeanMap.get(type.getName());
+      XmlBeanType<?> beanType = _customBeanMap.get(type.getName());
 
       if (beanType == null) {
-        beanType = new CustomBeanType(type);
+        beanType = new XmlBeanType<T>(type);
         _customBeanMap.put(type.getName(), beanType);
       }
 
-      return beanType;
+      return (XmlBeanType<T>) beanType;
     }
   }
 
@@ -953,7 +1006,7 @@ public class TypeFactory implements AddLoaderListener
     private String _name;
     private String _className;
 
-    private ConfigType _configType;
+    private ConfigType<?> _configType;
     private ClassLoader _loader;
 
     BeanConfig(String ns, boolean isDefault)
@@ -978,15 +1031,13 @@ public class TypeFactory implements AddLoaderListener
       _className = className;
     }
 
-    public ConfigType getConfigType()
+    public ConfigType<?> getConfigType()
     {
       try {
         if (_configType == null) {
-          QName qName = new QName(null, _name, _ns);
+          Class<?> cl = Class.forName(_className, false, _loader);
 
-          Class cl = Class.forName(_className, false, _loader);
-
-          ConfigType type = createType(cl);
+          ConfigType<?> type = createType(cl);
 
           type.introspect();
 
@@ -1059,6 +1110,8 @@ public class TypeFactory implements AddLoaderListener
     _primitiveTypes.put(QDate.class, QDateType.TYPE);
     _primitiveTypes.put(Date.class, DateType.TYPE);
     _primitiveTypes.put(Properties.class, PropertiesType.TYPE);
+    
+    _primitiveTypes.put(Expr.class, ExprType.TYPE);
 
     // _primitiveTypes.put(DataSource.class, DataSourceType.TYPE);
 

@@ -31,10 +31,12 @@ package com.caucho.config.j2ee;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.logging.Logger;
 
 import javax.ejb.EJB;
 import javax.enterprise.inject.spi.AnnotatedField;
 import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 
 import com.caucho.config.ConfigException;
@@ -49,6 +51,9 @@ import com.caucho.util.L10N;
  * Handles the @EJB annotation for JavaEE
  */
 public class EjbHandler extends JavaeeInjectionHandler {
+  private static final Logger log
+    = Logger.getLogger(EjbHandler.class.getName());
+  
   private static final L10N L = new L10N(EjbHandler.class);
   
   public EjbHandler(InjectManager manager)
@@ -72,6 +77,17 @@ public class EjbHandler extends JavaeeInjectionHandler {
     return generateContext(method, ejb);
   }
 
+  @Override
+  public ConfigProgram introspectType(AnnotatedType<?> type)
+  {
+    EJB ejb = type.getAnnotation(EJB.class);
+    
+    // return generateContext(type, ejb);
+    
+    // return null;
+    throw new UnsupportedOperationException(getClass().getName() + ":" + ejb);
+  }
+
   private ConfigProgram generateContext(AnnotatedField<?> field,
                                         EJB ejb)
     throws ConfigException
@@ -85,6 +101,11 @@ public class EjbHandler extends JavaeeInjectionHandler {
     String location = getLocation(javaField);
 
     Class<?> bindType = javaField.getType();
+    
+    // ejb/2004
+    if (! Object.class.equals(ejb.beanInterface())) {
+      bindType = ejb.beanInterface();
+    }
     
     /*
     if (! "".equals(pContext.name()))
@@ -116,7 +137,7 @@ public class EjbHandler extends JavaeeInjectionHandler {
     }
     else {
       throw new ConfigException(location + L.l("@EJB cannot find any defined EJBs.  No @EJB with type='{0}'",
-					       bindType));
+                                               bindType));
     }
 
     // return new ComponentValueGenerator(location, (AbstractBean) bean);
@@ -144,6 +165,11 @@ public class EjbHandler extends JavaeeInjectionHandler {
     String location = getLocation(javaMethod);
 
     Class<?> bindType = javaMethod.getParameterTypes()[0];
+    
+    // ejb/2005
+    if (! Object.class.equals(ejb.beanInterface())) {
+      bindType = ejb.beanInterface();
+    }
     
     /*
     if (! "".equals(pContext.name()))

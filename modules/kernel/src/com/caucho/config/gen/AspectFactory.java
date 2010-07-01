@@ -28,10 +28,14 @@
  */
 package com.caucho.config.gen;
 
+import java.io.IOException;
+import java.util.HashMap;
+
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 
 /**
  * Creates an aspect generator for a method.
@@ -47,10 +51,24 @@ public interface AspectFactory<X> {
    * Returns the bean type.
    */
   public AnnotatedType<X> getBeanType();
+
+  public boolean isEnhanced();
   
   /**
    * Returns an aspect for the method if one exists.
    */
   public AspectGenerator<X> create(AnnotatedMethod<? super X> method,
                                    boolean isEnhanced);
+
+  public void generateInject(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException;
+
+  public void generatePostConstruct(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException;
+
+  public void generatePreDestroy(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException;
+
+  public void generateEpilogue(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException;
 }

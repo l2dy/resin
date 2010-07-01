@@ -34,8 +34,8 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.ProcessSessionBean;
 import javax.enterprise.inject.spi.SessionBeanType;
 
+import com.caucho.config.extension.ProcessManagedBeanImpl;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.ProcessManagedBeanImpl;
 import com.caucho.inject.Module;
 
 /**

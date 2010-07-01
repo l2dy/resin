@@ -30,12 +30,14 @@
 package com.caucho.config.inject;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.inject.Module;
@@ -53,8 +55,11 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
 {
   private InjectionTargetBuilder<X> _target;
   private LinkedHashSet<Annotation> _qualifiers;
+  private Set<Type> _types;
 
-  NewBean(InjectManager inject, AnnotatedType<X> beanType)
+  NewBean(InjectManager inject,
+          Class<?> newType,
+          AnnotatedType<X> beanType)
   {
     super(inject, beanType.getBaseType(), beanType);
 
@@ -62,6 +67,8 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
     
     // validation
     _target.getInjectionPoints();
+    
+    _types = inject.createSourceBaseType(newType).getTypeClosure(inject);
 
     _qualifiers = new LinkedHashSet<Annotation>();
     _qualifiers.add(new NewLiteral(beanType.getJavaClass()));
@@ -71,6 +78,11 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
     //init();
   }
 
+  @Override
+  public void introspect()
+  {
+  }
+  
   /**
    * The @New name is null.
    */
@@ -90,6 +102,15 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
   }
   
   /**
+   * Returns thetype closure.
+   */
+  @Override
+  public Set<Type> getTypes()
+  {
+    return _types;
+  }
+  
+  /**
    * The qualifiers are @New
    */
   @Override
@@ -103,6 +124,14 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
   //
 
   /**
+   * Returns the injection points. 
+   */
+  @Override
+  public Set<InjectionPoint> getInjectionPoints()
+  {
+    return _target.getInjectionPoints();
+  }
+  /**
    * Creates a new instance of the component.
    */
   @Override
@@ -115,5 +144,11 @@ public class NewBean<X> extends AbstractIntrospectedBean<X>
     target.postConstruct(value);
 
     return value;
+  }
+  
+  @Override
+  public void destroy(X instance, CreationalContext<X> env)
+  {
+    env.release();
   }
 }

@@ -28,10 +28,14 @@
  */
 package com.caucho.config.gen;
 
+import java.io.IOException;
+import java.util.HashMap;
+
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 
 /**
  * Represents a filter for invoking a method
@@ -58,6 +62,22 @@ abstract public class AbstractAspectFactory<X> implements AspectFactory<X> {
   }
   
   /**
+   * Returns the generated class name
+   */
+  public String getGeneratedClassName()
+  {
+    return getAspectBeanFactory().getGeneratedClassName();
+  }
+  
+  /**
+   * Returns the generated class name
+   */
+  public String getInstanceClassName()
+  {
+    return getAspectBeanFactory().getInstanceClassName();
+  }
+  
+  /**
    * Returns the factory's bean type.
    */
   @Override
@@ -74,6 +94,16 @@ abstract public class AbstractAspectFactory<X> implements AspectFactory<X> {
     return getBeanType().getJavaClass();
   }
   
+
+  /**
+   * Returns true if the factory requires enhancement
+   */
+  @Override
+  public boolean isEnhanced()
+  {
+    return _next.isEnhanced();
+  }
+  
   /**
    * Returns an aspect for the method if one exists.
    */
@@ -83,6 +113,35 @@ abstract public class AbstractAspectFactory<X> implements AspectFactory<X> {
   {
     return _next.create(method, isEnhanced);
   }
+
+  @Override
+  public void generateInject(JavaWriter out, HashMap<String, Object> map)
+    throws IOException
+  {
+    _next.generateInject(out, map);
+  }
+  
+  @Override
+  public void generatePostConstruct(JavaWriter out, HashMap<String, Object> map)
+  throws IOException
+  {
+    _next.generatePostConstruct(out, map);
+  }
+  
+  @Override
+  public void generatePreDestroy(JavaWriter out, HashMap<String, Object> map)
+  throws IOException
+  {
+    _next.generatePreDestroy(out, map);
+  }
+  
+  @Override
+  public void generateEpilogue(JavaWriter out, HashMap<String, Object> map)
+    throws IOException
+  {
+    _next.generateEpilogue(out, map);
+  }
+
   
   @Override
   public String toString()

@@ -64,13 +64,13 @@ public class ErrorContext implements Context {
   @Override
   public <T> T get(Contextual<T> bean)
   {
-    return null;
+    throw _exn;    
   }
 
   @Override
   public <T> T get(Contextual<T> bean, CreationalContext<T> creationalContext)
   {
-    return null;
+    throw _exn;
   }
 
   @Override

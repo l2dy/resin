@@ -30,6 +30,7 @@
 package com.caucho.config.inject;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
@@ -38,40 +39,48 @@ import java.util.Set;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.decorator.Decorator;
 import javax.ejb.PostActivate;
 import javax.ejb.PrePassivate;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.AnnotatedType;
+import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InterceptionType;
-import javax.enterprise.inject.spi.Interceptor;
 import javax.interceptor.AroundInvoke;
 import javax.interceptor.InterceptorBinding;
 import javax.interceptor.InvocationContext;
 
+import com.caucho.config.ConfigException;
+import com.caucho.config.reflect.AnnotatedTypeImpl;
+import com.caucho.util.L10N;
+
 /**
  * InterceptorBean represents a Java interceptor
  */
-public class InterceptorBean<X> implements Interceptor<X>
+public class InterceptorBean<X> extends InterceptorRuntimeBean<X>
 {
+  private static final L10N L = new L10N(InterceptorBean.class);
+  
   private Class<X> _type;
 
   private ManagedBeanImpl<X> _bean;
 
-  private Method _aroundInvoke;
-  private Method _postConstruct;
-  private Method _preDestroy;
-  private Method _prePassivate;
-  private Method _postActivate;
-
-  private HashSet<Annotation> _bindings
+  private HashSet<Annotation> _qualifiers
     = new HashSet<Annotation>();
 
   public InterceptorBean(InjectManager beanManager,
                          Class<X> type)
   {
+    super(null, type);
+    
     _type = type;
 
-    _bean = beanManager.createManagedBean(_type);
+    AnnotatedType<X> annType = beanManager.createAnnotatedType(_type);
+    AnnotatedTypeImpl<X> enhAnnType = AnnotatedTypeImpl.create(annType);
+    
+    enhAnnType.addAnnotation(new InterceptorLiteral());
+    _bean = beanManager.createManagedBean(enhAnnType);
 
     init();
   }
@@ -81,6 +90,12 @@ public class InterceptorBean<X> implements Interceptor<X>
     this(InjectManager.create(), type);
   }
 
+  @Override
+  public Bean<X> getBean()
+  {
+    return this; // _bean;
+  }
+  
   //
   // metadata for the bean
   //
@@ -152,7 +167,8 @@ public class InterceptorBean<X> implements Interceptor<X>
     return _bean.getTypes();
   }
 
-  public Class getBeanClass()
+  @Override
+  public Class<?> getBeanClass()
   {
     return _bean.getBeanClass();
   }
@@ -161,22 +177,20 @@ public class InterceptorBean<X> implements Interceptor<X>
   // lifecycle
   //
 
-  /**
-   * Create a new instance of the bean.
-   */
-  /*
-  public Object create()
+  @Override
+  public X create(CreationalContext<X> creationalContext)
   {
-    return _bean.create();
+    return _bean.create(creationalContext);
   }
-  */
 
   /**
    * Destroys a bean instance
    */
+  @Override
   public void destroy(X instance, CreationalContext<X> env)
   {
-    _bean.destroy(instance, env);
+    // ioc/0558
+    // _bean.destroy(instance, env);
   }
 
   //
@@ -188,46 +202,7 @@ public class InterceptorBean<X> implements Interceptor<X>
    */
   public Set<Annotation> getInterceptorBindings()
   {
-    return _bindings;
-  }
-
-  /**
-   * Returns the bean's deployment type
-   */
-  public Method getMethod(InterceptionType type)
-  {
-    switch (type) {
-    case AROUND_INVOKE:
-      return _aroundInvoke;
-
-    case POST_CONSTRUCT:
-      return _postConstruct;
-
-    case PRE_DESTROY:
-      return _preDestroy;
-
-    case PRE_PASSIVATE:
-      return _prePassivate;
-
-    case POST_ACTIVATE:
-      return _postActivate;
-
-    default:
-      return null;
-    }
-  }
-
-  /**
-   * Returns the bean's deployment type
-   */
-  public boolean intercepts(InterceptionType type)
-  {
-    return getMethod(type) != null;
-  }
-
-  public Object create(CreationalContext creationalContext)
-  {
-    return _bean.create(creationalContext);
+    return _qualifiers;
   }
 
   /**
@@ -253,92 +228,21 @@ public class InterceptorBean<X> implements Interceptor<X>
   {
     introspectQualifiers(_type.getAnnotations());
 
-    introspectMethods();
-  }
-
-  protected void introspectMethods()
-  {
-    for (Method method : _type.getMethods()) {
-      if (Modifier.isStatic(method.getModifiers()))
-        continue;
-
-      if (method.isAnnotationPresent(AroundInvoke.class))
-        _aroundInvoke = method;
-
-      if (method.isAnnotationPresent(PostConstruct.class))
-        _postConstruct = method;
-
-      if (method.isAnnotationPresent(PreDestroy.class))
-        _preDestroy = method;
-
-      if (method.isAnnotationPresent(PrePassivate.class))
-        _prePassivate = method;
-
-      if (method.isAnnotationPresent(PostActivate.class))
-        _postActivate = method;
-    }
+    // introspectMethods(_type);
+    
+    if (_type.isAnnotationPresent(Decorator.class))
+      throw new ConfigException(L.l("@Interceptor {0} cannot have a @Decorator annotation",
+                                    _type.getName()));
   }
 
   protected void introspectQualifiers(Annotation []annList)
   {
     for (Annotation ann : annList) {
       if (ann.annotationType().isAnnotationPresent(InterceptorBinding.class)) {
-        _bindings.add(ann);
+        _qualifiers.add(ann);
       }
     }
   }
-
-  /**
-   * Invokes the callback
-   */
-  public Object intercept(InterceptionType type,
-                          X instance,
-                          InvocationContext ctx)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Instantiate the bean.
-   */
-  public Object instantiate()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Inject the bean.
-   */
-  public void inject(Object instance)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Call post-construct
-   */
-  public void postConstruct(Object instance)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Call pre-destroy
-   */
-  public void preDestroy(Object instance)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Call destroy
-   */
-  /*
-  public void destroy(Object instance)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-  */
 
   @Override
   public boolean equals(Object o)

@@ -137,7 +137,7 @@ public class BasicLogin extends AbstractLogin {
    */
   @Override
   protected boolean isSavedUserValid(HttpServletRequest request,
-				     Principal savedUser)
+                                     Principal savedUser)
   {
     String value = request.getHeader("authorization");
     if (value == null)
@@ -163,7 +163,7 @@ public class BasicLogin extends AbstractLogin {
    */
   @Override
   protected void loginChallenge(HttpServletRequest request,
-				HttpServletResponse response)
+                                HttpServletResponse response)
     throws IOException
   {
     String realm = getRealmName();

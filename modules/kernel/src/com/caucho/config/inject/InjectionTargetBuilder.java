@@ -29,12 +29,15 @@
 
 package com.caucho.config.inject;
 
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -43,9 +46,14 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.decorator.Decorator;
 import javax.decorator.Delegate;
+import javax.ejb.Stateful;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.event.Observes;
 import javax.enterprise.inject.AmbiguousResolutionException;
+import javax.enterprise.inject.Disposes;
+import javax.enterprise.inject.IllegalProductException;
 import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.UnsatisfiedResolutionException;
 import javax.enterprise.inject.spi.Annotated;
@@ -59,18 +67,19 @@ import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.inject.Inject;
 import javax.inject.Qualifier;
+import javax.interceptor.Interceptor;
 import javax.interceptor.InvocationContext;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.SerializeHandle;
 import com.caucho.config.bytecode.SerializationAdapter;
 import com.caucho.config.gen.CandiBeanGenerator;
+import com.caucho.config.inject.InjectManager.ReferenceFactory;
 import com.caucho.config.j2ee.PostConstructProgram;
 import com.caucho.config.j2ee.PreDestroyInject;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.BeanArg;
 import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.program.ValueArg;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -92,8 +101,6 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   private Bean<X> _bean;
 
   private AnnotatedType<X> _annotatedType;
-
-  private Set<Annotation> _interceptorBindings;
 
   private AnnotatedConstructor<X> _beanCtor;
   
@@ -152,6 +159,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     synchronized (this) {
       if (_producer == null) {
         _producer = build();
+        validate(getBean());
       }
     }
     
@@ -222,7 +230,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   {
     if (_producer == null)
       getInjectionPoints();
-System.out.println("DISPOSE: " + instance);    
+
     _producer.dispose(instance);
   }
 
@@ -293,7 +301,7 @@ System.out.println("DISPOSE: " + instance);
       ConfigProgram []initProgram = introspectPostConstruct(_annotatedType);
 
       ArrayList<ConfigProgram> destroyList = new ArrayList<ConfigProgram>();
-      introspectDestroy(destroyList, cl);
+      introspectDestroy(destroyList, _annotatedType);
       ConfigProgram []destroyProgram = new ConfigProgram[destroyList.size()];
       destroyList.toArray(destroyProgram);
       
@@ -343,26 +351,29 @@ System.out.println("DISPOSE: " + instance);
   
   private ConfigProgram []introspectPostConstruct(AnnotatedType<X> annType)
   {
+    if (annType.isAnnotationPresent(Interceptor.class)) {
+      return new ConfigProgram[0];
+    }
+    
     ArrayList<ConfigProgram> initList = new ArrayList<ConfigProgram>();
-    introspectInit(initList, annType.getJavaClass());
+    introspectInit(initList, annType);
     ConfigProgram []initProgram = new ConfigProgram[initList.size()];
     initList.toArray(initProgram);
+    
+    Arrays.sort(initProgram);
     
     return initProgram;
   }
 
   public static void
     introspectInit(ArrayList<ConfigProgram> initList,
-                   Class<?> type)
+                   AnnotatedType<?> type)
     throws ConfigException
   {
-    if (type == null || type.equals(Object.class))
-      return;
-
-    introspectInit(initList, type.getSuperclass());
-
-    for (Method method : type.getDeclaredMethods()) {
-      if (! method.isAnnotationPresent(PostConstruct.class)) {
+    for (AnnotatedMethod<?> annMethod : type.getMethods()) {
+      Method method = annMethod.getJavaMember();
+      
+      if (! annMethod.isAnnotationPresent(PostConstruct.class)) {
         // && ! isAnnotationPresent(annList, Inject.class)) {
         continue;
       }
@@ -386,17 +397,22 @@ System.out.println("DISPOSE: " + instance);
   }
 
   private void
-    introspectDestroy(ArrayList<ConfigProgram> destroyList, Class<?> type)
+    introspectDestroy(ArrayList<ConfigProgram> destroyList, 
+                      AnnotatedType<?> type)
     throws ConfigException
   {
     if (type == null || type.equals(Object.class))
       return;
+    
+    if (type.isAnnotationPresent(Interceptor.class)) {
+      return;
+    }
 
-    introspectDestroy(destroyList, type.getSuperclass());
-
-    for (Method method : type.getDeclaredMethods()) {
+    for (AnnotatedMethod<?> method : type.getMethods()) {
       if (method.isAnnotationPresent(PreDestroy.class)) {
-        Class<?> []types = method.getParameterTypes();
+        Method javaMethod = method.getJavaMember();
+        
+        Class<?> []types = javaMethod.getParameterTypes();
 
         if (types.length == 0) {
         }
@@ -405,11 +421,11 @@ System.out.println("DISPOSE: " + instance);
           continue;
         }
         else
-          throw new ConfigException(location(method)
+          throw new ConfigException(location(javaMethod)
                                     + L.l("@PreDestroy is requires zero arguments"));
 
         PreDestroyInject destroyProgram
-          = new PreDestroyInject(method);
+          = new PreDestroyInject(javaMethod);
 
         if (! destroyList.contains(destroyProgram))
           destroyList.add(destroyProgram);
@@ -467,12 +483,14 @@ System.out.println("DISPOSE: " + instance);
         else if (best == null) {
           best = ctor;
         }
-        else if (hasQualifierAnnotation(ctor)) {
-          if (best != null && hasQualifierAnnotation(best))
+        else if (ctor.isAnnotationPresent(Inject.class)) {
+          if (best != null && best.isAnnotationPresent(Inject.class))
             throw new ConfigException(L.l("'{0}' can't have two constructors marked by @Inject or by a @Qualifier, because the Java Injection BeanManager can't tell which one to use.",
                                           beanType.getJavaClass().getName()));
           best = ctor;
           second = null;
+        }
+        else if (best.isAnnotationPresent(Inject.class)) {
         }
         else if (ctor.getParameters().size() == 0) {
           best = ctor;
@@ -538,12 +556,22 @@ System.out.println("DISPOSE: " + instance);
     Annotation []qualifiers = getQualifiers(param);
  
     InjectionPoint ip = new InjectionPointImpl<X>(getBeanManager(),
-                                                 this,
-                                                 param);
+                                                  this,
+                                                  param);
     
     if (ann.isAnnotationPresent(Inject.class)) {
       // ioc/022k
       _injectionPointSet.add(ip);
+    }
+    
+    if (param.isAnnotationPresent(Disposes.class)) {
+      throw new ConfigException(L.l("{0} is an invalid managed bean because its constructor has a @Disposes parameter",
+                                    getAnnotatedType().getJavaClass().getName()));
+    }
+    
+    if (param.isAnnotationPresent(Observes.class)) {
+      throw new ConfigException(L.l("{0} is an invalid managed bean because its constructor has an @Observes parameter",
+                                    getAnnotatedType().getJavaClass().getName()));
     }
 
     return new BeanArg<X>(getBeanManager(),
@@ -581,7 +609,9 @@ System.out.println("DISPOSE: " + instance);
     
     ConfigProgram []injectProgram = new ConfigProgram[injectProgramList.size()];
     injectProgramList.toArray(injectProgram);
-
+    
+    Arrays.sort(injectProgram);
+    
     return injectProgram;
   }
   
@@ -597,6 +627,31 @@ System.out.println("DISPOSE: " + instance);
     
     // configureClassResources(injectList, type);
 
+    introspectInjectClass(type, injectProgramList);
+    introspectInjectField(type, injectProgramList);
+    introspectInjectMethod(type, injectProgramList);
+  }
+  
+  private void introspectInjectClass(AnnotatedType<X> type,
+                                     ArrayList<ConfigProgram> injectProgramList)
+  {
+    InjectManager cdiManager = getBeanManager();
+    
+    for (Annotation ann : type.getAnnotations()) {
+      Class<? extends Annotation> annType = ann.annotationType();
+      
+      InjectionPointHandler handler 
+        = cdiManager.getInjectionPointHandler(annType);
+      
+      if (handler != null) {
+        injectProgramList.add(new ClassHandlerProgram(ann, handler));
+      }
+    }
+  }
+  
+  private void introspectInjectField(AnnotatedType<X> type,
+                                     ArrayList<ConfigProgram> injectProgramList)
+  {
     for (AnnotatedField<?> field : type.getFields()) {
       if (field.getAnnotations().size() == 0)
         continue;
@@ -611,11 +666,11 @@ System.out.println("DISPOSE: " + instance);
         if (field.isAnnotationPresent(Delegate.class)) {
           // ioc/0i60
           /*
-          if (! type.isAnnotationPresent(javax.decorator.Decorator.class)) {
-            throw new IllegalStateException(L.l("'{0}' may not inject with @Delegate because it is not a @Decorator",
-                                                type.getJavaClass()));
-          }
-          */
+        if (! type.isAnnotationPresent(javax.decorator.Decorator.class)) {
+          throw new IllegalStateException(L.l("'{0}' may not inject with @Delegate because it is not a @Decorator",
+                                              type.getJavaClass()));
+        }
+           */
         }
         else {
           injectProgramList.add(new FieldInjectProgram(field.getJavaMember(), ij));
@@ -623,15 +678,20 @@ System.out.println("DISPOSE: " + instance);
       }
       else {
         InjectionPointHandler handler
-          = getBeanManager().getInjectionPointHandler(field);
-        
+        = getBeanManager().getInjectionPointHandler(field);
+
         if (handler != null) {
           ConfigProgram program = new FieldHandlerProgram(field, handler);
-          
+
           injectProgramList.add(program);
         }
       }
     }
+  }
+  
+  private void introspectInjectMethod(AnnotatedType<X> type,
+                                      ArrayList<ConfigProgram> injectProgramList)
+  {
 
     for (AnnotatedMethod method : type.getMethods()) {
       if (method.getAnnotations().size() == 0)
@@ -664,6 +724,60 @@ System.out.println("DISPOSE: " + instance);
           ConfigProgram program = new MethodHandlerProgram(method, handler);
           
           injectProgramList.add(program);
+        }
+      }
+    }
+  }
+  
+  private void validate(Bean<?> bean)
+  {
+    if (bean == null)
+      return;
+    
+    Class<? extends Annotation> scopeType = bean.getScope();
+    
+    if (getBeanManager().isPassivatingScope(scopeType)) {
+      //validateNormal(bean);
+      validatePassivating(bean);
+    }
+    else if (getBeanManager().isNormalScope(scopeType)) {
+      //validateNormal(bean);
+    }
+  }
+  
+  private void validatePassivating(Bean<?> bean)
+  {
+    Type baseType = _annotatedType.getBaseType();
+    
+    Class<?> cl = getBeanManager().createTargetBaseType(baseType).getRawClass();
+    boolean isStateful = _annotatedType.isAnnotationPresent(Stateful.class);
+    
+    if (! Serializable.class.isAssignableFrom(cl) && ! isStateful) {
+      throw new ConfigException(L.l("'{0}' is an invalid @{1} bean because it's not serializable for {2}.",
+                                    cl.getSimpleName(), bean.getScope().getSimpleName(),
+                                    bean));
+    }
+    
+    for (InjectionPoint ip : bean.getInjectionPoints()) {
+      if (ip.isTransient())
+        continue;
+      
+      Type type = ip.getType();
+      
+      if (ip.getBean() instanceof CdiStatefulBean)
+        continue;
+      
+      if (type instanceof Class<?>) {
+        Class<?> ipClass = (Class<?>) type;
+
+        if (! ipClass.isInterface()
+            && ! Serializable.class.isAssignableFrom(ipClass)
+            && ! getBeanManager().isNormalScope(ip.getBean().getScope())) {
+          throw new ConfigException(L.l("'{0}' is an invalid @{1} bean because '{2}' value {3} is not serializable for {4}.",
+                                        cl.getSimpleName(), bean.getScope().getSimpleName(),
+                                        ip.getType(),
+                                        ip.getMember().getName(),
+                                        bean));
         }
       }
     }
@@ -739,37 +853,61 @@ System.out.println("DISPOSE: " + instance);
       try {
         _fieldFactory = beanManager.getReferenceFactory(_ip);
       } catch (AmbiguousResolutionException e) {
-        String loc = _field.getDeclaringClass().getName() + "." + _field.getName() + ": ";
+        String loc = getLocation(field);
         
         throw new AmbiguousResolutionException(loc + e.getMessage(), e);
       } catch (UnsatisfiedResolutionException e) {
-        String loc = _field.getDeclaringClass().getName() + "." + _field.getName() + ": ";
+        String loc = getLocation(field);
         
         throw new UnsatisfiedResolutionException(loc + e.getMessage(), e);
+      } catch (IllegalProductException e) {
+        String loc = getLocation(field);
+        
+        throw new IllegalProductException(loc + e.getMessage(), e);
       } catch (InjectionException e) {
-        String loc = _field.getDeclaringClass().getName() + "." + _field.getName() + ": ";
+        String loc = getLocation(field);
       
         throw new InjectionException(loc + e.getMessage(), e);
       }
+    }
+    
+    @Override
+    public Class<?> getDeclaringClass()
+    {
+      return _field.getDeclaringClass();
+    }
+    
+    @Override
+    public String getName()
+    {
+      return _field.getName();
+    }
+    
+    private String getLocation(Field field)
+    {
+      return _field.getDeclaringClass().getName() + "." + _field.getName() + ": ";
+      
     }
 
     @Override
     public <T> void inject(T instance, CreationalContext<T> cxt)
     {
       try {
-        CreationalContextImpl<T> env;
+        CreationalContextImpl<?> env;
         
         if (cxt instanceof CreationalContextImpl<?>)
-          env = (CreationalContextImpl<T>) cxt;
+          env = (CreationalContextImpl<?>) cxt;
         else
           env = null;
         
         // server/30i1 vs ioc/0155
-        Object value = _fieldFactory.create(env, _ip);
+        Object value = _fieldFactory.create(null, env, _ip);
         
         _field.set(instance, value);
       } catch (AmbiguousResolutionException e) {
         throw new AmbiguousResolutionException(getFieldName(_field) + e.getMessage(), e);
+      } catch (IllegalProductException e) {
+        throw new IllegalProductException(getFieldName(_field) + e.getMessage(), e);
       } catch (InjectionException e) {
         throw new InjectionException(getFieldName(_field) + e.getMessage(), e);
       } catch (Exception e) {
@@ -791,27 +929,69 @@ System.out.println("DISPOSE: " + instance);
   class MethodInjectProgram extends ConfigProgram {
     private final Method _method;
     private final InjectionPoint []_args;
+    private ReferenceFactory<?> []_factoryArgs;
 
-    MethodInjectProgram(Method method, InjectionPoint []args)
+    MethodInjectProgram(Method method, 
+                        InjectionPoint []args)
     {
       _method = method;
       _method.setAccessible(true);
       _args = args;
+      
+      _factoryArgs = new ReferenceFactory[args.length];
     }
 
+    /**
+     * Sorting priority: fields are second
+     */
     @Override
-    public <T> void inject(T instance, CreationalContext<T> env)
+    public int getPriority()
+    {
+      return 1;
+    }
+    
+    @Override
+    public Class<?> getDeclaringClass()
+    {
+      return _method.getDeclaringClass();
+    }
+    
+    @Override
+    public String getName()
+    {
+      return _method.getName();
+    }
+    
+    @Override
+    public <T> void inject(T instance, CreationalContext<T> cxt)
     {
       try {
+        CreationalContextImpl<T> env;
+        
+        if (cxt instanceof CreationalContextImpl<?>)
+          env = (CreationalContextImpl<T>) cxt;
+        else
+          env = null;
+        
         Object []args = new Object[_args.length];
 
-        for (int i = 0; i < _args.length; i++)
-          args[i] = getBeanManager().getInjectableReference(_args[i], env);
+        for (int i = 0; i < _args.length; i++) {
+          if (_factoryArgs[i] == null)
+            _factoryArgs[i] = getBeanManager().getReferenceFactory(_args[i]);
+
+          args[i] = _factoryArgs[i].create(null, env, _args[i]);
+        }
 
         _method.invoke(instance, args);
       } catch (Exception e) {
         throw ConfigException.create(_method, e);
       }
+    }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _method + "]";
     }
   }
   
@@ -825,7 +1005,7 @@ System.out.println("DISPOSE: " + instance);
       _field = field;
       _handler = handler;
     }
-  
+
     @Override
     public <T> void inject(T instance, CreationalContext<T> env)
     {
@@ -838,6 +1018,44 @@ System.out.println("DISPOSE: " + instance);
     private void bind()
     {
       _boundProgram = _handler.introspectField(_field);
+    }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _field + "]";
+    }
+  }
+  
+  class ClassHandlerProgram extends ConfigProgram {
+    private final Annotation _ann;
+    private final InjectionPointHandler _handler;
+    private ConfigProgram _boundProgram;
+    
+    ClassHandlerProgram(Annotation ann, InjectionPointHandler handler)
+    {
+      _ann = ann;
+      _handler = handler;
+    }
+
+    @Override
+    public <T> void inject(T instance, CreationalContext<T> env)
+    {
+      if (_boundProgram == null)
+        bind();
+      
+      _boundProgram.inject(instance, env);
+    }
+    
+    private void bind()
+    {
+      _boundProgram = _handler.introspectType(_annotatedType);
+    }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _annotatedType + "]";
     }
   }
   
@@ -852,7 +1070,13 @@ System.out.println("DISPOSE: " + instance);
       _method = method;
       _handler = handler;
     }
-  
+
+    @Override
+    public int getPriority()
+    {
+      return 1;
+    }
+    
     @Override
     public <T> void inject(T instance, CreationalContext<T> env)
     {
@@ -865,6 +1089,12 @@ System.out.println("DISPOSE: " + instance);
     private void bind()
     {
       _boundProgram = _handler.introspectMethod(_method);
+    }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _method + "]";
     }
   }
 }

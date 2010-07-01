@@ -29,6 +29,8 @@
 
 package com.caucho.server.webbeans;
 
+import java.lang.annotation.Annotation;
+import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,19 +39,19 @@ import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.ejb.Stateless;
 import javax.enterprise.event.Observes;
+import javax.enterprise.inject.spi.AfterBeanDiscovery;
 import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.BeforeBeanDiscovery;
 import javax.enterprise.inject.spi.Extension;
 import javax.enterprise.inject.spi.ProcessAnnotatedType;
 import javax.enterprise.inject.spi.ProcessBean;
-import javax.enterprise.inject.spi.ProcessManagedBean;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.inject.AbstractBean;
+import com.caucho.config.extension.ProcessBeanImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
-import com.caucho.config.inject.ProcessBeanImpl;
 import com.caucho.ejb.inject.EjbGeneratedBean;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.hemp.broker.HempBroker;
@@ -57,6 +59,7 @@ import com.caucho.inject.Jndi;
 import com.caucho.inject.LazyExtension;
 import com.caucho.inject.MBean;
 import com.caucho.inject.Module;
+import com.caucho.inject.ThreadContext;
 import com.caucho.jms.JmsMessageListener;
 import com.caucho.jmx.Jmx;
 import com.caucho.remote.BamService;
@@ -72,12 +75,24 @@ public class ResinStandardPlugin implements Extension {
   private static final L10N L = new L10N(ResinStandardPlugin.class);
   private static final Logger log
     = Logger.getLogger(ResinStandardPlugin.class.getName());
+  
+  private static final HashSet<Class<? extends Annotation>> _ejbAnnotations
+    = new HashSet<Class<? extends Annotation>>();
 
-  private InjectManager _injectManager;
+  private InjectManager _cdiManager;
   
   public ResinStandardPlugin(InjectManager manager) 
   {
-    _injectManager = manager;
+    _cdiManager = manager;
+  }
+  
+  /**
+   * Callback on initialization, allowing for registration of contexts.
+   */
+  public void processAfterBeanDiscovery(@Observes AfterBeanDiscovery event)
+  {
+    // ioc/0p41
+    // event.addContext(ThreadContext.getContext());
   }
 
   /**
@@ -100,17 +115,41 @@ public class ResinStandardPlugin implements Extension {
     // ioc/0j08
     boolean isXmlConfig = true;
 
+    EjbManager ejbContainer = EjbManager.create(_cdiManager.getClassLoader());
+    
     if (isXmlConfig
         && (annotatedType.isAnnotationPresent(Stateful.class)
             || annotatedType.isAnnotationPresent(Stateless.class)
             || annotatedType.isAnnotationPresent(Singleton.class)
             || annotatedType.isAnnotationPresent(MessageDriven.class)
-            || annotatedType.isAnnotationPresent(JmsMessageListener.class))) {
-      EjbManager ejbContainer = EjbManager.create();
-      ejbContainer.createBean(annotatedType, null);
+            || annotatedType.isAnnotationPresent(JmsMessageListener.class)
+            || ejbContainer != null && ejbContainer.isConfiguredBean(annotatedType.getJavaClass()))) {
+      if (ejbContainer != null) {
+        ejbContainer.createBean(annotatedType, null);
+        event.veto();
+      }
+    }
+    
+    /*
+    if (isEjbParent(annotatedType.getJavaClass().getSuperclass())) {
       event.veto();
     }
+    */
   }
+  
+  private boolean isEjbParent(Class<?> cl)
+  {
+    if (cl == null || cl == Object.class)
+      return false;
+    
+    for (Annotation ann : cl.getAnnotations()) {
+      if (_ejbAnnotations.contains(ann.annotationType()))
+        return true;
+    }
+    
+    return isEjbParent(cl.getSuperclass());
+  }
+  
 
   @LazyExtension
   public void processBean(@Observes ProcessBean<?> event) 
@@ -123,15 +162,16 @@ public class ResinStandardPlugin implements Extension {
     Annotated annotated = event.getAnnotated();
     Bean<T> bean = event.getBean();
 
-    if (annotated == null || bean instanceof EjbGeneratedBean) {
+    if (annotated == null) {
       return;
     }
 
-    if (annotated.isAnnotationPresent(Stateful.class)
-        || annotated.isAnnotationPresent(Stateless.class)
-        || annotated.isAnnotationPresent(Singleton.class)
-        || annotated.isAnnotationPresent(MessageDriven.class)
-        || annotated.isAnnotationPresent(JmsMessageListener.class)) {
+    if (! (bean instanceof EjbGeneratedBean)
+        && (annotated.isAnnotationPresent(Stateful.class)
+            || annotated.isAnnotationPresent(Stateless.class)
+            || annotated.isAnnotationPresent(Singleton.class)
+            || annotated.isAnnotationPresent(MessageDriven.class)
+            || annotated.isAnnotationPresent(JmsMessageListener.class))) {
       EjbManager ejbContainer = EjbManager.create();
 
       if (bean instanceof ManagedBeanImpl<?>) {
@@ -152,12 +192,12 @@ public class ResinStandardPlugin implements Extension {
     if (annotated.isAnnotationPresent(Jndi.class)) {
       Jndi jndi = annotated.getAnnotation(Jndi.class);
       String jndiName = jndi.value();
-      
+
       if ("".equals(jndiName)) {
         jndiName = bean.getBeanClass().getSimpleName();
       }
       
-      JndiBeanProxy<T> proxy = new JndiBeanProxy<T>(_injectManager, bean);
+      JndiBeanProxy<T> proxy = new JndiBeanProxy<T>(_cdiManager, bean);
       
       if (log.isLoggable(Level.FINE))
         log.fine("bind to JNDI '" + jndiName + "' for " + bean);
@@ -179,7 +219,7 @@ public class ResinStandardPlugin implements Extension {
       AnnotatedType<?> annType = (AnnotatedType<?>) annotated;
       
       try {
-        Jmx.register(new BeanMBean(_injectManager, bean, annType), mbeanName);
+        Jmx.register(new BeanMBean(_cdiManager, bean, annType), mbeanName);
       } catch (Exception e) {
         log.log(Level.FINE, e.toString(), e);
       }
@@ -217,5 +257,13 @@ public class ResinStandardPlugin implements Extension {
   public String toString()
   {
     return getClass().getSimpleName() + "[]";
+  }
+  
+  static {
+    _ejbAnnotations.add(Stateful.class);
+    _ejbAnnotations.add(Stateless.class);
+    _ejbAnnotations.add(Singleton.class);
+    _ejbAnnotations.add(MessageDriven.class);
+    _ejbAnnotations.add(JmsMessageListener.class);
   }
 }

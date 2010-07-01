@@ -50,6 +50,7 @@ import com.caucho.config.inject.InjectManager;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 import com.caucho.java.gen.JavaClassGenerator;
+import com.caucho.loader.DynamicClassLoader;
 import com.caucho.util.L10N;
 
 /**
@@ -158,52 +159,13 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
         && hasTransientInject(_beanClass.getJavaClass())) {
       _isEnhanced = true;
     }
+    
+    if (_aspectFactory.isEnhanced())
+      _isEnhanced = true;
   }
 
   protected void introspectClass(AnnotatedType<X> cl)
   {
-    /*
-    if (cl.isAnnotationPresent(Interceptor.class)
-        || cl.isAnnotationPresent(Decorator.class)) {
-      return;
-    }
-
-    ArrayList<Annotation> interceptorBindingList
-      = new ArrayList<Annotation>();
-
-    Set<Annotation> xmlInterceptorBindings = getInterceptorBindings();
-
-    if (xmlInterceptorBindings != null) {
-      for (Annotation ann : xmlInterceptorBindings) {
-        interceptorBindingList.add(ann);
-      }
-    }
-    else {
-      for (Annotation ann : cl.getAnnotations()) {
-        Class<?> annType = ann.annotationType();
-
-        if (annType.isAnnotationPresent(Stereotype.class)) {
-          for (Annotation sAnn : ann.annotationType().getAnnotations()) {
-            Class<?> sAnnType = sAnn.annotationType();
-
-            if (sAnnType.isAnnotationPresent(InterceptorBinding.class)) {
-              interceptorBindingList.add(sAnn);
-            }
-          }
-        }
-
-        if (annType.isAnnotationPresent(InterceptorBinding.class)) {
-          interceptorBindingList.add(ann);
-        }
-      }
-    }
-    */
-
-    /*
-    if (interceptorBindingList.size() > 0) {
-      _view.setInterceptorBindings(interceptorBindingList);
-    }
-    */
   }
 
   private boolean hasTransientInject(Class<?> cl)
@@ -257,6 +219,11 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
     
     Class<?> baseClass = _beanClass.getJavaClass();
     int modifiers = baseClass.getModifiers();
+    
+    ClassLoader baseClassLoader = baseClass.getClassLoader();
+    
+    boolean isPackageLoader = (baseClassLoader != null
+                               && (baseClassLoader instanceof DynamicClassLoader));
 
     if (Modifier.isFinal(modifiers))
       throw new IllegalStateException(L.l("'{0}' is an invalid enhanced class because it is final.",
@@ -265,19 +232,34 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
     try {
       JavaClassGenerator gen = new JavaClassGenerator();
 
-      Class<?> cl = gen.preload(getFullClassName());
-
-      if (cl != null)
-        return cl;
-
-      gen.generate(this);
-
-      gen.compilePendingJava();
-
-      if (Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers))
-        return gen.loadClass(getFullClassName());
+      Class<?> cl;
+      
+      if (isPackageLoader)
+        cl = gen.preloadClassParentLoader(getFullClassName(), baseClass);
       else
-        return gen.loadClassParentLoader(getFullClassName(), baseClass);
+        cl = gen.preload(getFullClassName());
+
+      if (cl == null) {
+        gen.generate(this);
+
+        gen.compilePendingJava();
+      
+        // ioc/0c26
+
+        if (isPackageLoader)
+          cl = gen.loadClassParentLoader(getFullClassName(), baseClass);
+        else
+          cl = gen.loadClass(getFullClassName());
+      }
+      
+      Method getException = cl.getMethod("__caucho_getException");
+      
+      RuntimeException exn = (RuntimeException) getException.invoke(null);
+      
+      if (exn != null)
+        throw exn;
+      
+      return cl;
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -324,18 +306,21 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
       }
     }
     
-    generateBeanPrologue(out);
-
-    generateInject(out);
-
-    generatePostConstruct(out);
-
     HashMap<String,Object> map = new HashMap<String,Object>();
-    for (AspectGenerator<X> method : _businessMethods) {
-      method.generate(out, map);
-    }
+    
+    generateBeanPrologue(out, map);
 
+    generateBusinessMethods(out, map);
+
+    generateEpilogue(out, map);
+    
+    generateInject(out, map);
+    
+    generatePostConstruct(out, map);
+    
     generateWriteReplace(out);
+    
+    generateDestroy(out, map);
   }
 
   /**
@@ -344,18 +329,10 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
   protected void generateHeader(JavaWriter out)
     throws IOException
   {
-    out.println("private static final java.util.logging.Logger __log");
-    out.println("  = java.util.logging.Logger.getLogger(\"" + getFullClassName() + "\");");
-    out.println("private static final boolean __isFiner");
-    out.println("  = __log.isLoggable(java.util.logging.Level.FINER);");
-
-    /*
-    if (_hasXA) {
-      out.println();
-      out.println("private static final com.caucho.ejb.gen.XAManager _xa");
-      out.println("  = new com.caucho.ejb.gen.XAManager();");
-    }
-    */
+    generateClassStaticFields(out);
+    
+    out.println("private static final boolean __caucho_isFiner");
+    out.println("  = __caucho_log.isLoggable(java.util.logging.Level.FINER);");
 
     if (_isSerializeHandle) {
       generateSerializeHandle(out);
@@ -441,6 +418,10 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
       out.print("a" + i);
     }
     out.println(");");
+    
+    out.println();
+    out.println("if (__caucho_exception != null)");
+    out.println("  throw __caucho_exception;");
 
     generateBeanConstructor(out);
     generateProxyConstructor(out);
@@ -463,5 +444,11 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
 
       out.printClass(exnCls[i]);
     }
+  }
+
+  @Override
+  protected AspectBeanFactory<X> getAspectBeanFactory()
+  {
+    return _aspectFactory;
   }
 }

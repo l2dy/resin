@@ -29,7 +29,9 @@
 
 package com.caucho.ejb.server;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.ejb.FinderException;
@@ -46,16 +48,20 @@ import javax.transaction.UserTransaction;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.LineConfigException;
+import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.OwnerCreationalContext;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.cfg.AroundInvokeConfig;
 import com.caucho.ejb.manager.EjbManager;
+import com.caucho.ejb.manager.EjbModule;
 import com.caucho.ejb.session.AbstractSessionContext;
-import com.caucho.jca.pool.UserTransactionProxy;
+import com.caucho.inject.RequestContext;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
+import com.caucho.transaction.UserTransactionProxy;
 import com.caucho.util.L10N;
 
 /**
@@ -66,7 +72,8 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     = Logger.getLogger(AbstractEjbBeanManager.class.getName());
   private static final L10N L = new L10N(AbstractEjbBeanManager.class);
 
-  protected final EjbManager _ejbContainer;
+  protected final EjbManager _ejbManager;
+  private final EjbModule _ejbModule;
 
   protected final UserTransaction _ut = UserTransactionProxy.getInstance();
 
@@ -78,23 +85,18 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   protected Class<X> _ejbClass;
 
   // introspected bean information
+  private AnnotatedType<X> _rawAnnotatedType;
   private AnnotatedType<X> _annotatedType;
   private Bean<X> _bean;
 
   private String _id;
   private String _ejbName;
-  private String _moduleName;
   private String _handleServerId;
 
   // name for IIOP, Hessian, JNDI
   protected String _mappedName;
 
-  private ArrayList<Class<?>> _localApiList = new ArrayList<Class<?>>();
-  private Class<?> _localBean;
-  
   private ArrayList<Class<?>> _remoteApiList = new ArrayList<Class<?>>();
-  
-  protected boolean _hasNoInterfaceView = false;
 
   private Class<?> _serviceEndpointClass;
 
@@ -118,6 +120,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   private Bean<X> _component;
 
   private final Lifecycle _lifecycle = new Lifecycle();
+  private InjectManager _moduleInjectManager;
   private InjectManager _ejbInjectManager;
 
   /**
@@ -126,18 +129,26 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    * @param manager
    *          the owning server container
    */
-  public AbstractEjbBeanManager(EjbManager container, 
+  public AbstractEjbBeanManager(EjbManager ejbManager,
+                                AnnotatedType<X> rawAnnotatedType,
                                 AnnotatedType<X> annotatedType)
   {
+    _rawAnnotatedType = rawAnnotatedType;
     _annotatedType = annotatedType;
-    _ejbContainer = container;
-
-    _loader = EnvironmentClassLoader.create(container.getClassLoader());
+    _ejbManager = ejbManager;
+    
+    _ejbModule = EjbModule.getCurrent();
+    
+    if (_ejbModule == null)
+      throw new IllegalStateException(L.l("EjbModule is not currently defined."));
+    
+    _loader = EnvironmentClassLoader.create(ejbManager.getClassLoader());
     // XXX: 4.0.7 this is complicated by decorator vs context injection
     _loader.setAttribute("caucho.inject", false);
     
     _producer = new EjbInjectionTarget<X>(this, annotatedType);
     
+    _moduleInjectManager = InjectManager.create();
     _ejbInjectManager = InjectManager.create(_loader);
   }
 
@@ -147,6 +158,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   public String getId()
   {
     return _id;
+  }
+
+  public InjectManager getModuleInjectManager()
+  {
+    return _moduleInjectManager;
   }
 
   public InjectManager getInjectManager()
@@ -215,19 +231,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   }
 
   /**
-   * Set's the module that defined this ejb.
-   */
-  public void setModuleName(String moduleName)
-  {
-    _moduleName = moduleName;
-  }
-
-  /**
    * Returns's the module that defined this ejb.
    */
   public String getModuleName()
   {
-    return _moduleName;
+    return _ejbModule.getModuleName();
   }
 
   /**
@@ -285,6 +293,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     return url;
   }
 
+  public AnnotatedType<X> getRawAnnotatedType()
+  {
+    return _rawAnnotatedType;
+  }
+
   public AnnotatedType<X> getAnnotatedType()
   {
     return _annotatedType;
@@ -304,16 +317,6 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   public Class<X> getEjbClass()
   {
     return _annotatedType.getJavaClass();
-  }
-  
-  public void setIsNoInterfaceView(boolean noInterfaceView)
-  {
-    _hasNoInterfaceView = noInterfaceView;
-  }
-
-  public boolean hasNoInterfaceView()
-  {
-    return _hasNoInterfaceView;
   }
   
   /**
@@ -339,31 +342,15 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   {
     return _remoteApiList.size() > 0;
   }
-
-  /**
-   * Sets the local api class list
-   */
-  public void setLocalApiList(ArrayList<Class<?>> list)
+  
+  public ArrayList<AnnotatedType<? super X>> getLocalApi()
   {
-    _localApiList = new ArrayList<Class<?>>(list);
-  }
-
-  /**
-   * Sets the remote object class.
-   */
-  public ArrayList<Class<?>> getLocalApiList()
-  {
-    return _localApiList;
+    throw new UnsupportedOperationException(getClass().getName());
   }
   
-  public void setLocalBean(Class<?> localBean)
+  public AnnotatedType<X> getLocalBean()
   {
-    _localBean = localBean;
-  }
-  
-  public Class<?> getLocalBean()
-  {
-    return _localBean;
+    return null;
   }
 
   /**
@@ -381,7 +368,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   {
     try {
       if (_jndiEnv == null)
-        _jndiEnv = (Context) new InitialContext().lookup("java:comp/env");
+        _jndiEnv = (Context) new InitialContext();//.lookup("java:comp/env");
 
       // XXX: not tested
       return _jndiEnv.lookup(jndiName);
@@ -400,7 +387,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    */
   public EjbManager getEjbContainer()
   {
-    return _ejbContainer;
+    return _ejbManager;
   }
 
   /**
@@ -440,6 +427,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    */
   public TimerService getTimerService()
   {
+    TimerService service = _producer.getTimerService();
+    
+    if (service != null)
+      return service;
+    
     // ejb/0fj0
     throw new UnsupportedOperationException(L.l("'{0}' does not support a timer service because it does not have a @Timeout method",
                                                 this));
@@ -468,6 +460,10 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     return _contextImplClass;
   }
 
+  public void bind()
+  {
+  }
+  
   /**
    * Returns the remote skeleton for the given API
    *
@@ -516,7 +512,26 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     throw new UnsupportedOperationException(L.l("EJB '{0}' does not support a timeout, because it does not have a @Timeout method",
                                                 this));
     */
-    getContext().__caucho_timeout_callback(timer);
+    
+    try {
+      RequestContext.begin();
+      // XXX: needs reintegration
+      OwnerCreationalContext env = new OwnerCreationalContext(_producer.getBean());
+      Object instance = newInstance(env);
+      
+      Method method = _producer.getTimeoutMethod();
+      
+      if (method.getParameterTypes().length == 0)
+        method.invoke(instance);
+      else
+        method.invoke(instance, timer);
+      
+      destroy(instance, env);
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    } finally {
+      RequestContext.end();
+    }
   }
 
   public void init() throws Exception
@@ -525,33 +540,17 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     // _loader.setId("EnvironmentLoader[ejb:" + getId() + "]");
   }
   
-  public void initInstance(X instance)
-  {
-    _producer.initInstance(instance);
-  }
-  
-  public X newInstance(CreationalContext<X> env)
+  public X newInstance(CreationalContextImpl<X> env)
   {
     return _producer.newInstance(env);
   }
   
-  /**
-   * Initialize an instance
-   */
-  public <T> void initInstance(X instance, InjectionTarget<X> target, 
-                               T proxy, CreationalContext<T> cxt)
+  public void destroy(Object instance, CreationalContextImpl env)
   {
-    _producer.initInstance(instance, target, proxy, cxt);
-  }
-
-  public void setInitProgram(ConfigProgram program)
-  {
-    _producer.setInitProgram(program);
-  }
-  
-  public void setInjectionTarget(InjectionTarget<X> target)
-  {
-    _producer.setInjectionTarget(target);
+    /*
+    if (instance != null)
+      _producer.destroyInstance((X) instance);
+      */
   }
   
   /**

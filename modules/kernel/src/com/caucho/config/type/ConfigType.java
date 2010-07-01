@@ -113,7 +113,7 @@ abstract public class ConfigType<T>
   public Constructor getConstructor(int count)
   {
     throw new ConfigException(L.l("'{0}' does not support <new> constructors",
-				  this));
+                                  this));
   }
   
   /**
@@ -193,7 +193,7 @@ abstract public class ConfigType<T>
    */
   public boolean isProgram()
   {
-    return ConfigProgram.class.equals(getType());
+    return false;
   }
 
   public ConfigType<?> getComponentType()
@@ -209,7 +209,7 @@ abstract public class ConfigType<T>
       return attrStrategy;
 
     // ioc/2252 - flow attributes are not captured by ContentProgram
-	
+
     attrStrategy = getContentProgramAttribute();
 
     TypeFactory factory = TypeFactory.getFactory();
@@ -217,13 +217,13 @@ abstract public class ConfigType<T>
     Attribute envStrategy = factory.getEnvironmentAttribute(qName);
 
     if (envStrategy instanceof FlowAttribute
-	|| envStrategy != null && attrStrategy == null)
+        || envStrategy != null && attrStrategy == null)
       return envStrategy;
     else if (attrStrategy != null)
       return attrStrategy;
 
     if (qName.getNamespaceURI() != null
-	&& qName.getNamespaceURI().startsWith("urn:java:"))
+        && qName.getNamespaceURI().startsWith("urn:java:"))
       return getAddBeanAttribute(qName);
     else
       return null;
@@ -248,8 +248,8 @@ abstract public class ConfigType<T>
    * successful.
    */
   public boolean setProperty(Object bean,
-			     QName name,
-			     Object value)
+                             QName name,
+                             Object value)
   {
     Attribute attr = getAttribute(name);
 
@@ -291,8 +291,8 @@ abstract public class ConfigType<T>
    * Called before the children are configured.
    */
   public void beforeConfigureBean(XmlConfigContext builder,
-				  Object bean,
-				  Node node)
+                                  Object bean,
+                                  Node node)
   {
   }
 

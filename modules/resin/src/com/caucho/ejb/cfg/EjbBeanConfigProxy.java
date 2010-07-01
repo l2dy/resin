@@ -43,20 +43,17 @@ import java.util.ArrayList;
  * the merging of ejb definitions.
  */
 public class EjbBeanConfigProxy implements DependencyBean {
-  private static final L10N L = new L10N(EjbBeanConfigProxy.class);
-
   private final EjbConfig _config;
   private final String _ejbModuleName;
 
   private String _ejbName;
+  private Class<?> _ejbClass;
 
   private String _filename = "";
   private String _location = "";
   
   // The configuration program
   private ContainerProgram _program = new ContainerProgram();
-
-  private EjbBean _bean;
   
   ArrayList<PersistentDependency> _dependList =
     new ArrayList<PersistentDependency>();
@@ -111,7 +108,7 @@ public class EjbBeanConfigProxy implements DependencyBean {
   /**
    * Sets the ejbName
    */
-  public void setEJBName(String ejbName)
+  public void setEjbName(String ejbName)
   {
     _ejbName = ejbName;
   }
@@ -119,14 +116,31 @@ public class EjbBeanConfigProxy implements DependencyBean {
   /**
    * Gets the ejbName
    */
-  public String getEJBName()
+  public String getEjbName()
   {
     return _ejbName;
+  }
+  
+  /**
+   * Sets the ejb-class
+   */
+  public void setEjbClass(Class<?> ejbClass)
+  {
+    _ejbClass = ejbClass;
+  }
+  
+  /**
+   * Gets the ejb-class
+   */
+  public Class<?> getEjbClass()
+  {
+    return _ejbClass;
   }
 
   /**
    * Add a dependency.
    */
+  @Override
   public void addDependency(PersistentDependency depend)
   {
     if (! _dependList.contains(depend))
@@ -162,16 +176,12 @@ public class EjbBeanConfigProxy implements DependencyBean {
    */
   @PostConstruct
   public void init()
-    throws Throwable
   {
-    getConfig().addProxy(this);
+    getConfig().addConfigProxy(this);
   }
-
-  /**
-   * Returns the entity config.
-   */
-  public EjbBean getBean()
+  
+  public void configure()
   {
-    return _bean;
+    throw new UnsupportedOperationException(getClass().getName());
   }
 }

@@ -74,7 +74,7 @@ public class BeanArg<T> extends Arg<T> {
       HashSet<Annotation> qualifiers = new HashSet<Annotation>();
       
       for (Annotation ann : _bindings) {
-	qualifiers.add(ann);
+        qualifiers.add(ann);
       }
       
       _factory = (ReferenceFactory<T>) _beanManager.getReferenceFactory(_type, qualifiers, _ip);
@@ -87,6 +87,12 @@ public class BeanArg<T> extends Arg<T> {
     if (_factory == null)
       bind();
 
-    return _factory.create((CreationalContextImpl) parentEnv, _ip);
+    return _factory.create(null, (CreationalContextImpl<T>) parentEnv, _ip);
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _factory + "]";
   }
 }

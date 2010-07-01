@@ -29,10 +29,15 @@
 
 package com.caucho.ejb.session;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.ejb.FinderException;
@@ -40,11 +45,21 @@ import javax.ejb.NoSuchEJBException;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
+import javax.enterprise.inject.spi.Decorator;
+import javax.enterprise.inject.spi.SessionBeanType;
 
+import com.caucho.config.ConfigException;
+import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.gen.CandiEnhancedBean;
+import com.caucho.config.gen.CandiUtil;
 import com.caucho.config.inject.CreationalContextImpl;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
+import com.caucho.config.inject.OwnerCreationalContext;
+import com.caucho.ejb.cfg.EjbLazyGenerator;
+import com.caucho.ejb.gen.StatefulGenerator;
 import com.caucho.ejb.inject.SessionBeanImpl;
+import com.caucho.ejb.inject.StatefulBeanImpl;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.util.L10N;
@@ -61,12 +76,16 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
   
   // XXX: need real lifecycle
   private LruCache<String,StatefulObject> _remoteSessions;
+  
+  private Object _decoratorClass;
+  private List<Decorator<?>> _decoratorBeans;
 
   public StatefulManager(EjbManager ejbContainer,
-			AnnotatedType<X> annotatedType,
-			Class<?> proxyImplClass)
+                         AnnotatedType<X> rawAnnType,
+                         AnnotatedType<X> annotatedType,
+                         EjbLazyGenerator<X> lazyGenerator)
   {
-    super(ejbContainer, annotatedType, proxyImplClass);
+    super(ejbContainer, rawAnnType, annotatedType, lazyGenerator);
   }
 
   @Override
@@ -81,6 +100,45 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
     return StatefulContext.class;
   }
 
+  @Override
+  protected SessionBeanType getSessionBeanType()
+  {
+    return SessionBeanType.STATEFUL;
+  }
+  
+  public void bind()
+  {
+    super.bind();
+    
+    Class<?> instanceClass = getProxyImplClass();
+
+    if (instanceClass != null
+        && CandiEnhancedBean.class.isAssignableFrom(instanceClass)) {
+      try {
+        Method method = instanceClass.getMethod("__caucho_decorator_init");
+
+        _decoratorClass = method.invoke(null);
+      
+        Annotation []qualifiers = new Annotation[getBean().getQualifiers().size()];
+        getBean().getQualifiers().toArray(qualifiers);
+        
+        InjectManager moduleBeanManager = InjectManager.create();
+
+        _decoratorBeans = moduleBeanManager.resolveDecorators(getBean().getTypes(), qualifiers);
+      
+        method = instanceClass.getMethod("__caucho_init_decorators",
+                                         List.class);
+        
+      
+        method.invoke(null, _decoratorBeans);
+      } catch (InvocationTargetException e) {
+        throw ConfigException.create(e.getCause());
+      } catch (Exception e) {
+        log.log(Level.FINEST, e.toString(), e);
+      }
+    }
+  }
+  
   @Override
   public <T> StatefulContext<X,T> getSessionContext(Class<T> api)
   {
@@ -109,7 +167,7 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
 
     if (context != null) {
       CreationalContextImpl<T> env = 
-        (CreationalContextImpl<T>) CreationalContextImpl.create();
+        new OwnerCreationalContext<T>(null);
 
       return context.createProxy(env);
     }
@@ -117,17 +175,49 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
       return null;
   }
   
-  public <T> T initProxy(T instance, CreationalContext<T> env)
+  public Object getStatefulProxy(String key)
+  {
+    AnnotatedType<?> annType = getLocalBean();
+    
+    if (annType != null)
+      return getLocalProxy(annType.getJavaClass());
+    
+    ArrayList<AnnotatedType<? super X>> localApi = getLocalApi();
+    
+    if (localApi.size() > 0)
+      return getLocalProxy(localApi.get(0).getJavaClass());
+    
+    throw new UnsupportedOperationException(L.l("{0} cannot return proxy for {1} because no @Local interface exists",
+                                                this, key));
+    
+  }
+  
+  public <T> T initProxy(T instance, CreationalContextImpl<T> env)
   {
     if (instance instanceof CandiEnhancedBean) {
       CandiEnhancedBean bean = (CandiEnhancedBean) instance;
       
-      Object []delegates = null;
+      Object []delegates = createDelegates((CreationalContextImpl) env);
       
       bean.__caucho_inject(delegates, env);
     }
     
     return instance;
+  }
+  
+  private Object []createDelegates(CreationalContextImpl<?> env)
+  {
+    if (_decoratorBeans != null) {
+      // if (env != null)
+      //   env.setInjectionPoint(oldPoint);
+      
+      return CandiUtil.generateProxyDelegate(getInjectManager(),
+                                             _decoratorBeans,
+                                             _decoratorClass,
+                                             env);
+    }
+    else
+      return null;
   }
 
   @Override
@@ -139,7 +229,8 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
   @Override
   protected <T> Bean<T> createBean(ManagedBeanImpl<X> mBean, 
                                    Class<T> api,
-                                   Set<Type> apiList)
+                                   Set<Type> apiList,
+                                   AnnotatedType<X> extAnnType)
   {
     StatefulContext<X,T> context = getSessionContext(api);
 
@@ -147,8 +238,8 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
       throw new NullPointerException(L.l("'{0}' is an unknown api for {1}",
                                          api, getContext()));
     
-    SessionBeanImpl<X,T> statefulBean
-      = new SessionBeanImpl<X,T>(context, mBean, apiList);
+    StatefulBeanImpl<X,T> statefulBean
+      = new StatefulBeanImpl<X,T>(context, mBean, apiList, extAnnType);
 
     return statefulBean;
   }
@@ -156,6 +247,20 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
   public void addSession(StatefulObject remoteObject)
   {
     createSessionKey(remoteObject);
+  }
+
+  /**
+   * Creates the bean generator for the session bean.
+   */
+  @Override
+  protected BeanGenerator<X> createBeanGenerator()
+  {
+    EjbLazyGenerator<X> lazyGen = getLazyGenerator();
+    
+    return new StatefulGenerator<X>(getEJBName(), getAnnotatedType(),
+                                    lazyGen.getLocalApi(),
+                                    lazyGen.getLocalBean(),
+                                    lazyGen.getRemoteApi());
   }
 
   /**
@@ -187,37 +292,11 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
   }
 
   /**
-   * Returns the remote object.
-   */
-  /*
-  @Override
-  public Object getRemoteObject(Object key)
-  {
-    StatefulObject remote = null;
-    if (_remoteSessions != null) {
-      remote = _remoteSessions.get(String.valueOf(key));
-    }
-
-    return remote;
-  }
-  */
-
-  /**
    * Creates a handle for a new session.
    */
   public String createSessionKey(StatefulObject remote)
   {
     throw new UnsupportedOperationException(getClass().getName());
-    /*
-    String key = getHandleEncoder().createRandomStringKey();
-
-    if (_remoteSessions == null)
-      _remoteSessions = new LruCache<String,StatefulObject>(8192);
-    
-    _remoteSessions.put(key, remote);
-
-    return key;
-    */
   }
 
   /**
@@ -251,7 +330,7 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
       /*
       // ejb/0fe2
       if (cxt == null)
-	throw new NoSuchEJBException("no matching object:" + key);
+        throw new NoSuchEJBException("no matching object:" + key);
       */
     }
   }

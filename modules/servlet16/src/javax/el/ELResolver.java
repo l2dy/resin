@@ -46,32 +46,41 @@ public abstract class ELResolver {
   }
 
   public abstract Class<?> getCommonPropertyType(ELContext context,
-						 Object base);
+                                                 Object base);
 
   public abstract Iterator<FeatureDescriptor>
     getFeatureDescriptors(ELContext context, Object base);
 
   public abstract Class<?> getType(ELContext context,
-				   Object base,
-				   Object property);
+                                   Object base,
+                                   Object property);
 
   public abstract Object getValue(ELContext context,
-				  Object base,
-				  Object property)
+                                  Object base,
+                                  Object property)
     throws PropertyNotFoundException,
-	   ELException;
+           ELException;
+
+  public java.lang.Object invoke(ELContext context,
+                                 java.lang.Object base,
+                                 java.lang.Object method,
+                                 java.lang.Class<?> []paramTypes,
+                                 java.lang.Object []params)
+  {
+    return null;
+  }
 
   public abstract boolean isReadOnly(ELContext context,
-				     Object base,
-				     Object property)
+                                     Object base,
+                                     Object property)
     throws PropertyNotFoundException,
-	   ELException;
+           ELException;
 
   public abstract void setValue(ELContext context,
-				Object base,
-				Object property,
-				Object value)
+                                Object base,
+                                Object property,
+                                Object value)
     throws PropertyNotFoundException,
-	   PropertyNotWritableException,
-	   ELException;
+           PropertyNotWritableException,
+           ELException;
 }

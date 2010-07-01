@@ -32,9 +32,13 @@ package com.caucho.ejb.cfg;
 import java.util.*;
 import java.util.logging.*;
 
+import javax.enterprise.inject.spi.AnnotatedType;
+
 import com.caucho.config.*;
+import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.loader.*;
+import com.caucho.server.webapp.WebApp;
 import com.caucho.util.*;
 import com.caucho.vfs.*;
 
@@ -71,7 +75,14 @@ public class EjbConfigManager extends EjbConfig {
       _rootConfigMap.put(root, rootConfig);
       _rootPendingList.add(rootConfig);
 
-      String ejbModuleName = getEjbModuleName(root);
+      String ejbModuleName = null;
+      
+      WebApp webApp = WebApp.getCurrent();
+      
+      if (webApp != null)
+        ejbModuleName = webApp.getWarName();
+      else
+        ejbModuleName = getEjbModuleName(root);
 
       Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
 
@@ -87,16 +98,36 @@ public class EjbConfigManager extends EjbConfig {
 
     return rootConfig;
   }
+  
+  public void configureRootPath(Path root)
+  {
+    String ejbModuleName = null;
+    
+    WebApp webApp = WebApp.getCurrent();
+    
+    if (webApp != null)
+      ejbModuleName = webApp.getWarName();
+    else
+      ejbModuleName = getEjbModuleName(root);
 
+    Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
+
+    if (ejbJarXml.canRead()) {
+      EjbJar ejbJar = configurePath(root, ejbModuleName);
+    }
+  }
+  
   public void start()
   {
+    InjectManager.create().update();
+    
     ArrayList<EjbRootConfig> pendingList
       = new ArrayList<EjbRootConfig>(_rootPendingList);
     _rootPendingList.clear();
 
     for (EjbRootConfig rootConfig : pendingList) {
       for (String className : rootConfig.getClassNameList()) {
-        addIntrospectableClass(className, rootConfig.getModuleName());
+        addClassByName(className, rootConfig.getModuleName());
       }
     }
 
@@ -107,6 +138,27 @@ public class EjbConfigManager extends EjbConfig {
     deploy();
   }
 
+  private <X> void addClassByName(String className, String moduleName)
+  {
+    try {
+      ClassLoader loader = _ejbContainer.getClassLoader();
+      
+      Class<X> type = (Class<X>) Class.forName(className, false, loader);
+      
+      InjectManager manager = InjectManager.create(loader);
+      
+      AnnotatedType<X> annType = manager.createAnnotatedType(type);
+      
+      addAnnotatedType(annType, annType, null, moduleName);
+    }
+    catch (ConfigException e) {
+      throw e;
+    }
+    catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+  
   /**
    * Adds a path for an EJB config file to the config list.
    */

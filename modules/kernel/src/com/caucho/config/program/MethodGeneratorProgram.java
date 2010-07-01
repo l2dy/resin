@@ -54,7 +54,8 @@ public class MethodGeneratorProgram extends ConfigProgram
     _gen = gen;
   }
 
-  String getName()
+  @Override
+  public String getName()
   {
     return _method.getName();
   }
@@ -64,7 +65,8 @@ public class MethodGeneratorProgram extends ConfigProgram
     return _method.getParameterTypes()[0];
   }
 
-  Class<?> getDeclaringClass()
+  @Override
+  public Class<?> getDeclaringClass()
   {
     return _method.getDeclaringClass();
   }
@@ -86,16 +88,16 @@ public class MethodGeneratorProgram extends ConfigProgram
       if (! type.isAssignableFrom(value.getClass())) {
 
         throw new ConfigException(location()
-				  + L.l("Resource type {0} is not assignable to method '{1}' of type {2}.",
-					value.getClass().getName(),
-					_method.getName(),
-					type.getName()));
+                                  + L.l("Resource type {0} is not assignable to method '{1}' of type {2}.",
+                                        value.getClass().getName(),
+                                        _method.getName(),
+                                        type.getName()));
       }
 
       _method.invoke(bean, value);
     } catch (InvocationTargetException e) {
       throw new ConfigException(location() + e.getCause().getMessage(),
-				e.getCause());
+                                e.getCause());
     } catch (Exception e) {
       throw new ConfigException(location() + e.getMessage(), e);
     }

@@ -132,7 +132,7 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
    *   }
    * </pre></code>
    */
-  protected void generateContent(JavaWriter out)
+  protected void generateContent(JavaWriter out, HashMap<String,Object> map)
     throws IOException
   {
     generatePreTry(out);
@@ -291,6 +291,39 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
     throws IOException
   {
     _next.generatePostConstruct(out, map);
+  }
+
+  /**
+   * Generates @PreDestroy code
+   */
+  @Override
+  public void generatePreDestroy(JavaWriter out, 
+                                 HashMap<String,Object> map)
+    throws IOException
+  {
+    _next.generatePreDestroy(out, map);
+  }
+
+  /**
+   * Generates epilogue
+   */
+  @Override
+  public void generateEpilogue(JavaWriter out, 
+                               HashMap<String,Object> map)
+    throws IOException
+  {
+    _next.generateEpilogue(out, map);
+  }
+
+  /**
+   * Generates destroy code
+   */
+  @Override
+  public void generateDestroy(JavaWriter out, 
+                              HashMap<String,Object> map)
+    throws IOException
+  {
+    _next.generateDestroy(out, map);
   }
   
   //

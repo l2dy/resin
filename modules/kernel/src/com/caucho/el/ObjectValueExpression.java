@@ -52,8 +52,8 @@ public class ObjectValueExpression extends ValueExpression
   private final Class _expectedType;
 
   public ObjectValueExpression(Expr expr,
-			       String expressionString,
-			       Class<?> expectedType)
+                               String expressionString,
+                               Class<?> expectedType)
   {
     _expr = expr;
     _expressionString = expressionString;
@@ -101,7 +101,7 @@ public class ObjectValueExpression extends ValueExpression
 
   public Class<?> getType(ELContext context)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
     return _expr.getType(context);
   }
@@ -109,9 +109,11 @@ public class ObjectValueExpression extends ValueExpression
   @Override
   public Object getValue(ELContext context)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
-    Object value = _expr.getValue(context);
+    Object rawValue = _expr.getValue(context);
+
+    Object value = Expr.coerceToType(rawValue, _expectedType);
 
     return value;
   }
@@ -119,15 +121,15 @@ public class ObjectValueExpression extends ValueExpression
   @Override
   public boolean isReadOnly(ELContext context)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
     return _expr.isReadOnly(context);
   }
 
   public void setValue(ELContext context, Object value)
     throws PropertyNotFoundException,
-	   PropertyNotWritableException,
-	   ELException
+           PropertyNotWritableException,
+           ELException
   {
     _expr.setValue(context, value);
   }

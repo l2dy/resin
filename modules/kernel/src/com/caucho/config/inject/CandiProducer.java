@@ -45,6 +45,7 @@ import javax.enterprise.inject.spi.Decorator;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 
+import com.caucho.config.ConfigException;
 import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.gen.CandiUtil;
 import com.caucho.config.program.Arg;
@@ -118,6 +119,8 @@ public class CandiProducer<X> implements InjectionTarget<X>
                                          List.class);
         
         method.invoke(null, _decoratorBeans);
+      } catch (InvocationTargetException e) {
+        throw ConfigException.create(e.getCause());
       } catch (Exception e) {
         log.log(Level.FINEST, e.toString(), e);
       }
@@ -145,18 +148,35 @@ public class CandiProducer<X> implements InjectionTarget<X>
       Object []delegates = null;
       
       InjectionPoint oldPoint = null;
+      InjectionPoint ip = null;
+      
+      if (env != null) {
+        oldPoint = env.findInjectionPoint();
+        ip = oldPoint;
+      }
+      
       
       if (_decoratorBeans != null && _decoratorBeans.size() > 0) {
-        if (env != null)
-          oldPoint = env.getInjectionPoint();
-        
         Decorator dec = (Decorator) _decoratorBeans.get(_decoratorBeans.size() - 1);
         
-        if (dec instanceof DecoratorBean && env != null)
-          env.setInjectionPoint(((DecoratorBean) dec).getDelegateInjectionPoint());
+        if (dec instanceof DecoratorBean && env != null) {
+          ip = ((DecoratorBean) dec).getDelegateInjectionPoint();
+          env.setInjectionPoint(ip);
+        }
       }
       
       Object []args = evalArgs(env);
+
+      X value;
+      
+      if (_javaCtor != null) {
+        value = _javaCtor.newInstance(args);
+      }
+      else
+        value = _instanceClass.newInstance();
+
+      if (env != null)
+        env.push(value);
       
       if (_decoratorBeans != null) {
         if (env != null)
@@ -166,14 +186,10 @@ public class CandiProducer<X> implements InjectionTarget<X>
                                                     _decoratorBeans,
                                                     _decoratorClass,
                                                     env);
+        
+        if (env != null)
+          env.setInjectionPoint(ip);
       }
-
-      X value;
-      
-      if (_javaCtor != null)
-        value = _javaCtor.newInstance(args);
-      else
-        value = _instanceClass.newInstance();
       
       // server/4750
       if (value instanceof CandiEnhancedBean) {
@@ -181,7 +197,6 @@ public class CandiProducer<X> implements InjectionTarget<X>
         
         enhancedBean.__caucho_inject(delegates, env);
       }
-
 
       return value;
     } catch (RuntimeException e) {
@@ -193,12 +208,17 @@ public class CandiProducer<X> implements InjectionTarget<X>
         throw new CreationException(e.getCause());
     } catch (Exception e) {
       throw new CreationException(e);
+    } catch (ExceptionInInitializerError e) {
+      throw new CreationException(e);
     }
   }
   
   private Object []evalArgs(CreationalContextImpl<?> env)
   {
     Arg []args = _args;
+    
+    if (args == null)
+      return NULL_ARGS;
     
     int size = args.length;
     
@@ -220,6 +240,7 @@ public class CandiProducer<X> implements InjectionTarget<X>
   {
     try {
       for (ConfigProgram program : _injectProgram) {
+        // log.info("INJECT: " + program);
         program.inject(instance, env);
       }
     } catch (RuntimeException e) {
@@ -235,14 +256,16 @@ public class CandiProducer<X> implements InjectionTarget<X>
     try {
       CreationalContext<X> env = null;
 
-      for (ConfigProgram program : _initProgram) {
-        program.inject(instance, env);
-      }
-
-      // server/4750
+      // server/4750, ioc/0c29
       if (instance instanceof CandiEnhancedBean) {
         CandiEnhancedBean bean = (CandiEnhancedBean) instance;
         bean.__caucho_postConstruct();
+      }
+      else {
+        for (ConfigProgram program : _initProgram) {
+          // log.info("POST: " + program);
+          program.inject(instance, env);
+        }
       }
 
       /*
@@ -264,10 +287,16 @@ public class CandiProducer<X> implements InjectionTarget<X>
   public void preDestroy(X instance)
   {
     try {
-      CreationalContext<X> env = null;
+      CreationalContextImpl<X> env = null;
 
       for (ConfigProgram program : _destroyProgram) {
         program.inject(instance, env);
+      }
+
+      // server/4750
+      if (instance instanceof CandiEnhancedBean) {
+        CandiEnhancedBean bean = (CandiEnhancedBean) instance;
+        bean.__caucho_destroy(env);
       }
     }
     catch (RuntimeException e) {

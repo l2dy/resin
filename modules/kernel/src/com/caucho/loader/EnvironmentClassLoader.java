@@ -34,10 +34,12 @@ import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.config.ConfigException;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.loader.enhancer.ScanManager;
@@ -69,8 +71,8 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   private EnvironmentBean _owner;
 
   // Class loader specific attributes
-  private Hashtable<String,Object> _attributes
-    = new Hashtable<String,Object>(8);
+  private ConcurrentHashMap<String,Object> _attributes
+    = new ConcurrentHashMap<String,Object>(8);
 
   private ArrayList<ScanListener> _scanListeners;
   private ArrayList<ScanRoot> _pendingScanRoots = new ArrayList<ScanRoot>();
@@ -251,9 +253,23 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     }
 
     if (_attributes == null)
-      _attributes = new Hashtable<String,Object>(8);
+      _attributes = new ConcurrentHashMap<String,Object>(8);
 
     return _attributes.put(name, obj);
+  }
+
+  /**
+   * Sets the named attributes
+   */
+  public Object putIfAbsent(String name, Object obj)
+  {
+    if (obj == null)
+      throw new NullPointerException();
+
+    if (_attributes == null)
+      _attributes = new ConcurrentHashMap<String,Object>(8);
+
+    return _attributes.putIfAbsent(name, obj);
   }
 
   /**
@@ -562,7 +578,11 @@ public class EnvironmentClassLoader extends DynamicClassLoader
       URLClassLoader urlParent = (URLClassLoader) parent;
 
       for (URL url : urlParent.getURLs()) {
-        _pendingScanRoots.add(new ScanRoot(url, null));
+        String name = url.toString();
+        
+        if (name.endsWith(".jar")) {
+          _pendingScanRoots.add(new ScanRoot(url, null));
+        }
       }
 
       return;
@@ -714,7 +734,9 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     _pendingScanRoots.clear();
     
     try {
-      if (_scanListeners != null && rootList.size() > 0) { 
+      int rootListSize = rootList.size();
+      
+      if (_scanListeners != null && rootListSize > 0) { 
         try {
           make();
         } catch (Exception e) {
@@ -726,17 +748,19 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
         ScanManager scanManager = new ScanManager(_scanListeners);
 
-        for (ScanRoot root : rootList) {
+        for (int i = 0; i < rootListSize; i++) {
+          ScanRoot root = rootList.get(i);
+
           scanManager.scan(this, root.getUrl(), root.getPackageName());
         }
       }
 
       // configureEnhancerEvent();
     } catch (Exception e) {
-      log().log(Level.WARNING, e.toString(), e);
-
       if (_configException == null)
         _configException = e;
+      
+      throw ConfigException.create(e);
     }
   }
 

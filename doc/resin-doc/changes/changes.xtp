@@ -11,7 +11,17 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.7 - snapshot">
+<s2 title="4.0.8 - snapshot">
+<ul>
+<li>servlet: added support for MockHttpServletRequest and MockHttpServletResponse: (#4073)</li>
+<li>configure: fix for bad libtool message: (#4048)</li>
+<li>resin: fixed startup routine for directory with spaces issue: (#4021)</li>
+<li>resin-admin: fixed IllegalStateExceptionwith with readonly conf/admin-users.xml.generated (#4055)</li>
+<li>servlet: fixed NPE with MultipartConfig caching bug (#4051, rep by subwiz)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.7 - May 21, 2010">
 <ul>
 <li>iis: fixed bug preventing iis from serving web-apps defined with web-app tag (#3890)</li>
 <li>iis: allow IIS to choose when to use chunked encoding (#3871)</li>

@@ -30,7 +30,7 @@
 package com.caucho.ejb.cfg;
 
 import static javax.ejb.TransactionAttributeType.REQUIRED;
-
+import static javax.ejb.TransactionManagementType.BEAN;
 
 import java.lang.reflect.Modifier;
 
@@ -55,7 +55,8 @@ import javax.resource.spi.ResourceAdapter;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.gen.BeanGenerator;
-import com.caucho.config.gen.XaAnnotation;
+import com.caucho.config.gen.TransactionAttributeLiteral;
+import com.caucho.config.gen.TransactionManagementLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.reflect.AnnotatedTypeImpl;
@@ -112,10 +113,11 @@ public class EjbMessageBean<X> extends EjbBean<X> {
    * Creates a new session bean configuration.
    */
   public EjbMessageBean(EjbConfig ejbConfig,
+                        AnnotatedType<X> rawAnnType,
                         AnnotatedType<X> annType,
                         MessageDriven messageDriven)
   {
-    super(ejbConfig, annType, messageDriven.name());
+    super(ejbConfig, rawAnnType, annType, messageDriven.name());
   }
 
 
@@ -123,10 +125,11 @@ public class EjbMessageBean<X> extends EjbBean<X> {
    * Creates a new session bean configuration.
    */
   public EjbMessageBean(EjbConfig ejbConfig,
+                        AnnotatedType<X> rawAnnType,
                         AnnotatedType<X> annType,
                         String ejbName)
   {
-    super(ejbConfig, annType, ejbName);
+    super(ejbConfig, rawAnnType, annType, ejbName);
   }
 
   /**
@@ -501,7 +504,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
     AnnotatedTypeImpl<X> typeImpl = (AnnotatedTypeImpl<X>) type;
 
     if (! type.isAnnotationPresent(TransactionAttribute.class)) {
-      typeImpl.addAnnotation(XaAnnotation.create(TransactionAttributeType.REQUIRED));
+      typeImpl.addAnnotation(new TransactionAttributeLiteral(TransactionAttributeType.REQUIRED));
     }
 
     javax.ejb.MessageDriven messageDriven
@@ -573,17 +576,18 @@ public class EjbMessageBean<X> extends EjbBean<X> {
    */
   @Override
   public AbstractEjbBeanManager<X> deployServer(EjbManager ejbManager,
-                                        JavaClassGenerator javaGen)
+                                                EjbLazyGenerator<X> lazyGenerator)
     throws ClassNotFoundException
   {
     if (_activationSpec != null)
-      return deployActivationSpecServer(ejbManager, javaGen);
+      return deployActivationSpecServer(ejbManager, lazyGenerator);
     else
-      return deployJmsServer(ejbManager, javaGen);
+      return deployJmsServer(ejbManager, lazyGenerator);
   }
 
-  private AbstractEjbBeanManager<X> deployJmsServer(EjbManager ejbManager,
-                                            JavaClassGenerator javaGen)
+  private AbstractEjbBeanManager<X> 
+  deployJmsServer(EjbManager ejbManager,
+                  EjbLazyGenerator<X> lazyGenerator)
     throws ClassNotFoundException
   {
     JmsResourceAdapter ra
@@ -601,14 +605,15 @@ public class EjbMessageBean<X> extends EjbBean<X> {
     else
       ra.setConsumerMax(getEjbContainer().getMessageConsumerMax());
 
-    return deployMessageServer(ejbManager, javaGen, ra, spec);
+    return deployMessageServer(ejbManager, lazyGenerator, ra, spec);
   }
 
   /**
    * Deploys the bean.
    */
-  public AbstractEjbBeanManager<X> deployActivationSpecServer(EjbManager ejbManager,
-                                                      JavaClassGenerator javaGen)
+  public AbstractEjbBeanManager<X>
+  deployActivationSpecServer(EjbManager ejbManager,
+                             EjbLazyGenerator<X> lazyGenerator)
     throws ClassNotFoundException
   {
     if (_activationSpec == null)
@@ -638,7 +643,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
                       raClass.getName()));
     }
 
-    return deployMessageServer(ejbManager, javaGen, ra, _activationSpec);
+    return deployMessageServer(ejbManager, lazyGenerator, ra, _activationSpec);
   }
 
   private AnnotatedType<X> fillClassDefaults(AnnotatedType<X> ejbClass)
@@ -646,7 +651,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
     AnnotatedTypeImpl<X> ejbClassImpl = AnnotatedTypeImpl.create(ejbClass);
     
     if (!_isContainerTransaction) {
-      ejbClassImpl.addAnnotation(XaAnnotation.createBeanManaged());
+      ejbClassImpl.addAnnotation(new TransactionManagementLiteral(BEAN));
     }
 
     TransactionAttribute ann
@@ -654,7 +659,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
 
     if (ann == null) {
       // ejb/1100
-      ejbClassImpl.addAnnotation(XaAnnotation.create(REQUIRED));
+      ejbClassImpl.addAnnotation(new TransactionAttributeLiteral(REQUIRED));
     }
     
     return ejbClassImpl;
@@ -663,10 +668,11 @@ public class EjbMessageBean<X> extends EjbBean<X> {
   /**
    * Deploys the bean.
    */
-  public AbstractEjbBeanManager<X> deployMessageServer(EjbManager ejbManager,
-                                               JavaClassGenerator javaGen,
-                                               ResourceAdapter ra,
-                                               ActivationSpec spec)
+  public AbstractEjbBeanManager<X> 
+  deployMessageServer(EjbManager ejbManager,
+                      EjbLazyGenerator<X> lazyGenerator,
+                      ResourceAdapter ra,
+                      ActivationSpec spec)
     throws ClassNotFoundException
   {
     MessageManager<X> manager;
@@ -679,11 +685,13 @@ public class EjbMessageBean<X> extends EjbBean<X> {
         throw new ConfigException(L.l("ResourceAdapter is required for ActivationSpecServer"));
 
 
-      manager = new MessageManager<X>(ejbManager, getAnnotatedType());
+      manager = new MessageManager<X>(ejbManager, 
+                                      getRawAnnotatedType(), 
+                                      getAnnotatedType(),
+                                      lazyGenerator);
 
       manager.setConfigLocation(getFilename(), getLine());
 
-      manager.setModuleName(getEJBModuleName());
       manager.setEJBName(getEJBName());
       manager.setMappedName(getMappedName());
       manager.setId(getEJBModuleName() + "#" + getMappedName());
@@ -692,17 +700,23 @@ public class EjbMessageBean<X> extends EjbBean<X> {
 
       manager.setEjbClass(getEJBClass());
 
+      // XXX:
+      /*
       Class<?> proxyImplClass = javaGen.loadClass(getSkeletonName());
 
       manager.setProxyImplClass(proxyImplClass);
+      */
 
       manager.setActivationSpec(spec);
       manager.setResourceAdapter(ra);
 
       // server.setMessageListenerType(_messagingType);
 
-      javaGen.loadClass(getEJBClass().getName());
+      // javaGen.loadClass(getEJBClass().getName());
 
+      // XXX: can't be right because of timing, i.e. must be in bind() phase
+      
+      /*
       Thread thread = Thread.currentThread();
       ClassLoader oldLoader = thread.getContextClassLoader();
 
@@ -718,6 +732,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
       } finally {
         thread.setContextClassLoader(oldLoader);
       }
+      */
     } catch (Exception e) {
       throw error(e);
     }

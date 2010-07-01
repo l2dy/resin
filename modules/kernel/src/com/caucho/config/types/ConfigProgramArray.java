@@ -29,19 +29,9 @@
 
 package com.caucho.config.types;
 
-import com.caucho.config.*;
-import com.caucho.config.annotation.StartupType;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.program.*;
-import com.caucho.config.reflect.AnnotatedElementImpl;
-import com.caucho.config.type.*;
-import com.caucho.util.*;
-import com.caucho.xml.QName;
+import java.util.ArrayList;
 
-import java.util.*;
-import java.util.logging.*;
-import java.lang.reflect.*;
-import java.lang.annotation.*;
+import com.caucho.config.program.ConfigProgram;
 
 /**
  * Custom bean configured by namespace

@@ -28,11 +28,15 @@
  */
 package com.caucho.config.gen;
 
+import java.io.IOException;
+import java.util.HashMap;
+
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.inject.InjectManager;
 import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 
 /**
  * Manages aspect factories for a bean.
@@ -70,7 +74,12 @@ public class CandiAspectBeanFactory<X> implements AspectBeanFactory<X> {
   {
     return getBeanType().getJavaClass().getSimpleName() + "__ResinWebBean";
   }
-  
+
+  @Override
+  public String getInstanceClassName()
+  {
+    return getGeneratedClassName();
+  }
   /**
    * Returns the head aspect factory
    */
@@ -147,5 +156,51 @@ public class CandiAspectBeanFactory<X> implements AspectBeanFactory<X> {
     next = new SecurityFactory<X>(this, next);
     
     return new MethodHeadFactory<X>(this, next);
+  }
+
+  @Override
+  public boolean isEnhanced()
+  {
+    if (_factory != null)
+      return _factory.isEnhanced();
+    else
+      return false;
+  }
+
+  @Override
+  public void generateInject(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException
+  {
+    if (_factory != null)
+      _factory.generateInject(out, map);
+  }
+
+  @Override
+  public void generatePostConstruct(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException
+  {
+    if (_factory != null)
+      _factory.generatePostConstruct(out, map);
+  }
+
+  @Override
+  public void generatePreDestroy(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException
+  {
+    if (_factory != null)
+      _factory.generatePreDestroy(out, map);
+  }
+
+  @Override
+  public void generateEpilogue(JavaWriter out, HashMap<String, Object> map) 
+    throws IOException
+  {
+    if (_factory != null)
+      _factory.generateEpilogue(out, map);
+  }
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _beanType + "]"; 
   }
 }

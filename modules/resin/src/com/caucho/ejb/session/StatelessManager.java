@@ -38,10 +38,15 @@ import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.Interceptor;
+import javax.enterprise.inject.spi.SessionBeanType;
 
+import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.ejb.SessionPool;
+import com.caucho.ejb.cfg.EjbLazyGenerator;
+import com.caucho.ejb.gen.StatefulGenerator;
+import com.caucho.ejb.gen.StatelessGenerator;
 import com.caucho.ejb.inject.StatelessBeanImpl;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
@@ -71,10 +76,11 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
    *          the session configuration from the ejb.xml
    */
   public StatelessManager(EjbManager ejbContainer, 
+                          AnnotatedType<X> rawAnnType,
                           AnnotatedType<X> annotatedType,
-                          Class<?> proxyImplClass)
+                          EjbLazyGenerator<X> ejbGenerator)
   {
-    super(ejbContainer, annotatedType, proxyImplClass);
+    super(ejbContainer, rawAnnType, annotatedType, ejbGenerator);
     
     introspect();
   }
@@ -84,7 +90,13 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   {
     return "stateless:";
   }
-  
+
+  @Override
+  protected SessionBeanType getSessionBeanType()
+  {
+    return SessionBeanType.STATELESS;
+  }
+
   public int getSessionIdleMax()
   {
     return _sessionIdleMax;
@@ -129,7 +141,8 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   @Override
   protected <T> Bean<T> createBean(ManagedBeanImpl<X> mBean,
                                    Class<T> api,
-                                   Set<Type> apiList)
+                                   Set<Type> apiList,
+                                   AnnotatedType<X> extAnnType)
   {
     StatelessContext<X,T> context = getSessionContext(api);
 
@@ -138,7 +151,7 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
           api, this));
 
     StatelessBeanImpl<X,T> statelessBean
-      = new StatelessBeanImpl<X,T>(this, mBean, api, apiList, context);
+      = new StatelessBeanImpl<X,T>(this, mBean, api, apiList, context, extAnnType);
 
     return statelessBean;
   }
@@ -147,6 +160,20 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   protected Class<?> getContextClass()
   {
     return StatelessContext.class;
+  }
+
+  /**
+   * Creates the bean generator for the session bean.
+   */
+  @Override
+  protected BeanGenerator<X> createBeanGenerator()
+  {
+    EjbLazyGenerator<X> lazyGen = getLazyGenerator();
+    
+    return new StatelessGenerator<X>(getEJBName(), getAnnotatedType(),
+                                     lazyGen.getLocalApi(),
+                                     lazyGen.getLocalBean(),
+                                     lazyGen.getRemoteApi());
   }
   
   /**
@@ -179,23 +206,10 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
     }
   }
 
-  /**
-   * Returns the remote object.
-   */
-  /*
-  @Override
-  public Object getRemoteObject(Object key)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-  */
-
   @Override
   public void init() throws Exception
   {
     super.init();
-
-    ArrayList<Class<?>> remoteApiList = getRemoteApiList();
   }
 
   private void introspect()
@@ -224,21 +238,6 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   @Override
   protected void postStart()
   {
-    //ScheduleIntrospector introspector = new ScheduleIntrospector();
-
-    /*
-    InjectManager manager = InjectManager.create();
-    AnnotatedType<X> type = manager.createAnnotatedType(getEjbClass());
-    ArrayList<TimerTask> timers;
-
-    timers = introspector.introspect(new StatelessTimeoutCaller(), type);
-
-    if (timers != null) {
-      for (TimerTask task : timers) {
-        task.start();
-      }
-    }
-    */
   }
 
   @Override
@@ -249,7 +248,7 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
 
   // XXX
   public Object[] getInterceptorBindings(List<Interceptor<?>> interceptorBeans,
-                                         CreationalContextImpl parentEnv)
+                                         CreationalContextImpl<?> parentEnv)
   {
     int size = interceptorBeans.size();
     
@@ -259,24 +258,11 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
     Object []interceptors = new Object[size];
     
     for (int i = 0; i < size; i++) {
-      Interceptor bean = interceptorBeans.get(i);
+      Interceptor<?> bean = interceptorBeans.get(i);
       
       interceptors[i] = getInjectManager().getReference(bean, parentEnv); 
     }
     
     return interceptors;
   }
-
-  /*
-  public void destroy()
-  {
-    super.destroy();
-    
-    try {
-      getContext().destroy();
-    } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
-    }
-  }
-  */
 }

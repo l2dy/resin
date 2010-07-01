@@ -87,11 +87,11 @@ public class JavaClassGenerator {
       char ch = className.charAt(i);
 
       if (ch == '.' || ch == '/')
-	cb.append('.');
+        cb.append('.');
       else if (Character.isJavaIdentifierPart(ch))
-	cb.append(ch);
+        cb.append(ch);
       else
-	cb.append('_');
+        cb.append('_');
     }
 
     return cb.toString();
@@ -164,7 +164,7 @@ public class JavaClassGenerator {
     /*
     if (_loader == null) {
       _loader = SimpleLoader.create(getParentLoader(),
-				    getWorkDir());
+                                    getWorkDir());
     }
     
     return _loader;
@@ -195,9 +195,9 @@ public class JavaClassGenerator {
 
       /*
       if (_preloadLoader instanceof EnhancingClassLoader) {
-	EnhancingClassLoader enhancingLoader;
-	enhancingLoader = (EnhancingClassLoader) _preloadLoader;
-	_preloadLoader = enhancingLoader.getRawLoader();
+        EnhancingClassLoader enhancingLoader;
+        enhancingLoader = (EnhancingClassLoader) _preloadLoader;
+        _preloadLoader = enhancingLoader.getRawLoader();
       }
       */
   }
@@ -305,9 +305,9 @@ public class JavaClassGenerator {
     WriteStream os = javaPath.openWrite();
     try {
       if (_encoding != null)
-	os.setEncoding(_encoding);
+        os.setEncoding(_encoding);
       else
-	os.setEncoding("JAVA");
+        os.setEncoding("JAVA");
       
       JavaWriter out = new JavaWriter(os);
 
@@ -427,43 +427,43 @@ public class JavaClassGenerator {
       ClassLoader loader;
 
       if (preload) {
-	preloadLoader = SimpleLoader.create(getPreloadLoader(),
-					    getWorkDir(),
-					    fullClassName);
+        preloadLoader = SimpleLoader.create(getPreloadLoader(),
+                                            getWorkDir(),
+                                            fullClassName);
 
-	// needed for cases like Amber enhancing
-	preloadLoader.setServletHack(true);
-	loader = preloadLoader;
+        // needed for cases like Amber enhancing
+        preloadLoader.setServletHack(true);
+        loader = preloadLoader;
       }
       else {
-	// XXX: because of automatic instantiation, might cause trouble
-	loader = getClassLoader();
+        // XXX: because of automatic instantiation, might cause trouble
+        loader = getClassLoader();      
 
-	if (loader == null) {
-	  loader = SimpleLoader.create(getParentLoader(),
-				       getWorkDir(),
-				       fullClassName);
-	}
+        if (loader == null) {
+          loader = SimpleLoader.create(getParentLoader(),
+                                       getWorkDir(),
+                                       fullClassName);
+        }
       }
 
       Class<?> cl = Class.forName(fullClassName, false, loader);
 
       if (cl == null)
-	return null;
+        return null;
       
       if (! preload)
-	return cl;
+        return cl;
 
       if (isModified(cl)) {
-	return null;
+        return null;
       }
 
       if (_loader != null)
-	loader = _loader;
+        loader = _loader;
       else {
-	loader = SimpleLoader.create(getParentLoader(),
-				     getWorkDir(),
-				     fullClassName);
+        loader = SimpleLoader.create(getParentLoader(),
+                                     getWorkDir(),
+                                     fullClassName);
       }
 
       cl = Class.forName(fullClassName, false, loader);
@@ -471,28 +471,48 @@ public class JavaClassGenerator {
       return cl;
     } catch (RuntimeException e) {
       if (! preload)
-	throw e;
+        throw e;
       else {
         log.log(Level.FINE, e.toString(), e);
         
-	return null;
+        return null;
       }
     } catch (Error e) {
       if (! preload)
-	throw e;
+        throw e;
       else {
         log.log(Level.FINE, e.toString(), e);
       
-	return null;
+        return null;
       }
     } catch (ClassNotFoundException e) {
       if (! preload)
-	throw e;
+        throw e;
       else
-	return null;
+        return null;
     } finally {
       if (preloadLoader != null)
-	preloadLoader.destroy();
+        preloadLoader.destroy();
+    }
+  }
+
+  /**
+   * Loads the generated class into the parent loader.
+   */
+  public Class<?> preloadClassParentLoader(String fullClassName,
+                                           Class<?> parentClass)
+  {
+    try {
+      Class<?> cl = loadClassParentLoader(fullClassName, parentClass);
+      
+      if (! isModified(cl))
+        return cl;
+      else
+        return null;
+    } catch (ClassNotFoundException e) {
+      log.log(Level.ALL, e.toString(), e);
+      
+      return null;
     }
   }
 
@@ -501,7 +521,7 @@ public class JavaClassGenerator {
    */
   public Class<?> loadClassParentLoader(String fullClassName,
                                         Class<?> parentClass)
-    throws ClassNotFoundException
+      throws ClassNotFoundException
   {
     ClassLoader parentLoader = parentClass.getClassLoader();
     
@@ -537,8 +557,8 @@ public class JavaClassGenerator {
     ClassLoader oldLoader = thread.getContextClassLoader();
     try {
       if (_parentLoader != null)
-	thread.setContextClassLoader(_parentLoader);
-	
+        thread.setContextClassLoader(_parentLoader);
+
       Method method = cl.getMethod(_initMethod, new Class[] { Path.class });
       method.invoke(null, new Object[] { searchPath });
 

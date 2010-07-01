@@ -60,6 +60,7 @@ public abstract class JspContainerNode extends JspNode {
    * @param name the name of the attribute.
    * @param value the value of the attribute.
    */
+  @Override
   public void addAttribute(QName name, String value)
     throws JspParseException
   {
@@ -79,6 +80,7 @@ public abstract class JspContainerNode extends JspNode {
    * @param name the name of the attribute.
    * @param value the value of the attribute.
    */
+  @Override
   public void addAttribute(QName name, JspAttribute value)
     throws JspParseException
   {
@@ -111,6 +113,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * Adds a child node.
    */
+  @Override
   public void addChild(JspNode node)
     throws JspParseException
   {
@@ -143,7 +146,7 @@ public abstract class JspContainerNode extends JspNode {
           i++;
         else {
           throw child.error(L.l("tags using jsp:attribute must put body content in a jsp:body tag"));
-	}
+        }
       }
     }
     else if (_hasJspAttribute && ! (node instanceof JspBody)) {
@@ -209,6 +212,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * Adds a child node after its done initializing.
    */
+  @Override
   public void addChildEnd(JspNode node)
     throws JspParseException
   {
@@ -217,6 +221,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * True if the jsf-parent setting is required.
    */
+  @Override
   public boolean isJsfParentRequired()
   {
     if (_children == null)
@@ -242,18 +247,18 @@ public abstract class JspContainerNode extends JspNode {
       JspNode child = _children.get(i);
 
       if (child instanceof JspBody) {
-	JspBody body = (JspBody) child;
+        JspBody body = (JspBody) child;
 
-	return body.isEmpty();
+        return body.isEmpty();
       }
       else if (child instanceof StaticText) {
-	StaticText text = (StaticText) child;
+        StaticText text = (StaticText) child;
 
-	if (! text.isWhitespace())
-	  return false;
+        if (! text.isWhitespace())
+          return false;
       }
       else
-	return false;
+        return false;
     }
 
     return false;
@@ -262,6 +267,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * Returns the static text.
    */
+  @Override
   public void getStaticText(CharBuffer cb)
   {
     if (_children == null)
@@ -274,6 +280,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * Set true if the node contains a child tag.
    */
+  @Override
   public boolean hasCustomTag()
   {
     for (int i = 0; _children != null && i < _children.size(); i++) {
@@ -310,7 +317,7 @@ public abstract class JspContainerNode extends JspNode {
       JspNode child = _children.get(i);
 
       if (child instanceof CustomTag ||
-	  child instanceof CustomSimpleTag)
+          child instanceof CustomSimpleTag)
         return true;
 
       if (child.hasTag())
@@ -336,6 +343,7 @@ public abstract class JspContainerNode extends JspNode {
   /**
    * Adds a text node.
    */
+  @Override
   public JspNode addText(String text)
     throws JspParseException
   {
@@ -386,7 +394,7 @@ public abstract class JspContainerNode extends JspNode {
   {
     for (int i = 0; _children != null && i < _children.size(); i++) {
       if (_children.get(i).hasScripting()) {
-	return true;
+        return true;
       }
     }
     
@@ -401,7 +409,7 @@ public abstract class JspContainerNode extends JspNode {
   {
     for (int i = 0; _children != null && i < _children.size(); i++) {
       if (_children.get(i).hasScriptingElement()) {
-	return true;
+        return true;
       }
     }
     
@@ -418,7 +426,7 @@ public abstract class JspContainerNode extends JspNode {
       JspNode node = _children.get(i).findScriptingNode();
 
       if (node != null)
-	return node;
+        return node;
     }
 
     if (hasScripting())
@@ -437,7 +445,7 @@ public abstract class JspContainerNode extends JspNode {
     
     for (int i = 0; i < _children.size(); i++) {
       if (! _children.get(i).isStatic())
-	return false;
+        return false;
     }
 
     return true;
@@ -501,15 +509,15 @@ public abstract class JspContainerNode extends JspNode {
   {
     if (_children != null) {
       for (int i = 0; i < _children.size(); i++) {
-	JspNode child = _children.get(i);
+        JspNode child = _children.get(i);
 
-	child.generateTagState(out);
+        child.generateTagState(out);
       }
     }
     
     if (_attrChildren != null) {
       for (JspNode child : _attrChildren) {
-	child.generateTagState(out);
+        child.generateTagState(out);
       }
     }
   }
@@ -522,15 +530,15 @@ public abstract class JspContainerNode extends JspNode {
   {
     if (_children != null) {
       for (int i = 0; i < _children.size(); i++) {
-	JspNode child = _children.get(i);
+        JspNode child = _children.get(i);
 
-	child.generateTagRelease(out);
+        child.generateTagRelease(out);
       }
     }
     
     if (_attrChildren != null) {
       for (JspNode child : _attrChildren) {
-	child.generateTagRelease(out);
+        child.generateTagRelease(out);
       }
     }
   }
@@ -595,6 +603,28 @@ public abstract class JspContainerNode extends JspNode {
       out.setLocation(child.getFilename(), child.getStartLine());
       child.generateStatic(out);
       // out.setLocation(child.getFilename(), child.getEndLine());
+    }
+  }
+
+  /**
+   * generates data for tag state children.
+   */
+  @Override
+  public void generateClassEpilogueChildren(JspJavaWriter out)
+    throws IOException
+  {
+    if (_children != null) {
+      for (int i = 0; i < _children.size(); i++) {
+        JspNode child = _children.get(i);
+
+        child.generateClassEpilogue(out);
+      }
+    }
+    
+    if (_attrChildren != null) {
+      for (JspNode child : _attrChildren) {
+        child.generateClassEpilogue(out);
+      }
     }
   }
 }

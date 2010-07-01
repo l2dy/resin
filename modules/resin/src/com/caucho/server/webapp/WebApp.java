@@ -29,17 +29,70 @@
 
 package com.caucho.server.webapp;
 
+import java.io.File;
+import java.io.IOException;
+import java.lang.reflect.Modifier;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.EventListener;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import javax.annotation.PostConstruct;
+import javax.enterprise.inject.InjectionException;
+import javax.enterprise.inject.spi.Bean;
+import javax.management.ObjectName;
+import javax.naming.NamingException;
+import javax.servlet.*;
+import javax.servlet.annotation.ServletSecurity;
+import javax.servlet.annotation.WebFilter;
+import javax.servlet.annotation.WebInitParam;
+import javax.servlet.annotation.WebListener;
+import javax.servlet.annotation.WebServlet;
+import javax.servlet.descriptor.JspConfigDescriptor;
+import javax.servlet.descriptor.JspPropertyGroupDescriptor;
+import javax.servlet.descriptor.TaglibDescriptor;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.HttpSessionActivationListener;
+import javax.servlet.http.HttpSessionAttributeListener;
+import javax.servlet.http.HttpSessionListener;
+
 import com.caucho.amber.manager.AmberContainer;
+import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
-import com.caucho.config.inject.*;
-import com.caucho.config.j2ee.PersistenceContextRefConfig;
 import com.caucho.config.SchemaBean;
-import com.caucho.config.Config;
-import com.caucho.config.el.WebBeansELResolver;
-import com.caucho.config.types.*;
+import com.caucho.config.el.CandiConfigResolver;
+import com.caucho.config.el.CandiElResolver;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.SingletonBindingHandle;
+import com.caucho.config.j2ee.PersistenceContextRefConfig;
+import com.caucho.config.types.EjbLocalRef;
+import com.caucho.config.types.EjbRef;
+import com.caucho.config.types.InitParam;
+import com.caucho.config.types.PathBuilder;
+import com.caucho.config.types.Period;
+import com.caucho.config.types.ResourceRef;
+import com.caucho.config.types.Validator;
 import com.caucho.ejb.manager.EjbManager;
+import com.caucho.ejb.manager.EjbModule;
 import com.caucho.i18n.CharacterEncoding;
+import com.caucho.java.WorkDir;
+import com.caucho.jsf.cfg.JsfPropertyGroup;
 import com.caucho.jsp.JspServlet;
 import com.caucho.jsp.cfg.JspConfig;
 import com.caucho.jsp.cfg.JspPropertyGroup;
@@ -52,7 +105,6 @@ import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.loader.enhancer.AbstractScanClass;
 import com.caucho.loader.enhancer.ScanClass;
-import com.caucho.loader.enhancer.ScanMatch;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.make.AlwaysModified;
 import com.caucho.make.DependencyContainer;
@@ -60,11 +112,19 @@ import com.caucho.management.server.HostMXBean;
 import com.caucho.naming.Jndi;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.TcpSocketLink;
-import com.caucho.rewrite.RewriteFilter;
 import com.caucho.rewrite.DispatchRule;
-import com.caucho.rewrite.RedirectSecure;
 import com.caucho.rewrite.IfSecure;
 import com.caucho.rewrite.Not;
+import com.caucho.rewrite.RedirectSecure;
+import com.caucho.rewrite.RewriteFilter;
+import com.caucho.security.AbstractSingleSignon;
+import com.caucho.security.Authenticator;
+import com.caucho.security.BasicLogin;
+import com.caucho.security.ClusterSingleSignon;
+import com.caucho.security.Login;
+import com.caucho.security.MemorySingleSignon;
+import com.caucho.security.RoleMapManager;
+import com.caucho.security.SingleSignon;
 import com.caucho.server.cache.AbstractCache;
 import com.caucho.server.cluster.Cluster;
 import com.caucho.server.cluster.Server;
@@ -72,51 +132,47 @@ import com.caucho.server.deploy.DeployContainer;
 import com.caucho.server.deploy.DeployGenerator;
 import com.caucho.server.deploy.EnvironmentDeployInstance;
 import com.caucho.server.deploy.RepositoryDependency;
-import com.caucho.server.dispatch.*;
+import com.caucho.server.dispatch.DispatchBuilder;
+import com.caucho.server.dispatch.DispatchServer;
+import com.caucho.server.dispatch.ErrorFilterChain;
+import com.caucho.server.dispatch.ExceptionFilterChain;
+import com.caucho.server.dispatch.FilterChainBuilder;
+import com.caucho.server.dispatch.FilterConfigImpl;
+import com.caucho.server.dispatch.FilterManager;
+import com.caucho.server.dispatch.FilterMapper;
+import com.caucho.server.dispatch.FilterMapping;
+import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.dispatch.InvocationDecoder;
+import com.caucho.server.dispatch.ServletConfigImpl;
+import com.caucho.server.dispatch.ServletManager;
+import com.caucho.server.dispatch.ServletMapper;
+import com.caucho.server.dispatch.ServletMapping;
+import com.caucho.server.dispatch.ServletRegexp;
+import com.caucho.server.dispatch.SubInvocation;
+import com.caucho.server.dispatch.UrlMap;
+import com.caucho.server.dispatch.VersionInvocation;
 import com.caucho.server.host.Host;
 import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
-import com.caucho.security.*;
-import com.caucho.security.AbstractAuthenticator;
-import com.caucho.security.Authenticator;
-import com.caucho.security.BasicLogin;
-import com.caucho.server.security.*;
+import com.caucho.server.security.ConstraintManager;
+import com.caucho.server.security.LoginConfig;
+import com.caucho.server.security.PermitEmptyRolesConstraint;
+import com.caucho.server.security.SecurityConstraint;
+import com.caucho.server.security.TransportConstraint;
+import com.caucho.server.security.WebResourceCollection;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.transaction.TransactionManagerImpl;
 import com.caucho.util.Alarm;
+import com.caucho.util.CharBuffer;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
-import com.caucho.util.CharBuffer;
 import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Encoding;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
-import com.caucho.java.WorkDir;
-import com.caucho.jsf.cfg.JsfPropertyGroup;
-
-import javax.annotation.PostConstruct;
-import javax.management.ObjectName;
-import javax.naming.NamingException;
-import javax.servlet.*;
-import javax.servlet.descriptor.JspConfigDescriptor;
-import javax.servlet.descriptor.TaglibDescriptor;
-import javax.servlet.descriptor.JspPropertyGroupDescriptor;
-import javax.servlet.annotation.*;
-import javax.servlet.http.*;
-import javax.enterprise.inject.InjectionException;
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.lang.reflect.Modifier;
-import java.net.URL;
 
 /**
  * Resin's webApp implementation.
@@ -166,13 +222,15 @@ public class WebApp extends ServletContextImpl
   private WebAppController _controller;
 
   // The webbeans container
-  private InjectManager _beanManager;
+  private InjectManager _cdiManager;
 
   // The webApp directory.
   private final Path _appDir;
 
   private InvocationDecoder _invocationDecoder;
 
+  private String _moduleName = "default";
+  
   // The context path
   private String _baseContextPath = "";
   private String _versionContextPath = "";
@@ -375,6 +433,13 @@ public class WebApp extends ServletContextImpl
 
     setVersionContextPath(controller.getContextPath());
     _baseContextPath = controller.getBaseContextPath();
+    
+    _moduleName = _baseContextPath;
+    
+    if ("".equals(_moduleName))
+      _moduleName = "ROOT";
+    else if (_moduleName.startsWith("/"))
+      _moduleName = _moduleName.substring(1);
 
     _controller = controller;
     _appDir = controller.getRootDirectory();
@@ -406,12 +471,13 @@ public class WebApp extends ServletContextImpl
       WorkDir.setLocalWorkDir(_appDir.lookup("WEB-INF/work"), _classLoader);
       
       EjbManager.setScanAll();
+      
+      EjbModule.replace(getModuleName(), _classLoader);
 
       // map.put("app", _appVar);
 
       _servletManager = new ServletManager();
-      _servletMapper = new ServletMapper();
-      _servletMapper.setServletContext(this);
+      _servletMapper = new ServletMapper(this);
       _servletMapper.setServletManager(_servletManager);
 
       _filterManager = new FilterManager();
@@ -452,8 +518,6 @@ public class WebApp extends ServletContextImpl
         _invocationDependency.add(new RepositoryDependency(baseTag, baseValue));
       }
 
-      _jspApplicationContext = new JspApplicationContextImpl(this);
-
       // validation
       if (CauchoSystem.isTesting()) {
       }
@@ -465,11 +529,12 @@ public class WebApp extends ServletContextImpl
         throw new ConfigException(L.l("web-app root-directory '{0}' can not be the same as the host root-directory\n", _appDir.getURL()));
       }
 
-      _beanManager = InjectManager.create(_classLoader);
-      _beanManager.addPath(_appDir.lookup("WEB-INF/beans.xml"));
-      _beanManager.addExtension(new WebAppInjectExtension(_beanManager, this));
+      _cdiManager = InjectManager.create(_classLoader);
+      _cdiManager.addPath(_appDir.lookup("WEB-INF/beans.xml"));
+      _cdiManager.addExtension(new WebAppInjectExtension(_cdiManager, this));
 
-      _jspApplicationContext.addELResolver(_beanManager.getELResolver());
+      _jspApplicationContext = new JspApplicationContextImpl(this);
+      _jspApplicationContext.addELResolver(_cdiManager.getELResolver());
     } catch (Throwable e) {
       setConfigException(e);
     }
@@ -565,6 +630,17 @@ public class WebApp extends ServletContextImpl
     else
       return null;
   }
+  
+  public String getModuleName()
+  {
+    return _moduleName;
+  }
+  
+  public void setModuleName(String moduleName)
+  {
+    _moduleName = moduleName;
+    EjbModule.replace(getModuleName(), _classLoader);
+  }
 
   public InvocationDecoder getInvocationDecoder()
   {
@@ -578,6 +654,11 @@ public class WebApp extends ServletContextImpl
       _invocationDecoder = Server.getCurrent().getInvocationDecoder();
 
     return _invocationDecoder;
+  }
+  
+  public InjectManager getBeanManager()
+  {
+    return _cdiManager;
   }
 
   /**
@@ -726,6 +807,11 @@ public class WebApp extends ServletContextImpl
   public ObjectName getObjectName()
   {
     return _controller.getObjectName();
+  }
+  
+  public String getWarName()
+  {
+    return _controller.getWarName();
   }
 
   /**
@@ -967,7 +1053,7 @@ public class WebApp extends ServletContextImpl
     throws ServletException
   {
     try {
-      return _beanManager.createTransientObject(servletClass);
+      return _cdiManager.createTransientObject(servletClass);
     } catch (InjectionException e) {
       throw new ServletException(e);
     }
@@ -1198,7 +1284,7 @@ public class WebApp extends ServletContextImpl
     throws ServletException
   {
     try {
-      return _beanManager.createTransientObject(filterClass);
+      return _cdiManager.createTransientObject(filterClass);
     } catch (InjectionException e) {
       throw new ServletException(e);
     }
@@ -1874,7 +1960,7 @@ public class WebApp extends ServletContextImpl
     throws ServletException
   {
     try {
-      return _beanManager.createTransientObject(listenerClass);
+      return _cdiManager.createTransientObject(listenerClass);
     }
     catch (InjectionException e) {
       throw new ServletException(e);
@@ -1897,7 +1983,7 @@ public class WebApp extends ServletContextImpl
   @Override
   public void addListener(Class<? extends EventListener> listenerClass)
   {
-    addListener(_beanManager.createTransientObject(listenerClass));
+    addListener(_cdiManager.createTransientObject(listenerClass));
   }
 
   @Override
@@ -2091,7 +2177,8 @@ public class WebApp extends ServletContextImpl
    * Returns the JSF configuration
    */
   @Configurable
-  public JsfPropertyGroup getJsf() {
+  public JsfPropertyGroup getJsf()
+  {
     return _jsf;
   }
 
@@ -2542,7 +2629,8 @@ public class WebApp extends ServletContextImpl
 
       _classLoader.setId("web-app:" + getId());
 
-      _beanManager = InjectManager.getCurrent();
+      _cdiManager = InjectManager.getCurrent();
+      _cdiManager.update();
       
       SingleSignon singleSignon = AbstractSingleSignon.getCurrent();
       
@@ -2563,7 +2651,7 @@ public class WebApp extends ServletContextImpl
       try {
         // server/1a36
 
-        Authenticator auth = _beanManager.getReference(Authenticator.class);
+        Authenticator auth = _cdiManager.getReference(Authenticator.class);
 
         setAttribute("caucho.authenticator", auth);
       } catch (Exception e) {
@@ -2572,21 +2660,21 @@ public class WebApp extends ServletContextImpl
 
       try {
         if (_login == null) {
-          _login = _beanManager.getReference(Login.class);
+          _login = _cdiManager.getReference(Login.class);
         }
 
         if (_login == null) {
-          _beanManager.addBean(_beanManager.createManagedBean(BasicLogin.class));
+          Bean<?> loginBean = _cdiManager.createManagedBean(BasicLogin.class);
+          
+          _cdiManager.addBean(loginBean);
           // server/1aj0
-          _defaultLogin = _beanManager.getReference(Login.class);
+          _defaultLogin = _cdiManager.getReference(Login.class);
 
-          _authenticator = _beanManager.getReference(Authenticator.class);
+          _authenticator = _cdiManager.getReference(Authenticator.class);
         }
 
         setAttribute("caucho.login", _login);
       } catch (Exception e) {
-        e.printStackTrace();
-
         log.log(Level.FINEST, e.toString(), e);
       }
 
@@ -2866,7 +2954,7 @@ public class WebApp extends ServletContextImpl
     throws Exception
   {
     for (ServletContainerInitializer init
-          : _beanManager.loadServices(ServletContainerInitializer.class)) {
+          : _cdiManager.loadLocalServices(ServletContainerInitializer.class)) {
       init.onStartup(null, this);
     }
   }
@@ -2998,7 +3086,7 @@ public class WebApp extends ServletContextImpl
         log.log(Level.WARNING, e.toString(), e);
       }
 
-      _jspApplicationContext.addELResolver(new WebBeansELResolver());
+      _jspApplicationContext.addELResolver(new CandiElResolver());
 
       callInitializers();
 
@@ -3032,6 +3120,9 @@ public class WebApp extends ServletContextImpl
         initSecurityConstraints();
       } catch (Exception e) {
         setConfigException(e);
+
+        // XXX: CDI TCK
+        throw e;
       }
 
       if (_parent instanceof Host) {
@@ -3221,6 +3312,8 @@ public class WebApp extends ServletContextImpl
 
           if (! entry.isAsyncSupported())
             invocation.clearAsyncSupported();
+
+          invocation.setMultipartConfig(entry.getMultipartConfig());
         } else {
           chain = _servletMapper.mapServlet(invocation);
 
@@ -4170,6 +4263,7 @@ public class WebApp extends ServletContextImpl
     HashMap<String,String> _securityRoleMap;
     final Dependency _dependency;
     boolean _isAsyncSupported;
+    MultipartConfigElement _multipartConfig;
 
     FilterChainEntry(FilterChain filterChain, Invocation invocation)
     {
@@ -4179,6 +4273,7 @@ public class WebApp extends ServletContextImpl
       _servletName = invocation.getServletName();
       _dependency = invocation.getDependency();
       _isAsyncSupported = invocation.isAsyncSupported();
+      _multipartConfig = invocation.getMultipartConfig();
     }
 
     boolean isModified()
@@ -4218,6 +4313,11 @@ public class WebApp extends ServletContextImpl
 
     boolean isAsyncSupported() {
       return _isAsyncSupported;
+    }
+
+    public MultipartConfigElement getMultipartConfig()
+    {
+      return _multipartConfig;
     }
   }
   

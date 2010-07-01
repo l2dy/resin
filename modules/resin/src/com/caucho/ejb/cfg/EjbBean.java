@@ -38,6 +38,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.ejb.Local;
+import javax.ejb.LocalBean;
 import javax.ejb.Remote;
 import javax.ejb.Timeout;
 import javax.ejb.TransactionAttribute;
@@ -93,7 +94,8 @@ public class EjbBean<X> extends DescriptionGroupConfig
 
   private String _ejbName;
 
-  private AnnotatedType<X> _ejbClass;
+  private AnnotatedType<X> _rawAnnType;
+  private AnnotatedTypeImpl<X> _ejbClass;
 
   // The published name as used by IIOP, Hessian, and
   // jndi-remote-prefix/jndi-local-prefix
@@ -112,8 +114,10 @@ public class EjbBean<X> extends DescriptionGroupConfig
 
   protected ArrayList<AnnotatedType<? super X>> _localList
     = new ArrayList<AnnotatedType<? super X>>();
+  
+  protected AnnotatedType<X> _localBean;
 
-  protected BeanGenerator<X> _bean;
+  // protected BeanGenerator<X> _bean;
 
   private boolean _isAllowPOJO = true;
 
@@ -161,14 +165,16 @@ public class EjbBean<X> extends DescriptionGroupConfig
    * Creates a new entity bean configuration.
    */
   public EjbBean(EjbConfig ejbConfig,
-		 AnnotatedType<X> annType,
-		 String ejbModuleName)
+                 AnnotatedType<X> rawAnnType,
+                 AnnotatedType<X> annType,
+                 String ejbModuleName)
   {
     _ejbConfig = ejbConfig;
 
-    _ejbClass = annType;
+    _rawAnnType = rawAnnType;
+    _ejbClass = AnnotatedTypeImpl.create(annType);
     _ejbModuleName = ejbModuleName;
-
+    
     setEJBClass(annType.getJavaClass());
 
     _loader = ejbConfig.getEjbContainer().getClassLoader();
@@ -460,7 +466,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
                       ejbClass.getJavaClass().getName()));
 
 
-    _ejbClass = ejbClass;
+    _ejbClass = AnnotatedTypeImpl.create(ejbClass);
 
     int modifiers = _ejbClass.getJavaClass().getModifiers();
     
@@ -505,16 +511,18 @@ public class EjbBean<X> extends DescriptionGroupConfig
     AnnotatedMethod<? super X> method = getMethod("finalize", new Class[0]);
 
     if (method != null
-	&& ! method.getJavaMember().getDeclaringClass().equals(Object.class)) {
+        && ! method.getJavaMember().getDeclaringClass().equals(Object.class)) {
       throw error(L.l("'{0}' may not implement finalize().  Bean implementations may not implement finalize().", 
                       method.getJavaMember().getDeclaringClass().getName()));
     }
 
+    /*
     if (_ejbClass == null) {
       InjectManager manager = InjectManager.create();
 
       _ejbClass = manager.createAnnotatedType(_ejbClass.getJavaClass());
     }
+    */
   }
 
   /**
@@ -534,7 +542,12 @@ public class EjbBean<X> extends DescriptionGroupConfig
     }
   }
 
-  public AnnotatedType<X> getAnnotatedType()
+  public AnnotatedType<X> getRawAnnotatedType()
+  {
+    return _rawAnnType;
+  }
+
+  public AnnotatedTypeImpl<X> getAnnotatedType()
   {
     return _ejbClass;
   }
@@ -644,9 +657,29 @@ public class EjbBean<X> extends DescriptionGroupConfig
     if (! localClass.isInterface())
       throw error(L.l("'{0}' must be an interface. <local> interfaces must be interfaces.", localClass.getName()));
 
-    if (! _localList.contains(local)) {
-      _localList.add(local);
+    for (int i = _localList.size() - 1; i >= 0; i--) {
+      AnnotatedType<? super X> oldLocal = _localList.get(i);
+      
+      Class<?> oldClass = oldLocal.getJavaClass();
+
+      // ioc/1235 vs ejb/4040
+      if (localClass.equals(oldClass))
+        return;
+      
+      /*
+      if (localClass.isAssignableFrom(oldClass))
+        return;
+      
+      if (oldClass.isAssignableFrom(localClass)) {
+        _localList.set(i, local);
+        return;
+      }
+      else if (localClass.isAssignableFrom(oldClass))
+        return;
+        */
     }
+
+    _localList.add(local);
   }
 
   /**
@@ -655,6 +688,11 @@ public class EjbBean<X> extends DescriptionGroupConfig
   public ArrayList<AnnotatedType<? super X>> getLocalList()
   {
     return _localList;
+  }
+  
+  public AnnotatedType<X> getLocalBean()
+  {
+    return _localBean;
   }
 
   /**
@@ -913,15 +951,19 @@ public class EjbBean<X> extends DescriptionGroupConfig
 
       initIntrospect();
       
+      /*
       _bean = createBeanGenerator();
       
       if (_bean == null)
         throw new NullPointerException(getClass().getName() + ": createBeanGenerator returns null");
 
       _bean.introspect();
+      */
 
       // _bean.createViews();
 
+      // XXX: lifecycle refactor
+      /*
       InterceptorBinding interceptor
         = getConfig().getInterceptorBinding(getEJBName(), false);
 
@@ -933,13 +975,14 @@ public class EjbBean<X> extends DescriptionGroupConfig
         if (method == null)
           throw error(L.l("'{0}' is an unknown around-invoke method",
                           _aroundInvokeMethodName));
-	
+
         // XXX: _bean.setAroundInvokeMethod(method.getMethod());
       }
 
       for (RemoveMethod method : _removeMethods) {
         method.configure(_bean);
       }
+      */
     } catch (ConfigException e) {
       throw ConfigException.createLine(_location, e);
     }
@@ -1013,6 +1056,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
   /**
    * Generates the class.
    */
+  /*
   public void generate(JavaClassGenerator javaGen, boolean isAutoCompile)
     throws Exception
   {
@@ -1022,21 +1066,15 @@ public class EjbBean<X> extends DescriptionGroupConfig
     }
     else if (isAutoCompile) {
       javaGen.generate(_bean);
-
-      /*
-      GenClass genClass = assembleGenerator(fullClassName);
-
-      if (genClass != null)
-        javaGen.generate(genClass);
-      */
     }
   }
+  */
 
   /**
    * Deploys the bean.
    */
   public AbstractEjbBeanManager<X> deployServer(EjbManager ejbContainer,
-                                        JavaClassGenerator javaGen)
+                                                EjbLazyGenerator<X> lazyGenerator)
     throws ClassNotFoundException, ConfigException
   {
     throw new UnsupportedOperationException();
@@ -1412,7 +1450,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
   {
     for (int i = 0; i < exn.length; i++) {
       if (! AnnotatedTypeUtil.hasException(method, exn[i])
-	  && ! RuntimeException.class.isAssignableFrom(exn[i]))
+          && ! RuntimeException.class.isAssignableFrom(exn[i]))
         return exn[i];
     }
 
@@ -1424,7 +1462,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
   {
     for (AnnotatedMethod<? super T> method : cl.getMethods()) {
       if (method.getJavaMember().getName().startsWith("create"))
-	return method;
+        return method;
     }
 
     return null;
@@ -1460,7 +1498,14 @@ public class EjbBean<X> extends DescriptionGroupConfig
           addLocal(localClass);
         }
       }
-
+      
+      if (type.isAnnotationPresent(LocalBean.class)) {
+        _localBean = type;
+      }
+      
+      if (_localList.size() == 0)
+        _localBean = type;
+      
       Remote remote = type.getAnnotation(Remote.class);
       if (remote != null) {
         for (Class<?> localClass : local.value()) {
@@ -1470,7 +1515,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
         /*
         // ejb/0f08: single interface
         if (values.length == 0) {
-	  // XXX: getGenericInterfaces
+          // XXX: getGenericInterfaces
           Class []ifs = type.getJavaClass().getInterfaces();
 
           if (ifs.length == 1)
@@ -1509,7 +1554,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
   {
     for (AnnotatedMethod<? super Y> method : type.getMethods()) {
       TransactionAttribute xa
-	= (TransactionAttribute) method.getAnnotation(TransactionAttribute.class);
+        = (TransactionAttribute) method.getAnnotation(TransactionAttribute.class);
 
       if (xa != null) {
         EjbMethodPattern<X> pattern = createMethod(getSignature(method));

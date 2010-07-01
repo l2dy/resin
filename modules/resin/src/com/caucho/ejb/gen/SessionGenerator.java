@@ -29,12 +29,16 @@
 
 package com.caucho.ejb.gen;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 
 import javax.ejb.LocalBean;
+import javax.ejb.Schedule;
+import javax.ejb.Schedules;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
@@ -44,6 +48,7 @@ import com.caucho.config.gen.AspectGenerator;
 import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.inject.Module;
+import com.caucho.java.JavaWriter;
 import com.caucho.util.L10N;
 
 /**
@@ -56,6 +61,8 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   private boolean _hasNoInterfaceView;
 
   private ArrayList<AnnotatedType<? super X>> _localApi;
+  private AnnotatedType<X> _localBean;
+  
   private ArrayList<AnnotatedType<? super X>> _remoteApi;
   
   private ArrayList<AnnotatedMethod<? super X>> _annotatedMethods
@@ -71,6 +78,7 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   public SessionGenerator(String ejbName, 
                           AnnotatedType<X> beanType,
                           ArrayList<AnnotatedType<? super X>> localApi,
+                          AnnotatedType<X> localBean,
                           ArrayList<AnnotatedType<? super X>> remoteApi, 
                           String beanTypeName)
   {
@@ -80,6 +88,7 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     _contextClassName = "dummy";
 
     _localApi = new ArrayList<AnnotatedType<? super X>>(localApi);
+    _localBean = localBean;
 
     _remoteApi = new ArrayList<AnnotatedType<? super X>>(remoteApi);
 
@@ -130,7 +139,8 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
 
   public boolean hasNoInterfaceView()
   {
-    return _hasNoInterfaceView;
+    // return _hasNoInterfaceView;
+    return getLocalBean() != null;
   }
   
   /**
@@ -139,6 +149,11 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   public ArrayList<AnnotatedType<? super X>> getLocalApi()
   {
     return _localApi;
+  }
+  
+  public AnnotatedType<X> getLocalBean()
+  {
+    return _localBean;
   }
 
   /**
@@ -282,7 +297,10 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
       
     int modifiers = javaMethod.getModifiers();
 
-    if (! isBusinessMethod(javaMethod) && ! Modifier.isPublic(modifiers))
+    if (! isBusinessMethod(javaMethod) 
+        && ! Modifier.isPublic(modifiers)
+        && (javaMethod.isAnnotationPresent(Schedule.class)
+            || javaMethod.isAnnotationPresent(Schedules.class)))
       addScheduledMethod(apiMethod);
   }
   
@@ -330,6 +348,20 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   protected AnnotatedType<? super X> introspectLocalDefault()
   {
     return getBeanType();
+  }
+  
+  protected void generateContentImpl(JavaWriter out,
+                                     HashMap<String,Object> map)
+    throws IOException
+  {
+    generateBeanPrologue(out, map);
+
+    generateBusinessMethods(out, map);
+    
+    generateEpilogue(out, map);
+    generateInject(out, map);
+    generatePostConstruct(out, map);
+    generateDestroy(out, map);
   }
 
   protected AspectBeanFactory<X> getScheduledAspectBeanFactory()

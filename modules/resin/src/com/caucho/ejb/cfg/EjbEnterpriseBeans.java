@@ -28,15 +28,10 @@
 
 package com.caucho.ejb.cfg;
 
-import com.caucho.config.ConfigException;
-import com.caucho.util.L10N;
-
 /**
  * Configuration for an ejb bean.
  */
 public class EjbEnterpriseBeans {
-  private static final L10N L = new L10N(EjbEnterpriseBeans.class);
-
   private final EjbConfig _config;
   private final String _ejbModuleName;
 
@@ -50,39 +45,14 @@ public class EjbEnterpriseBeans {
   {
     return new EjbSessionConfigProxy(_config, _ejbModuleName);
   }
-  
-  public void addSession(EjbSessionConfigProxy sessionProxy)
-    throws ConfigException
-  {
-    EjbSessionBean session = sessionProxy.getSession();
-
-    _config.setBeanConfig(session.getEJBName(), session);
-  }
 
   public EjbBeanConfigProxy createEjbBean()
   {
     return new EjbBeanConfigProxy(_config, _ejbModuleName);
   }
-  
-  public void addEjbBean(EjbBeanConfigProxy beanProxy)
-    throws ConfigException
-  {
-    EjbBean bean = beanProxy.getBean();
-
-    if (bean != null)
-      _config.setBeanConfig(bean.getEJBName(), bean);
-  }
 
   public EjbMessageConfigProxy createMessageDriven()
   {
     return new EjbMessageConfigProxy(_config, _ejbModuleName);
-  }
-
-  public void addMessageDriven(EjbMessageConfigProxy messageProxy)
-    throws ConfigException
-  {
-    EjbMessageBean message = messageProxy.getMessage();
-    
-    _config.setBeanConfig(message.getEJBName(), message);
   }
 }

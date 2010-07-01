@@ -43,25 +43,30 @@ install	:
 	fi; \
 	(cd modules/c/src; $(MAKE) install)
 	if test -r $(resin_pro)/modules/c/src/Makefile; then \
-	  cd $(resin_pro)/modules/c/src; $(MAKE) install; \
+	  pushd $(resin_pro)/modules/c/src; $(MAKE) install; popd; \
 	fi; \
 	if test -n "${resin_init_d}"; then \
-		if test -w "${resin_init_d}"; then \
-			cp $(CP_U_FLAG) init.d/resin $(resin_init_d); \
-			chmod +x $(resin_init_d); \
+		cd $(abs_builddir); \
+		if test -f "${resin_init_d}"; then\
+			if test \( -w "${resin_init_d}" \) -o \( -w `dirname ${resin_init_d}` \); then \
+				cp $(CP_U_FLAG) init.d/resin $(resin_init_d); \
+				chmod +x $(resin_init_d) && echo "${resin_init_d} updated."; \
+			else \
+				echo ;\
+				echo ;\
+				echo "****************************************************************"; \
+				echo "WARNING: Unable to install ${resin_init_d}"; \
+				echo "         Destination is not writable. Usually, only root has";\
+				echo "         permissions to install this file.";\
+				echo;\
+				echo "         This file is not required, but is used to start Resin"; \
+				echo "         at boot time.";\
+				echo "****************************************************************"; \
+				echo ;\
+				echo ;\
+			fi; \
 		else \
-			echo ;\
-			echo ;\
-			echo "****************************************************************"; \
-			echo "WARNING: Unable to install ${resin_init_d}"; \
-			echo "         Destination is not writable. Usually, only root has";\
-			echo "         permissions to install this file.";\
-			echo;\
-			echo "         This file is not required, but is used to start Resin"; \
-			echo "         at boot time.";\
-			echo "****************************************************************"; \
-			echo ;\
-			echo ;\
-		fi; \
+			cp init.d/resin $(resin_init_d); \
+                        chmod +x $(resin_init_d) && echo "${resin_init_d} installed."; \
+                fi; \
 	fi;
-

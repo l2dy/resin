@@ -28,20 +28,13 @@
  */
 package com.caucho.config.gen;
 
-import static javax.ejb.ConcurrencyManagementType.CONTAINER;
-
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
-import javax.ejb.AccessTimeout;
-import javax.ejb.ConcurrencyManagement;
-import javax.ejb.Lock;
 import javax.ejb.LockType;
 import javax.enterprise.inject.spi.AnnotatedMethod;
-import javax.enterprise.inject.spi.AnnotatedType;
 
-import com.caucho.config.types.Period;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 
@@ -60,66 +53,24 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
 
   public LockGenerator(LockFactory<X> factory,
                        AnnotatedMethod<? super X> method,
-                       AspectGenerator<X> next)
+                       AspectGenerator<X> next,
+                       LockType lockType,
+                       long lockTimeout,
+                       TimeUnit lockTimeoutUnit)
   {
     super(factory, method, next);
 
     _isContainerManaged = true;
-    _lockType = null;
-    _lockTimeout = DEFAULT_TIMEOUT;
-    _lockTimeoutUnit = TimeUnit.MILLISECONDS;
-  }
+    _lockType = lockType;
 
-  /**
-   * Sets the lock timeout.
-   *
-   * @param timeout
-   *          The timeout period.
-   */
-  public void setTimeout(Period timeout)
-  {
-    _lockTimeout = timeout.getPeriod();
-  }
-
-  /**
-   * Introspects the method for locking attributes.
-   */
-  /*
-  @Override
-  public void introspect(AnnotatedMethod<? super T> apiMethod,
-                         AnnotatedMethod<? super X> implementationMethod)
-  {
-    AnnotatedType<T> apiClass = getApiType();
-
-    ConcurrencyManagement concurrencyManagementAnnotation
-      = apiClass.getAnnotation(ConcurrencyManagement.class);
-
-    if ((concurrencyManagementAnnotation != null)
-        && (concurrencyManagementAnnotation.value() != CONTAINER)) {
-      _isContainerManaged = false;
-      return;
-    }
-
-    AnnotatedType<X> implementationClass = getImplType();
-
-    Lock lockAttribute = getAnnotation(Lock.class, apiMethod, apiClass,
-                                       implementationMethod, implementationClass);
-
-    if (lockAttribute != null) {
-      _lockType = lockAttribute.value();
-    }
-
-    AccessTimeout accessTimeoutAttribute
-      = getAnnotation(AccessTimeout.class,
-                      apiMethod, apiClass,
-                      implementationMethod, implementationClass);
-
-    if (accessTimeoutAttribute != null) {
-      _lockTimeout = accessTimeoutAttribute.value();
-      _lockTimeoutUnit = accessTimeoutAttribute.unit();
+    if (lockTimeoutUnit != null) {
+      _lockTimeout = lockTimeout;
+      _lockTimeoutUnit = lockTimeoutUnit;
+    } else {
+      _lockTimeout = DEFAULT_TIMEOUT;
+      _lockTimeoutUnit = TimeUnit.MILLISECONDS;
     }
   }
-  */
 
   /**
    * Generates the class prologue.
@@ -157,7 +108,9 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
                       + _lockTimeoutUnit.toMillis(_lockTimeout)
                       + ");");
         } else {
-          out.println("_readWriteLock.readLock().lock();");
+            // XXX: This should probably be put behind the lock utility as well,
+                // mostly to maintain code symmetry.
+                out.println("_readWriteLock.readLock().lock();");
         }
         break;
 
@@ -190,11 +143,15 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
       switch (_lockType) {
       case READ:
         out.println();
+        // XXX: This should probably be put behind the lock utility as well,
+            // mostly to maintain code symmetry.
         out.println("_readWriteLock.readLock().unlock();");
 
         break;
       case WRITE:
         out.println();
+        // XXX: This should probably be put behind the lock utility as well,
+            // mostly to maintain code symmetry.
         out.println("_readWriteLock.writeLock().unlock();");
         break;
       }

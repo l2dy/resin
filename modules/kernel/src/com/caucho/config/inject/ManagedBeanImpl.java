@@ -49,8 +49,6 @@ import javax.enterprise.event.Observes;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
 import javax.enterprise.inject.Specializes;
-import javax.enterprise.inject.spi.Annotated;
-import javax.enterprise.inject.spi.AnnotatedField;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.AnnotatedType;
@@ -58,14 +56,12 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.inject.Inject;
-import javax.inject.Named;
 import javax.inject.Qualifier;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.Names;
 import com.caucho.config.bytecode.ScopeAdapter;
-import com.caucho.config.program.Arg;
-import com.caucho.config.program.BeanArg;
+import com.caucho.config.event.EventManager;
+import com.caucho.config.event.ObserverMethodImpl;
 import com.caucho.config.timer.ScheduleIntrospector;
 import com.caucho.config.timer.TimeoutCaller;
 import com.caucho.config.timer.TimerTask;
@@ -85,9 +81,6 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
 
   private InjectionTarget<X> _injectionTarget;
 
-  private HashSet<Bean<?>> _producerBeans
-    = new LinkedHashSet<Bean<?>>();
-
   private HashSet<ObserverMethodImpl<X,?>> _observerMethods
     = new LinkedHashSet<ObserverMethodImpl<X,?>>();
 
@@ -95,7 +88,8 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   private Object _scopeAdapter;
 
   public ManagedBeanImpl(InjectManager injectManager,
-                         AnnotatedType<X> beanType)
+                         AnnotatedType<X> beanType,
+                         boolean isSessionBean)
   {
     super(injectManager, beanType.getBaseType(), beanType);
 
@@ -105,15 +99,21 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     if (beanType.getType() instanceof Class)
       validateType((Class) beanType.getType());
     */
-
-    _injectionTarget = new InjectionTargetBuilder<X>(injectManager, beanType, this);
+    
+    InjectionTargetBuilder target;
+    target = new InjectionTargetBuilder<X>(injectManager, beanType, this);
+    
+    if (isSessionBean)
+      target.setGenerateInterception(false);
+    
+    _injectionTarget = target; 
   }
 
   public ManagedBeanImpl(InjectManager webBeans,
                          AnnotatedType<X> beanType,
                          InjectionTarget<X> injectionTarget)
   {
-    this(webBeans, beanType);
+    this(webBeans, beanType, false);
 
     _injectionTarget = injectionTarget;
   }
@@ -174,7 +174,7 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   /**
    * Creates a new instance of the component.
    */
-  public X createDependent(CreationalContextImpl<X> env)
+  public X createDependent(CreationalContext<X> env)
   {
     X instance = _injectionTarget.produce(env);
 
@@ -196,14 +196,14 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   }
 
   @Override
-  public X getScopeAdapter(Bean<?> topBean, CreationalContext<X> cxt)
+  public X getScopeAdapter(Bean<?> topBean, CreationalContextImpl<X> cxt)
   {
     // ioc/0520
     if (isNormalScope()) {
       Object value = _scopeAdapter;
 
       if (value == null) {
-        ScopeAdapter scopeAdapter = ScopeAdapter.create(getBaseType().getRawClass());
+        ScopeAdapter scopeAdapter = ScopeAdapter.create(getJavaClass());
         _scopeAdapter = scopeAdapter.wrap(getBeanManager().createNormalInstanceFactory(topBean));
         value = _scopeAdapter;
       }
@@ -248,10 +248,12 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     return _injectionTarget.getInjectionPoints();
   }
 
+  /*
   public Set<Bean<?>> getProducerBeans()
   {
     return _producerBeans;
   }
+  */
 
   /**
    * Returns the observer methods
@@ -273,11 +275,18 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
    * Call pre-destroy
    */
   @Override
-  public void destroy(X instance, CreationalContext<X> env)
+  public void destroy(X instance, CreationalContext<X> cxt)
   {
     _injectionTarget.preDestroy(instance);
-    
-    env.release();
+
+    if (cxt!= null) {
+      if (cxt instanceof CreationalContextImpl<?>) {
+        CreationalContextImpl<?> env = (CreationalContextImpl<?>) cxt;
+        env.clearTarget();
+      }
+      
+      cxt.release();
+    }
   }
 
   //
@@ -341,246 +350,45 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   {
     // super.introspect(beanType);
 
-    introspectProduces(beanType);
+    // introspectProduces(beanType);
 
-    introspectObservers(beanType);
+    // introspectObservers(beanType);
   }
 
-  /**
-   * Introspects the methods for any @Produces
-   */
-  protected void introspectProduces(AnnotatedType<X> beanType)
+  public void introspectProduces()
   {
-    for (AnnotatedMethod<? super X> beanMethod : beanType.getMethods()) {
-      if (beanMethod.isAnnotationPresent(Produces.class)) {
-        AnnotatedMethod<? super X> disposesMethod 
-          = findDisposesMethod(beanType, beanMethod);
-        
-        addProduces(beanMethod, disposesMethod);
-      }
-    }
+    ProducesBuilder builder = new ManagedProducesBuilder(getBeanManager());
     
-    for (AnnotatedField<?> beanField : beanType.getFields()) {
-      if (beanField.isAnnotationPresent(Produces.class))
-        addProduces(beanField);
-    }
-  }
-
-  protected <T> void addProduces(AnnotatedMethod producesMethod,
-                                 AnnotatedMethod disposesMethod)
-  {
-    if (producesMethod.getJavaMember().getDeclaringClass() != getBeanClass()
-        && ! getAnnotatedType().isAnnotationPresent(Specializes.class))
-      return;
-    
-    Arg []producesArgs = introspectArguments(producesMethod.getParameters());
-    Arg []disposesArgs = null;
-    
-    if (disposesMethod != null)
-      disposesArgs = introspectDisposesArgs(disposesMethod.getParameters());
-
-    ProducesBean<X,T> bean = ProducesBean.create(getBeanManager(), this, 
-                                                 producesMethod, producesArgs,
-                                                 disposesMethod, disposesArgs);
-
-    // bean.init();
-
-    _producerBeans.add(bean);
+    builder.introspectProduces(this, getAnnotatedType());
   }
   
-  private AnnotatedMethod<? super X>
-  findDisposesMethod(AnnotatedType<X> beanType,
-                     AnnotatedMethod<? super X> producesMethod)
-  {
-    for (AnnotatedMethod beanMethod : beanType.getMethods()) {
-      List<AnnotatedParameter<?>> params = beanMethod.getParameters();
-      
-      if (params.size() == 0)
-        continue;
-      
-      AnnotatedParameter<?> param = params.get(0);
-      
-      if (! param.isAnnotationPresent(Disposes.class))
-        continue;
-      
-      if (! producesMethod.getBaseType().equals(param.getBaseType()))
-        continue;
-
-
-      // XXX: check @Qualifiers
-      
-      return beanMethod;
-    }
-    
-    return null;
-  }
-
-  protected void addProduces(AnnotatedField<?> beanField)
-  {
-    if (beanField.getJavaMember().getDeclaringClass() != getBeanClass()
-        && ! getBeanClass().isAnnotationPresent(Specializes.class))
-      return;
-    
-    ProducesFieldBean bean
-      = ProducesFieldBean.create(getBeanManager(), this, beanField);
-
-    // bean.init();
-
-    _producerBeans.add(bean);
-  }
-
-  protected Arg<X> []introspectArguments(List<AnnotatedParameter<X>> params)
-  {
-    Arg<X> []args = new Arg[params.size()];
-
-    for (int i = 0; i < args.length; i++) {
-      AnnotatedParameter<X> param = params.get(i);
-      
-      InjectionPoint ip = new InjectionPointImpl(getBeanManager(),
-                                                 this,
-                                                 param);
-
-      if (InjectionPoint.class.equals(param.getBaseType()))
-        args[i] = new InjectionPointArg();
-      else
-        args[i] = new BeanArg(getBeanManager(), 
-                              param.getBaseType(), 
-                              getQualifiers(param),
-                              ip);
-    }
-
-    return args;
-  }
-
-  protected Arg<X> []introspectDisposesArgs(List<AnnotatedParameter<X>> params)
-  {
-    Arg<X> []args = new Arg[params.size()];
-
-    for (int i = 0; i < args.length; i++) {
-      AnnotatedParameter<X> param = params.get(i);
-      
-      InjectionPoint ip = null;
-
-      if (param.isAnnotationPresent(Disposes.class))
-        args[i] = null;
-      else
-        args[i] = new BeanArg(getBeanManager(),
-                              param.getBaseType(), 
-                              getQualifiers(param),
-                              ip);
-    }
-
-    return args;
-  }
-
-  private Annotation []getQualifiers(Annotated annotated)
-  {
-    ArrayList<Annotation> qualifierList = new ArrayList<Annotation>();
-
-    for (Annotation ann : annotated.getAnnotations()) {
-      if (ann.annotationType().equals(Named.class)) {
-        String namedValue = getNamedValue(ann);
-
-        if ("".equals(namedValue)) {
-          String name = getDefaultName();
-
-          ann = Names.create(name);
-        }
-
-        qualifierList.add(ann);
-
-      }
-      else if (ann.annotationType().isAnnotationPresent(Qualifier.class)) {
-        qualifierList.add(ann);
-      }
-    }
-
-    if (qualifierList.size() == 0)
-      qualifierList.add(CurrentLiteral.CURRENT);
-
-    Annotation []qualifiers = new Annotation[qualifierList.size()];
-    qualifierList.toArray(qualifiers);
-
-    return qualifiers;
-  }
-
   /**
-   * Introspects the methods for any @Produces
+   * Introspects the methods for any @Observes
    */
-  protected void introspectObservers(AnnotatedType<X> beanType)
+  void introspectObservers()
   {
-    for (AnnotatedMethod<? super X> beanMethod : beanType.getMethods()) {
-      for (AnnotatedParameter<? super X> param : beanMethod.getParameters()) {
-        if (param.isAnnotationPresent(Observes.class)) {
-          addObserver(beanMethod);
-          break;
-        }
-      }
-    }
-  }
-
-  protected <Z> void addObserver(AnnotatedMethod<Z> beanMethod)
-  {
-    int param = findObserverAnnotation(beanMethod);
-
-    if (param < 0)
-      return;
-
-    Method method = beanMethod.getJavaMember();
-    Type eventType = method.getGenericParameterTypes()[param];
+    EventManager eventManager = getBeanManager().getEventManager();
     
-    // ioc/0b22
-    if (! method.getDeclaringClass().equals(getBeanClass())
-        && ! getBeanClass().isAnnotationPresent(Specializes.class))
+    AnnotatedType<X> annType = getAnnotatedType();
+    
+    if (! getBeanManager().isIntrospectObservers(annType))
       return;
-
-    HashSet<Annotation> bindingSet = new HashSet<Annotation>();
-
-    List<AnnotatedParameter<Z>> paramList = beanMethod.getParameters();
-    for (Annotation ann : paramList.get(param).getAnnotations()) {
-      if (ann.annotationType().isAnnotationPresent(Qualifier.class))
-        bindingSet.add(ann);
-    }
-
-    if (method.isAnnotationPresent(Inject.class)) {
-      throw InjectManager.error(method, L.l("A method may not have both an @Observer and an @Inject annotation."));
-    }
-
-    if (method.isAnnotationPresent(Produces.class)) {
-      throw InjectManager.error(method, L.l("A method may not have both an @Observer and a @Produces annotation."));
-    }
-
-    if (method.isAnnotationPresent(Disposes.class)) {
-      throw InjectManager.error(method, L.l("A method may not have both an @Observer and a @Disposes annotation."));
-    }
-
-    ObserverMethodImpl observerMethod
-      = new ObserverMethodImpl(getBeanManager(), this, beanMethod,
-                               eventType, bindingSet);
-
-    _observerMethods.add(observerMethod);
-  }
-
-  private <Z> int findObserverAnnotation(AnnotatedMethod<Z> method)
-  {
-    List<AnnotatedParameter<Z>> params = method.getParameters();
-    int size = params.size();
-    int observer = -1;
-
-    for (int i = 0; i < size; i++) {
-      AnnotatedParameter<?> param = params.get(i);
-
-      for (Annotation ann : param.getAnnotations()) {
-        if (ann.annotationType() == Observes.class) {
-          if (observer >= 0 && observer != i)
-            throw InjectManager.error(method.getJavaMember(), L.l("Only one param may have an @Observer"));
-
-          observer = i;
-        }
+    
+    for (AnnotatedMethod<? super X> beanMethod : getAnnotatedType().getMethods()) {
+      int param = EventManager.findObserverAnnotation(beanMethod);
+      
+      if (param < 0)
+        continue;
+      
+      Class<?> declClass = beanMethod.getJavaMember().getDeclaringClass();
+      if (declClass != annType.getJavaClass() 
+          && declClass.isAssignableFrom(annType.getJavaClass())
+          && ! annType.isAnnotationPresent(Specializes.class)) {
+        continue;
       }
+      
+      eventManager.addObserver(this, beanMethod);
     }
-
-    return observer;
   }
 
   /**
@@ -617,7 +425,7 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     throws InvocationTargetException,
            IllegalAccessException
     {
-    	method.invoke(_bean);
+            method.invoke(_bean);
     }
 
     @Override

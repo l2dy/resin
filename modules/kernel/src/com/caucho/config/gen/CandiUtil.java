@@ -29,12 +29,19 @@
 
 package com.caucho.config.gen;
 
+import com.caucho.config.ConfigException;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.DecoratorBean;
+import com.caucho.config.inject.DelegateProxyBean;
+import com.caucho.config.inject.DependentCreationalContext;
 import com.caucho.config.inject.InterceptorBean;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.inject.InterceptorRuntimeBean;
+import com.caucho.config.inject.OwnerCreationalContext;
+import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.util.L10N;
 
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
 import java.util.ArrayList;
@@ -78,11 +85,14 @@ public class CandiUtil {
   }
 
   public static int []createInterceptors(InjectManager manager,
+                                         ArrayList<InterceptorRuntimeBean<?>> staticBeans,
                                          ArrayList<Interceptor<?>> beans,
-                                         int []indexList,
+                                         int []staticIndexList,
                                          InterceptionType type,
                                          Annotation ...bindings)
   {
+    ArrayList<Integer> indexList = new ArrayList<Integer>();
+    
     List<Interceptor<?>> interceptors;
 
     if (bindings != null && bindings.length > 0) {
@@ -91,53 +101,161 @@ public class CandiUtil {
     else
       interceptors = new ArrayList<Interceptor<?>>();
 
-    int offset = 0;
-
-    if (indexList == null) {
-      indexList = new int[interceptors.size()];
-    }
-    else {
-      offset = indexList.length;
-
-      int[] newIndexList = new int[indexList.length + interceptors.size()];
-      System.arraycopy(indexList, 0, newIndexList, 0, indexList.length);
-      indexList = newIndexList;
+    if (staticIndexList != null) {
+      for (int i = 0; i < staticIndexList.length; i++) {
+        int staticIndex = staticIndexList[i];
+        InterceptorRuntimeBean<?> staticBean = staticBeans.get(staticIndex);
+      
+        addStaticBean(staticBean, indexList, beans, type);
+      }
     }
 
     for (int i = 0; i < interceptors.size(); i++) {
       Interceptor<?> interceptor = interceptors.get(i);
 
       int index = beans.indexOf(interceptor);
+
       if (index >= 0)
-        indexList[offset + i] = index;
+        indexList.add(index);
       else {
-        indexList[offset + i] = beans.size();
+        indexList.add(beans.size());
         beans.add(interceptor);
       }
     }
 
-    return indexList;
+    int []indexArray = new int[indexList.size()];
+    for (int i = 0; i < indexList.size(); i++) {
+      indexArray[i] = indexList.get(i);
+    }
+    
+    return indexArray;
+  }
+  
+  private static void 
+  addStaticBean(InterceptorRuntimeBean<?> staticBean,
+                ArrayList<Integer> indexList,
+                ArrayList<Interceptor<?>> beans,
+                InterceptionType type)
+  {
+    if (staticBean == null)
+      return;
+    
+    if (! beans.contains(staticBean))
+      beans.add(staticBean);
+    
+    addStaticBean(staticBean.getParent(), indexList, beans, type);
+
+    if (staticBean.intercepts(type)) {
+      int index = beans.indexOf(staticBean);
+      indexList.add(index);
+    }
   }
 
-  public static Method []createMethods(ArrayList<Interceptor<?>> beans,
-                                       InterceptionType type,
-                                       int []indexChain)
+  public static void createInterceptors(InjectManager manager,
+                                        ArrayList<Interceptor<?>> beans,
+                                        Annotation ...bindings)
   {
-    Method []methods = new Method[indexChain.length];
+    if (bindings == null || bindings.length == 0)
+      return;
+    
+    createInterceptors(manager, beans, InterceptionType.AROUND_INVOKE, bindings);
+    createInterceptors(manager, beans, InterceptionType.POST_CONSTRUCT, bindings);
+    createInterceptors(manager, beans, InterceptionType.PRE_DESTROY, bindings);
+  }
+  
+  public static void createInterceptors(InjectManager manager,
+                                        ArrayList<Interceptor<?>> beans,
+                                        InterceptionType type,
+                                        Annotation ...bindings)
+  {
+    List<Interceptor<?>> interceptors;
+
+    interceptors = manager.resolveInterceptors(type, bindings);
+
+    for (Interceptor<?> bean : interceptors) {
+       int index = beans.indexOf(bean);
+
+      if (index < 0)
+        beans.add(bean);
+    }
+  }
+
+  public static void validatePassivating(Class<?> cl, 
+                                         ArrayList<Interceptor<?>> beans)
+  {
+    for (Interceptor<?> interceptor : beans) {
+      validatePassivating(cl, interceptor, "interceptor");
+    }
+  }
+
+  public static void validatePassivatingDecorators(Class<?> cl, 
+                                                   List<Decorator<?>> beans)
+  {
+    for (Decorator<?> decorator : beans) {
+      validatePassivating(cl, decorator, "decorator");
+    }
+  }
+  
+  public static void validatePassivating(Class<?> cl,
+                                         Bean<?> bean,
+                                         String typeName)
+  {
+    Class<?> beanClass = bean.getBeanClass();
+
+    if (! Serializable.class.isAssignableFrom(beanClass)) {
+      ConfigException exn
+      = new ConfigException(L.l("{0}: {1} is an invalid {2} because it is not serializable.",
+                                cl.getName(),
+                                bean,
+                                typeName));
+
+      throw exn;
+      // InjectManager.create().addDefinitionError(exn);
+    }
+
+    for (InjectionPoint ip : bean.getInjectionPoints()) {
+      if (ip.isTransient() || ip.isDelegate())
+        continue;
+      
+      Class<?> type = getRawClass(ip.getType());
+      
+      if (type.isInterface())
+        continue;
+
+      if (! Serializable.class.isAssignableFrom(type)) {
+        ConfigException exn
+          = new ConfigException(L.l("{0}: {1} is an invalid {4} because its injection point '{2}' of type {3} is not serializable.",
+                                    cl.getName(),
+                                    bean,
+                                    ip.getMember().getName(),
+                                    ip.getType(),
+                                    typeName));
+
+        throw exn;
+      }
+    }
+  }
+  
+  public static Class<?> getRawClass(Type type)
+  {
+    if (type instanceof Class<?>)
+      return (Class<?>) type;
+    else if (type instanceof ParameterizedType)
+      return (Class<?>) ((ParameterizedType) type).getRawType();
+    else
+      return Object.class;
+  }
+
+  public static Interceptor<?> []createMethods(ArrayList<Interceptor<?>> beans,
+                                               InterceptionType type,
+                                               int []indexChain)
+  {
+    Interceptor<?> []methods = new Interceptor<?>[indexChain.length];
 
     for (int i = 0; i < indexChain.length; i++) {
       int index = indexChain[i];
 
-      // XXX:
-      Method method = ((InterceptorBean<?>) beans.get(index)).getMethod(type);
-
-      if (method == null)
-        throw new IllegalStateException(L.l("'{0}' is an unknown interception method in '{1}'",
-                                           type, beans.get(index)));
-
-      method.setAccessible(true);
-      
-      methods[i] = method;
+      methods[i] = beans.get(index);
     }
 
     return methods;
@@ -166,7 +284,7 @@ public class CandiUtil {
 
   public static Method getMethod(Class<?> cl,
                                  String methodName,
-                                 Class<?> paramTypes[])
+                                 Class<?> ...paramTypes)
     throws Exception
   {
     Method method = null;
@@ -191,41 +309,43 @@ public class CandiUtil {
     return method;
   }
 
-  public static Object generateDelegate(List<Decorator<?>> beans,
-                                        Object tail)
+  public static Method findMethod(Class<?> cl,
+                                  String methodName,
+                                  Class<?> ...paramTypes)
   {
-    InjectManager webBeans = InjectManager.create();
-
-    Bean<?> parentBean = null;
-    CreationalContext env = webBeans.createCreationalContext(parentBean);
-
-    for (int i = beans.size() - 1; i >= 0; i--) {
-      Decorator<?> bean = beans.get(i);
-
-      Object instance = webBeans.getReference(bean, bean.getBeanClass(), env);
-
-      // XXX:
-      // bean.setDelegate(instance, tail);
-
-      tail = instance;
+    for (Class<?> ptr = cl; ptr != null; ptr = ptr.getSuperclass()) {
+      for (Method method : ptr.getDeclaredMethods()) {
+        if (AnnotatedTypeUtil.isMatch(method, methodName, paramTypes)) {
+          return method;
+        }
+      }
     }
 
-    return tail;
+    log.warning(L.l("'{0}' is an unknown method in {1}",
+                    methodName, cl.getName()));
+    
+    return null;
   }
 
   public static Object []generateProxyDelegate(InjectManager manager,
                                                List<Decorator<?>> beans,
-                                               Object proxy,
-                                               CreationalContext<?> parentEnv)
+                                               Object delegateProxy,
+                                               CreationalContextImpl<?> parentEnv)
   {
     Object []instances = new Object[beans.size()];
 
+    DependentCreationalContext<Object> proxyEnv
+      = new DependentCreationalContext<Object>(DelegateProxyBean.BEAN, parentEnv, null);
+    
+    proxyEnv.push(delegateProxy);
+    
     for (int i = 0; i < beans.size(); i++) {
       Decorator<?> bean = beans.get(i);
-      CreationalContext<?> env = new CreationalContextImpl(bean, parentEnv);
-
+      
+      CreationalContextImpl<?> env = new DependentCreationalContext(bean, proxyEnv, null);
+      
       Object instance = manager.getReference(bean, bean.getBeanClass(), env);
-
+      
       // XXX:
       InjectionPoint ip = getDelegate(bean);
 
@@ -234,16 +354,16 @@ public class CandiUtil {
         field.setAccessible(true);
       
         try {
-          field.set(instance, proxy);
+          field.set(instance, delegateProxy);
         } catch (Exception e) {
           throw new InjectionException(e);
         }
-      } else {
+      } else if (ip.getMember() instanceof Method) {
         Method method = (Method) ip.getMember();
         method.setAccessible(true);
       
         try {
-          method.invoke(instance, proxy);
+          method.invoke(instance, delegateProxy);
         } catch (Exception e) {
           throw new InjectionException(e);
         }

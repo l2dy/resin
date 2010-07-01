@@ -86,23 +86,27 @@ public class XaFactory<X>
     if (xaManagement != null)
       xaManagementType = xaManagement.value();
     
-    if (xaManagementType == TransactionManagementType.BEAN)
-      return super.create(method, isEnhanced);
-  
+
     TransactionAttribute xa = method.getAnnotation(TransactionAttribute.class);
     TransactionAttributeType xaType = _classXa;
     
-    
+
     if (xa != null) {
       xaType = xa.value();
     }
+    
+    boolean isBeanManaged = xaManagementType == TransactionManagementType.BEAN;
+
+    if (isBeanManaged)
+      xaType = TransactionAttributeType.NOT_SUPPORTED;
+      
     
     if (xaType != null) {
       isEnhanced = true;
       
       AspectGenerator<X> next = super.create(method, isEnhanced);
       
-      return new XaGenerator<X>(this, method, next, xaType);
+      return new XaGenerator<X>(this, method, next, xaType, isBeanManaged);
     }
     
     return super.create(method, isEnhanced);

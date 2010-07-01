@@ -54,6 +54,7 @@ import javax.enterprise.inject.Stereotype;
 import javax.enterprise.inject.Typed;
 import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedMethod;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.PassivationCapable;
@@ -126,17 +127,12 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     
     _baseType = manager.createSourceBaseType(type);
     
-    LinkedHashSet<Type> baseTypes = new LinkedHashSet<Type>();
-    
-    for (Type closureType : annotated.getTypeClosure()) {
-      baseTypes.add(manager.createSourceBaseType(closureType).toType());
-    }
+    Set<Type> baseTypes = _baseType.getTypeClosure(manager);
     
     Typed typed = annotated.getAnnotation(Typed.class);
     
     if (typed != null) {
-      _typeClasses = fillTyped(baseTypes,
-                               typed.value());
+      _typeClasses = fillTyped(baseTypes, typed.value());
     }
     else {
       _typeClasses = baseTypes;
@@ -186,6 +182,11 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
 
   @Override
   public Class<?> getBeanClass()
+  {
+    return _baseType.getRawClass();
+  }
+
+  public final Class<?> getJavaClass()
   {
     return _baseType.getRawClass();
   }
@@ -313,8 +314,10 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     introspectQualifiers(annotated);
     introspectName(annotated);
     
-    if (annotated.isAnnotationPresent(Alternative.class))
+    if (annotated.isAnnotationPresent(Alternative.class)) {
+      // ioc/0618
       _isAlternative = true;
+    }
     
     introspectStereotypes(annotated);
     introspectSpecializes(annotated);
@@ -402,12 +405,17 @@ public class AbstractIntrospectedBean<T> extends AbstractBean<T>
     Class<? extends Annotation> scope = null;
 
     for (Annotation stereotype : annotated.getAnnotations()) {
-      Class<?> stereotypeType = stereotype.annotationType();
+      Class<? extends Annotation> stereotypeType = stereotype.annotationType();
 
-      if (stereotypeType.isAnnotationPresent(Stereotype.class))
-        _stereotypes.add(stereotype);
+      Set<Annotation> stereotypeSet =
+        getBeanManager().getStereotypeDefinition(stereotypeType);
+      
+      if (stereotypeSet == null)
+        continue;
 
-      for (Annotation ann : stereotypeType.getDeclaredAnnotations()) {
+      _stereotypes.add(stereotype);
+
+      for (Annotation ann : stereotypeSet) {
         Class<? extends Annotation> annType = ann.annotationType();
 
         if (annType.isAnnotationPresent(Scope.class)

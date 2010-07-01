@@ -98,7 +98,7 @@ import com.caucho.server.cluster.Server;
 import com.caucho.server.cluster.SingleCluster;
 import com.caucho.server.repository.ModuleRepositoryImpl;
 import com.caucho.server.util.JniCauchoSystem;
-import com.caucho.server.webbeans.ResinWebBeansProducer;
+import com.caucho.server.webbeans.ResinCdiProducer;
 import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
 import com.caucho.util.L10N;
@@ -443,7 +443,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
 
       _management = createResinManagement();
 
-      if (webBeans.getBeans(ResinWebBeansProducer.class).size() == 0) {
+      if (webBeans.getBeans(ResinCdiProducer.class).size() == 0) {
         Config.setProperty("fmt", new FmtFunctions());
 
         ResinConfigLibrary.configure(webBeans);
@@ -456,7 +456,7 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
           throw ConfigException.create(e);
         }
 
-        webBeans.addManagedBean(webBeans.createManagedBean(ResinWebBeansProducer.class));
+        webBeans.addManagedBean(webBeans.createManagedBean(ResinCdiProducer.class));
         webBeans.update();
       }
 
@@ -1085,6 +1085,8 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       }
       */
 
+      Environment.start(getClassLoader());
+
       _server = createServer();
 
       for (int i = 0; i < _boundPortList.size(); i++) {
@@ -1096,8 +1098,6 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
       }
 
       _server.start();
-
-      Environment.start(getClassLoader());
 
       /*
         if (! hasListeningPort()) {
@@ -2109,10 +2109,13 @@ public class Resin extends Shutdown implements EnvironmentBean, SchemaBean
      */
     public Path getRoot()
     {
+      /*
       if (Alarm.isTest())
         return Vfs.lookup("file:/var/www");
       else
         return Resin.this.getRootDirectory();
+        */
+      return Resin.this.getRootDirectory();
     }
 
     public String getUserName()

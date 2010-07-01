@@ -665,39 +665,43 @@ public abstract class Expr extends ValueExpression {
   public static double toDouble(Object value, ELContext env)
     throws ELException
   {
-    if (value == null)
-      return 0;
-    else if (value instanceof Number) {
-      double dValue = ((Number) value).doubleValue();
-
-      if (Double.isNaN(dValue))
+    try {
+      if (value == null)
         return 0;
-      else
-        return dValue;
-    }
-    else if (value.equals(""))
-      return 0;
-    else if (value instanceof String) {
-      double dValue = Double.parseDouble((String) value);
+      else if (value instanceof Number) {
+        double dValue = ((Number) value).doubleValue();
 
-      if (Double.isNaN(dValue))
+        if (Double.isNaN(dValue))
+          return 0;
+        else
+          return dValue;
+      }
+      else if (value.equals(""))
         return 0;
-      else
-        return dValue;
-    }
-    else if (value instanceof Character) {
-      // jsp/18s7
-      return ((Character) value).charValue();
-    }
-    else {
-      ELException e = new ELException(L.l("can't convert {0} to double.",
-                                          value.getClass().getName()));
-      
-      // error(e, env);
+      else if (value instanceof String) {
+        double dValue = Double.parseDouble((String) value);
 
-      // return 0;
+        if (Double.isNaN(dValue))
+          return 0;
+        else
+          return dValue;
+      }
+      else if (value instanceof Character) {
+        // jsp/18s7
+        return ((Character) value).charValue();
+      }
+      else {
+        ELException e = new ELException(L.l("can't convert {0} to double.",
+                                            value.getClass().getName()));
 
-      throw e;
+        // error(e, env);
+
+        // return 0;
+
+        throw e;
+      }
+    } catch (NumberFormatException e) {
+      throw new ELException(L.l("can't convert '{0}' to double.", value));
     }
   }
 
@@ -1036,13 +1040,35 @@ public abstract class Expr extends ValueExpression {
       }
     }
   }
+
+  public static Object toEnum(Object obj, Class<? extends Enum> enumType)
+  {
+    if (obj == null)
+      return null;
+
+    Class objClass = obj.getClass();
+
+    if (objClass.equals(enumType))
+      return obj;
+
+    if (obj.getClass().equals(String.class) && "".equals(obj))
+      return null;
+
+    try {
+      return Enum.valueOf(enumType, obj.toString());
+    } catch (IllegalArgumentException e) {
+      throw new ELException(L.l("Unable convert '{0}' to '{1}'",
+                                obj.toString(),
+                                enumType.getName()));
+    }
+  }
   
   /**
    * Write to the *.java stream escaping Java reserved characters.
    *
-   * @param out the output stream to the *.java code.
+   * @param os the output stream to the *.java code.
    *
-   * @param value the value to be converted.
+   * @param is the value to be converted.
    */
   public static void printEscaped(WriteStream os, ReadStream is)
     throws IOException
@@ -1207,12 +1233,15 @@ public abstract class Expr extends ValueExpression {
   {
     CoerceType type = _coerceMap.get(targetType);
 
+    if (targetType.isEnum())
+      return Expr.toEnum(obj, (Class<? extends Enum>) targetType);
+
     if (type == null)
       return obj;
 
     switch (type) {
     case BOOLEAN:
-      return Expr.toBoolean(obj, null) ? Boolean.FALSE : Boolean.TRUE;
+      return Expr.toBoolean(obj, null) ? Boolean.TRUE : Boolean.FALSE;
     case CHARACTER:
       return Expr.toCharacter(obj, null);
     case BYTE:

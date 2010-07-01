@@ -43,6 +43,8 @@ import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
+import javax.servlet.http.HttpServletResponseWrapper;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.jsp.JspException;
 import javax.servlet.jsp.JspTagException;
 import javax.servlet.jsp.JspWriter;
@@ -110,24 +112,24 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
 
       switch (ch) {
       case '&':
-	_query.append("%26");
-	break;
-	
+        _query.append("%26");
+        break;
+
       case '%':
-	_query.append("%25");
-	break;
-	
+        _query.append("%25");
+        break;
+
       case '+':
-	_query.append("%2b");
-	break;
-	
+        _query.append("%2b");
+        break;
+
       case '=':
-	_query.append("%3d");
-	break;
-	
+        _query.append("%3d");
+        break;
+
       default:
-	_query.append(ch);
-	break;
+        _query.append(ch);
+        break;
       }
     }
   }
@@ -213,24 +215,24 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
     }
     else {
       try {
-	JspWriter jspWriter = pageContext.pushBody();
+        JspWriter jspWriter = pageContext.pushBody();
           
-	BodyContentImpl body = (BodyContentImpl) pageContext.getOut();
+        BodyContentImpl body = (BodyContentImpl) pageContext.getOut();
 
-	handleBody(body);
+        handleBody(body);
 
-	if (_var != null) {
-	  String value = body.getString();
+        if (_var != null) {
+          String value = body.getString();
 
-	  pageContext.popBody();
+          pageContext.popBody();
 
-	  CoreSetTag.setValue(pageContext, _var, _scope, value);
+          CoreSetTag.setValue(pageContext, _var, _scope, value);
         }
-	else {
-	  body.writeOut(body.getEnclosingWriter());
-	  
-	  pageContext.popBody();
-	}
+        else {
+          body.writeOut(body.getEnclosingWriter());
+
+          pageContext.popBody();
+        }
       } catch (JspException e) {
         throw e;
       } catch (ServletException e) {
@@ -314,8 +316,8 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
         if (disp == null)
           throw new JspException(L.l("URL `{0}' does not map to any servlet",
                                      url));
-	
-	CauchoResponse response = (CauchoResponse) pageContext.getResponse();
+
+        CauchoResponse response = (CauchoResponse) pageContext.getResponse();
 
         String charEncoding = getCharEncoding();
 
@@ -375,28 +377,11 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
 
       RequestDispatcher disp = request.getRequestDispatcher(url);
 
-      disp.include(request, response);
+      JstlImportResponseWrapper wrapper = new JstlImportResponseWrapper(response);
+      disp.include(request, wrapper);
 
-/*
-      final Integer statusCode
-        = (Integer) request.getAttribute("com.caucho.dispatch.response.statusCode");
-
-
-      if (statusCode != null) {
-        final int status = statusCode.intValue();
-
-        if (status < 200 || status > 299) {
-          String message = L.l(
-            "c:import status code {0} recieved while serving {1}",
-            statusCode,
-            url);
-
-          throw new JspException(message);
-        }
-      }
-*/
       //jsp/1jie
-      int status = response.getStatus();
+      int status = wrapper.getStatus();
 
       if (status < 200 || status > 299) {
         String message = L.l(
@@ -405,6 +390,8 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
           url);
 
         throw new JspException(message);
+      } else {
+        response.setStatus(status);
       }
 
     }
@@ -469,4 +456,33 @@ public class CoreImportTag extends BodyTagSupport implements NameValueTag {
       is.close();
     }
   }
+
+  static class JstlImportResponseWrapper extends HttpServletResponseWrapper {
+    private int _status;
+
+    JstlImportResponseWrapper(HttpServletResponse response)
+    {
+      super(response);
+      _status = response.getStatus();
+    }
+
+    @Override
+    public void setStatus(int sc)
+    {
+      _status = sc;
+    }
+
+    @Override
+    public int getStatus()
+    {
+      return _status;
+    }
+
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + getResponse() + "]";
+    }
+  }
 }
+

@@ -29,22 +29,22 @@
 
 package com.caucho.config.inject;
 
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.util.Set;
 
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.IllegalProductException;
 import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.spi.AnnotatedField;
-import javax.enterprise.inject.spi.AnnotatedMember;
-import javax.enterprise.inject.spi.AnnotatedParameter;
+import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeanManager;
 import javax.enterprise.inject.spi.InjectionPoint;
-import javax.enterprise.inject.spi.InjectionTarget;
 import javax.enterprise.inject.spi.Producer;
 
+import com.caucho.config.program.Arg;
 import com.caucho.config.reflect.BaseType;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -54,25 +54,36 @@ import com.caucho.util.L10N;
  */
 @Module
 public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
-  implements InjectionTarget<T>
 {
   private static final L10N L = new L10N(ProducesFieldBean.class);
 
   private final Bean<X> _producerBean;
   private final AnnotatedField<X> _beanField;
 
-  private Producer<T> _producer;
+  private FieldProducer _fieldProducer = new FieldProducer();
+  private DisposesProducer _disposesProducer;
+  
+  private Producer<T> _producer = _fieldProducer;
 
   private boolean _isBound;
+  private boolean _isPassivating;
+  private boolean _isStatic;
 
   protected ProducesFieldBean(InjectManager manager,
                               Bean<X> producerBean,
-                              AnnotatedField<X> beanField)
+                              AnnotatedField<X> beanField,
+                              AnnotatedMethod<X> disposesMethod,
+                              Arg []disposesArgs)
   {
     super(manager, beanField.getBaseType(), beanField);
-
+    
     _producerBean = producerBean;
     _beanField = beanField;
+    _isStatic = beanField.isStatic(); 
+    
+    if (disposesMethod != null)
+      _disposesProducer = new DisposesProducer(manager, producerBean, 
+                                               disposesMethod, disposesArgs);
 
     if (beanField == null)
       throw new NullPointerException();
@@ -80,15 +91,18 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
 
   public static ProducesFieldBean create(InjectManager manager,
                                          Bean producer,
-                                         AnnotatedField beanField)
+                                         AnnotatedField beanField,
+                                         AnnotatedMethod disposesMethod,
+                                         Arg []disposesArgs)
   {
     ProducesFieldBean bean
-      = new ProducesFieldBean(manager, producer, beanField);
+      = new ProducesFieldBean(manager, producer, beanField,
+                              disposesMethod, disposesArgs);
     bean.introspect();
     bean.introspect(beanField);
     
     BaseType type = manager.createSourceBaseType(beanField.getBaseType());
-    
+
     if (type.isGeneric()) {
       // ioc/07f1
       throw new InjectionException(L.l("'{0}' is an invalid @Produces field because it returns a generic type {1}",
@@ -108,8 +122,19 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
   {
     _producer = producer;
   }
+  
+  public Bean<X> getProducerBean()
+  {
+    return _producerBean;
+  }
 
-  protected AnnotatedField<X> getField()
+  @Override
+  public Class<?> getBeanClass()
+  {
+    return _producerBean.getBeanClass();
+  }
+
+  public AnnotatedField<X> getField()
   {
     return _beanField;
   }
@@ -119,95 +144,36 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
   {
     return _beanField.getJavaMember().getName();
   }
-
-  public boolean isInjectionPoint()
+  
+  @Override
+  public void introspect()
   {
-    return false;
-  }
-
-  /**
-   * Returns the declaring bean
-   */
-  public Bean<X> getParentBean()
-  {
-    return _producerBean;
+    super.introspect();
+   
+    _isPassivating = getBeanManager().isPassivatingScope(getScope());
   }
 
   @Override
   public T create(CreationalContext<T> createEnv)
   {
-    return produce(createEnv);
+    return _producer.produce(createEnv);
   }
 
   @Override
-  public InjectionTarget<T> getInjectionTarget()
+  public void destroy(T instance, CreationalContext<T> cxt)
   {
-    return this;
-  }
-
-  /**
-   * Produces a new bean instance
-   */
-  @Override
-  public T produce(CreationalContext<T> cxt)
-  {
-    Class<?> type = _producerBean.getBeanClass();
+    if (_producer == _fieldProducer)
+      _fieldProducer.destroy(instance, (CreationalContextImpl<T>) cxt);
+    else
+      _producer.dispose(instance);
     
-    CreationalContextImpl<X> producerCxt
-      = new CreationalContextImpl<X>(_producerBean, cxt);
-
-    X factory = (X) getBeanManager().getReference(_producerBean, type, producerCxt);
-
-    if (factory == null) {
-      throw new IllegalStateException(L.l("{0}: unexpected null factory for {1}",
-                                          this, _producerBean));
+    if (cxt instanceof CreationalContextImpl<?>) {
+      CreationalContextImpl<?> env = (CreationalContextImpl<?>) cxt;
+      
+      env.clearTarget();
     }
     
-    CreationalContextImpl<T> env = (CreationalContextImpl<T>) cxt;
-
-    return produce(factory, env.getInjectionPoint());
-  }
-
-  /**
-   * Produces a new bean instance
-   */
-  private T produce(X bean, InjectionPoint ij)
-  {
-    try {
-      Field field = _beanField.getJavaMember();
-      field.setAccessible(true);
-      
-      T value = (T) _beanField.getJavaMember().get(bean);
-      
-      if (value != null)
-        return value;
-      
-      if (! Dependent.class.equals(getScope()))
-        throw new IllegalProductException(L.l("'{0}' is an invalid producer because it returns null",
-                                              bean));
-
-      return value;
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  /*
-  @Override
-  public X instantiate()
-  {
-    return createNew(null, null);
-  }
-  */
-
-  public void inject(T instance, CreationalContext<T> cxt)
-  {
-  }
-
-  public void postConstruct(T instance)
-  {
+    cxt.release();
   }
 
   @Override
@@ -215,46 +181,7 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
   {
   }
 
-  /*
-  public Bean bindInjectionPoint(InjectionPoint ij)
-  {
-    return new ProducesInjectionPointBean(this, ij);
-  }
-  */
-
-  /**
-   * Disposes a bean instance
-   */
-  public void preDestroy(T instance)
-  {
-  }
-
-  /**
-   * Returns the owning producer
-   */
-  public AnnotatedMember<X> getProducerMember()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  /**
-   * Returns the owning disposer
-   */
-  public AnnotatedField<X> getAnnotatedDisposer()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  public AnnotatedParameter<X> getDisposedParameter()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  protected InjectionPointBean createInjectionPointBean(BeanManager manager)
-  {
-    return new InjectionPointBean(manager, null);
-  }
-
+  @Override
   public String toString()
   {
     StringBuilder sb = new StringBuilder();
@@ -293,5 +220,109 @@ public class ProducesFieldBean<X,T> extends AbstractIntrospectedBean<T>
     sb.append("]");
 
     return sb.toString();
+  }
+
+  class FieldProducer implements Producer<T> {
+    /**
+     * Produces a new bean instance
+     */
+    @Override
+    public T produce(CreationalContext<T> cxt)
+    {
+      Class<?> type = _producerBean.getBeanClass();
+    
+      ProducesCreationalContext<X> producerCxt;
+      
+      if (cxt instanceof CreationalContextImpl<?>) {
+        CreationalContextImpl<?> parentCxt = (CreationalContextImpl<?>) cxt;
+      
+        producerCxt = new ProducesCreationalContext<X>(_producerBean, parentCxt);
+      }
+      else
+        producerCxt = new ProducesCreationalContext<X>(_producerBean, null);
+
+      X factory;
+      
+      if (_isStatic) {
+        factory = null;
+      }
+      else {
+        factory = (X) getBeanManager().getReference(_producerBean, type, producerCxt);
+      
+        if (factory == null) {
+          throw new IllegalStateException(L.l("{0}: unexpected null factory for {1}",
+                                              this, _producerBean));
+        }
+      }
+      
+      CreationalContextImpl<T> env = (CreationalContextImpl<T>) cxt;
+
+      T instance = produce(factory, env.findInjectionPoint());
+      
+      if (_producerBean.getScope() == Dependent.class)
+        _producerBean.destroy(factory, producerCxt);
+      
+      if (_isPassivating && ! (instance instanceof Serializable))
+        throw new IllegalProductException(L.l("'{0}' is an invalid @{1} instance because it's not serializable for bean {2}",
+                                              instance, getScope().getSimpleName(), this));
+      
+      
+      return instance;
+    }
+
+    /**
+     * Produces a new bean instance
+     */
+    private T produce(X bean, InjectionPoint ij)
+    {
+      try {
+        Field field = _beanField.getJavaMember();
+        field.setAccessible(true);
+      
+        T value = (T) _beanField.getJavaMember().get(bean);
+      
+        if (value != null)
+          return value;
+      
+        if (! Dependent.class.equals(getScope()))
+          throw new IllegalProductException(L.l("'{0}' is an invalid producer because it returns null",
+                                              bean));
+
+        return value;
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
+    }
+    
+    public void destroy(T instance, CreationalContextImpl<T> cxt)
+    {
+      if (_disposesProducer != null)
+        _disposesProducer.destroy(instance, cxt);
+    }
+
+    @Override
+    public void dispose(T instance)
+    {
+      if (_disposesProducer != null)
+        _disposesProducer.dispose(instance);
+    }
+
+    @Override
+    public Set<InjectionPoint> getInjectionPoints()
+    {
+      return ProducesFieldBean.this.getInjectionPoints();
+    }
+
+    @Override
+    public String toString()
+    {
+      Field javaField = _beanField.getJavaMember();
+      
+      return (getClass().getSimpleName()
+          + "[" + javaField.getDeclaringClass().getSimpleName()
+          + "." + javaField.getName() + "]");
+    }
   }
 }

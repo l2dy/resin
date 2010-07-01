@@ -31,11 +31,13 @@ package com.caucho.ejb.gen;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 
 import javax.ejb.Singleton;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
@@ -50,9 +52,10 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
 
   public SingletonGenerator(String ejbName, AnnotatedType<X> ejbClass,
                             ArrayList<AnnotatedType<? super X>> localApi,
+                            AnnotatedType<X> localBean,
                             ArrayList<AnnotatedType<? super X>> remoteApi)
   {
-    super(ejbName, ejbClass, localApi, remoteApi, 
+    super(ejbName, ejbClass, localApi, localBean, remoteApi, 
           Singleton.class.getSimpleName());
     
     InjectManager manager = InjectManager.create();
@@ -137,10 +140,8 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.println("{");
     out.pushDepth();
 
-    generateConstructor(out);
-
-    generateContextPrologue(out);
-
+    generateClassStaticFields(out);
+    
     generateClassContent(out);
 
     generateDependency(out);
@@ -159,6 +160,7 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
       out.println("  extends " + getBeanType().getJavaClass().getName());
     
     out.print("  implements SessionProxyFactory<T>");
+    out.print(", " + CandiEnhancedBean.class.getName());
 
     for (AnnotatedType<? super X> apiType : getLocalApi()) {
       out.print(", " + apiType.getJavaClass().getName());
@@ -180,9 +182,15 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.println("private transient boolean _isValid;");
     out.println("private transient boolean _isActive;");
     
+    HashMap<String,Object> map = new HashMap<String,Object>();
+    
+    generateConstructor(out);
+    
     generateProxyFactory(out);
-
-    generateBusinessMethods(out);
+    
+    generateContentImpl(out, map);
+    
+    // generateSerialization(out);
   }
   
   private void generateConstructor(JavaWriter out)
@@ -205,7 +213,7 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.print("private ");
     out.println(getClassName() 
                 + "(SingletonManager manager"
-                + ", CreationalContext<T> env)");
+                + ", com.caucho.config.inject.CreationalContextImpl<T> env)");
     out.println("{");
     out.pushDepth();
 
@@ -213,6 +221,8 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.println("_isValid = true;");
 
     out.println("_bean = (" + beanClassName + ") manager.newInstance(env);");
+    
+    generateContextObjectConstructor(out);
 
     out.popDepth();
     out.println("}");
@@ -223,7 +233,7 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
   {
       out.println();
       out.println("@Override");
-      out.println("public T __caucho_createProxy(CreationalContext<T> env)");
+      out.println("public T __caucho_createProxy(com.caucho.config.inject.CreationalContextImpl<T> env)");
       out.println("{");
       out.println("  return (T) new " + getClassName() + "(_manager, env);");
       out.println("}");

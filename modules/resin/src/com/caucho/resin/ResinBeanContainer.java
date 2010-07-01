@@ -45,14 +45,16 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.cfg.BeansConfig;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
+import com.caucho.ejb.manager.EjbManager;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
+import com.caucho.inject.ThreadContext;
 import com.caucho.java.WorkDir;
 import com.caucho.loader.CompilingLoader;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.ResourceLoader;
-import com.caucho.server.webbeans.ResinWebBeansProducer;
+import com.caucho.server.webbeans.ResinCdiProducer;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -118,8 +120,8 @@ public class ResinBeanContainer
   private EnvironmentClassLoader _classLoader;
   private InjectManager _injectManager;
 
-  private ThreadLocal<RequestContext> _localContext
-    = new ThreadLocal<RequestContext>();
+  private ThreadLocal<BeanContainerRequest> _localContext
+    = new ThreadLocal<BeanContainerRequest>();
 
   /**
    * Creates a new ResinContext.
@@ -128,20 +130,31 @@ public class ResinBeanContainer
   {
     _classLoader = EnvironmentClassLoader.create("resin-context");
     _injectManager = InjectManager.create(_classLoader);
+    
+    // ioc/0b07
     _injectManager.replaceContext(new RequestScope());
-
-    _injectManager.addManagedBean(_injectManager.createManagedBean(ResinWebBeansProducer.class));
+    _injectManager.replaceContext(ThreadContext.getContext());
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
       thread.setContextClassLoader(_classLoader);
+      
+      // ioc/0p62
+      EjbManager.create(_classLoader);
+      // XXX: currently this would cause a scanning of the classpath even
+      // if there's no ejb-jar.xml
+      // EjbManager.setScanAll();
 
       Environment.init();
 
       Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
       Environment.addChildLoaderListener(new EjbEnvironmentListener());
+      
+      Environment.addCloseListener(this);
+
+      _injectManager.addManagedBean(_injectManager.createManagedBean(ResinCdiProducer.class));
 
       _classLoader.scanRoot();
     } finally {
@@ -299,6 +312,10 @@ public class ResinBeanContainer
       thread.setContextClassLoader(_classLoader);
 
       _classLoader.start();
+      
+      InjectManager cdiManager = InjectManager.create();
+      
+      cdiManager.update();
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -412,15 +429,15 @@ public class ResinBeanContainer
    * @return the RequestContext which must be passed to
    *    <code>completeContext</code>
    */
-  public RequestContext beginRequest()
+  public BeanContainerRequest beginRequest()
   {
     Thread thread = Thread.currentThread();
 
     ClassLoader oldLoader = thread.getContextClassLoader();
 
-    RequestContext oldContext = _localContext.get();
+    BeanContainerRequest oldContext = _localContext.get();
 
-    RequestContext context = new RequestContext(this, oldLoader, oldContext);
+    BeanContainerRequest context = new BeanContainerRequest(this, oldLoader, oldContext);
 
     thread.setContextClassLoader(_classLoader);
 
@@ -432,7 +449,7 @@ public class ResinBeanContainer
   /**
    * Completes the thread's request and exits the Resin context.
    */
-  void completeRequest(RequestContext context)
+  void completeRequest(BeanContainerRequest context)
   {
     Thread thread = Thread.currentThread();
 
@@ -463,7 +480,7 @@ public class ResinBeanContainer
     return getClass().getName() + "[]";
   }
 
-  class ContextConfig extends BeansConfig implements EnvironmentBean {
+  private class ContextConfig extends BeansConfig implements EnvironmentBean {
     ContextConfig(InjectManager manager, Path root)
     {
       super(manager, root);
@@ -480,18 +497,18 @@ public class ResinBeanContainer
     }
   }
 
-  public class SystemContext implements EnvironmentBean {
+  private class SystemContext implements EnvironmentBean {
     public ClassLoader getClassLoader()
     {
       return ClassLoader.getSystemClassLoader();
     }
   }
 
-  class RequestScope implements Context {
+  private class RequestScope implements Context {
     @Override
     public <T> T get(Contextual<T> bean)
     {
-      RequestContext cxt = _localContext.get();
+      BeanContainerRequest cxt = _localContext.get();
 
       if (cxt == null)
         throw new IllegalStateException(L.l("No RequestScope is active"));
@@ -502,7 +519,7 @@ public class ResinBeanContainer
     @Override
     public <T> T get(Contextual<T> bean, CreationalContext<T> creationalContext)
     {
-      RequestContext cxt = _localContext.get();
+      BeanContainerRequest cxt = _localContext.get();
 
       if (cxt == null)
         throw new IllegalStateException(L.l("No RequestScope is active"));

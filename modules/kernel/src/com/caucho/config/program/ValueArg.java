@@ -83,9 +83,9 @@ public class ValueArg<T> extends Arg<T> {
       HashSet<Annotation> bindings = new HashSet<Annotation>();
       
       try {
-	_factory = (ReferenceFactory<T>) _beanManager.getReferenceFactory(_type, bindings, null);
+        _factory = (ReferenceFactory<T>) _beanManager.getReferenceFactory(_type, bindings, null);
       } catch (RuntimeException e) {
-	_bindException = e;
+        _bindException = e;
       }
     }
   }
@@ -97,7 +97,7 @@ public class ValueArg<T> extends Arg<T> {
       bind();
 
     if (_factory != null)
-      return _factory.create((CreationalContextImpl) env, null);
+      return _factory.create(null, (CreationalContextImpl) env, null);
     else
       throw _bindException;
   }

@@ -39,7 +39,7 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.cfg.BeanConfig;
 import com.caucho.config.type.*;
 import com.caucho.config.types.AnnotationConfig;
-import com.caucho.config.types.CustomBeanConfig;
+import com.caucho.config.xml.XmlBeanConfig;
 import com.caucho.config.xml.XmlConfigContext;
 import com.caucho.util.L10N;
 import com.caucho.xml.QName;
@@ -54,7 +54,7 @@ public class AddAttribute extends Attribute {
 
   private AddAttribute()
   {
-    this(null, TypeFactory.getType(CustomBeanConfig.class));
+    this(null, TypeFactory.getType(XmlBeanConfig.class));
   }
   
   public AddAttribute(Method setMethod, ConfigType configType)
@@ -80,48 +80,24 @@ public class AddAttribute extends Attribute {
   public Object create(Object parent, QName qName)
     throws ConfigException
   {
-    String uri = qName.getNamespaceURI();
-    String localName = qName.getLocalName();
-
-    if (uri.equals("urn:java:com.caucho.config.driver")) {
-      TypeFactory factory = TypeFactory.getFactory();
-      
-      Class api;
-
-      if (parent instanceof BeanConfig) {
-	api = ((BeanConfig) parent).getBeanConfigClass();
-      }
-      else if (_setMethod != null)
-	api = _setMethod.getParameterTypes()[0];
-      else
-	api = _configType.getType();
-
-      Class cl = factory.getDriverClassByScheme(api, localName);
-
-      return new CustomBeanConfig(qName, cl);
-    }
-
-    if (! uri.startsWith("urn:java:"))
-      throw new IllegalStateException(L.l("'{0}' is an unexpected namespace, expected 'urn:java:...'", uri));
-
-    String packageName = uri.substring("uri:java:".length());
-    Class cl = TypeFactory.loadClass(packageName, localName);
+    Class<?> cl = TypeFactory.loadClass(qName);
 
     if (cl == null) {
-      ConfigType type = TypeFactory.getFactory().getEnvironmentType(qName);
+      ConfigType<?> type = TypeFactory.getFactory().getEnvironmentType(qName);
 
       if (type != null)
-	return type.create(parent, qName);
+        return type.create(parent, qName);
 
       throw new ConfigException(L.l("'{0}.{1}' is an unknown class for element '{2}'",
-				    packageName, localName, qName));
+                                    qName.getNamespaceURI(), qName.getLocalName(), qName));
     }
 
     if (Annotation.class.isAssignableFrom(cl)) {
       return new AnnotationConfig(cl);
     }
     else {
-      CustomBeanConfig config = new CustomBeanConfig(qName, cl);
+      XmlBeanConfig config = new XmlBeanConfig(qName, cl);
+      config.setInlineBean(true);
 
       // config.setScope("singleton");
 
@@ -137,11 +113,11 @@ public class AddAttribute extends Attribute {
   {
     Object objValue = create(bean, name);
 
-    if (objValue instanceof CustomBeanConfig) {
-      CustomBeanConfig config = (CustomBeanConfig) objValue;
+    if (objValue instanceof XmlBeanConfig) {
+      XmlBeanConfig config = (XmlBeanConfig) objValue;
 
       if (! value.trim().equals("")) {
-	config.addArg(new TextArgProgram(value));
+        config.addArg(new TextArgProgram(value));
       }
 
       config.init();
@@ -158,25 +134,25 @@ public class AddAttribute extends Attribute {
     throws ConfigException
   {
     try {
-      if (value instanceof CustomBeanConfig) {
-	CustomBeanConfig config = (CustomBeanConfig) value;
+      if (value instanceof XmlBeanConfig) {
+        XmlBeanConfig config = (XmlBeanConfig) value;
 
-	value = config.toObject();
+        value = config.toObject();
       }
       else if (value instanceof AnnotationConfig) {
-	AnnotationConfig config = (AnnotationConfig) value;
+        AnnotationConfig config = (AnnotationConfig) value;
 
-	value = config.replace();
+        value = config.replace();
       }
 
       if (_setMethod != null && value != null) {
-	if (! _setMethod.getParameterTypes()[0].isAssignableFrom(value.getClass()))
-	  throw new ConfigException(L.l("'{0}.{1}' is not assignable from {2}",
-					_setMethod.getDeclaringClass().getSimpleName(),
-					_setMethod.getName(),
-					value));
+        if (! _setMethod.getParameterTypes()[0].isAssignableFrom(value.getClass()))
+          throw new ConfigException(L.l("'{0}.{1}' is not assignable from {2}",
+                                        _setMethod.getDeclaringClass().getSimpleName(),
+                                        _setMethod.getName(),
+                                        value));
 
-	_setMethod.invoke(bean, value);
+        _setMethod.invoke(bean, value);
       }
     } catch (Exception e) {
       throw ConfigException.create(e);

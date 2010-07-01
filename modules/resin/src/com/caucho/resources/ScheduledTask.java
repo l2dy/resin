@@ -46,6 +46,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.Service;
 import com.caucho.config.Unbound;
+import com.caucho.config.inject.CandiELContext;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.types.CronType;
 import com.caucho.config.types.Period;
@@ -162,7 +163,7 @@ public class ScheduledTask
 
     /*
       throw new ConfigException(L.l("relative url '{0}' requires web-app context",
-				    url));
+                                    url));
     */
   }
 
@@ -198,7 +199,7 @@ public class ScheduledTask
 
     if (_task == null)
       throw new ConfigException(L.l("{0} requires a <task>, <method>, or <url> because the ScheduledTask needs a task to run.",
-				    this));
+                                    this));
 
     if (_trigger == null) {
       _timerTrigger.setFirstTime(Long.MAX_VALUE / 2);
@@ -261,7 +262,7 @@ public class ScheduledTask
       long nextTime = _trigger.nextTime(now + 500);
 
       if (_isActive)
-	alarm.queue(nextTime - now);
+        alarm.queue(nextTime - now);
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
     } finally {
@@ -303,7 +304,7 @@ public class ScheduledTask
     MethodTask(MethodExpression method)
     {
       _method = method;
-      _elContext = InjectManager.create().getELContext();
+      _elContext = new CandiELContext(InjectManager.create());
     }
 
     public void run()
@@ -333,11 +334,11 @@ public class ScheduledTask
       StubServletResponse res = new StubServletResponse();
 
       try {
-	RequestDispatcher dispatcher = _webApp.getRequestDispatcher(_url);
-	
-	dispatcher.forward(req, res);
+        RequestDispatcher dispatcher = _webApp.getRequestDispatcher(_url);
+
+        dispatcher.forward(req, res);
       } catch (Exception e) {
-	log.log(Level.FINE, e.toString(), e);
+        log.log(Level.FINE, e.toString(), e);
       }
     }
 

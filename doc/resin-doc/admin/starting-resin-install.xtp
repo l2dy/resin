@@ -166,7 +166,7 @@ repositories to use automated update tools like Synaptic and apt-get.
 To do this, add the following line to your <var>/etc/apt/sources.list</var>
 </p>
 <example>
-deb http://caucho.com/download/ debian/
+deb http://caucho.com/download/debian unstable multiverse
 </example>
 <p>
 After adding this line, update your local repository cache by running:
@@ -181,7 +181,7 @@ Finally, install Resin Professional using the following:
 apt-get resin-pro
 </example>
 <p>
-If you have a license file for Resin, save it in <var>/usr/local/resin/licenses</var>
+If you have a license file for Resin, save it in <var>/usr/share/resin/licenses</var>
 </p>
 <p>
 Or install Resin Open Source with this command:

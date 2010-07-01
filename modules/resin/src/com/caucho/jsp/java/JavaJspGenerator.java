@@ -58,6 +58,7 @@ import javax.servlet.jsp.tagext.TagInfo;
 import javax.servlet.jsp.tagext.TagLibraryValidator;
 import javax.servlet.jsp.tagext.ValidationMessage;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -578,8 +579,14 @@ public class JavaJspGenerator extends JspGenerator {
               message.append("\n");
             message.append(messages[j].getMessage());
           }
+          
+          InputStream is = getPageData().getInputStream();
+          StringBuilder sb = new StringBuilder();
+          int ch;
+          while ((ch = is.read()) >= 0)
+            sb.append((char) ch);
 
-          throw _rootNode.error(message.toString());
+          throw _rootNode.error(message.toString() + "\n\n" + sb);
         }
       }
     }
@@ -588,6 +595,7 @@ public class JavaJspGenerator extends JspGenerator {
   /**
    * Generates the JSP page.
    */
+  @Override
   protected void generate(Path path, String className)
     throws Exception
   {
@@ -750,7 +758,7 @@ public class JavaJspGenerator extends JspGenerator {
     _rootNode.generate(out);
 
     generatePageFooter(out);
-
+    
     // _rootNode.generateDeclaration(out);
 
     generateClassFooter(out);
@@ -1256,6 +1264,8 @@ public class JavaJspGenerator extends JspGenerator {
     generateDepends(out);
 
     generateTags(out);
+    
+    _rootNode.generateClassEpilogue(out);
 
     //generateTags may still add to _value(Expr|Method)List
     generateInit(out);
