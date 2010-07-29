@@ -78,8 +78,8 @@ abstract public class AbstractCache extends AbstractMap
 
   private String _guid;
 
-  private Collection<CacheListener> _listeners
-    = new ConcurrentLinkedQueue<CacheListener>();
+  private Collection<CacheListener<?>> _listeners
+    = new ConcurrentLinkedQueue<CacheListener<?>>();
 
   private CacheConfig _config = new CacheConfig();
 

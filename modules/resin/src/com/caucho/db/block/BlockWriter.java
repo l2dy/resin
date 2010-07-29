@@ -33,7 +33,8 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.util.TaskWorker;
+import com.caucho.env.thread.TaskWorker;
+import com.caucho.util.Alarm;
 
 /**
  * Writer thread serializing dirty blocks.
@@ -61,6 +62,8 @@ public class BlockWriter extends TaskWorker {
   {
     synchronized (_writeQueue) {
       if (_writeQueueMax < _writeQueue.size()) {
+        wake();
+        
         try {
           _writeQueue.wait(100);
         } catch (InterruptedException e) {
@@ -75,32 +78,49 @@ public class BlockWriter extends TaskWorker {
 
   boolean copyDirtyBlock(long blockId, Block block)
   {
+    Block writeBlock = null;
+    
     synchronized (_writeQueue) {
       int size = _writeQueue.size();
 
       // search from newest to oldest in case multiple writes
       for (int i = size - 1; i >= 0; i--) {
-        Block writeBlock = _writeQueue.get(i);
+        Block testBlock = _writeQueue.get(i);
 
-        if (writeBlock.getBlockId() == blockId) {
-          // System.out.println("FOUND-DIRTY: " + block + " " + _writeQueue.size());
-          
-          writeBlock.copyToBlock(block);
-          
-          return true;
+        if (testBlock.getBlockId() == blockId) {
+          writeBlock = testBlock;
+          break;
         }
       }
     }
-
-    return false;
+    
+    if (writeBlock != null)
+      return writeBlock.copyToBlock(block);
+    else
+      return false;
   }
   
-  void waitForComplete()
+  @Override
+  protected boolean isClosed()
   {
+    return super.isClosed() && _writeQueue.size() == 0;
+  }
+  
+  void waitForComplete(long timeout)
+  {
+    long expires = Alarm.getCurrentTimeActual() + timeout;
+    
     synchronized (_writeQueue) {
       while (_writeQueue.size() > 0) {
+        wake();
+        
+        long now = Alarm.getCurrentTimeActual();
+        
+        if (expires < now)
+          return;
+        
         try {
-          _writeQueue.wait(2000);
+          _writeQueue.wait(expires - now);
         } catch (Exception e) {
           
         }
@@ -109,7 +129,7 @@ public class BlockWriter extends TaskWorker {
   }
   
   @Override
-  public void runTask()
+  public long runTask()
   {
     try {
       int retryMax = 10;
@@ -122,20 +142,30 @@ public class BlockWriter extends TaskWorker {
           retry = retryMax;
 
           try {
-            block.writeImpl();
+            block.writeFromBlockWriter();
           } finally {
             removeFirstBlock();
-          
-            block.freeFromWriter();
           }
         }
         else if (retry-- <= 0) {
-          return;
+          return -1;
         }
       }
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);
     }
+    
+    return -1;
+  }
+  
+  @Override
+  protected void onThreadStart()
+  {
+  }
+  
+  @Override
+  protected void onThreadComplete()
+  {
   }
 
   private Block peekFirstBlock()

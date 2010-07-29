@@ -48,11 +48,12 @@ import javax.annotation.PostConstruct;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
+import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.types.Period;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.env.thread.TaskWorker;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.lifecycle.Lifecycle;
-import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentClassLoader;
-import com.caucho.loader.EnvironmentListener;
 import com.caucho.management.server.PortMXBean;
 import com.caucho.management.server.TcpConnectionInfo;
 import com.caucho.server.cluster.Server;
@@ -60,8 +61,6 @@ import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
-import com.caucho.util.TaskWorker;
-import com.caucho.util.ThreadPool;
 import com.caucho.vfs.JsseSSLFactory;
 import com.caucho.vfs.QJniServerSocket;
 import com.caucho.vfs.QServerSocket;
@@ -72,8 +71,9 @@ import com.caucho.vfs.SSLFactory;
 /**
  * Represents a protocol connection.
  */
+@Configurable
 public class SocketLinkListener extends TaskWorker
-  implements EnvironmentListener, Runnable
+  implements Runnable
 {
   private static final L10N L = new L10N(SocketLinkListener.class);
 
@@ -106,8 +106,6 @@ public class SocketLinkListener extends TaskWorker
   // URL for debugging
   private String _url;
 
-  private String _debugId;
-
   // The protocol
   private Protocol _protocol;
 
@@ -130,6 +128,7 @@ public class SocketLinkListener extends TaskWorker
 
   private long _keepaliveTimeMax = 10 * 60 * 1000L;
   private long _keepaliveTimeout = 120 * 1000L;
+  
   private boolean _isKeepaliveSelectEnable = true;
   private long _keepaliveSelectThreadTimeout = 1000;
   
@@ -216,7 +215,7 @@ public class SocketLinkListener extends TaskWorker
 
   public String getDebugId()
   {
-    return _debugId;
+    return getUrl();
   }
 
   public ClassLoader getClassLoader()
@@ -520,16 +519,6 @@ public class SocketLinkListener extends TaskWorker
   }
 
   /**
-   * Returns true for ignore-client-disconnect.
-   */
-  /*
-  public boolean isIgnoreClientDisconnect()
-  {
-    return _server.isIgnoreClientDisconnect();
-  }
-  */
-
-  /**
    * Sets the read/write timeout for the accepted sockets.
    */
   @Configurable
@@ -545,18 +534,6 @@ public class SocketLinkListener extends TaskWorker
   {
     _socketTimeout = timeout;
   }
-
-  /**
-   * Sets the read timeout for the accepted sockets.
-   *
-   * @deprecated
-   */
-  /*
-  public void setReadTimeout(Period period)
-  {
-    setSocketTimeout(period);
-  }
-  */
 
   /**
    * Gets the read timeout for the accepted sockets.
@@ -610,17 +587,6 @@ public class SocketLinkListener extends TaskWorker
   {
     _isEnableJni = isEnableJni;
   }
-
-  /**
-   * Sets the write timeout for the accepted sockets.
-   *
-   * @deprecated
-   */
-  /*
-  public void setWriteTimeout(Period period)
-  {
-  }
-  */
 
   private Throttle createThrottle()
   {
@@ -722,7 +688,12 @@ public class SocketLinkListener extends TaskWorker
 
   public void setKeepaliveSelectThreadTimeout(Period period)
   {
-    _keepaliveSelectThreadTimeout = period.getPeriod();
+    setKeepaliveSelectThreadTimeoutMillis(period.getPeriod());
+  }
+
+  public void setKeepaliveSelectThreadTimeoutMillis(long timeout)
+  {
+    _keepaliveSelectThreadTimeout = timeout;
   }
 
   public long getBlockingTimeoutForSelect()
@@ -743,6 +714,17 @@ public class SocketLinkListener extends TaskWorker
       return getSelectManager().getSelectMax();
     else
       return -1;
+  }
+  
+  /**
+   * Ignore unknown tags.
+   * 
+   * server/0940
+   */
+  @Configurable
+  public void addContentProgram(ConfigProgram program)
+  {
+    
   }
 
   //
@@ -872,31 +854,36 @@ public class SocketLinkListener extends TaskWorker
   {
     if (! _lifecycle.toInit())
       return;
-    
-    StringBuilder url = new StringBuilder();
+  }
+  
+  public String getUrl()
+  {
+    if (_url == null) {
+      StringBuilder url = new StringBuilder();
 
-    if (_protocol != null)
-      url.append(_protocol.getProtocolName());
-    else
-      url.append("unknown");
-    url.append("://");
+      if (_protocol != null)
+        url.append(_protocol.getProtocolName());
+      else
+        url.append("unknown");
+      url.append("://");
 
-    if (getAddress() != null)
-      url.append(getAddress());
-    else
-      url.append("*");
-    url.append(":");
-    url.append(getPort());
+      if (getAddress() != null)
+        url.append(getAddress());
+      else
+        url.append("*");
+      url.append(":");
+      url.append(getPort());
 
-    if (_serverId != null && ! "".equals(_serverId)) {
-      url.append("(");
-      url.append(_serverId);
-      url.append(")");
+      if (_serverId != null && ! "".equals(_serverId)) {
+        url.append("(");
+        url.append(_serverId);
+        url.append(")");
+      }
+
+      _url = url.toString();
     }
-
-    _url = url.toString();
-
-    _debugId = _url;
+    
+    return _url;
   }
 
   /**
@@ -1006,10 +993,17 @@ public class SocketLinkListener extends TaskWorker
     _serverSocket.setConnectionSocketTimeout((int) getSocketTimeout());
 
     if (_serverSocket.isJni()) {
-      Server server = Server.getCurrent();
+      ResinSystem server = ResinSystem.getCurrent();
 
-      if (server != null)
-        _selectManager = server.getSelectManager();
+      if (server != null) {
+        SocketPollService pollService 
+          = server.getService(SocketPollService.class);
+        
+        if (pollService != null) {
+          _selectManager = pollService.getSelectManager();
+          
+        }
+      }
 
       /*
       if (_selectManager == null) {
@@ -1100,8 +1094,6 @@ public class SocketLinkListener extends TaskWorker
 
     boolean isValid = false;
     try {
-      Environment.addEnvironmentListener(this);
-
       bind();
       postBind();
 
@@ -1340,7 +1332,7 @@ public class SocketLinkListener extends TaskWorker
 
     if (timeout < 0)
       timeout = 0;
-
+    
     // server/2l02
 
     _keepaliveThreadCount.incrementAndGet();
@@ -1528,10 +1520,10 @@ public class SocketLinkListener extends TaskWorker
   /**
    * The port thread is responsible for creating new connections.
    */
-  public void runTask()
+  public long runTask()
   {
     if (_lifecycle.isDestroyed())
-      return;
+      return -1;
 
     try {
       TcpSocketLink startConn = null;
@@ -1561,36 +1553,8 @@ public class SocketLinkListener extends TaskWorker
     } catch (Throwable e) {
       log.log(Level.SEVERE, e.toString(), e);
     }
-  }
-
-  /**
-   * Handles the environment config phase
-   */
-  public void environmentConfigure(EnvironmentClassLoader loader)
-  {
-  }
-
-  /**
-   * Handles the environment bind phase
-   */
-  public void environmentBind(EnvironmentClassLoader loader)
-  {
-  }
-
-  /**
-   * Handles the case where the environment is starting (after init).
-   */
-  public void environmentStart(EnvironmentClassLoader loader)
-  {
-  }
-
-
-  /**
-   * Handles the case where the environment is stopping
-   */
-  public void environmentStop(EnvironmentClassLoader loader)
-  {
-    close();
+    
+    return -1;
   }
 
   /**
@@ -1633,8 +1597,6 @@ public class SocketLinkListener extends TaskWorker
    */
   public void close()
   {
-    Environment.removeEnvironmentListener(this);
-
     if (! _lifecycle.toDestroy())
       return;
 
@@ -1761,7 +1723,7 @@ public class SocketLinkListener extends TaskWorker
 
   public String toURL()
   {
-    return _url;
+    return getUrl();
   }
 
   @Override
@@ -1773,7 +1735,10 @@ public class SocketLinkListener extends TaskWorker
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _url + "]";
+    if (_url != null)
+      return getClass().getSimpleName() + "[" + _url + "]";
+    else
+      return getClass().getSimpleName() + "[" + getAddress() + ":" + getPort() + "]";
   }
 
   public class SuspendReaper implements AlarmListener {

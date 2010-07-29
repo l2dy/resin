@@ -34,7 +34,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -46,7 +45,6 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
-import javax.decorator.Decorator;
 import javax.decorator.Delegate;
 import javax.ejb.Stateful;
 import javax.enterprise.context.spi.CreationalContext;
@@ -80,6 +78,7 @@ import com.caucho.config.j2ee.PreDestroyInject;
 import com.caucho.config.program.Arg;
 import com.caucho.config.program.BeanArg;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.reflect.AnnotatedConstructorImpl;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -100,7 +99,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   
   private Bean<X> _bean;
 
-  private AnnotatedType<X> _annotatedType;
+  private final AnnotatedType<X> _annotatedType;
 
   private AnnotatedConstructor<X> _beanCtor;
   
@@ -170,20 +169,6 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   {
     _isGenerateInterception = isEnable;
   }
-
-  private static boolean isAnnotationPresent(Annotation []annotations, Class<?> type)
-  {
-    for (Annotation ann : annotations) {
-      if (ann.annotationType().equals(type))
-        return true;
-    }
-
-    return false;
-  }
-  
-  //
-  // Producer/InjectionTarget methods
-  //
 
   @Override
   public X produce(CreationalContext<X> env)
@@ -256,11 +241,11 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
       introspect();
       
-      Class<?> cl = (Class<?>) _annotatedType.getBaseType();
+      Class<X> cl = (Class<X>) _annotatedType.getBaseType();
 
       if (_beanCtor == null) {
         // XXX:
-        AnnotatedType beanType = _annotatedType;
+        AnnotatedType<X> beanType = _annotatedType;
           
         if (beanType == null)
           beanType = ReflectionAnnotatedFactory.introspectType(cl);
@@ -504,10 +489,10 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
         }
       }
 
-      /*
-      if (best == null)
-        best = cl.getConstructor(new Class[0]);
-      */
+      if (best == null) {
+        // ioc/0q00
+        best = new AnnotatedConstructorImpl(beanType, beanType.getJavaClass().getConstructor(new Class[0]));
+      }
 
       if (best == null) {
         throw new ConfigException(L.l("{0}: no constructor found while introspecting bean for Java Injection",
@@ -623,7 +608,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     if (rawType == null || Object.class.equals(rawType))
       return;
     
-    Class<?> parentClass = rawType.getSuperclass();
+    // Class<?> parentClass = rawType.getSuperclass();
     
     // configureClassResources(injectList, type);
 
@@ -645,6 +630,22 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
       
       if (handler != null) {
         injectProgramList.add(new ClassHandlerProgram(ann, handler));
+      }
+    }
+    
+    // ioc/123i
+    for (Class<?> parentClass = type.getJavaClass().getSuperclass();
+         parentClass != null;
+         parentClass = parentClass.getSuperclass()) {
+      for (Annotation ann : parentClass.getAnnotations()) {
+        Class<? extends Annotation> annType = ann.annotationType();
+      
+        InjectionPointHandler handler 
+          = cdiManager.getInjectionPointHandler(annType);
+      
+        if (handler != null) {
+          injectProgramList.add(new ClassHandlerProgram(ann, handler));
+        }
       }
     }
   }

@@ -40,23 +40,20 @@ import javax.servlet.GenericServlet;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.bam.ActorStream;
 import com.caucho.bam.Broker;
+import com.caucho.config.Admin;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.hemp.broker.HempMemoryQueue;
 import com.caucho.hemp.servlet.ServerAuthManager;
-import com.caucho.hemp.servlet.ServerLinkService;
+import com.caucho.hemp.servlet.ServerLinkActor;
 import com.caucho.hmtp.HmtpReader;
 import com.caucho.hmtp.HmtpWriter;
-import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.http.HttpServletRequestImpl;
 import com.caucho.server.http.HttpServletResponseImpl;
-import com.caucho.servlet.JanusContext;
-import com.caucho.servlet.JanusListener;
 import com.caucho.servlet.WebSocketContext;
 import com.caucho.servlet.WebSocketListener;
 import com.caucho.util.L10N;
@@ -64,6 +61,7 @@ import com.caucho.util.L10N;
 /**
  * Main protocol handler for the HTTP version of BAM.
  */
+@SuppressWarnings("serial")
 public class HmtpServlet extends GenericServlet {
   private static final Logger log
     = Logger.getLogger(HmtpServlet.class.getName());
@@ -73,7 +71,7 @@ public class HmtpServlet extends GenericServlet {
   private boolean _isAuthenticationRequired = true;
 
   private @Inject Instance<Authenticator> _authInstance;
-  private @Inject Instance<AdminAuthenticator> _adminInstance;
+  private @Inject @Admin Instance<Authenticator> _adminInstance;
 
   private Broker _broker;
   private Authenticator _auth;
@@ -122,7 +120,9 @@ public class HmtpServlet extends GenericServlet {
       }
     }
 
-    _authManager = new ServerAuthManager(_auth);
+    // _authManager = new ServerAuthManager(_auth);
+    _authManager = new ServerAuthManager();
+    _authManager.setAuthenticationRequired(_isAuthenticationRequired);
 
     if (_isAdmin)
       _broker = Server.getCurrent().getAdminBroker();
@@ -168,7 +168,7 @@ public class HmtpServlet extends GenericServlet {
     private ActorStream _linkStream;
     private ActorStream _brokerStream;
     
-    private ServerLinkService _linkService;
+    private ServerLinkActor _linkService;
 
     WebSocketHandler(String ipAddress)
     {
@@ -182,7 +182,7 @@ public class HmtpServlet extends GenericServlet {
       _out = new HmtpWriter(context.getOutputStream());
       _linkStream = new HempMemoryQueue(_out, _broker.getBrokerStream(), 1);
       
-      _linkService = new ServerLinkService(_linkStream, _broker, _authManager,
+      _linkService = new ServerLinkActor(_linkStream, _broker, _authManager,
                                            _ipAddress, false);
       _brokerStream = _linkService.getBrokerStream();
     }

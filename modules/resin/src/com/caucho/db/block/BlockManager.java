@@ -58,7 +58,7 @@ public final class BlockManager
 
   private final byte []_storeMask = new byte[8192];
   private LongKeyLruCache<Block> _blockCache;
-
+  
   private final AtomicLong _blockWriteCount = new AtomicLong();
   private final AtomicLong _blockReadCount = new AtomicLong();
 
@@ -189,7 +189,7 @@ public final class BlockManager
     }
     
     for (Block block : dirtyBlocks) {
-      block.allocate();
+      // block.allocate();
       store.getWriter().addDirtyBlock(block);
     }
   }
@@ -244,10 +244,11 @@ public final class BlockManager
 
     while (block == null || ! block.allocate()) {
       block = new Block(store, blockId);
-
+        
+      Block oldBlock = _blockCache.putIfAbsent(blockId, block);
+      
       // needs to be outside the synchronized because the put
       // can cause an LRU drop which might lead to a dirty write
-      Block oldBlock = _blockCache.putIfAbsent(blockId, block);
 
       if (oldBlock != null) {
         block.free();
@@ -259,8 +260,7 @@ public final class BlockManager
     if (blockId != block.getBlockId()
         || (blockId & BlockStore.BLOCK_INDEX_MASK) != store.getId()
         || block.getStore() != store) {
-      System.out.println("BLOCK: " + Long.toHexString(blockId) + " " + Long.toHexString(block.getBlockId()) + " " + store + " " + block.getStore());
-      Thread.dumpStack();
+      throw stateError("BLOCK: " + Long.toHexString(blockId) + " " + Long.toHexString(block.getBlockId()) + " " + store + " " + block.getStore());
     }
 
     return block;
@@ -283,6 +283,7 @@ public final class BlockManager
   /**
    * The managed name is null
    */
+  @Override
   public String getName()
   {
     return null;
@@ -291,6 +292,7 @@ public final class BlockManager
   /**
    * The managed type is BlockManager
    */
+  @Override
   public String getType()
   {
     return "BlockManager";
@@ -299,6 +301,7 @@ public final class BlockManager
   /**
    * Returns the capacity.
    */
+  @Override
   public long getBlockCapacity()
   {
     return _blockCache.getCapacity();
@@ -307,6 +310,7 @@ public final class BlockManager
   /**
    * Returns the hit count.
    */
+  @Override
   public long getHitCountTotal()
   {
     return _blockCache.getHitCount();
@@ -315,6 +319,7 @@ public final class BlockManager
   /**
    * Returns the miss count.
    */
+  @Override
   public long getMissCountTotal()
   {
     return _blockCache.getMissCount();
@@ -328,6 +333,7 @@ public final class BlockManager
   /**
    * Returns the read count.
    */
+  @Override
   public long getBlockReadCountTotal()
   {
     return _blockReadCount.get();
@@ -341,6 +347,7 @@ public final class BlockManager
   /**
    * Returns the write count.
    */
+  @Override
   public long getBlockWriteCountTotal()
   {
     return _blockWriteCount.get();

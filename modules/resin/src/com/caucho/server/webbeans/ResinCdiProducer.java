@@ -34,7 +34,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.enterprise.context.Conversation;
 import javax.enterprise.context.RequestScoped;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
@@ -44,9 +43,6 @@ import javax.management.MBeanServer;
 import javax.transaction.TransactionManager;
 import javax.transaction.TransactionSynchronizationRegistry;
 import javax.transaction.UserTransaction;
-import javax.validation.Validation;
-import javax.validation.Validator;
-import javax.validation.ValidatorFactory;
 
 import com.caucho.config.CauchoDeployment;
 import com.caucho.config.ContextDependent;
@@ -68,8 +64,6 @@ public class ResinCdiProducer
 {
   private static final Logger log
     = Logger.getLogger(ResinCdiProducer.class.getName());
-  
-  private Validator _validator;
   
   public ResinCdiProducer()
   {
@@ -159,25 +153,25 @@ public class ResinCdiProducer
       return null;
     }
   }
-  
+
   /**
-   * Returns the validator factory.
+   * Adds the bean validation producer to CDI. This uses reflection in case
+   * the validation jars don't exist.
    */
-  @Produces
-  public ValidatorFactory createValidatorFactory()
+  public static Class<?> createResinValidatorProducer()
   {
-    return Validation.buildDefaultValidatorFactory();
-  }
-  
-  /**
-   * Returns the validator factory.
-   */
-  @Produces
-  public Validator createValidator()
-  {
-    if (_validator == null)
-      _validator = Validation.buildDefaultValidatorFactory().getValidator();
+    try {
+      Class<?> cl = Class.forName("com.caucho.server.webbeans.ResinValidatorProducer");
+      
+      cl.getMethods();
+      
+      return cl;
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    } catch (NoClassDefFoundError e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
     
-    return _validator;
+    return null;
   }
 }

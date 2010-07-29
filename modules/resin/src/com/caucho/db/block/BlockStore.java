@@ -32,12 +32,16 @@ package com.caucho.db.block;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.sql.SQLException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.db.Database;
-import com.caucho.db.lock.Lock;
+// import com.caucho.db.lock.Lock;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -154,14 +158,15 @@ public class BlockStore {
   // number of minifragments currently used
   private long _miniFragmentUseCount;
 
-  private Lock _rowLock;
+  private Lock _rowWriteLock;
+  
   private long _blockLockTimeout = 120000;
 
   private boolean _isCorrupted;
 
   private final Lifecycle _lifecycle = new Lifecycle();
   
-  public BlockStore(Database database, String name, Lock tableLock)
+  public BlockStore(Database database, String name, ReadWriteLock tableLock)
   {
     this(database, name, tableLock, database.getPath().lookup(name + ".db"));
   }
@@ -174,7 +179,10 @@ public class BlockStore {
    * @param lock the table lock
    * @param path the path to the files
    */
-  public BlockStore(Database database, String name, Lock rowLock, Path path)
+  public BlockStore(Database database, 
+                    String name,
+                    ReadWriteLock rowLock,
+                    Path path)
   {
     _database = database;
     _blockManager = _database.getBlockManager();
@@ -191,9 +199,10 @@ public class BlockStore {
     _writer = new BlockWriter(this);
 
     if (rowLock == null)
-      rowLock = new Lock("row-lock:" + _name + ":" + _id);
+      rowLock = new ReentrantReadWriteLock();
 
-    _rowLock = rowLock;
+    rowLock.readLock();
+    _rowWriteLock = rowLock.writeLock();
   }
 
   /**
@@ -250,9 +259,9 @@ public class BlockStore {
   /**
    * Returns the table's lock.
    */
-  public Lock getLock()
+  public Lock getWriteLock()
   {
-    return _rowLock;
+    return _rowWriteLock;
   }
 
   /**
@@ -704,7 +713,7 @@ public class BlockStore {
 
     // if extending file, write the contents now
     try {
-      block.writeImpl();
+      block.writeFromBlockWriter();
     } catch (IOException e) {
       log.log(Level.WARNING, e.toString(), e);
     }
@@ -906,16 +915,18 @@ public class BlockStore {
     Block block = readBlock(blockId);
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
 
         os.write(blockBuffer, blockOffset, length);
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -945,8 +956,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
@@ -956,8 +967,10 @@ public class BlockStore {
 
         return length;
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -987,8 +1000,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
@@ -1004,8 +1017,10 @@ public class BlockStore {
 
         return length;
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1023,16 +1038,18 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
 
         return readLong(blockBuffer, offset);
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1060,8 +1077,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
@@ -1074,8 +1091,10 @@ public class BlockStore {
         
         return block;
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1103,8 +1122,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
@@ -1124,8 +1143,10 @@ public class BlockStore {
         
         return block;
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1143,8 +1164,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(blockAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         byte []blockBuffer = block.getBuffer();
@@ -1155,8 +1176,10 @@ public class BlockStore {
         
         return block;
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1185,8 +1208,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(fragmentAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int blockOffset = getMiniFragmentOffset(fragmentAddress);
@@ -1198,8 +1221,10 @@ public class BlockStore {
 
         return length;
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1228,8 +1253,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(fragmentAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int blockOffset = getMiniFragmentOffset(fragmentAddress);
@@ -1248,8 +1273,10 @@ public class BlockStore {
 
         return length;
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1267,8 +1294,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(fragmentAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockRead(_blockLockTimeout);
+      Lock lock = block.getReadLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int blockOffset = getMiniFragmentOffset(fragmentAddress);
@@ -1277,8 +1304,10 @@ public class BlockStore {
 
         return readLong(blockBuffer, blockOffset + fragmentOffset);
       } finally {
-        lock.unlockRead();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1302,8 +1331,8 @@ public class BlockStore {
         byte []blockBuffer = block.getBuffer();
         int freeOffset = -1;
 
-        Lock lock = block.getLock();
-        lock.lockReadAndWrite(_blockLockTimeout);
+        Lock lock = block.getWriteLock();
+        lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
         try {
           for (int i = 0; i < MINI_FRAG_PER_BLOCK; i++) {
@@ -1333,7 +1362,7 @@ public class BlockStore {
             }
           }
         } finally {
-          lock.unlockReadAndWrite();
+          lock.unlock();
         }
 
         if (freeOffset >= 0) {
@@ -1344,6 +1373,8 @@ public class BlockStore {
         }
 
         return blockAddr + fragOffset;
+      } catch (InterruptedException e) {
+        throw new IllegalStateException(e);
       } finally {
         block.free();
       }
@@ -1416,8 +1447,8 @@ public class BlockStore {
     Block block = readBlock(fragmentAddress);
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int fragIndex = (int) (fragmentAddress & BLOCK_OFFSET_MASK);
@@ -1445,8 +1476,10 @@ public class BlockStore {
           setAllocDirty(i + 1, i + 2);
         }
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1474,8 +1507,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(fragmentAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int blockOffset = getMiniFragmentOffset(fragmentAddress);
@@ -1492,8 +1525,10 @@ public class BlockStore {
         
         return block;
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1519,8 +1554,8 @@ public class BlockStore {
     Block block = readBlock(addressToBlockId(fragmentAddress));
 
     try {
-      Lock lock = block.getLock();
-      lock.lockReadAndWrite(_blockLockTimeout);
+      Lock lock = block.getWriteLock();
+      lock.tryLock(_blockLockTimeout, TimeUnit.MILLISECONDS);
 
       try {
         int blockOffset = getMiniFragmentOffset(fragmentAddress);
@@ -1544,8 +1579,10 @@ public class BlockStore {
         
         return block;
       } finally {
-        lock.unlockReadAndWrite();
+        lock.unlock();
       }
+    } catch (InterruptedException e) {
+      throw new IllegalStateException(e);
     } finally {
       block.free();
     }
@@ -1595,7 +1632,9 @@ public class BlockStore {
       _blockManager.freeStore(this);
     }
     
-    _writer.waitForComplete();
+    _writer.destroy();
+    
+    _writer.waitForComplete(60000);
 
     int id = _id;
     _id = 0;

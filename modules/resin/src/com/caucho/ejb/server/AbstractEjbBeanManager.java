@@ -74,6 +74,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
 
   protected final EjbManager _ejbManager;
   private final EjbModule _ejbModule;
+  private String _moduleName;
 
   protected final UserTransaction _ut = UserTransactionProxy.getInstance();
 
@@ -91,14 +92,10 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
 
   private String _id;
   private String _ejbName;
-  private String _handleServerId;
-
   // name for IIOP, Hessian, JNDI
   protected String _mappedName;
 
   private ArrayList<Class<?>> _remoteApiList = new ArrayList<Class<?>>();
-
-  private Class<?> _serviceEndpointClass;
 
   private Context _jndiEnv;
   
@@ -130,6 +127,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    *          the owning server container
    */
   public AbstractEjbBeanManager(EjbManager ejbManager,
+                                String moduleName,
                                 AnnotatedType<X> rawAnnotatedType,
                                 AnnotatedType<X> annotatedType)
   {
@@ -138,6 +136,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     _ejbManager = ejbManager;
     
     _ejbModule = EjbModule.getCurrent();
+    
+    if (moduleName == null)
+      moduleName = _ejbModule.getModuleName();
+      
+    _moduleName = moduleName;
     
     if (_ejbModule == null)
       throw new IllegalStateException(L.l("EjbModule is not currently defined."));
@@ -235,7 +238,8 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    */
   public String getModuleName()
   {
-    return _ejbModule.getModuleName();
+    // return _ejbModule.getModuleName();
+    return _moduleName;
   }
 
   /**
@@ -370,6 +374,9 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
       if (_jndiEnv == null)
         _jndiEnv = (Context) new InitialContext();//.lookup("java:comp/env");
 
+      if (jndiName.indexOf(':') < 0)
+        jndiName = "java:comp/env/" + jndiName;
+      
       // XXX: not tested
       return _jndiEnv.lookup(jndiName);
     } catch (NamingException e) {

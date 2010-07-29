@@ -62,7 +62,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
       .getName());
   private static final L10N L = new L10N(TransactionImpl.class);
 
-  private final static long EXTRA_TIMEOUT = 60000;
+  // private final static long EXTRA_TIMEOUT = 60000;
+  private final static long EXTRA_TIMEOUT = 0;
   private final static long MAX_TIMEOUT = 24 * 3600 * 1000L;
 
   // flag when the resource is active (between getConnection() and close())
@@ -105,8 +106,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
   private int [] _resourceStates;
 
   /**
-   * Transaction resources that a client API such as JPA may store and retrieve
-   * by key.
+   * Transaction resources that a client API such 
+   * as JPA may store and retrieve by key.
    */
   private Map<Object, Object> _mappedResources;
 
@@ -259,6 +260,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
    * 
    * @return true if successful
    */
+  @Override
   public boolean enlistResource(XAResource resource) throws RollbackException,
       SystemException
   {
@@ -282,10 +284,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
         throw RollbackExceptionWrapper.create(_rollbackException);
       } else
         throw new RollbackException(
-            L
-                .l(
-                    "Can't enlist resource {0} because the transaction is marked rollback-only.",
-                    resource));
+            L.l("Can't enlist resource {0} because the transaction is marked rollback-only.",
+                resource));
 
       if (_status == Status.STATUS_NO_TRANSACTION)
         throw new IllegalStateException(L.l(
@@ -293,10 +293,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
             resource));
 
       throw new IllegalStateException(
-          L
-              .l(
-                  "Can't enlist resource {0} because the transaction is not in an active state.  state='{1}'",
-                  resource, xaState(_status)));
+          L.l("Can't enlist resource {0} because the transaction is not in an active state.  state='{1}'",
+              resource, xaState(_status)));
     }
 
     // creates enough space in the arrays for the resource
@@ -336,11 +334,9 @@ public class TransactionImpl implements Transaction, AlarmListener {
       } else if ((_resourceStates[i] & RES_ACTIVE) != 0) {
         IllegalStateException exn;
         exn = new IllegalStateException(
-            L
-                .l(
-                    "Can't enlist same resource {0} twice. "
-                        + "Delist is required before calling enlist with an old resource.",
-                    resource));
+            L.l("Can't enlist same resource {0} twice. "
+                + "Delist is required before calling enlist with an old resource.",
+                resource));
 
         setRollbackOnly(exn);
         throw exn;
@@ -382,9 +378,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
     } catch (XAException e) {
       setRollbackOnly(e);
 
-      String message = L
-          .l(
-              "Failed to enlist resource {0} in transaction because of exception:\n{1}",
+      String message = L.l("Failed to enlist resource {0} in transaction because of exception:\n{1}",
               resource, e);
 
       log.log(Level.SEVERE, message, e);
@@ -593,16 +587,20 @@ public class TransactionImpl implements Transaction, AlarmListener {
   /**
    * Start a transaction.
    */
-  void begin() throws SystemException, NotSupportedException
+  void begin() 
+    throws SystemException, NotSupportedException
   {
     if (_status != Status.STATUS_NO_TRANSACTION) {
       int status = _status;
 
+      // env/0691
+      /*
       try {
         rollback();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }
+      */
 
       throw new NotSupportedException(
           L.l("Nested transactions are not supported. "
@@ -636,8 +634,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
   void suspend() throws SystemException
   {
     if (_isSuspended)
-      throw new IllegalStateException(L
-          .l("can't suspend already-suspended transaction"));
+      throw new IllegalStateException(L.l("can't suspend already-suspended transaction"));
 
     // _alarm.dequeue();
 
@@ -671,7 +668,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
       throw new IllegalStateException(L
           .l("can't resume non-suspended transaction"));
 
-    _alarm.queue(_timeout + EXTRA_TIMEOUT);
+    if (_timeout > 0)
+      _alarm.queue(_timeout + EXTRA_TIMEOUT);
 
     for (int i = _resourceCount - 1; i >= 0; i--) {
       if ((_resourceStates[i] & (RES_ACTIVE | RES_SUSPENDED)) == RES_ACTIVE) {
@@ -709,6 +707,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
     _status = Status.STATUS_MARKED_ROLLBACK;
 
+    _alarm.dequeue();
     _timeout = 0;
 
     if (log.isLoggable(Level.FINE))
@@ -777,8 +776,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
           log.fine(this + " commit (no transaction)");
 
         throw new IllegalStateException(
-            L
-                .l("Can't commit outside of a transaction.  Either the UserTransaction.begin() is missing or the transaction has already been committed or rolled back."));
+            L.l("Can't commit outside of a transaction.  Either the UserTransaction.begin() is missing or the transaction has already been committed or rolled back."));
 
       default:
         if (log.isLoggable(Level.FINE))
@@ -852,8 +850,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
             } catch (XAException e) {
               heuristicExn = heuristicException(heuristicExn, e);
               rollbackInt();
-              throw new RollbackExceptionWrapper(
-                  L.l("all commits rolled back"), heuristicExn);
+              throw new RollbackExceptionWrapper(L.l("all commits rolled back"), 
+                                                 heuristicExn);
             }
           }
         }
@@ -945,6 +943,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
   /**
    * Rollback the transaction.
    */
+  @Override
   public void rollback()
   {
     _alarm.dequeue();
@@ -964,8 +963,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
       case Status.STATUS_NO_TRANSACTION:
         throw new IllegalStateException(
-            L
-                .l("Can't rollback outside of a transaction.  Either the UserTransaction.begin() is missing or the transaction has already been committed or rolled back."));
+            L.l("Can't rollback outside of a transaction.  Either the UserTransaction.begin() is missing or the transaction has already been committed or rolled back."));
 
       default:
         rollbackInt();
@@ -1047,6 +1045,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
    */
   private void callBeforeCompletion() throws RollbackException
   {
+    _alarm.dequeue();
+    
     // server/16h2
     for (int i = 0; _synchronizations != null && i < _synchronizations.size(); i++) {
       Synchronization synchronization = _synchronizations.get(i);
@@ -1176,10 +1176,14 @@ public class TransactionImpl implements Transaction, AlarmListener {
   public void handleAlarm(Alarm alarm)
   {
     try {
-      log.warning(L.l("{0}: timed out after {1} seconds.", this, String
-          .valueOf(getTransactionTimeout())));
+      String msg = L.l("{0}: timed out after {1} seconds.", this, 
+                       String.valueOf(getTransactionTimeout()));
+                       
+      log.warning(msg);
+      
+      RuntimeException exn = new RuntimeException(msg);
 
-      setRollbackOnly();
+      setRollbackOnly(exn);
 
       // should not close at this point because there could be following
       // statements that also need to be rolled back

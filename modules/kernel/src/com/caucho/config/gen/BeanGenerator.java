@@ -268,23 +268,43 @@ abstract public class BeanGenerator<X> extends GenClass
 
   protected void generateInject(JavaWriter out,
                                 HashMap<String,Object> map)
-     throws IOException
-   {
-     out.println();
-     out.println("public void __caucho_inject(Object []delegates"
-                 + ", com.caucho.config.inject.CreationalContextImpl<?> parentEnv)");
-     out.println("{");
-     out.pushDepth();
+    throws IOException
+  {
+    out.println();
+    out.println("public void __caucho_inject(Object []delegates"
+                + ", com.caucho.config.inject.CreationalContextImpl<?> parentEnv)");
+    out.println("{");
+    out.pushDepth();
 
-     for (AspectGenerator<X> method : getMethods()) {
-       method.generateInject(out, map);
-     }
+    generateInjectContent(out, map);
 
-     getAspectBeanFactory().generateInject(out, map);
+    out.popDepth();
+    out.println("}");
+  }
 
-     out.popDepth();
-     out.println("}");
-   }
+  protected void generateInjectContent(JavaWriter out,
+                                       HashMap<String,Object> map)
+    throws IOException
+  {
+    for (AspectGenerator<X> method : getMethods()) {
+      method.generateInject(out, map);
+    }
+
+    getAspectBeanFactory().generateInject(out, map);
+  }
+
+  protected void generateDelegate(JavaWriter out,
+                                HashMap<String,Object> map)
+    throws IOException
+  {
+    out.println();
+    out.println("public Object __caucho_getDelegate()");
+    out.println("{");
+    out.print("  return ");
+    out.print(getAspectBeanFactory().getBeanInstance());
+    out.println(";");
+    out.println("}");
+  }
 
   protected void generatePostConstruct(JavaWriter out, 
                                        HashMap<String,Object> map)

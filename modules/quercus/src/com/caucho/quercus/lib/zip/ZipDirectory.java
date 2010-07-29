@@ -85,8 +85,10 @@ public class ZipDirectory
     }
 
     // Zip file signature check
-    if ((((_tmpBuf[3] & 0xff) << 24) | ((_tmpBuf[2] & 0xff) << 16) |
-          ((_tmpBuf[1] & 0xff) << 8) | (_tmpBuf[0] & 0xff)) != 0x04034b50) {
+    if ((((_tmpBuf[3] & 0xff) << 24)
+        | ((_tmpBuf[2] & 0xff) << 16)
+        | ((_tmpBuf[1] & 0xff) << 8)
+        | (_tmpBuf[0] & 0xff)) != 0x04034b50) {
       _eof = true;
       return null;
     }
@@ -100,7 +102,8 @@ public class ZipDirectory
     int compressionMethod = (_tmpBuf[8] & 0xff) | ((_tmpBuf[9] & 0xff) << 8);
 
     //if (compressionMethod != 0 && compressionMethod != 8)
-    //  throw new IOException("Unsupported zip compression method (" + compressionMethod + ").");
+//      throw new IOException(
+//          "Unsupported zip compression method (" + compressionMethod + ").");
 
     long crc32 = _tmpBuf[14] & 0xff;
     crc32 |= (_tmpBuf[15] & 0xff) << 8;

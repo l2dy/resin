@@ -60,7 +60,7 @@ class RegexpSet {
   
   static HashMap<String,RegexpSet> CLASS_MAP = null;
   
-  boolean _bitset[] = new boolean[BITSET_CHARS];
+  boolean []_bitset = new boolean[BITSET_CHARS];
   IntSet _range;
 
   /**
@@ -111,7 +111,8 @@ class RegexpSet {
     // php/4es0
     // http://bugs.caucho.com/view.php?id=3811
     if (low > high || low < 0)
-      throw new RuntimeException("Range out of range (" + low + ", " + high + ")");
+      throw new RuntimeException(
+          "Range out of range (" + low + ", " + high + ")");
 
     if (low < BITSET_CHARS) {
       for (int i = low; i < Math.min(high + 1, BITSET_CHARS); i++)

@@ -90,7 +90,7 @@ public class BeanBuilder<T>
     return this;
   }
 
-  public BeanBuilder<T> binding(Annotation ann)
+  public BeanBuilder<T> qualifier(Annotation ann)
   {
     if (_bindings == null)
       _bindings = new LinkedHashSet<Annotation>();
@@ -168,6 +168,18 @@ public class BeanBuilder<T>
       for (Type type : types) {
         _types.add(type);
       }
+    }
+
+    return this;
+  }
+
+  public BeanBuilder<T> type(Set<Type> types)
+  {
+    if (_types == null)
+      _types = new LinkedHashSet<Type>();
+
+    if (types != null) {
+      _types.addAll(types);
     }
 
     return this;

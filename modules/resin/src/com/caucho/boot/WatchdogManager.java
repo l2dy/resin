@@ -39,6 +39,11 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.caucho.admin.RemoteAdminService;
+import com.caucho.cloud.network.NetworkListenService;
+import com.caucho.cloud.topology.CloudCluster;
+import com.caucho.cloud.topology.CloudPod;
+import com.caucho.cloud.topology.CloudSystem;
+import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.BeanBuilder;
@@ -46,6 +51,8 @@ import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.config.types.Period;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.jmx.Jmx;
 import com.caucho.lifecycle.Lifecycle;
@@ -57,16 +64,14 @@ import com.caucho.log.RotateStream;
 import com.caucho.network.listen.SocketLinkListener;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.Authenticator;
-import com.caucho.server.cluster.Cluster;
-import com.caucho.server.cluster.ClusterServer;
 import com.caucho.server.cluster.Server;
+import com.caucho.server.http.HttpProtocol;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.server.util.JniCauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
-import com.caucho.util.ThreadPool;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
@@ -109,6 +114,7 @@ class WatchdogManager implements AlarmListener {
     Path logPath = getLogDirectory().lookup("watchdog-manager.log");
 
     RotateStream logStream = RotateStream.create(logPath);
+    logStream.setRolloverSize(64L * 1024 * 1024);
     logStream.init();
     WriteStream out = logStream.getStream();
     out.setDisableClose(true);
@@ -127,14 +133,30 @@ class WatchdogManager implements AlarmListener {
     else
       Logger.getLogger("").setLevel(Level.INFO);
 
-    ThreadPool.getThreadPool().setThreadIdleMin(1);
-    ThreadPool.getThreadPool().setThreadIdleMax(5);
+    ThreadPool.getThreadPool().setIdleMin(1);
+    ThreadPool.getThreadPool().setPriorityIdleMin(1);
 
     ResinELContext elContext = _args.getELContext();
+    
+    Path rootDirectory = _args.getRootDirectory();
+    Path dataDirectory = rootDirectory.lookup("watchdog-data");
+    
+    Resin resin = Resin.createWatchdog();
+    
+    resin.preConfigureInit();
+    /*
+    NetworkServer network = new NetworkServer("watchdog",
+                                              rootDirectory,
+                                              dataDirectory,
+                                              null);
+    
+    */
+    Thread thread = Thread.currentThread();
+    thread.setContextClassLoader(resin.getClassLoader());
 
     // XXX: needs to be config
 
-    InjectManager webBeans = InjectManager.create();
+    InjectManager cdiManager = InjectManager.create();
 
     Config.setProperty("resinHome", elContext.getResinHome());
     Config.setProperty("resin", elContext.getResinVar());
@@ -143,7 +165,7 @@ class WatchdogManager implements AlarmListener {
     Config.setProperty("system", System.getProperties());
     Config.setProperty("getenv", System.getenv());
 
-    ResinConfigLibrary.configure(webBeans);
+    ResinConfigLibrary.configure(cdiManager);
 
     _watchdogPort = _args.getWatchdogPort();
 
@@ -177,32 +199,27 @@ class WatchdogManager implements AlarmListener {
 
     server.getConfig().logInit(logStream);
 
-    Resin resin = Resin.createWatchdog();
-
     resin.preConfigureInit();
     resin.setConfigFile(_args.getResinConf().getNativePath());
 
-    Thread thread = Thread.currentThread();
+    thread = Thread.currentThread();
     thread.setContextClassLoader(resin.getClassLoader());
 
-    Cluster cluster = resin.createCluster();
-    ClusterServer clusterServer = cluster.createServer();
-    // cluster.addServer(clusterServer);
-
-    clusterServer.setId("");
-    clusterServer.setPort(0);
-
-    // clusterServer.addHttp(http);
-
-    cluster.addServer(clusterServer);
-
-    resin.addCluster(cluster);
+    CloudSystem cloudSystem = TopologyService.getCurrent().getSystem();
+    
+    CloudCluster cluster = cloudSystem.createCluster("watchdog");
+    CloudPod pod = cluster.createPod();
+    pod.createStaticServer("", "localhost", -1, false);
 
     _server = resin.createServer();
     
     thread.setContextClassLoader(_server.getClassLoader());
     
-    _httpPort = _server.createHttp();
+    NetworkListenService listenService = _server.getListenService();
+    
+    _httpPort = new SocketLinkListener();
+    _httpPort.setProtocol(new HttpProtocol());
+
     if (_watchdogPort > 0)
       _httpPort.setPort(_watchdogPort);
     else
@@ -214,29 +231,28 @@ class WatchdogManager implements AlarmListener {
     _httpPort.setAcceptThreadMax(2);
 
     _httpPort.init();
-    
-    
-    _server.bindPorts();
+
+    listenService.addListener(_httpPort);
     
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
       thread.setContextClassLoader(_server.getClassLoader());
 
-      webBeans = InjectManager.create();
+      cdiManager = InjectManager.create();
       AdminAuthenticator auth = null;
 
       if (_management != null)
         auth = _management.getAdminAuthenticator();
 
       if (auth != null) {
-        BeanBuilder<Authenticator> factory = webBeans.createBeanFactory(Authenticator.class);
+        BeanBuilder<Authenticator> factory = cdiManager.createBeanFactory(Authenticator.class);
 
         factory.type(Authenticator.class);
         factory.type(AdminAuthenticator.class);
-        factory.binding(DefaultLiteral.DEFAULT);
+        factory.qualifier(DefaultLiteral.DEFAULT);
 
-        webBeans.addBean(factory.singleton(auth));
+        cdiManager.addBean(factory.singleton(auth));
       }
 
       DependencyCheckInterval depend = new DependencyCheckInterval();
@@ -261,7 +277,7 @@ class WatchdogManager implements AlarmListener {
 
       broker.addActor(service);
 
-      _server.start();
+      ResinSystem.getCurrent().start();
 
       _lifecycle.toActive();
       

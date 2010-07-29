@@ -36,17 +36,17 @@ import java.io.OutputStream;
 /**
  * Custom serialization for the cache
  */
-public interface CacheSerializer<V>
+public interface CacheSerializer
 {
   /**
    * Serialize the data
    */
-  public void serialize(V value, OutputStream os)
+  public void serialize(Object value, OutputStream os)
     throws IOException;
   
   /**
    * Deserialize the data
    */
-  public V deserialize(InputStream is)
+  public Object deserialize(InputStream is)
     throws IOException;
 }

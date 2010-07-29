@@ -30,6 +30,7 @@
 package com.caucho.server.host;
 
 import com.caucho.bam.*;
+import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.config.ConfigException;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.inject.InjectManager;
@@ -430,7 +431,7 @@ public class Host extends WebAppContainer
   /**
    * Returns the current cluster.
    */
-  public Cluster getCluster()
+  public CloudCluster getCluster()
   {
     Server server = getServer();
 
@@ -523,9 +524,9 @@ public class Host extends WebAppContainer
       }
     }
 
-    _bamBroker = new HempBroker(hostName);
-
     HempBrokerManager brokerManager = HempBrokerManager.getCurrent();
+
+    _bamBroker = new HempBroker(brokerManager, hostName);
 
     if (brokerManager != null)
       brokerManager.addBroker(hostName, _bamBroker);

@@ -57,6 +57,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.Resource;
 import javax.ejb.EJB;
+import javax.ejb.EJBs;
 import javax.ejb.Stateful;
 import javax.el.ELContext;
 import javax.el.ELResolver;
@@ -192,6 +193,8 @@ public final class InjectManager
 
   private static final Class<? extends Annotation> []_forbiddenAnnotations;
   private static final Class<?> []_forbiddenClasses;
+  
+  private static final ClassLoader _systemClassLoader;
 
   private String _id;
 
@@ -276,6 +279,7 @@ public final class InjectManager
   private HashSet<Bean<?>> _beanSet = new HashSet<Bean<?>>();
 
   private boolean _isUpdateNeeded = true;
+  private boolean _isAfterValidationNeeded = true;
 
   private ArrayList<Path> _pendingPathList
     = new ArrayList<Path>();
@@ -328,7 +332,7 @@ public final class InjectManager
                         boolean isSetLocal)
   {
     _id = id;
-
+    
     _classLoader = loader;
     
     _parent = parent;
@@ -391,6 +395,8 @@ public final class InjectManager
       _injectionMap.put(Resource.class,
                         new ResourceHandler(this));
       _injectionMap.put(EJB.class,
+                        new EjbHandler(this));
+      _injectionMap.put(EJBs.class,
                         new EjbHandler(this));
 
       _deploymentMap.put(CauchoDeployment.class, 0);
@@ -495,6 +501,9 @@ public final class InjectManager
    */
   public static InjectManager create(ClassLoader loader)
   {
+    if (loader == null)
+      loader = _systemClassLoader;
+    
     InjectManager manager = null;
 
     manager = _localContainer.getLevel(loader);
@@ -528,7 +537,7 @@ public final class InjectManager
 
     InjectManager parent = null;
 
-    if (envLoader != null)
+    if (envLoader != null && envLoader != _systemClassLoader)
       parent = create(envLoader.getParent());
 
     synchronized (_localContainer) {
@@ -1090,12 +1099,12 @@ public final class InjectManager
   {
     AnnotatedType<T> type = createAnnotatedType(cl);
     
-    type = getExtensionManager().processAnnotatedType(type);
+    AnnotatedType<T> extType = getExtensionManager().processAnnotatedType(type);
     
-    if (type != null)
-      return createManagedBean(type);
+    if (extType != null)
+      return createManagedBean(extType);
     else
-      return null; 
+      return createManagedBean(type);
   }
 
   /**
@@ -1159,6 +1168,8 @@ public final class InjectManager
 
     if (log.isLoggable(Level.FINER))
       log.finer(this + " add bean " + bean);
+    
+    _isAfterValidationNeeded = true;
 
     _version.incrementAndGet();
     
@@ -2823,7 +2834,7 @@ public final class InjectManager
     }
   }
 
-  private void processPendingAnnotatedTypes()
+  public void processPendingAnnotatedTypes()
   {
     _scanManager.discover();
     
@@ -2922,7 +2933,6 @@ public final class InjectManager
     }
     
     AnnotatedType<X> type = getExtensionManager().processAnnotatedType(beanType);
-
     if (type == null)
       return;
 
@@ -3347,9 +3357,11 @@ public final class InjectManager
 
       validate();
       
+      /*
       if (isBind) {
         getExtensionManager().fireAfterDeploymentValidation();
       }
+      */
     } catch (RuntimeException e) {
       if (_configException == null)
         _configException = e;
@@ -3564,6 +3576,34 @@ public final class InjectManager
       // ioc/0p91
       throw _configException;
     }
+    
+    notifyStart();
+  }
+
+  public void notifyStart()
+  {
+
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+
+    try {
+      thread.setContextClassLoader(_classLoader);
+
+      update();
+      
+      // cloud/0300
+      if (_isAfterValidationNeeded) {
+        _isAfterValidationNeeded = false;
+        getExtensionManager().fireAfterDeploymentValidation();
+      }
+    } catch (ConfigException e) {
+      if (_configException == null)
+        _configException = e;
+
+      throw e;
+    } finally {
+      thread.setContextClassLoader(oldLoader);
+    }
   }
 
   public void addDefinitionError(Throwable t)
@@ -3710,7 +3750,10 @@ public final class InjectManager
 
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _id + "]";
+    if (_classLoader != null)
+      return getClass().getSimpleName() + "[" + _classLoader.getId() + "]";
+    else
+      return getClass().getSimpleName() + "[" + _id + "]";
   }
 
   static String getSimpleName(Type type)
@@ -4408,7 +4451,6 @@ public final class InjectManager
     _forbiddenClasses = new Class[forbiddenClasses.size()];
     forbiddenClasses.toArray(_forbiddenClasses);
 
-    /*
     ClassLoader systemClassLoader = null;
 
     try {
@@ -4418,6 +4460,7 @@ public final class InjectManager
 
       log.log(Level.FINEST, e.toString(), e);
     }
-    */
+
+    _systemClassLoader = systemClassLoader;
   }
 }

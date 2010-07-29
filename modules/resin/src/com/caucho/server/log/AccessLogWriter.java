@@ -29,14 +29,14 @@
 
 package com.caucho.server.log;
 
-import com.caucho.env.sample.ProbeManager;
-import com.caucho.env.sample.SemaphoreProbe;
+import com.caucho.env.meter.MeterService;
+import com.caucho.env.meter.SemaphoreMeter;
+import com.caucho.env.thread.TaskWorker;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.log.AbstractRolloverLog;
 import com.caucho.util.Alarm;
 import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
-import com.caucho.util.TaskWorker;
-import com.caucho.util.ThreadPool;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -82,7 +82,7 @@ public class AccessLogWriter extends AbstractRolloverLog
   private final LogWriterTask _logWriterTask = new LogWriterTask();
   private Thread _flushThread;
 
-  private SemaphoreProbe _semaphoreProbe;
+  private SemaphoreMeter _semaphoreProbe;
 
   AccessLogWriter(AccessLog log)
   {
@@ -94,7 +94,7 @@ public class AccessLogWriter extends AbstractRolloverLog
     _length = 0;
     */
 
-    _semaphoreProbe = ProbeManager.createSemaphoreProbe("Resin|Log|Semaphore");
+    _semaphoreProbe = MeterService.createSemaphoreMeter("Resin|Log|Semaphore");
   }
 
   @Override
@@ -275,9 +275,11 @@ public class AccessLogWriter extends AbstractRolloverLog
   }
 
   class LogWriterTask extends TaskWorker {
-    public void runTask()
+    public long runTask()
     {
       flushBuffer();
+      
+      return -1;
     }
   }
 }

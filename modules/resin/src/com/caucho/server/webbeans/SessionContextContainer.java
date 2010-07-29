@@ -29,9 +29,6 @@
 
 package com.caucho.server.webbeans;
 
-import javax.servlet.http.HttpSessionBindingEvent;
-import javax.servlet.http.HttpSessionBindingListener;
-
 import com.caucho.config.scope.ContextContainer;
 import com.caucho.inject.Module;
 
@@ -41,8 +38,8 @@ import com.caucho.inject.Module;
 @Module
 @SuppressWarnings("serial")
 public class SessionContextContainer extends ContextContainer
-  implements HttpSessionBindingListener
 {
+  /*
   @Override
   public void valueBound(HttpSessionBindingEvent event)
   {
@@ -53,4 +50,5 @@ public class SessionContextContainer extends ContextContainer
   {
     close();
   }
+  */
 }

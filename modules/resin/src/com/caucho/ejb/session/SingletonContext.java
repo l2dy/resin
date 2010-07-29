@@ -28,6 +28,8 @@
 
 package com.caucho.ejb.session;
 
+import java.util.logging.Logger;
+
 import javax.ejb.TimerService;
 
 import com.caucho.config.inject.CreationalContextImpl;
@@ -36,6 +38,11 @@ import com.caucho.config.inject.CreationalContextImpl;
  * Abstract base class for an session context
  */
 public class SingletonContext<X,T> extends AbstractSessionContext<X,T> {
+  private static final Logger log
+    = Logger.getLogger(SingletonContext.class.getName());
+  
+  private T _proxy;
+  
   public SingletonContext(SingletonManager<X> manager,
                           Class<T> api)
   {
@@ -54,11 +61,18 @@ public class SingletonContext<X,T> extends AbstractSessionContext<X,T> {
   @Override
   public T createProxy(CreationalContextImpl<T> env)
   {
-    T proxy = super.createProxy(env);
-    
-    getServer().initProxy(proxy, env);
-    
-    return proxy;
+    synchronized (this) {
+      if (_proxy == null) {
+        _proxy = super.createProxy(env);
+
+        if (env != null)
+          env.push(_proxy);
+
+        getServer().initProxy(_proxy, env);
+      }
+      
+      return _proxy;
+    }
   }
 
   /**

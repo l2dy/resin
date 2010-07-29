@@ -58,7 +58,6 @@ import com.caucho.config.gen.BeanGenerator;
 import com.caucho.config.gen.TransactionAttributeLiteral;
 import com.caucho.config.gen.TransactionManagementLiteral;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.types.JndiBuilder;
 import com.caucho.ejb.gen.MessageGenerator;
@@ -67,9 +66,7 @@ import com.caucho.ejb.message.JmsActivationSpec;
 import com.caucho.ejb.message.JmsResourceAdapter;
 import com.caucho.ejb.message.MessageManager;
 import com.caucho.ejb.server.AbstractEjbBeanManager;
-import com.caucho.ejb.server.EjbInjectionTarget;
 import com.caucho.inject.Module;
-import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.jca.cfg.MessageListenerConfig;
 import com.caucho.jca.ra.ResourceArchive;
 import com.caucho.jca.ra.ResourceArchiveManager;
@@ -95,8 +92,6 @@ public class EjbMessageBean<X> extends EjbBean<X> {
   private int _acknowledgeMode = Session.AUTO_ACKNOWLEDGE;
   private String _selector;
   private String _subscriptionName;
-  // private int _consumerMax = -1;
-  private String _messageDestinationLink;
   private Class<?> _messagingType;
   
   private MessageGenerator<X> _messageBean;
@@ -241,7 +236,6 @@ public class EjbMessageBean<X> extends EjbBean<X> {
   public void setMessageDestinationLink(String messageDestinationLink)
     throws ConfigException, NamingException
   {
-    _messageDestinationLink = messageDestinationLink;
   }
 
   /**
@@ -605,7 +599,11 @@ public class EjbMessageBean<X> extends EjbBean<X> {
     else
       ra.setConsumerMax(getEjbContainer().getMessageConsumerMax());
 
-    return deployMessageServer(ejbManager, lazyGenerator, ra, spec);
+    return deployMessageServer(ejbManager,
+                               getModuleName(),
+                               lazyGenerator, 
+                               ra, 
+                               spec);
   }
 
   /**
@@ -643,7 +641,11 @@ public class EjbMessageBean<X> extends EjbBean<X> {
                       raClass.getName()));
     }
 
-    return deployMessageServer(ejbManager, lazyGenerator, ra, _activationSpec);
+    return deployMessageServer(ejbManager,
+                               getModuleName(),
+                               lazyGenerator,
+                               ra,
+                               _activationSpec);
   }
 
   private AnnotatedType<X> fillClassDefaults(AnnotatedType<X> ejbClass)
@@ -670,6 +672,7 @@ public class EjbMessageBean<X> extends EjbBean<X> {
    */
   public AbstractEjbBeanManager<X> 
   deployMessageServer(EjbManager ejbManager,
+                      String moduleName,
                       EjbLazyGenerator<X> lazyGenerator,
                       ResourceAdapter ra,
                       ActivationSpec spec)
@@ -685,7 +688,8 @@ public class EjbMessageBean<X> extends EjbBean<X> {
         throw new ConfigException(L.l("ResourceAdapter is required for ActivationSpecServer"));
 
 
-      manager = new MessageManager<X>(ejbManager, 
+      manager = new MessageManager<X>(ejbManager,
+                                      moduleName,
                                       getRawAnnotatedType(), 
                                       getAnnotatedType(),
                                       lazyGenerator);

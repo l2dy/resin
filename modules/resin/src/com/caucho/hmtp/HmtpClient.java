@@ -32,7 +32,6 @@ package com.caucho.hmtp;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
-import java.security.PublicKey;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -40,15 +39,20 @@ import com.caucho.bam.ActorException;
 import com.caucho.bam.ActorStream;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.SimpleActorClient;
+import com.caucho.cloud.security.SecurityService;
 import com.caucho.hemp.broker.HempMemoryQueue;
 import com.caucho.remote.websocket.WebSocketClient;
 import com.caucho.servlet.WebSocketContext;
 import com.caucho.servlet.WebSocketListener;
+import com.caucho.util.Alarm;
+import com.caucho.util.L10N;
 
 /**
  * HMTP client protocol
  */
 public class HmtpClient extends SimpleActorClient {
+  private static final L10N L = new L10N(HmtpClient.class);
+  
   private static final Logger log
     = Logger.getLogger(HmtpClient.class.getName());
 
@@ -125,20 +129,40 @@ public class HmtpClient extends SimpleActorClient {
   protected void loginImpl(String uid, Serializable credentials)
   {
     try {
-      if (credentials instanceof SelfEncryptedCredentials) {
+      if (uid == null)
+        uid = "";
+      
+      if (credentials == null)
+        credentials = "";
+      
+      if (credentials instanceof SignedCredentials) {
       }
-      else if (_isEncryptPassword) {
-        GetPublicKeyQuery pkValue
-          = (GetPublicKeyQuery) queryGet(null, new GetPublicKeyQuery());
+      else if (credentials instanceof String) {
+        String password = (String) credentials;
+        
+        String clientNonce = String.valueOf(Alarm.getCurrentTime());
+        
+        NonceQuery nonceQuery = new NonceQuery(uid, clientNonce);
+        NonceQuery nonceResult
+          = (NonceQuery) queryGet(null, nonceQuery);
+        
+        String serverNonce = nonceResult.getNonce();
+        String serverSignature = nonceResult.getSignature();
+        
+        String testSignature = _authManager.sign(uid, clientNonce, password);
+        
+        if (! testSignature.equals(serverSignature) && "".equals(uid))
+          throw new ActorException(L.l("{0} server signature does not match",
+                                      this));
 
-        PublicKey publicKey = _authManager.getPublicKey(pkValue);
+        String signature = _authManager.sign(uid, serverNonce, password);
 
-        ClientAuthManager.Secret secret = _authManager.generateSecret();
-
-        EncryptedObject encPassword
-          = _authManager.encrypt(secret, publicKey, credentials);
-
-        credentials = encPassword;
+        SecurityService security = new SecurityService();
+        
+        if ("".equals(uid))
+          credentials = new SignedCredentials(uid, serverNonce, signature);
+        else
+          credentials = security.createCredentials(uid, password, serverNonce);
       }
 
       AuthResult result;

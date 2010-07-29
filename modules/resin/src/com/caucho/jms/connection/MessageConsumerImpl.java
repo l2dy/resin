@@ -220,15 +220,22 @@ public class MessageConsumerImpl<E> implements MessageConsumer
   /**
    * Receives the next message, blocking until a message is available.
    */
+  @Override
   public Message receive()
     throws JMSException
   {
-    return receiveImpl(Long.MAX_VALUE / 2);
+    long timeout = Long.MAX_VALUE / 2;
+    
+    if (Alarm.isTest())
+      timeout = 600000L;
+    
+    return receiveImpl(timeout);
   }
 
   /**
    * Receives a message from the queue.
    */
+  @Override
   public Message receiveNoWait()
     throws JMSException
   {
@@ -238,6 +245,7 @@ public class MessageConsumerImpl<E> implements MessageConsumer
   /**
    * Receives a message from the queue.
    */
+  @Override
   public Message receive(long timeout)
     throws JMSException
   {
@@ -457,8 +465,6 @@ public class MessageConsumerImpl<E> implements MessageConsumer
     private final MessageListener _listener;
     private final ClassLoader _classLoader;
     
-    private MessageImpl _message;
-
     MessageConsumerCallback(MessageListener listener)
     {
       _listener = listener;

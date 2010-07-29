@@ -31,16 +31,14 @@ package com.caucho.config.xml;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.logging.Logger;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.context.NormalScope;
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.Produces;
@@ -69,7 +67,6 @@ import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.config.type.ConfigType;
 import com.caucho.config.type.TypeFactory;
-import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.xml.QName;
 
@@ -99,7 +96,6 @@ public class XmlBeanConfig<T> {
   private ContainerProgram _init;
   private boolean _hasBindings;
   private boolean _hasInterceptorBindings;
-  private boolean _hasDeployment;
   private boolean _isInlineBean;
 
   public XmlBeanConfig(QName name, Class<T> cl)
@@ -315,13 +311,13 @@ public class XmlBeanConfig<T> {
 
   public void addField(XmlBeanFieldConfig fieldConfig)
   {
-    Field field = fieldConfig.getField();
-    Annotation []annList = fieldConfig.getAnnotations();
+    // Field field = fieldConfig.getField();
+    // Annotation []annList = fieldConfig.getAnnotations();
 
     //_component.addField(new SimpleBeanField(field, annList));
   }
 
-  private void clearBindings(AnnotatedTypeImpl beanType)
+  private void clearBindings(AnnotatedTypeImpl<?> beanType)
   {
     HashSet<Annotation> annSet
       = new HashSet<Annotation>(beanType.getAnnotations());
@@ -332,7 +328,7 @@ public class XmlBeanConfig<T> {
     }
   }
 
-  private void clearAnnotations(AnnotatedTypeImpl beanType,
+  private void clearAnnotations(AnnotatedTypeImpl<?> beanType,
                                 Class<? extends Annotation> annType)
   {
     HashSet<Annotation> annSet
@@ -363,8 +359,6 @@ public class XmlBeanConfig<T> {
 
   private Class<?> createResinClass(String name)
   {
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
-
     Class<?> cl = TypeFactory.loadClass("ee", name);
 
     if (cl != null)
@@ -378,7 +372,7 @@ public class XmlBeanConfig<T> {
     return null;
   }
 
-  //  @PostConstruct
+  @PostConstruct
   public void init()
   {
     if (_annotatedType != null) {
@@ -423,7 +417,7 @@ public class XmlBeanConfig<T> {
 
       for (int i = 0; i < _args.size(); i++) {
         ConfigProgram argProgram = _args.get(i);
-        ConfigType type = TypeFactory.getType(genericParam[i]);
+        ConfigType<?> type = TypeFactory.getType(genericParam[i]);
 
         if (argProgram != null)
           newProgram[i] = new ProgramArg(type, argProgram);
@@ -450,19 +444,22 @@ public class XmlBeanConfig<T> {
     _annotatedType.addAnnotation(xmlCookie);
     
     ManagedBeanImpl<T> managedBean
-      = new ManagedBeanImpl(_cdiManager,_annotatedType, false);
+      = new ManagedBeanImpl<T>(_cdiManager,_annotatedType, false);
     
     managedBean.introspect();
     
-    XmlInjectionTarget injectionTarget
+    XmlInjectionTarget<T> injectionTarget
       = new XmlInjectionTarget(managedBean, javaCtor, newProgram, injectProgram);
     
-    _bean = new XmlBean(managedBean, injectionTarget);
+    _bean = new XmlBean<T>(managedBean, injectionTarget);
     
     _cdiManager.addXmlInjectionTarget(xmlCookie.value(), injectionTarget);
-
-    if (! _isInlineBean)
+    
+    if (! _isInlineBean) {
       _cdiManager.discoverBean(_annotatedType);
+      // ioc/23n3
+      _cdiManager.processPendingAnnotatedTypes();
+    }
     
     //beanManager.addBean(_bean);
 
@@ -497,7 +494,7 @@ public class XmlBeanConfig<T> {
     InjectManager beanManager = InjectManager.create();
 
     CreationalContext<?> env = beanManager.createCreationalContext(_bean);
-    Class type = _bean.getBeanClass();
+    Class<?> type = _bean.getBeanClass();
 
     return InjectManager.create().getReference(_bean, type, env);
   }
@@ -507,7 +504,7 @@ public class XmlBeanConfig<T> {
     return getClass().getSimpleName() + "[" + _class.getSimpleName() + "]";
   }
 
-  class BeanArg<T> extends Arg<T> {
+  class BeanArg extends Arg<T> {
     private String _loc;
     private Constructor<T> _ctor;
     private Type _type;

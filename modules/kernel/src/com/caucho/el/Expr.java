@@ -184,12 +184,12 @@ public abstract class Expr extends ValueExpression {
    * @return the value of the expression as an object
    */
   public MethodInfo getMethodInfo(ELContext env,
-				  Class<?> returnType,
-				  Class<?> []argTypes)
+                                  Class<?> returnType,
+                                  Class<?> []argTypes)
     throws ELException
   {
     throw new ELException(L.l("'{0}' is an illegal method expression." + getClass(),
-			      toString()));
+                              toString()));
   }
 
   /**
@@ -203,7 +203,7 @@ public abstract class Expr extends ValueExpression {
     throws ELException
   {
     throw new ELException(L.l("'{0}' is an illegal method expression." + getClass(),
-			      toString()));
+                              toString()));
   }
 
   /**
@@ -356,8 +356,8 @@ public abstract class Expr extends ValueExpression {
   @Override
   public void setValue(ELContext env, Object value)
     throws PropertyNotFoundException,
-	   PropertyNotWritableException,
-	   ELException
+           PropertyNotWritableException,
+           ELException
   {
     throw new PropertyNotWritableException(getClass().getName() + ": " + toString());
   }
@@ -462,7 +462,7 @@ public abstract class Expr extends ValueExpression {
   @Override
   public Class<?> getType(ELContext context)
     throws PropertyNotFoundException,
-	   ELException
+           ELException
   {
     Object value = getValue(context);
 
@@ -492,10 +492,10 @@ public abstract class Expr extends ValueExpression {
       int len = s.length();
 
       for (int i = 0; i < len; i++) {
-	char ch = s.charAt(i);
+        char ch = s.charAt(i);
 
-	if (ch == '.' || ch == 'e' || ch == 'E')
-	  return true;
+        if (ch == '.' || ch == 'e' || ch == 'E')
+          return true;
       }
 
       return false;
@@ -601,9 +601,9 @@ public abstract class Expr extends ValueExpression {
       String s = (String) value;
 
       if (s == null || s.length() == 0)
-	return (char) 0;
+        return (char) 0;
       else
-	return s.charAt(0);
+        return s.charAt(0);
     }
     else if (value instanceof Number) {
       Number number = (Number) value;
@@ -826,8 +826,8 @@ public abstract class Expr extends ValueExpression {
    * @return true for null
    */
   public static boolean toStream(JspWriter out,
-				 Object value,
-				 boolean isEscaped)
+                                 Object value,
+                                 boolean isEscaped)
     throws IOException
   {
     if (value == null)
@@ -879,7 +879,7 @@ public abstract class Expr extends ValueExpression {
       int ch;
 
       while ((ch = reader.read()) > 0) {
-	out.print((char) ch);
+        out.print((char) ch);
       }
     }
     else
@@ -889,9 +889,9 @@ public abstract class Expr extends ValueExpression {
   /**
    * Write to the *.java stream escaping Java reserved characters.
    *
-   * @param out the output stream to the *.java code.
+   * @param os the output stream to the *.java code.
    *
-   * @param value the value to be converted.
+   * @param string the value to be converted.
    */
   public static void printEscapedString(WriteStream os, String string)
     throws IOException
@@ -1008,7 +1008,7 @@ public abstract class Expr extends ValueExpression {
    * Write to the stream escaping XML reserved characters.
    *
    * @param out the output stream.
-   * @param value the value to be converted.
+   * @param in the value to be converted.
    */
   public static void toStreamEscaped(Writer out, Reader in)
     throws IOException
@@ -1124,81 +1124,81 @@ public abstract class Expr extends ValueExpression {
       Class<?> type = method.getParameterTypes()[0];
 
       try {
-	int code = _typeMap.get(type);
+        int code = _typeMap.get(type);
 
-	switch (code) {
-	case BOOLEAN:
-	  value = toBoolean(value, null) ? Boolean.TRUE : Boolean.FALSE;
-	  break;
-	  
-	case BYTE:
-	  value = new Byte((byte) toLong(value, null));
-	  break;
-	  
-	case SHORT:
-	  value = new Short((short) toLong(value, null));
-	  break;
-	  
-	case INT:
-	  value = new Integer((int) toLong(value, null));
-	  break;
-	  
-	case LONG:
-	  value = new Long((long) toLong(value, null));
-	  break;
-	  
-	case FLOAT:
-	  value = new Float((float) toDouble(value, null));
-	  break;
-	  
-	case DOUBLE:
-	  value = new Double((double) toDouble(value, null));
-	  break;
-	  
-	case BOOLEAN_OBJ:
-	  if (value != null)
-	    value = toBoolean(value, null) ? Boolean.TRUE : Boolean.FALSE;
-	  break;
-	  
-	case BYTE_OBJ:
-	  if (value != null)
-	    value = new Byte((byte) toLong(value, null));
-	  break;
-	  
-	case SHORT_OBJ:
-	  if (value != null)
-	    value = new Short((short) toLong(value, null));
-	  break;
-	  
-	case INT_OBJ:
-	  if (value != null)
-	    value = new Integer((int) toLong(value, null));
-	  break;
-	  
-	case LONG_OBJ:
-	  if (value != null)
-	    value = new Long((long) toLong(value, null));
-	  break;
-	  
-	case FLOAT_OBJ:
-	  if (value != null)
-	    value = new Float((float) toDouble(value, null));
-	  break;
-	  
-	case DOUBLE_OBJ:
-	  if (value != null)
-	    value = new Double((double) toDouble(value, null));
-	  break;
+        switch (code) {
+        case BOOLEAN:
+          value = toBoolean(value, null) ? Boolean.TRUE : Boolean.FALSE;
+          break;
 
-	case STRING:
-	  if (value != null)
-	    value = String.valueOf(value);
-	  break;
-	  
-	default:
-	  break;
-	}
-	
+        case BYTE:
+          value = new Byte((byte) toLong(value, null));
+          break;
+
+        case SHORT:
+          value = new Short((short) toLong(value, null));
+          break;
+
+        case INT:
+          value = new Integer((int) toLong(value, null));
+          break;
+
+        case LONG:
+          value = new Long((long) toLong(value, null));
+          break;
+
+        case FLOAT:
+          value = new Float((float) toDouble(value, null));
+          break;
+
+        case DOUBLE:
+          value = new Double((double) toDouble(value, null));
+          break;
+
+        case BOOLEAN_OBJ:
+          if (value != null)
+            value = toBoolean(value, null) ? Boolean.TRUE : Boolean.FALSE;
+          break;
+
+        case BYTE_OBJ:
+          if (value != null)
+            value = new Byte((byte) toLong(value, null));
+          break;
+
+        case SHORT_OBJ:
+          if (value != null)
+            value = new Short((short) toLong(value, null));
+          break;
+
+        case INT_OBJ:
+          if (value != null)
+            value = new Integer((int) toLong(value, null));
+          break;
+
+        case LONG_OBJ:
+          if (value != null)
+            value = new Long((long) toLong(value, null));
+          break;
+
+        case FLOAT_OBJ:
+          if (value != null)
+            value = new Float((float) toDouble(value, null));
+          break;
+
+        case DOUBLE_OBJ:
+          if (value != null)
+            value = new Double((double) toDouble(value, null));
+          break;
+
+        case STRING:
+          if (value != null)
+            value = String.valueOf(value);
+          break;
+
+        default:
+          break;
+        }
+
         method.invoke(target, new Object[] { value });
       } catch (Exception e) {
         throw new JspException(e);
@@ -1231,43 +1231,54 @@ public abstract class Expr extends ValueExpression {
   public static Object coerceToType(Object obj, Class<?> targetType)
     throws ELException
   {
-    CoerceType type = _coerceMap.get(targetType);
-
-    if (targetType.isEnum())
-      return Expr.toEnum(obj, (Class<? extends Enum>) targetType);
-
-    if (type == null)
+    if (targetType == null)
       return obj;
 
-    switch (type) {
-    case BOOLEAN:
-      return Expr.toBoolean(obj, null) ? Boolean.TRUE : Boolean.FALSE;
-    case CHARACTER:
-      return Expr.toCharacter(obj, null);
-    case BYTE:
-      return new Byte((byte) Expr.toLong(obj, null));
-    case SHORT:
-      return new Short((short) Expr.toLong(obj, null));
-    case INTEGER:
-      return new Integer((int) Expr.toLong(obj, null));
-    case LONG:
-      return new Long(Expr.toLong(obj, null));
-    case FLOAT:
-      return new Float((float) Expr.toDouble(obj, null));
-    case DOUBLE:
-      return new Double(Expr.toDouble(obj, null));
-    case STRING:
-      if (obj == null)
-	return "";
-      else
-	return obj.toString();
-    case BIG_DECIMAL:
-      return Expr.toBigDecimal(obj, null);
-    case BIG_INTEGER:
-      return Expr.toBigInteger(obj, null);
+    CoerceType type = _coerceMap.get(targetType);
+
+    if (type != null) {
+      switch (type) {
+      case BOOLEAN:
+        return Expr.toBoolean(obj, null) ? Boolean.TRUE : Boolean.FALSE;
+      case CHARACTER:
+        return Expr.toCharacter(obj, null);
+      case BYTE:
+        return new Byte((byte) Expr.toLong(obj, null));
+      case SHORT:
+        return new Short((short) Expr.toLong(obj, null));
+      case INTEGER:
+        return new Integer((int) Expr.toLong(obj, null));
+      case LONG:
+        return new Long(Expr.toLong(obj, null));
+      case FLOAT:
+        return new Float((float) Expr.toDouble(obj, null));
+      case DOUBLE:
+        return new Double(Expr.toDouble(obj, null));
+      case STRING:
+        if (obj == null)
+          return "";
+        else
+          return obj.toString();
+      case BIG_DECIMAL:
+        return Expr.toBigDecimal(obj, null);
+      case BIG_INTEGER:
+        return Expr.toBigInteger(obj, null);
+      case OBJECT:
+        return obj;
+      case VOID:
+        return null;
+      }
+    } else if (targetType.isEnum()) {
+      return Expr.toEnum(obj, (Class<? extends Enum>) targetType);
+    } else if (obj == null) {
+      return null;
+    } else if (targetType.isAssignableFrom(obj.getClass())) {
+      return obj;
     }
 
-    return null;
+    throw new ELException(L.l("unable to convert {0} to type {1}",
+                              obj,
+                              targetType));
   }
 
   /**
@@ -1337,7 +1348,8 @@ public abstract class Expr extends ValueExpression {
     BYTE,
     BIG_INTEGER,
     BIG_DECIMAL,
-    VOID
+    VOID,
+    OBJECT
   };
 
   static {
@@ -1371,6 +1383,7 @@ public abstract class Expr extends ValueExpression {
     _coerceMap.put(BigInteger.class, CoerceType.BIG_INTEGER);
     
     _coerceMap.put(void.class, CoerceType.VOID);
+    _coerceMap.put(Object.class, CoerceType.OBJECT);
   }
 
   static {

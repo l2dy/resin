@@ -63,6 +63,7 @@ public class EJBContainerImpl extends EJBContainer {
     = Logger.getLogger(EJBContainerImpl.class.getName());
 
   private Context _context;
+  private ClassLoader _globalClassLoader;
   private EnvironmentClassLoader _classLoader;
   private InjectManager _injectManager;
   private EnterpriseApplication _application;
@@ -93,12 +94,14 @@ public class EJBContainerImpl extends EJBContainer {
     if (_application != null)
       return;
     
+    Thread thread = Thread.currentThread();
+    
+    _globalClassLoader = thread.getContextClassLoader(); 
     _application = EnterpriseApplication.create(name);
     
     _classLoader = _application.getClassLoader();
     _injectManager = InjectManager.create(_classLoader);
 
-    Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
@@ -110,7 +113,12 @@ public class EJBContainerImpl extends EJBContainer {
       Environment.addChildLoaderListener(new EjbEnvironmentListener());
 
       _injectManager.addManagedBean(_injectManager.createManagedBean(ResinCdiProducer.class));
+
+      Class<?> resinValidatorClass = ResinCdiProducer.createResinValidatorProducer();
       
+      if (_injectManager != null)
+        _injectManager.addManagedBean(_injectManager.createManagedBean(resinValidatorClass));
+   
       // XXX initialcontextfactory broken when set by non-resin container
       AbstractModel model = InitialContextFactoryImpl.createRoot();
       _context = new ContextImpl(model, null);
@@ -133,6 +141,7 @@ public class EJBContainerImpl extends EJBContainer {
 
         EjbManager manager = EjbManager.getCurrent();
 
+        manager.setGlobalClassLoader(_globalClassLoader);
         manager.setScannableRoots(_moduleRoots);
       }
       

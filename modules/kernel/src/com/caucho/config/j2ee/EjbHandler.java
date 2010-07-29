@@ -31,9 +31,9 @@ package com.caucho.config.j2ee;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.logging.Logger;
 
 import javax.ejb.EJB;
+import javax.ejb.EJBs;
 import javax.enterprise.inject.spi.AnnotatedField;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
@@ -45,15 +45,14 @@ import com.caucho.config.program.BeanValueGenerator;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.FieldGeneratorProgram;
 import com.caucho.config.program.MethodGeneratorProgram;
+import com.caucho.config.program.NullProgram;
+import com.caucho.config.program.ValueGenerator;
 import com.caucho.util.L10N;
 
 /**
  * Handles the @EJB annotation for JavaEE
  */
 public class EjbHandler extends JavaeeInjectionHandler {
-  private static final Logger log
-    = Logger.getLogger(EjbHandler.class.getName());
-  
   private static final L10N L = new L10N(EjbHandler.class);
   
   public EjbHandler(InjectManager manager)
@@ -80,12 +79,61 @@ public class EjbHandler extends JavaeeInjectionHandler {
   @Override
   public ConfigProgram introspectType(AnnotatedType<?> type)
   {
+    // ejb/123j
+    for (Class<?> parentClass = type.getJavaClass().getSuperclass();
+         parentClass != null;
+         parentClass = parentClass.getSuperclass()) {
+      EJBs ejbs = parentClass.getAnnotation(EJBs.class);
+
+      if (ejbs != null) {
+        for (EJB ejb : ejbs.value()) {
+          introspectClass(getClass().getName(), ejb);
+        }
+      }
+
+      EJB ejb = parentClass.getAnnotation(EJB.class);
+
+      if (ejb != null)
+        introspectClass(getClass().getName(), ejb);
+    }
+    
+    EJBs ejbs = type.getAnnotation(EJBs.class);
+
+    if (ejbs != null) {
+      for (EJB ejb : ejbs.value()) {
+        introspectClass(getClass().getName(), ejb);
+      }
+    }
+
     EJB ejb = type.getAnnotation(EJB.class);
+
+    if (ejb != null)
+      introspectClass(getClass().getName(), ejb);
     
-    // return generateContext(type, ejb);
+
+    return new NullProgram();
+  }
+
+  private void introspectClass(String location, EJB ejb)
+  {
+    String name = ejb.name();
+
+    Class<?> bindType = ejb.beanInterface();
     
-    // return null;
-    throw new UnsupportedOperationException(getClass().getName() + ":" + ejb);
+    if ("".equals(name))
+      throw new ConfigException(L.l("{0}: @EJB name() attribute is required for @EJB on a class.",
+                                    location));
+    
+    if (Object.class.equals(bindType))
+      throw new ConfigException(L.l("{0}: @EJB beanInterface() attribute is required for @EJB on a class.",
+                                    location));
+    
+    ValueGenerator gen = bindGenerator(location, ejb, bindType);
+
+    if (name != null && ! "".equals(name)) {
+      bindJndi(name, gen, name);
+    }
+    
   }
 
   private ConfigProgram generateContext(AnnotatedField<?> field,
@@ -93,8 +141,6 @@ public class EjbHandler extends JavaeeInjectionHandler {
     throws ConfigException
   {
     String name = ejb.name();
-    String mappedName = ejb.mappedName();
-    String beanName = ejb.beanName();
 
     Field javaField = field.getJavaMember();
     
@@ -102,51 +148,12 @@ public class EjbHandler extends JavaeeInjectionHandler {
 
     Class<?> bindType = javaField.getType();
     
-    // ejb/2004
-    if (! Object.class.equals(ejb.beanInterface())) {
-      bindType = ejb.beanInterface();
-    }
-    
-    /*
-    if (! "".equals(pContext.name()))
-      jndiName = pContext.name();
-      */
-
-    Bean<?> bean = null;
-
-    if (! "".equals(beanName))
-      bean = bind(location, bindType, new BeanNameLiteral(beanName));
-    
-    if (bean == null)
-      bean = bind(location, bindType, name);
-    
-    if (bean == null)
-      bean = bind(location, bindType, mappedName);
-
-    if (bean != null) {
-      // valid bean
-    }
-    else if (! "".equals(name)) {
-      throw new ConfigException(location + L.l("name='{0}' is an unknown @EJB.",
-                                               name));
-    }
-    else if (! "".equals(mappedName)) {
-      throw new ConfigException(location + L.l("mappedName='{0}' is an unknown @EJB.",
-                                               mappedName));
-
-    }
-    else {
-      throw new ConfigException(location + L.l("@EJB cannot find any defined EJBs.  No @EJB with type='{0}'",
-                                               bindType));
-    }
-
-    // return new ComponentValueGenerator(location, (AbstractBean) bean);
-    
-    BeanValueGenerator gen
-      = new BeanValueGenerator(location, bean);
+    ValueGenerator gen = bindGenerator(location, ejb, bindType);
 
     if (name != null && ! "".equals(name))
       bindJndi(name, gen, name);
+    
+    bindJndi(javaField, gen);
     
     return new FieldGeneratorProgram(javaField, gen);
   }
@@ -157,8 +164,6 @@ public class EjbHandler extends JavaeeInjectionHandler {
     throws ConfigException
   {
     String name = ejb.name();
-    String mappedName = ejb.mappedName();
-    String beanName = ejb.beanName();
 
     Method javaMethod = method.getJavaMember();
     
@@ -171,6 +176,32 @@ public class EjbHandler extends JavaeeInjectionHandler {
       bindType = ejb.beanInterface();
     }
     
+    ValueGenerator gen = bindGenerator(location, ejb, bindType);
+
+    if (name != null && ! "".equals(name))
+      bindJndi(name, gen, name);
+    
+    return new MethodGeneratorProgram(javaMethod, gen);
+  }
+  
+  protected ValueGenerator bindGenerator(String location,
+                                         EJB ejb,
+                                         Class<?> bindType)
+  {
+    String name = ejb.name();
+    String mappedName = ejb.mappedName();
+    String beanName = ejb.beanName();
+    String lookupName = ejb.lookup();
+
+    // ejb/2005
+    if (! Object.class.equals(ejb.beanInterface())) {
+      bindType = ejb.beanInterface();
+    }
+    
+    if (lookupName != null && ! "".equals(lookupName)) {
+      return new JndiValueGenerator(location, bindType, lookupName);
+    }
+    
     /*
     if (! "".equals(pContext.name()))
       jndiName = pContext.name();
@@ -204,14 +235,6 @@ public class EjbHandler extends JavaeeInjectionHandler {
                                                bindType));
     }
 
-    // bindJndi(location, jndiName, bean);
-
-    // return new ComponentValueGenerator(location, (AbstractBean) bean);
-    
-    BeanValueGenerator gen
-      = new BeanValueGenerator(location, bean);
-    
-    return new MethodGeneratorProgram(javaMethod, gen);
+    return new BeanValueGenerator(location, bean);
   }
-
 }

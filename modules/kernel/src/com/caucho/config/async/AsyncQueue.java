@@ -34,7 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.util.TaskWorker;
+import com.caucho.env.thread.TaskWorker;
 
 
 /**
@@ -53,7 +53,7 @@ public class AsyncQueue extends TaskWorker {
     wake();
   }
   
-  public final void runTask()
+  public final long runTask()
   {
     try {
       Runnable task;
@@ -64,5 +64,7 @@ public class AsyncQueue extends TaskWorker {
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
     }
+    
+    return -1;
   }
 }

@@ -29,15 +29,9 @@
 
 package com.caucho.server.cluster;
 
-import com.caucho.config.ConfigException;
-import com.caucho.network.server.NetworkServer;
-import com.caucho.server.resin.*;
-import com.caucho.util.Alarm;
+import com.caucho.cloud.network.ClusterServer;
+import com.caucho.server.resin.Resin;
 import com.caucho.util.L10N;
-
-import java.io.IOException;
-import java.util.logging.Logger;
-import java.util.logging.Level;
 
 /**
  * Defines a cluster with a single server
@@ -45,9 +39,6 @@ import java.util.logging.Level;
 public class SingleCluster extends Cluster
 {
   private static final L10N L = new L10N(SingleCluster.class);
-  private static final Logger log
-    = Logger.getLogger(SingleCluster.class.getName());
-
   private SingleClusterPod _pod;
   private ClusterPod [] _podList;
 
@@ -86,12 +77,5 @@ public class SingleCluster extends Cluster
       throw new IllegalStateException(L.l("{0}: can't create static server after initialization", this));
 
     return _pod.createServer();
-  }
-
-  @Override
-  protected Server createResinServer(NetworkServer networkServer,
-                                     ClusterServer clusterServer)
-  {
-    return new Server(networkServer, clusterServer);
   }
 }

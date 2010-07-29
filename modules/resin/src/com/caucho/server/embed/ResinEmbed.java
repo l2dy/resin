@@ -32,12 +32,12 @@ package com.caucho.server.embed;
 import java.io.IOException;
 import java.io.InputStream;
 
+import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.RawString;
 import com.caucho.lifecycle.Lifecycle;
-import com.caucho.server.cluster.Cluster;
-import com.caucho.server.cluster.ClusterServer;
+import com.caucho.resin.HttpEmbed;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.host.Host;
 import com.caucho.server.host.HostConfig;
@@ -53,8 +53,6 @@ public class ResinEmbed
     = "com/caucho/server/embed/resin-embed.xml";
   
   private Resin _resin = Resin.create();
-  private Cluster _cluster;
-  private ClusterServer _clusterServer;
   private Host _host;
   private Server _server;
   
@@ -82,9 +80,6 @@ public class ResinEmbed
       } catch (IOException e) {
       }
     }
-
-    _cluster = _resin.findCluster("");
-    _clusterServer = _cluster.findServer("");
   }
 
   public void setHttpPort(int port)
@@ -117,8 +112,10 @@ public class ResinEmbed
       _resin.start();
       _server = _resin.getServer();
       
-      if (_httpPort >= 0)
-        _server.createHttp().setPort(_httpPort);
+      if (_httpPort >= 0) {
+        HttpEmbed httpEmbed = new HttpEmbed(_httpPort);
+        httpEmbed.bindTo(_server);
+      }
       
       HostConfig hostConfig = new HostConfig();
       _server.addHost(hostConfig);

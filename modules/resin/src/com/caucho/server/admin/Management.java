@@ -29,46 +29,43 @@
 
 package com.caucho.server.admin;
 
+import javax.annotation.PostConstruct;
+
 import com.caucho.bam.Broker;
-import com.caucho.hemp.broker.*;
+import com.caucho.config.AdminLiteral;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.inject.BeanBuilder;
+import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.RawString;
-import com.caucho.lifecycle.*;
-import com.caucho.server.cluster.Cluster;
-import com.caucho.server.cluster.DeployManagementService;
+import com.caucho.lifecycle.Lifecycle;
+import com.caucho.security.AdminAuthenticator;
+import com.caucho.security.Authenticator;
+import com.caucho.security.BasicPrincipal;
+import com.caucho.security.PasswordUser;
+import com.caucho.security.XmlAuthenticator;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.host.HostConfig;
-import com.caucho.server.resin.*;
-import com.caucho.security.*;
+import com.caucho.server.resin.Resin;
 import com.caucho.util.L10N;
-import com.caucho.vfs.*;
-
-import javax.annotation.*;
-import javax.resource.spi.ResourceAdapter;
-import java.util.logging.Logger;
+import com.caucho.vfs.Path;
 
 /**
  * Configuration for management.
  */
+@Configurable
 public class Management
 {
   private static L10N L = new L10N(Management.class);
-  private static Logger log = Logger.getLogger(Management.class.getName());
-
   public static final String HOST_NAME = "admin.caucho";
 
-  private Cluster _cluster;
   private Resin _resin;
   private Server _server;
 
   private HostConfig _hostConfig;
 
   private AdminAuthenticator _auth;
-  private DeployService _deployService;
-
   protected TransactionManager _transactionManager;
 
   private Lifecycle _lifecycle = new Lifecycle();
@@ -78,9 +75,9 @@ public class Management
     _resin = Resin.getCurrent();
   }
 
-  public void setCluster(Cluster cluster)
+  public Management(Resin resin)
   {
-    _cluster = cluster;
+    _resin = resin;
   }
 
   public void setResin(Resin resin)
@@ -149,19 +146,14 @@ public class Management
    */
   public Object createDeployService()
   {
-    _deployService = new DeployService();
-
-    return _deployService;
+    return createService("com.caucho.server.admin.DeployService");
   }
-
   /**
    * Create and configure the jmx service.
    */
   public Object createJmxService()
   {
-    log.warning(L.l("jmx-service requires Resin Professional"));
-
-    return new Object();
+    return createService("com.caucho.admin.JmxService");
   }
 
   /**
@@ -169,9 +161,7 @@ public class Management
    */
   public Object createLogService()
   {
-    log.warning(L.l("log-service requires Resin Professional"));
-
-    return new Object();
+    return createService("com.caucho.admin.LogService");
   }
 
   /**
@@ -179,9 +169,7 @@ public class Management
    */
   public Object createRemoteService()
   {
-    log.warning(L.l("remote-service requires Resin Professional"));
-
-    return new Object();
+    return createService("com.caucho.admin.RemoteAdminService");
   }
 
   /**
@@ -189,9 +177,7 @@ public class Management
    */
   public Object createStatService()
   {
-    log.warning(L.l("stat-service requires Resin Professional"));
-
-    return new Object();
+    return createService("com.caucho.admin.StatService");
   }
 
   /**
@@ -199,26 +185,15 @@ public class Management
    */
   public Object createPing()
   {
-    log.warning(L.l("'ping' requires Resin Professional"));
-
-    return new ContainerProgram();
+    return createService("com.caucho.server.admin.PingThread");
   }
 
   /**
    * Create and configure the stat service
    */
-  public void addPing(Object ping)
-  {
-  }
-
-  /**
-   * Create and configure the transaction log.
-   */
   public Object createXaLogService()
   {
-    log.warning(L.l("xa-log-service requires Resin Professional"));
-
-    return new Object();
+    return createService("com.caucho.admin.XaLogService");
   }
 
   /**
@@ -253,12 +228,15 @@ public class Management
       if (_auth != null) {
         _auth.init();
 
-        InjectManager webBeans = InjectManager.create();
-        BeanBuilder factory = webBeans.createBeanFactory(Authenticator.class);
+        InjectManager cdiManager = InjectManager.create();
+        BeanBuilder<?> factory = cdiManager.createBeanFactory(Authenticator.class);
         factory.type(Authenticator.class);
         factory.type(AdminAuthenticator.class);
+        
+        factory.qualifier(DefaultLiteral.DEFAULT);
+        factory.qualifier(new AdminLiteral());
 
-        webBeans.addBean(factory.singleton(_auth));
+        cdiManager.addBean(factory.singleton(_auth));
       }
 
       if (_transactionManager != null)
@@ -317,14 +295,6 @@ public class Management
     return _hostConfig;
   }
 
-  protected Cluster getCluster()
-  {
-    if (_cluster == null)
-      _cluster = Server.getCurrent().getCluster();
-
-    return _cluster;
-  }
-
   public double getCpuLoad()
   {
     return 0;
@@ -332,6 +302,22 @@ public class Management
 
   public void dumpThreads()
   {
+  }
+
+  private Object createService(String className)
+  {
+    int p = className.lastIndexOf('.');
+    String shortName = className.substring(p + 1);
+    
+    try {
+      Class<?> cl = Class.forName(className);
+      
+      return cl.newInstance();
+    } catch (Exception e) {
+      throw ConfigException.create(L.l("{0} is an unavailable service because it requires Resin Professional.\n  {1}",
+                                       shortName, e.toString()),
+                                   e);
+    }
   }
 
   public void destroy()

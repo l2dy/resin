@@ -278,7 +278,8 @@ public class RegexpModule
     throws IllegalRegexpException
   {
     if (regexpValue.length() < 2) {
-      throw new QuercusException(L.l("Regexp pattern must have opening and closing delimiters"));
+      throw new QuercusException(
+          L.l("Regexp pattern must have opening and closing delimiters"));
     }
 
     RegexpCacheItem cacheItem = _regexpCache.get(regexpValue);
@@ -663,7 +664,8 @@ public class RegexpModule
     }
     else {
       if ((flags & PREG_SET_ORDER) != 0) {
-        env.warning((L.l("Cannot combine PREG_PATTER_ORDER and PREG_SET_ORDER")));
+        env.warning((
+            L.l("Cannot combine PREG_PATTER_ORDER and PREG_SET_ORDER")));
         return BooleanValue.FALSE;
       }
     }
@@ -1452,7 +1454,8 @@ public class RegexpModule
                                             @Optional @Reference Value count)
   {
     if (fun == null) {
-      env.warning(L.l("callable argument can't be null in preg_replace_callback"));
+      env.warning(
+          L.l("callable argument can't be null in preg_replace_callback"));
       return subject;
     }
 
@@ -1991,7 +1994,8 @@ public class RegexpModule
           }
 
           if (digit != '}') {
-            // env.warning(L.l("expected '}' to close replacement at '{1}' replacement {0}", (char) digit, replacement));
+//             env.warning(L.l("expected '}' to close replacement at '{1}' " +
+//                 "replacement {0}", (char) digit, replacement));
             text.append("${");
             text.append(group);
             continue;
@@ -2048,8 +2052,13 @@ public class RegexpModule
 
           ch = regexp.charAt(i);
 
-          if (ch == '0' ||
-                  '1' <= ch && ch <= '3' && i + 1 < len && '0' <= regexp.charAt(i + 1) && ch <= '7') {
+          if (
+              ch == '0'
+              || '1' <= ch && ch <= '3'
+              && i + 1 < len
+              && '0' <= regexp.charAt(i + 1)
+              && ch <= '7'
+              ) {
             // Java's regexp requires \0 for octal
 
             sb = sb.appendByte('\\');
@@ -2191,12 +2200,17 @@ public class RegexpModule
         break;
 
       case '{':
-        if (i + 1 < len &&
-                ('0' <= (ch = regexp.charAt(i + 1)) && ch <= '9' || ch == ',')) {
+        if (i + 1 < len
+            && (
+              '0' <= (ch = regexp.charAt(i + 1))
+              && ch <= '9'
+              || ch == ','
+              )
+            ) {
           sb = sb.appendByte('{');
           for (i++;
-          i < len &&
-          ('0' <= (ch = regexp.charAt(i)) && ch <= '9' || ch == ',');
+          i < len
+              && ('0' <= (ch = regexp.charAt(i)) && ch <= '9' || ch == ',');
           i++) {
             sb = sb.appendByte(ch);
           }

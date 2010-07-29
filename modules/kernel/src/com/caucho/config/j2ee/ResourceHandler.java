@@ -31,35 +31,22 @@ package com.caucho.config.j2ee;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.annotation.Resource;
-import javax.enterprise.inject.Any;
+import javax.annotation.Resources;
 import javax.enterprise.inject.spi.AnnotatedField;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.util.AnnotationLiteral;
-import javax.naming.NamingException;
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.PersistenceContext;
-import javax.persistence.PersistenceContextType;
-import javax.persistence.PersistenceProperty;
-import javax.persistence.PersistenceUnit;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.Names;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.InjectionPointHandler;
 import com.caucho.config.program.BeanValueGenerator;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.FieldGeneratorProgram;
 import com.caucho.config.program.MethodGeneratorProgram;
+import com.caucho.config.program.NullProgram;
 import com.caucho.config.program.ValueGenerator;
 import com.caucho.naming.Jndi;
 import com.caucho.util.L10N;
@@ -69,9 +56,6 @@ import com.caucho.util.L10N;
  */
 public class ResourceHandler extends JavaeeInjectionHandler {
   private static final L10N L = new L10N(ResourceHandler.class);
-  private static final Logger log 
-    = Logger.getLogger(ResourceHandler.class.getName());
-  
   private static HashMap<Class<?>,Class<?>> _boxingMap
     = new HashMap<Class<?>,Class<?>>();
   
@@ -93,6 +77,8 @@ public class ResourceHandler extends JavaeeInjectionHandler {
     Class<?> bindType = javaField.getType();
     
     ValueGenerator gen = generateContext(loc, bindType, jndiName, resource);
+    
+    bindJndi(javaField, gen);
     
     return new FieldGeneratorProgram(field.getJavaMember(), gen);
   }
@@ -116,6 +102,65 @@ public class ResourceHandler extends JavaeeInjectionHandler {
     return new MethodGeneratorProgram(method.getJavaMember(), gen);
   }
 
+  @Override
+  public ConfigProgram introspectType(AnnotatedType<?> type)
+  {
+    for (Class<?> parentClass = type.getJavaClass().getSuperclass();
+         parentClass != null;
+         parentClass = parentClass.getSuperclass()) {
+      Resources resources = parentClass.getAnnotation(Resources.class);
+
+      if (resources != null) {
+        for (Resource resource : resources.value()) {
+          introspectClass(getClass().getName(), resource);
+        }
+      }
+
+      Resource resource = parentClass.getAnnotation(Resource.class);
+
+      if (resource != null)
+        introspectClass(getClass().getName(), resource);
+    }
+    
+    Resources resources = type.getAnnotation(Resources.class);
+
+    if (resources != null) {
+      for (Resource resource : resources.value()) {
+        introspectClass(getClass().getName(), resource);
+      }
+    }
+
+    Resource resource = type.getAnnotation(Resource.class);
+
+    if (resource != null)
+      introspectClass(getClass().getName(), resource);
+    
+
+    return new NullProgram();
+  }
+
+  private void introspectClass(String location, Resource resource)
+  {
+    String name = resource.name();
+
+    Class<?> bindType = resource.type();
+    
+    if ("".equals(name))
+      throw new ConfigException(L.l("{0}: @Resource name() attribute is required for @Resource on a class.",
+                                    location));
+    
+    if (Object.class.equals(bindType))
+      throw new ConfigException(L.l("{0}: @Resource beanInterface() attribute is required for @Resource on a class.",
+                                    location));
+    
+    ValueGenerator gen = generateContext(location, bindType, null, resource);
+
+    if (name != null && ! "".equals(name)) {
+      bindJndi(name, gen, name);
+    }
+    
+  }
+
   private ValueGenerator generateContext(String loc,
                                          Class<?> bindType,
                                          String fullJndiName,
@@ -125,12 +170,18 @@ public class ResourceHandler extends JavaeeInjectionHandler {
     String name = resource.name();
     String mappedName = resource.mappedName();
     String lookupName; // = resource.lookup();
+    
+    if (! resource.type().equals(Object.class)
+        && ! resource.type().equals(void.class)) {
+      bindType = resource.type();
+    }
 
     lookupName = name;
     ValueGenerator gen = lookupJndi(loc, bindType, lookupName);
     
     if (gen != null) {
-      bindJndi(null, gen, fullJndiName);
+      if (fullJndiName != null)
+        bindJndi(null, gen, fullJndiName);
     }
     else {
       gen = bindValueGenerator(loc, bindType, name, mappedName);

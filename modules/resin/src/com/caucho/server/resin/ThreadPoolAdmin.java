@@ -29,20 +29,13 @@
 
 package com.caucho.server.resin;
 
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ThreadPoolMXBean;
-import com.caucho.util.L10N;
-import com.caucho.util.ThreadPool;
-
-import java.util.logging.Logger;
 
 public class ThreadPoolAdmin extends AbstractManagedObject
   implements ThreadPoolMXBean
 {
-  private static final L10N L = new L10N(ThreadPoolAdmin.class);
-  private static final Logger log
-    = Logger.getLogger(ThreadPoolAdmin.class.getName());
-
   private final ThreadPool _threadPool;
 
   private ThreadPoolAdmin(ThreadPool threadPool)
@@ -90,25 +83,28 @@ public class ThreadPoolAdmin extends AbstractManagedObject
   /**
    * Returns the minimum number of idle threads.
    */
+  @Override
   public int getThreadIdleMin()
   {
-    return _threadPool.getThreadIdleMin();
+    return _threadPool.getIdleMin();
   }
 
   /**
    * Returns the maximum number of idle threads.
    */
+  @Override
   public int getThreadIdleMax()
   {
-    return _threadPool.getThreadIdleMax();
+    return 0;
   }
 
   /**
    * Returns the minimum number of saved priority threads.
    */
+  @Override
   public int getThreadPriorityMin()
   {
-    return _threadPool.getThreadPriority();
+    return _threadPool.getPriorityIdleMin();
   }
 
   //

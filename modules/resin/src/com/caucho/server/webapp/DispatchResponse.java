@@ -29,10 +29,9 @@
 
 package com.caucho.server.webapp;
 
-import com.caucho.server.http.ResponseAdapter;
-
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
+
+import com.caucho.server.http.ResponseAdapter;
 
 public class DispatchResponse extends ResponseAdapter {
 

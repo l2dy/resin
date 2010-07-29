@@ -55,7 +55,6 @@ import javax.inject.Singleton;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Names;
-import com.caucho.config.inject.AbstractBean;
 import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
@@ -514,7 +513,13 @@ public class BeanConfig {
       builder.name(getCdiNamed());
     }
 
-
+    if (_annotatedType.isAnnotationPresent(javax.ejb.Singleton.class)
+        || _annotatedType.isAnnotationPresent(Stateful.class) 
+        || _annotatedType.isAnnotationPresent(Stateless.class) 
+        || _annotatedType.isAnnotationPresent(MessageDriven.class)) {
+      throw new ConfigException(L.l("{0} cannot be configured by <bean> because it has an EJB annotation.  Use CDI syntax instead.",
+                                    _annotatedType));
+    }
     /*
     if (getMBeanName() != null)
       comp.setMBeanName(getMBeanName());
@@ -529,14 +534,14 @@ public class BeanConfig {
     }
 
     for (Annotation qualifier : _qualifierList) {
-      builder.binding(qualifier);
+      builder.qualifier(qualifier);
     }
     
     if (_name != null)
-      builder.binding(Names.create(_name));
+      builder.qualifier(Names.create(_name));
     
     if (_qualifierList.size() == 0)
-      builder.binding(DefaultLiteral.DEFAULT);
+      builder.qualifier(DefaultLiteral.DEFAULT);
 
     for (Annotation stereotype : _stereotypeList) {
       builder.stereotype(stereotype.annotationType());

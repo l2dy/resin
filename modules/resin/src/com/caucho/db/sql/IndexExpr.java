@@ -28,16 +28,12 @@
 
 package com.caucho.db.sql;
 
-import com.caucho.db.index.BTree;
-import com.caucho.db.index.IndexCache;
-import com.caucho.db.table.Column;
-import com.caucho.db.table.TableIterator;
-import com.caucho.sql.SQLExceptionWrapper;
-import com.caucho.util.Hex;
-
 import java.io.IOException;
 import java.sql.SQLException;
-import java.util.logging.Logger;
+
+import com.caucho.db.index.BTree;
+import com.caucho.db.table.Column;
+import com.caucho.db.table.TableIterator;
 
 class IndexExpr extends RowIterateExpr {
   private IdExpr _columnExpr;
@@ -75,6 +71,7 @@ class IndexExpr extends RowIterateExpr {
   /**
    * Returns true if shifing the child rows will make a difference.
    */
+  @Override
   boolean allowChildRowShift(QueryContext context, TableIterator rowIter)
   {
     return false;
@@ -83,6 +80,7 @@ class IndexExpr extends RowIterateExpr {
   /**
    * Sets the initial row.
    */
+  @Override
   boolean init(QueryContext context, TableIterator rowIter)
     throws SQLException, IOException
   {
@@ -98,6 +96,7 @@ class IndexExpr extends RowIterateExpr {
   /**
    * Sets the initial row.
    */
+  @Override
   boolean initRow(QueryContext context, TableIterator tableIter)
     throws SQLException, IOException
   {
@@ -106,11 +105,7 @@ class IndexExpr extends RowIterateExpr {
     if (rowAddr == 0)
       return false;
 
-    context.unlock();
-
     tableIter.setRow(rowAddr);
-
-    context.lock();
 
     return true;
   }
@@ -118,7 +113,18 @@ class IndexExpr extends RowIterateExpr {
   /**
    * Returns the next row.
    */
+  @Override
   boolean nextRow(QueryContext context, TableIterator table)
+  {
+    return false;
+  }
+
+  /**
+   * Returns the next row.
+   */
+  @Override
+  boolean nextBlock(QueryContext context, TableIterator rowIter)
+    throws IOException, SQLException
   {
     return false;
   }
@@ -146,23 +152,11 @@ class IndexExpr extends RowIterateExpr {
     } catch (IOException e) {
       throw new SQLException(e);
     }
-    // System.out.println("ROW: " + index + " " + _index + " " + Hex.toHex(buffer, 0, length));
 
-    // System.out.println("LOOKUP: " + index + " " + _expr.evalString(context));
     return index;
   }
 
-  /**
-   * Returns the next row.
-   */
-  boolean nextBlock(QueryContext context, TableIterator rowIter)
-    throws IOException, SQLException
-  {
-    context.unlock();
-
-    return false;
-  }
-
+  @Override
   public String toString()
   {
     return "(" + _columnExpr + " = " + _expr + ")";

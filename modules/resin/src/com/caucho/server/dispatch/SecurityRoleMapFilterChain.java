@@ -28,25 +28,22 @@
 
 package com.caucho.server.dispatch;
 
-import com.caucho.server.http.CauchoRequest;
+import java.io.IOException;
+import java.util.HashMap;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletRequestWrapper;
 import javax.servlet.ServletResponse;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.logging.Logger;
+
+import com.caucho.server.http.CauchoRequest;
 
 /**
  * Represents the next filter in a filter chain.  The final filter will
  * be the servlet itself.
  */
 public class SecurityRoleMapFilterChain implements FilterChain {
-  private static final Logger log
-    = Logger.getLogger(SecurityRoleMapFilterChain.class.getName());
-  
   // Next filter chain
   private FilterChain _next;
 
@@ -83,8 +80,7 @@ public class SecurityRoleMapFilterChain implements FilterChain {
   {
     // HashMap<String,String> oldMap = null;
     ServletRequest ptr = request;
-    CauchoRequest req = null;
-
+    
     while (ptr instanceof ServletRequestWrapper) {
       ServletRequestWrapper wrapper;
       wrapper = (ServletRequestWrapper) ptr;
@@ -99,7 +95,6 @@ public class SecurityRoleMapFilterChain implements FilterChain {
     }
 
     if (ptr instanceof CauchoRequest) {
-      req = (CauchoRequest) ptr;
 
       // oldMap = req.setRoleMap(_roleMap);
     }

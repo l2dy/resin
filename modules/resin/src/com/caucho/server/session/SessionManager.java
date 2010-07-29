@@ -29,19 +29,20 @@
 
 package com.caucho.server.session;
 
+import com.caucho.cloud.network.ClusterServer;
+import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.ByteStreamCache;
 import com.caucho.distcache.AbstractCache;
 import com.caucho.distcache.ClusterByteStreamCache;
 import com.caucho.distcache.ExtCacheEntry;
-import com.caucho.env.sample.AverageSample;
-import com.caucho.env.sample.ProbeManager;
+import com.caucho.env.meter.AverageSensor;
+import com.caucho.env.meter.MeterService;
 import com.caucho.hessian.io.*;
 import com.caucho.management.server.SessionManagerMXBean;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.cluster.ClusterServer;
 import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.InvocationDecoder;
 import com.caucho.server.distcache.PersistentStoreConfig;
@@ -102,9 +103,6 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
   // active sessions
   private LruCache<String,SessionImpl> _sessions;
-  // total sessions
-  private int _totalSessions;
-
   // iterator to purge sessions (to reduce gc)
   private Iterator<SessionImpl> _sessionIter;
   // array list for session timeout
@@ -114,7 +112,6 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   // allow session rewriting
   private boolean _enableSessionUrls = true;
 
-  private boolean _isModuloSessionId = false;
   private boolean _isAppendServerIndex = false;
   private boolean _isTwoDigitSessionIndex = false;
 
@@ -189,7 +186,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   private volatile long _sessionTimeoutCount;
   private volatile long _sessionInvalidateCount;
 
-  private final AverageSample _sessionSaveSample;
+  private final AverageSensor _sessionSaveSample;
 
   /**
    * Creates and initializes a new session manager
@@ -246,7 +243,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
     _alarm = new WeakAlarm(this);
     _sessionSaveSample
-      = ProbeManager.createAverageProbe("Resin|WebApp|Session Save", "Size");
+      = MeterService.createAverageMeter("Resin|WebApp|Session Save", "Size");
 
     _admin = new SessionManagerAdmin(this);
   }
@@ -1041,7 +1038,6 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
    */
   public void setCookieModuloCluster(boolean isModulo)
   {
-    _isModuloSessionId = isModulo;
   }
 
   /**
@@ -1191,30 +1187,32 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     // the most random bit is the high bit
     int index = _selfIndex;
 
-    ClusterServer server = _selfServer;
+    CloudServer server = _selfServer.getCloudServer();
 
     if (owner == null) {
     }
     else if (owner instanceof Number) {
       index = ((Number) owner).intValue();
 
-      int podIndex = _selfServer.getClusterPod().getIndex();
+      int podIndex = _selfServer.getCloudPod().getIndex();
 
       server = _selfServer.getCluster().findServer(podIndex, index);
 
       if (server == null)
-        server = _selfServer;
+        server = _selfServer.getCloudServer();
     }
     else if (owner instanceof String) {
       server = _selfServer.getCluster().findServer((String) owner);
 
       if (server == null)
-        server = _selfServer;
+        server = _selfServer.getCloudServer();
     }
 
     index = server.getIndex();
+    
+    ClusterServer clusterServer = server.getData(ClusterServer.class);
 
-    server.generateIdPrefix(sb);
+    clusterServer.generateIdPrefix(sb);
     // XXX: _cluster.generateBackup(sb, index);
 
     int length = _cookieLength;

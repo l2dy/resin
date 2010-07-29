@@ -711,29 +711,23 @@ public class TcpSocketLink extends AbstractSocketLink
 
         return RequestState.THREAD_DETACHED;
       }
-      // keepalive to select manager fails (e.g. filled select manager)
       else {
         log.warning(dbgId() + " failed keepalive (select)");
-
-        close();
-
-        return RequestState.EXIT;
       }
     }
+
+    if (log.isLoggable(Level.FINE))
+      log.fine(dbgId() + " keepalive (thread)");
+
+    // if blocking read has available data
+    if (getReadStream().waitForRead()) {
+      return RequestState.REQUEST;
+    }
+    // blocking read timed out or closed
     else {
-      if (log.isLoggable(Level.FINE))
-        log.fine(dbgId() + " keepalive (thread)");
+      close();
 
-      // if blocking read has available data
-      if (getReadStream().waitForRead()) {
-        return RequestState.REQUEST;
-      }
-      // blocking read timed out or closed
-      else {
-        close();
-
-        return RequestState.EXIT;
-      }
+      return RequestState.EXIT;
     }
   }
 
@@ -799,29 +793,6 @@ public class TcpSocketLink extends AbstractSocketLink
 
   //
   // async/comet state transitions
-
-  /**
-   * Starts a comet request
-   */
-  /*
-  @Override
-  public ConnectionCometController toComet(boolean isTop,
-                                           ServletRequest request,
-                                           ServletResponse response)
-  {
-    _state = _state.toComet();
-
-    ConnectionCometController controller
-      = super.toComet(isTop, request, response);
-
-    _controller = controller;
-
-    if (log.isLoggable(Level.FINER))
-      log.finer(this + " starting comet");
-
-    return controller;
-  }
-  */
   
   @Override
   public AsyncController toComet(CometHandler cometHandler)
