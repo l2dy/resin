@@ -11,7 +11,9 @@
   <class-loader>
     <compiling-loader path="WEB-INF/classes"/>
     <library-loader path="WEB-INF/lib"/>
+    <!--
     <project-loader path="WEB-INF/pom.xml"/>
+    -->
   </class-loader>
 
   <servlet servlet-name="resin-file"
@@ -54,7 +56,9 @@
   <servlet servlet-name="j_security_check"
            servlet-class="com.caucho.server.security.FormLoginServlet"/>
 
-  <multipart-form enable="true"/>
+  <!--
+     - <multipart-form enable="true"/>
+    -->
 
   <!-- Configures the special index files to check for directory URLs -->
   <welcome-file-list>

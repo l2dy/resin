@@ -32,18 +32,18 @@ package com.caucho.network.listen;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.InetAddress;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-
+import com.caucho.env.shutdown.ExitCode;
+import com.caucho.env.shutdown.ShutdownService;
 import com.caucho.inject.Module;
 import com.caucho.inject.RequestContext;
 import com.caucho.loader.Environment;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.TcpConnectionMXBean;
-import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.vfs.ClientDisconnectException;
 import com.caucho.vfs.QSocket;
@@ -1091,7 +1091,9 @@ public class TcpSocketLink extends AbstractSocketLink
       try {
         result = doTask();
       } catch (OutOfMemoryError e) {
-        CauchoSystem.exitOom(getClass(), e);
+        String msg = "TcpSocketLink OutOfMemory";
+        
+        ShutdownService.shutdownActive(ExitCode.MEMORY, msg); 
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       } finally {
@@ -1292,7 +1294,9 @@ public class TcpSocketLink extends AbstractSocketLink
      } catch (IOException e) {
         log.log(Level.FINE, e.toString(), e);
       } catch (OutOfMemoryError e) {
-        CauchoSystem.exitOom(getClass(), e);
+        String msg = "TcpSocketLink OutOfMemory";
+        
+        ShutdownService.shutdownActive(ExitCode.MEMORY, msg);
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       } finally {

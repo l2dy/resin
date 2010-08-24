@@ -33,6 +33,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.ByteArrayInputStream;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.nio.charset.Charset;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.DispatcherType;
@@ -71,9 +73,6 @@ import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.servlet.JanusContext;
-import com.caucho.servlet.JanusListener;
-import com.caucho.servlet.JanusServletRequest;
 import com.caucho.servlet.WebSocketContext;
 import com.caucho.servlet.WebSocketListener;
 import com.caucho.servlet.WebSocketServletRequest;
@@ -103,6 +102,8 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   private static final String CHAR_ENCODING = "resin.form.character.encoding";
   private static final String FORM_LOCALE = "resin.form.local";
   private static final String CAUCHO_CHAR_ENCODING = "caucho.form.character.encoding";
+
+  private static final Charset UTF8 = Charset.forName("UTF-8");
 
   private AbstractHttpRequest _request;
 
@@ -954,8 +955,16 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Collection<Part> getParts()
     throws IOException, ServletException
   {
-    if ( ! getWebApp().doMultipartForm())
+    MultipartConfigElement multipartConfig
+      = _invocation.getMultipartConfig();
+    
+    if (multipartConfig == null)
+      throw new ServletException(L.l("multipart-form is disabled; check @MultipartConfig annotation on `{0}'.", _invocation.getServletName()));
+    
+    /*
+    if (! getWebApp().doMultipartForm())
       throw new ServletException("multipart-form is disabled; check <multipart-form> configuration tag.");
+      */
 
     if (! getContentType().startsWith("multipart/form-data"))
       throw new ServletException("Content-Type must be of 'multipart/form-data'.");
@@ -1043,6 +1052,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
       String javaEncoding = Encoding.getJavaName(charEncoding);
 
+      MultipartConfigElement multipartConfig
+        = _invocation.getMultipartConfig();
+
       if (contentType == null || ! "POST".equalsIgnoreCase(getMethod())) {
       }
 
@@ -1050,7 +1062,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
         formParser.parsePostData(form, getInputStream(), javaEncoding);
       }
 
-      else if (getWebApp().doMultipartForm()
+      else if ((getWebApp().doMultipartForm() || multipartConfig != null)
                && contentType.startsWith("multipart/form-data")) {
         int length = contentType.length();
         int i = contentType.indexOf("boundary=");
@@ -1074,9 +1086,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
           return form;
         }
-
-        MultipartConfigElement multipartConfig
-          = _invocation.getMultipartConfig();
 
         long fileUploadMax = -1;
 
@@ -2024,7 +2033,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     return getClass().getSimpleName() + "[" + _request + "]";
   }
 
-  private class PartImpl implements Part {
+  public class PartImpl implements Part {
     private String _name;
     private Map<String, List<String>> _headers;
     private Object _value;
@@ -2086,10 +2095,14 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       Object value = getValue();
 
       if (value instanceof FilePath)
-        return ((FilePath)value).openRead();
+        return ((FilePath) value).openRead();
 
-      throw new IOException(L.l("Part.getInputStream() is not applicable to part '{0}':'{1}'", _name, value));
+      ByteArrayInputStream is
+        = new ByteArrayInputStream(value.toString().getBytes(UTF8));
+
+      return is;
     }
+
 
     public String getName()
     {
@@ -2183,7 +2196,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       }
     }
 
-    private Object getValue()
+    public Object getValue()
     {
       if (_value != null)
         return _value;
@@ -2203,109 +2216,10 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     }
   }
 
-  /*
-  static class DuplexContextImpl implements SocketLinkDuplexListener {
-    private final HttpServletRequestImpl _request;
-    private final HttpServletResponseImpl _response;
-
-    private final SocketLinkDuplexListener _listener;
-
-    private SocketLinkDuplexController _controller;
-
-    DuplexContextImpl(HttpServletRequestImpl request,
-                      HttpServletResponseImpl response,
-                      SocketLinkDuplexListener listener)
-    {
-      _request = request;
-      _response = response;
-      _listener = listener;
-    }
-
-    public void setController(SocketLinkDuplexController controller)
-    {
-      _controller = controller;
-    }
-
-    public void setTimeout(long timeout)
-    {
-      _controller.setIdleTimeMax(timeout);
-    }
-
-    public long getTimeout()
-    {
-      return _controller.getIdleTimeMax();
-    }
-
-    public ServletRequest getRequest()
-    {
-      return _request;
-    }
-
-    public ServletResponse getResponse()
-    {
-      return _response;
-    }
-
-    public void complete()
-    {
-      _controller.complete();
-    }
-
-    public void onRead(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      do {
-        _listener.onMessage(this);
-      } while (_request.getAvailable() > 0);
-    }
-
-    public void onComplete(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      _listener.onComplete(this);
-    }
-
-    public void onTimeout(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      _listener.onTimeout(this);
-    }
-
-    @Override
-    public String toString()
-    {
-      return getClass().getSimpleName() + "[" + _listener + "]";
-    }
-
-    @Override
-    public InputStream getInputStream() throws IOException
-    {
-      // TODO Auto-generated method stub
-      return null;
-    }
-
-    @Override
-    public OutputStream getOutputStream() throws IOException
-    {
-      // TODO Auto-generated method stub
-      return null;
-    }
-
-    @Override
-    public void onStart(SocketLinkDuplexController context) throws IOException
-    {
-      // TODO Auto-generated method stub
-      
-    }
-  }
-  */
-
   static class WebSocketContextImpl
     implements WebSocketContext, SocketLinkDuplexListener
   {
     private final HttpServletRequestImpl _request;
-    private final HttpServletResponseImpl _response;
-
     private final WebSocketListener _listener;
 
     private SocketLinkDuplexController _controller;
@@ -2315,7 +2229,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
                          WebSocketListener listener)
     {
       _request = request;
-      _response = response;
       _listener = listener;
     }
 

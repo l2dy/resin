@@ -85,6 +85,7 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
   private EjbLazyGenerator<X> _lazyGenerator;
   
   private Class<?> _proxyImplClass;
+  
   private HashMap<Class<?>, AbstractSessionContext<X,?>> _contextMap
     = new HashMap<Class<?>, AbstractSessionContext<X,?>>();
 
@@ -202,10 +203,12 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       for (AnnotatedType<? super X> remoteApi : _lazyGenerator.getRemoteApi()) {
         createContext(remoteApi.getJavaClass());
       }
+
+      bindContext();
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
-
+    
     registerCdiBeans();
 
     log.fine(this + " initialized");
@@ -214,7 +217,12 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
   @Override
   public void bind()
   {
+    Thread thread = Thread.currentThread();
+    ClassLoader loader = thread.getContextClassLoader();
+    
     try {
+      thread.setContextClassLoader(getClassLoader());
+      
       boolean isAutoCompile = true;
 
       if (_proxyImplClass == null) {
@@ -242,6 +250,8 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       }
     } catch (Exception e) {
       throw ConfigException.create(e);
+    } finally {
+      thread.setContextClassLoader(loader);
     }
   }
 

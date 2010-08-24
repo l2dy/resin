@@ -70,14 +70,9 @@ namespace Caucho
 
     public bool StartResin()
     {
-      if (!ResinArgs.IsService && _process != null)
-        return false;
-
       try {
         if (ResinArgs.IsService)
           ExecuteJava("start");
-        else if ("gui".Equals(ResinArgs.Command))
-          ExecuteJava("console");
         else
           ExecuteJava(ResinArgs.Command);
 
@@ -99,22 +94,6 @@ namespace Caucho
       if (ResinArgs.IsService) {
         Info("Stopping Resin");
         ExecuteJava("stop");
-      } else {
-        if (_process != null && !_process.HasExited) {
-          Info("Stopping Resin ", false);
-
-          _process.Kill();
-
-          //give server time to close
-          for (int i = 0; i < 14; i++) {
-            Info(".", false);
-            Thread.CurrentThread.Join(1000);
-          }
-
-          Info(". done.");
-        }
-
-        _process = null;
       }
     }
 
@@ -151,8 +130,7 @@ namespace Caucho
 
       try {
         Directory.SetCurrentDirectory(_rootDirectory);
-      }
-      catch (Exception e) {
+      } catch (Exception e) {
         Error(String.Format("Can't change dir to {0} due to: {1}", _rootDirectory, e), e);
 
         return 1;
@@ -160,10 +138,9 @@ namespace Caucho
 
       Environment.SetEnvironmentVariable("CLASSPATH", _cp);
       Environment.SetEnvironmentVariable("PATH",
-                                         String.Format("{0};{1};{2}\\win32;{2}\\win64;\\openssl\\bin",
+                                         String.Format("{0};{1};\\openssl\\bin;.",
                                                        _javaHome + "\\bin",
-                                                       Environment.GetEnvironmentVariable("PATH"),
-                                                       _resinHome));
+                                                       Environment.GetEnvironmentVariable("PATH")));
 
       _resinDataDir = System.Reflection.Assembly.GetExecutingAssembly().Location;
       _resinDataDir = _resinDataDir.Substring(0, _resinDataDir.LastIndexOf('\\')) + "\\resin-data";
@@ -175,23 +152,14 @@ namespace Caucho
         ServiceBase.Run(new ServiceBase[] { this });
 
         return 0;
-      } else if (ResinArgs.IsStandalone) {
+      } else {
         if (StartResin()) {
           Join();
-
           if (_process != null) {
             int exitCode = _process.ExitCode;
             _process.Dispose();
             return exitCode;
           }
-        }
-
-        return 0;
-      } else {
-        if (StartResin()) {
-          ResinWindow window = new ResinWindow(this, _displayName);
-          window.Show();
-          Application.Run();
         }
 
         return 0;
@@ -255,8 +223,7 @@ namespace Caucho
         Process process = null;
         try {
           process = Process.Start(startInfo);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           Error(e.Message, e);
 
           return;
@@ -277,7 +244,7 @@ namespace Caucho
 
         while (!process.HasExited)
           process.WaitForExit(500);
-        
+
         process.CancelErrorRead();
         process.CancelOutputRead();
 

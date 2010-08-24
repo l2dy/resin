@@ -133,6 +133,14 @@ public class ResinEmbed
   //
   // Configuration/Injection methods
   //
+  
+  /**
+   * Sets the root directory
+   */
+  public void setRootDirectory(String rootUrl)
+  {
+    _resin.setRootDirectory(Vfs.lookup(rootUrl));
+  }
 
   /**
    * Sets the config file
@@ -299,6 +307,9 @@ public class ResinEmbed
         WebAppConfig config = new WebAppConfig();
         config.setContextPath(webApp.getContextPath());
         config.setRootDirectory(new RawString(webApp.getRootDirectory()));
+        
+        if (webApp.getArchivePath() != null)
+          config.setArchivePath(new RawString(webApp.getArchivePath()));
 
         config.addBuilderProgram(new WebAppProgram(webApp));
 
@@ -352,7 +363,7 @@ public class ResinEmbed
       return;
 
     try {
-      _resin.startShutdown("Resin shutdown from embedded server");
+      _resin.close();
     } catch (RuntimeException e) {
       throw e;
     } catch (Throwable e) {
@@ -457,7 +468,8 @@ public class ResinEmbed
     CloudServer cloudServer = _cluster.getPodList()[0].getServerList()[0]; 
     // _clusterServer = cloudServer.getData(ClusterServer.class);
     
-    _resin.setServerId(cloudServer.getId());
+    if (cloudServer != null)
+      _resin.setServerId(cloudServer.getId());
   }
 
   protected void finalize()

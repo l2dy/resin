@@ -194,8 +194,8 @@ public class ModuleContext
     }
   }
 
-  public JavaClassDef addClass(String name, Class type,
-                               String extension, Class javaClassDefClass)
+  public JavaClassDef addClass(String name, Class<?> type,
+                               String extension, Class<?> javaClassDefClass)
     throws NoSuchMethodException,
            InvocationTargetException,
            IllegalAccessException,
@@ -219,7 +219,7 @@ public class ModuleContext
       }
 
       if (javaClassDefClass != null) {
-        Constructor constructor
+        Constructor<?> constructor
           = javaClassDefClass.getConstructor(ModuleContext.class,
                                              String.class,
                                              Class.class);
@@ -254,7 +254,7 @@ public class ModuleContext
   /**
    * Gets or creates a JavaClassDef for the given class name.
    */
-  public JavaClassDef getJavaClassDefinition(Class type, String className)
+  public JavaClassDef getJavaClassDefinition(Class<?> type, String className)
   {
     JavaClassDef def;
     
@@ -292,16 +292,19 @@ public class ModuleContext
         return def;
 
       try {
-        Class type;
-
+        Class<?> type;
+        
         try {
-            type = Class.forName(className, false, _loader);
+          type = Class.forName(className, false, _loader);
         }
         catch (ClassNotFoundException e) {
-          throw new ClassNotFoundException(
-            L.l("'{0}' is not a known Java class: {1}",
-                className,
-                e.toString()), e);
+          throw new ClassNotFoundException(L.l("'{0}' is not a known Java class: {1}",
+                                               className,
+                                               e.toString()), e);
+        } catch (NoClassDefFoundError e) {
+          throw new ClassNotFoundException(L.l("'{0}' cannot be as a Java class: {1}",
+                                               className,
+                                               e.toString()), e);
         }
 
         def = JavaClassDef.create(this, className, type);
@@ -533,7 +536,7 @@ public class ModuleContext
       String quercusModule
         = "META-INF/services/com.caucho.quercus.QuercusModule";
       Enumeration<URL> urls = _loader.getResources(quercusModule);
-
+      
       HashSet<URL> urlSet = new HashSet<URL>();
 
       // gets rid of duplicate entries found by different classloaders
@@ -595,7 +598,7 @@ public class ModuleContext
         String className = line;
 
         try {
-          Class cl;
+          Class<?> cl;
           try {
             cl = Class.forName(className, false, loader);
           }
@@ -643,9 +646,10 @@ public class ModuleContext
    *
    * @param cl the class to introspect.
    */
-  private void introspectPhpModuleClass(Class cl)
+  private void introspectPhpModuleClass(Class<?> cl)
     throws IllegalAccessException, InstantiationException, ConfigException
   {
+    log.info("CLAXX: " + cl);
     synchronized (_moduleInfoMap) {
       if (_moduleInfoMap.get(cl.getName()) != null)
         return;

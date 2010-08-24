@@ -30,7 +30,6 @@
 package com.caucho.env.jpa;
 
 import java.util.Map;
-import java.util.Set;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -63,7 +62,7 @@ public class EntityManagerJtaProxy
 {
   private static final L10N L = new L10N(EntityManagerJtaProxy.class);
   
-  private final ManagerPersistenceUnit _persistenceUnit;
+  private final PersistenceUnitManager _persistenceUnit;
   
   private EntityManagerFactory _emf;
 
@@ -77,7 +76,7 @@ public class EntityManagerJtaProxy
 
   private Object _serializationHandle;
   
-  public EntityManagerJtaProxy(ManagerPersistenceUnit pUnit)
+  public EntityManagerJtaProxy(PersistenceUnitManager pUnit)
   {
     _persistenceUnit = pUnit;
     _ut = UserTransactionProxy.getCurrent();
@@ -112,23 +111,6 @@ public class EntityManagerJtaProxy
     
     try {
       return em.getProperties();
-    } finally {
-      freeEntityManager(em);
-    }
-  }
-
-  @Override
-  public Set<String> getSupportedProperties()
-  {
-    EntityManager em = getCurrent();
-    
-    if (em != null)
-      return em.getSupportedProperties();
-    
-    em = createEntityManager();
-    
-    try {
-      return em.getSupportedProperties();
     } finally {
       freeEntityManager(em);
     }
@@ -776,19 +758,19 @@ public class EntityManagerJtaProxy
   }
 
   @Override
-  public <T> TypedQuery<T> createQuery(CriteriaQuery<T> criteriaQuery,
+  public <T> TypedQuery<T> createQuery(String query,
                                        Class<T> resultClass)
   {
     EntityManager em = getCurrent();
-    
+
     if (em != null) {
-      return em.createQuery(criteriaQuery, resultClass);
+      return em.createQuery(query, resultClass);
     }
-    
+
     em = createEntityManager();
-    
+
     try {
-      return em.createQuery(criteriaQuery, resultClass);
+      return em.createQuery(query, resultClass);
     } finally {
       freeEntityManager(em);
     }

@@ -31,6 +31,9 @@ package com.caucho.env.service;
 
 import java.io.IOException;
 
+import com.caucho.java.WorkDir;
+import com.caucho.util.L10N;
+import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 
 /**
@@ -39,6 +42,7 @@ import com.caucho.vfs.Path;
  */
 public class RootDirectoryService extends AbstractResinService 
 {
+  private static final L10N L = new L10N(RootDirectoryService.class);
   public static final int START_PRIORITY_ROOT_DIRECTORY = 20;
   
   private final Path _rootDirectory;
@@ -66,6 +70,10 @@ public class RootDirectoryService extends AbstractResinService
     if (dataDirectory == null)
       throw new NullPointerException();
     
+    if (dataDirectory instanceof MemoryPath) { // QA
+      dataDirectory = WorkDir.getTmpWorkDir().lookup("qa/" + dataDirectory.getFullPath());
+    }
+    
     _rootDirectory = rootDirectory;
     _dataDirectory = dataDirectory;
     
@@ -79,6 +87,20 @@ public class RootDirectoryService extends AbstractResinService
   public static RootDirectoryService getCurrent()
   {
     return ResinSystem.getCurrentService(RootDirectoryService.class);
+  }
+
+  /**
+   * Returns the data directory for current active directory service.
+   */
+  public static Path getCurrentDataDirectory()
+  {
+    RootDirectoryService rootService = getCurrent();
+    
+    if (rootService == null)
+      throw new IllegalStateException(L.l("{0} must be active for getCurrentDataDirectory().",
+                                          RootDirectoryService.class.getSimpleName()));
+    
+    return rootService.getDataDirectory();
   }
   
   /**

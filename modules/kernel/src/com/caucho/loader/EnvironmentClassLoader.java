@@ -33,7 +33,6 @@ import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
-import java.util.Hashtable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
@@ -84,7 +83,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   // Array of listeners
   // server/306i  - can't be weak reference, instead create WeakStopListener
   private ArrayList<EnvironmentListener> _listeners
-    = new ArrayList<EnvironmentListener>();
+  = new ArrayList<EnvironmentListener>();
 
   private WeakStopListener _stopListener;
 
@@ -102,7 +101,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   protected EnvironmentClassLoader(ClassLoader parent, String id)
   {
     super(parent);
-
+    
     if (id != null)
       setId(id);
 
@@ -116,7 +115,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
    */
   public static EnvironmentClassLoader create()
   {
-    ClassLoader parent = Thread.currentThread().getContextClassLoader();
+    ClassLoader parent = null;
     String id = null;
 
     return create(parent, id);
@@ -127,8 +126,8 @@ public class EnvironmentClassLoader extends DynamicClassLoader
    */
   public static EnvironmentClassLoader create(String id)
   {
-    ClassLoader parent = Thread.currentThread().getContextClassLoader();
-
+    ClassLoader parent = null;
+    
     return create(parent, id);
   }
 
@@ -138,7 +137,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   public static EnvironmentClassLoader create(ClassLoader parent)
   {
     String id = null;
-
+    
     return create(parent, id);
   }
 
@@ -147,6 +146,14 @@ public class EnvironmentClassLoader extends DynamicClassLoader
    */
   public static EnvironmentClassLoader create(ClassLoader parent, String id)
   {
+    if (parent == null)
+      parent = Thread.currentThread().getContextClassLoader();
+    
+    ClassLoader systemClassLoader = getSystemClassLoaderSafe();
+    
+    if (parent == null || isParent(parent, systemClassLoader))
+      parent = systemClassLoader;
+    
     String className = System.getProperty("caucho.environment.class.loader");
 
     if (className != null) {
@@ -163,6 +170,18 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     }
 
     return new EnvironmentClassLoader(parent, id);
+  }
+  
+  private static boolean isParent(ClassLoader parent, ClassLoader child)
+  {
+    if (parent == null)
+      return true;
+    else if (child == null)
+      return false;
+    else if (parent.equals(child))
+      return true;
+    else
+      return isParent(parent, child.getParent());
   }
 
   /**
@@ -424,20 +443,24 @@ public class EnvironmentClassLoader extends DynamicClassLoader
 
     if (_listeners == null)
       return listeners;
+    
+    ArrayList<EnvironmentListener> envListeners = _listeners;
 
-    synchronized (_listeners) {
-      for (int i = 0; i < _listeners.size(); i++) {
-        EnvironmentListener listener = _listeners.get(i);
+    if (envListeners != null) {
+      synchronized (envListeners) {
+        for (int i = 0; i < envListeners.size(); i++) {
+          EnvironmentListener listener = envListeners.get(i);
 
-        if (listener != null)
-          listeners.add(listener);
-        else {
-          _listeners.remove(i);
-          i--;
+          if (listener != null)
+            listeners.add(listener);
+          else {
+            envListeners.remove(i);
+            i--;
+          }
         }
       }
     }
-
+    
     return listeners;
   }
 
@@ -570,22 +593,27 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   {
     super.scanRoot();
 
-    ClassLoader parent = getParent();
-    if (parent instanceof EnvironmentClassLoader)
+    scanRoot(getParent());
+  }
+  
+  private void scanRoot(ClassLoader loader)
+  {
+    if (loader == null)
       return;
+    
+    scanRoot(loader.getParent());
 
-    if (parent instanceof URLClassLoader) {
-      URLClassLoader urlParent = (URLClassLoader) parent;
+    if (loader instanceof URLClassLoader) {
+      URLClassLoader urlParent = (URLClassLoader) loader;
 
       for (URL url : urlParent.getURLs()) {
-        String name = url.toString();
+        // String name = url.toString();
         
-        if (name.endsWith(".jar")) {
-          _pendingScanRoots.add(new ScanRoot(url, null));
-        }
+        // ejb/0e01
+        //if (name.endsWith(".jar")) {
+        _pendingScanRoots.add(new ScanRoot(url, null));
+        //}
       }
-
-      return;
     }
   }
 
@@ -952,6 +980,16 @@ public class EnvironmentClassLoader extends DynamicClassLoader
       _log = Logger.getLogger(EnvironmentClassLoader.class.getName());
 
     return _log;
+  }
+  
+  private static ClassLoader getSystemClassLoaderSafe()
+  {
+    try {
+      return ClassLoader.getSystemClassLoader();
+    } catch (Exception e) {
+    }
+    
+    return EnvironmentClassLoader.class.getClassLoader();
   }
   
   static class ScanRoot {

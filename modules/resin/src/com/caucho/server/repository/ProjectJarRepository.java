@@ -59,10 +59,10 @@ import com.caucho.vfs.Path;
 public class ProjectJarRepository implements ArtifactResolver
 {
   private static final L10N L = new L10N(ProjectJarRepository.class);
-  
+
   private static final Logger log
     = Logger.getLogger(ProjectJarRepository.class.getName());
-  
+
   private Path _path;
 
   private ArrayList<Entry> _entryList = new ArrayList<Entry>();
@@ -159,7 +159,7 @@ public class ProjectJarRepository implements ArtifactResolver
   protected ArrayList<Path> getJarList()
   {
     ArrayList<Path> jarList = new ArrayList<Path>();
-    
+
     try {
       for (String name : _path.list()) {
         if (name.endsWith(".jar")) {
@@ -184,7 +184,7 @@ public class ProjectJarRepository implements ArtifactResolver
   static class Entry {
     private Path _path;
     private Artifact _artifact;
-    
+
     Entry(Path path, Artifact artifact, JarMap jarMap)
     {
       _path = path;

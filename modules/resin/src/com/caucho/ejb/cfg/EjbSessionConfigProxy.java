@@ -74,6 +74,10 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
     EjbBean<?> ejbBean = getConfig().getBeanConfig(getEjbName());
     
     if (ejbBean == null) {
+      if (getEjbClass() == null)
+        throw new ConfigException(L.l("'{0}' is an unknown EJB name",
+                                      getEjbName()));
+      
       ejbBean = createEjbBean(getEjbClass());
       
       if (getEjbName() != null) {
@@ -84,12 +88,14 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
       getConfig().setBeanConfig(getEjbName(), ejbBean);
     }
     
+    getBuilderProgram().configure(ejbBean);
+    
   }
   
   private <T> EjbBean<T> createEjbBean(Class<T> ejbClass)
   {
     AnnotatedType<T> rawAnnType
-      = ReflectionAnnotatedFactory.introspectSimpleType(ejbClass);
+      = ReflectionAnnotatedFactory.introspectType(ejbClass);
     
     AnnotatedTypeImpl<T> annType = AnnotatedTypeImpl.create(rawAnnType);
     

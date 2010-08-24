@@ -45,6 +45,7 @@ import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.interceptor.AroundInvoke;
+import javax.interceptor.Interceptors;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.DependencyBean;
@@ -56,12 +57,17 @@ import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.config.types.DescriptionGroupConfig;
+import com.caucho.config.types.EjbLocalRef;
+import com.caucho.config.types.EjbRef;
+import com.caucho.config.types.EnvEntry;
 import com.caucho.config.types.MessageDestinationRef;
 import com.caucho.config.types.Period;
 import com.caucho.config.types.PostConstructType;
+import com.caucho.config.types.ResourceEnvRef;
+import com.caucho.config.types.ResourceGroupConfig;
+import com.caucho.config.types.ResourceRef;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractEjbBeanManager;
-import com.caucho.java.gen.GenClass;
 import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.make.ClassDependency;
@@ -131,6 +137,9 @@ public class EjbBean<X> extends DescriptionGroupConfig
   private ArrayList<ConfigProgram> _postConstructList
     = new ArrayList<ConfigProgram>();
   private ContainerProgram _serverProgram;
+  private ArrayList<ResourceGroupConfig> _resourceList
+    = new ArrayList<ResourceGroupConfig>();
+
 
   private ArrayList<Interceptor> _interceptors
     = new ArrayList<Interceptor>();
@@ -139,7 +148,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
   private String _timeoutMethodName;
 
   private long _transactionTimeout;
-
+  
   private ArrayList<RemoveMethod> _removeMethods
     = new ArrayList<RemoveMethod>();
 
@@ -484,31 +493,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
     if (_ejbClass.getJavaClass().isInterface())
       throw error(L.l("'{0}' must not be an interface.  Bean implementations must be classes.", ejbClass.getJavaClass().getName()));
 
-    /*
-    // ejb/02e5
-    Constructor<?> constructor = null;
-    try {
-      for (Constructor<?> ctor : ejbClass.getDeclaredConstructors()) {
-        if (ctor.getParameterTypes().length == 0)
-          constructor = ctor;
-      }
-      
-      if (constructor == null)
-        constructor = ejbClass.getConstructor(new Class[0]);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-    }
-
-    if (constructor == null && ejbClass.getDeclaredConstructors().length > 0)
-      throw error(L.l("'{0}' needs a zero-arg constructor.  Bean implementations need a zero-argument constructor.", ejbClass.getName()));
-
-    for (Class<?> exn : constructor.getExceptionTypes()) {
-      if (! RuntimeException.class.isAssignableFrom(exn)) {
-        throw error(L.l("{0}: constructor must not throw '{1}'.  Bean constructors must not throw checked exceptions.", ejbClass.getName(), exn.getName()));
-      }
-    }
-      */
-
     AnnotatedMethod<? super X> method = getMethod("finalize", new Class[0]);
 
     if (method != null
@@ -516,14 +500,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
       throw error(L.l("'{0}' may not implement finalize().  Bean implementations may not implement finalize().", 
                       method.getJavaMember().getDeclaringClass().getName()));
     }
-
-    /*
-    if (_ejbClass == null) {
-      InjectManager manager = InjectManager.create();
-
-      _ejbClass = manager.createAnnotatedType(_ejbClass.getJavaClass());
-    }
-    */
   }
 
   /**
@@ -876,6 +852,78 @@ public class EjbBean<X> extends DescriptionGroupConfig
 
     _serverProgram.addProgram(init);
   }
+  
+  //
+  // references and resources
+  //
+  
+  public EnvEntry createEnvEntry()
+  {
+    EnvEntry env = new EnvEntry();
+    
+    env.setProgram(true);
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    env.setJndiClassLoader(loader);
+    
+    _resourceList.add(env);
+    
+    return env;
+  }
+  
+  public EjbRef createEjbRef()
+  {
+    EjbRef ref = new EjbRef();
+    
+    ref.setProgram(true);
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    ref.setJndiClassLoader(loader);
+    
+    _resourceList.add(ref);
+    
+    return ref;
+  }
+  
+  public EjbLocalRef createEjbLocalRef()
+  {
+    EjbLocalRef ref = new EjbLocalRef();
+    
+    ref.setProgram(true);
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    ref.setJndiClassLoader(loader);
+    
+    _resourceList.add(ref);
+    
+    return ref;
+  }
+  
+  public ResourceRef createResourceRef()
+  {
+    ResourceRef ref= new ResourceRef();
+    
+    ref.setProgram(true);
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    ref.setJndiClassLoader(loader);
+    
+    _resourceList.add(ref);
+    
+    return ref;
+  }
+  
+  public ResourceEnvRef createResourceEnvRef()
+  {
+    ResourceEnvRef ref = new ResourceEnvRef();
+    
+    ref.setProgram(true);
+    
+    _resourceList.add(ref);
+    
+    return ref;
+  }
+  
+  public ArrayList<ResourceGroupConfig> getResourceList()
+  {
+    return _resourceList;
+  }
 
   public void setInit(ContainerProgram init)
   {
@@ -927,7 +975,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
       if (_isInit)
         return;
       _isInit = true;
-
+      
       if (getAnnotatedType() == null)
         throw error(L.l("ejb-class is not defined for '{0}'",
                         getEJBName()));
@@ -949,41 +997,10 @@ public class EjbBean<X> extends DescriptionGroupConfig
       // XXX: add local api
 
       introspect();
-
+      
       initIntrospect();
       
-      /*
-      _bean = createBeanGenerator();
-      
-      if (_bean == null)
-        throw new NullPointerException(getClass().getName() + ": createBeanGenerator returns null");
-
-      _bean.introspect();
-      */
-
-      // _bean.createViews();
-
-      // XXX: lifecycle refactor
-      /*
-      InterceptorBinding interceptor
-        = getConfig().getInterceptorBinding(getEJBName(), false);
-
-      if (_aroundInvokeMethodName != null) {
-        AnnotatedMethod<? super X> method
-          = getMethod(_aroundInvokeMethodName,
-                      new Class[] { InvocationContext.class });
-
-        if (method == null)
-          throw error(L.l("'{0}' is an unknown around-invoke method",
-                          _aroundInvokeMethodName));
-
-        // XXX: _bean.setAroundInvokeMethod(method.getMethod());
-      }
-
-      for (RemoveMethod method : _removeMethods) {
-        method.configure(_bean);
-      }
-      */
+      addInterceptors();
     } catch (ConfigException e) {
       throw ConfigException.createLine(_location, e);
     }
@@ -1013,7 +1030,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
     // ejb/0fb5
     InterceptorBinding binding =
       _ejbConfig.getInterceptorBinding(getEJBName(), isExcludeDefault);
-
 
     if (binding != null) {
       ArrayList<String> interceptorClasses = new ArrayList<String>();
@@ -1051,25 +1067,34 @@ public class EjbBean<X> extends DescriptionGroupConfig
         }
       }
     }
-
   }
 
-  /**
-   * Generates the class.
-   */
-  /*
-  public void generate(JavaClassGenerator javaGen, boolean isAutoCompile)
-    throws Exception
+  private void addInterceptors()
   {
-    String fullClassName = _bean.getFullClassName();
-
-    if (javaGen.preload(fullClassName) != null) {
+    Class<?> []interceptors = new Class<?>[_interceptors.size()];
+    
+    for (int i = 0; i < _interceptors.size(); i++) {
+      String className = _interceptors.get(i).getInterceptorClass();
+      Class<?> cl = null;
+    
+      try {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+      
+        cl = Class.forName(className, false, loader);
+        
+        interceptors[i] = cl;
+      } catch (ClassNotFoundException e) {
+        throw ConfigException.create(e);
+      }
     }
-    else if (isAutoCompile) {
-      javaGen.generate(_bean);
-    }
+    
+    addClassInterceptors(interceptors);
   }
-  */
+  
+  private void addClassInterceptors(Class<?> []cl)
+  {
+    _ejbClass.addAnnotation(new InterceptorsDefaultLiteral(cl));
+  }
 
   /**
    * Deploys the bean.
@@ -1099,13 +1124,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
     Class<T> objectClass = objectType.getJavaClass();
 
     String objectName = objectClass.getName();
-
-    int modifiers = objectClass.getModifiers();
-
-    /*
-    if (! Modifier.isPublic(modifiers))
-      throw error(L.l("'{0}' must be public", objectName));
-      */
 
     if (! objectClass.isInterface())
       throw error(L.l("'{0}' must be an interface", objectName));
@@ -1168,7 +1186,7 @@ public class EjbBean<X> extends DescriptionGroupConfig
     method = AnnotatedTypeUtil.findMethod(beanClass, methodName, param);
 
     if (method == null && sourceMethod != null) {
-      throw error(L.l("{0}: '{1}' expected to match {2}.{3}",
+      throw error(L.l("{0}: '{1}' needed on the implementation class to match {2}.{3}",
                       beanClass.getJavaClass().getName(),
                       getFullMethodName(methodName, param),
                       sourceMethod.getJavaMember().getDeclaringClass().getSimpleName(),
@@ -1238,25 +1256,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
   }
 
   /**
-   * Assembles the generator.
-   */
-  public GenClass assembleGenerator(String fullClassName)
-    throws NoSuchMethodException, ConfigException
-  {
-    throw new UnsupportedOperationException();
-  }
-
-  /**
-   * Introspects the bean's methods.
-   */
-  public void assembleBeanMethods()
-    throws ConfigException
-  {
-    if (getAnnotatedType() == null)
-      return;
-  }
-
-  /**
    * Finds the method in the class.
    *
    * @param cl owning class
@@ -1311,11 +1310,6 @@ public class EjbBean<X> extends DescriptionGroupConfig
   public boolean isCMP1()
   {
     return false;
-  }
-
-  public boolean isEJB3()
-  {
-    return ! (isCMP() || isCMP1());
   }
 
   /**

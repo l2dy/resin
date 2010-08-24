@@ -42,9 +42,7 @@ import javax.enterprise.inject.spi.InjectionTarget;
 import javax.jms.ConnectionFactory;
 
 import com.caucho.amber.manager.AmberContainer;
-import com.caucho.amber.manager.AmberPersistenceUnit;
 import com.caucho.config.ConfigException;
-import com.caucho.config.gen.ApplicationExceptionConfig;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.cfg.EjbConfigManager;
 import com.caucho.ejb.cfg.EjbRootConfig;
@@ -59,7 +57,6 @@ import com.caucho.loader.EnvironmentLocal;
 import com.caucho.loader.enhancer.ScanClass;
 import com.caucho.loader.enhancer.ScanListener;
 import com.caucho.util.CharBuffer;
-import com.caucho.util.L10N;
 import com.caucho.vfs.JarPath;
 import com.caucho.vfs.Path;
 
@@ -67,7 +64,6 @@ import com.caucho.vfs.Path;
  * Environment-based container.
  */
 public class EjbManager implements ScanListener, EnvironmentListener {
-  private static final L10N L = new L10N(EjbManager.class);
   private static final Logger log = Logger.getLogger(EjbManager.class
       .getName());
 
@@ -105,8 +101,8 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   // active servers
   //
 
-  private final ArrayList<AbstractEjbBeanManager> _serverList 
-    = new ArrayList<AbstractEjbBeanManager>();
+  private final ArrayList<AbstractEjbBeanManager<?>> _serverList 
+    = new ArrayList<AbstractEjbBeanManager<?>>();
 
   private EjbManager(ClassLoader loader)
   {
@@ -153,7 +149,14 @@ public class EjbManager implements ScanListener, EnvironmentListener {
       EjbManager container = _localContainer.getLevel(loader);
 
       if (container == null) {
-        container = new EjbManager(loader);
+        Boolean ejbManager = null;
+        
+        ejbManager = (Boolean) Environment.getAttribute("ejb.manager", loader);
+        
+        if (ejbManager == null || Boolean.TRUE.equals(ejbManager))
+          container = new EjbManager(loader);
+        else
+          container = _localContainer.get(loader);
 
         _localContainer.set(container, loader);
       }
@@ -369,6 +372,13 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     if (ejbJar.canRead()) {
       getConfigManager().configureRootPath(root);
     }
+    else if (root.getURL().endsWith("WEB-INF/classes")) {
+      ejbJar = root.lookup("../ejb-jar.xml");
+    
+      if (ejbJar.canRead()) {
+        getConfigManager().configureRootPath(root);
+      }
+    }
 
     _ejbUrls.add(root.getURL());
   }
@@ -450,6 +460,9 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     else if (annotationName.matches("javax.ejb.MessageDriven")) {
       return true;
     }
+    else if (annotationName.matches("javax.annotation.ManagedBean")) {
+      return true;
+    }
     else
       return false;
   }
@@ -512,7 +525,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
     
     InjectManager.create().bind();
     
-    for (AbstractEjbBeanManager server : _serverList) {
+    for (AbstractEjbBeanManager<?> server : _serverList) {
       server.bind();
     }
   }
@@ -527,7 +540,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
       Thread thread = Thread.currentThread();
       ClassLoader oldLoader = thread.getContextClassLoader();
 
-      for (AbstractEjbBeanManager server : _serverList) {
+      for (AbstractEjbBeanManager<?> server : _serverList) {
         try {
           thread.setContextClassLoader(server.getClassLoader());
 
@@ -555,15 +568,15 @@ public class EjbManager implements ScanListener, EnvironmentListener {
      */
 
     try {
-      ArrayList<AbstractEjbBeanManager> servers;
-      servers = new ArrayList<AbstractEjbBeanManager>(_serverList);
+      ArrayList<AbstractEjbBeanManager<?>> servers;
+      servers = new ArrayList<AbstractEjbBeanManager<?>>(_serverList);
 
       _serverList.clear();
 
       // only purpose of the sort is to make the qa order consistent
       Collections.sort(servers, new ServerCmp());
 
-      for (AbstractEjbBeanManager server : servers) {
+      for (AbstractEjbBeanManager<?> server : servers) {
         try {
           getProtocolManager().removeServer(server);
         } catch (Throwable e) {
@@ -571,7 +584,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
         }
       }
 
-      for (AbstractEjbBeanManager server : servers) {
+      for (AbstractEjbBeanManager<?> server : servers) {
         try {
           server.destroy();
         } catch (Throwable e) {
@@ -594,6 +607,7 @@ public class EjbManager implements ScanListener, EnvironmentListener {
   /**
    * Handles the case where the environment is configuring
    */
+  @Override
   public void environmentBind(EnvironmentClassLoader loader)
   {
     bind();
@@ -624,8 +638,8 @@ public class EjbManager implements ScanListener, EnvironmentListener {
    * Sorts the servers so they can be destroyed in a consistent order. (To make
    * QA sane.)
    */
-  static class ServerCmp implements Comparator<AbstractEjbBeanManager> {
-    public int compare(AbstractEjbBeanManager a, AbstractEjbBeanManager b)
+  static class ServerCmp implements Comparator<AbstractEjbBeanManager<?>> {
+    public int compare(AbstractEjbBeanManager<?> a, AbstractEjbBeanManager<?> b)
     {
       return a.getEJBName().compareTo(b.getEJBName());
     }

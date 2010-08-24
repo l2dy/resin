@@ -63,8 +63,9 @@ import com.caucho.config.types.Period;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.GlobalCache;
 import com.caucho.env.service.ResinSystem;
+import com.caucho.env.shutdown.ExitCode;
+import com.caucho.env.shutdown.ShutdownService;
 import com.caucho.env.thread.ThreadPool;
-import com.caucho.git.GitRepository;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.hemp.servlet.ServerAuthManager;
 import com.caucho.lifecycle.Lifecycle;
@@ -90,12 +91,8 @@ import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationMatcher;
 import com.caucho.server.dispatch.ProtocolDispatchServer;
-import com.caucho.server.distcache.DistributedCacheManager;
-import com.caucho.server.distcache.FileCacheManager;
 import com.caucho.server.distcache.PersistentStoreConfig;
-import com.caucho.server.distlock.AbstractLockManager;
 import com.caucho.server.distlock.AbstractVoteManager;
-import com.caucho.server.distlock.SingleLockManager;
 import com.caucho.server.distlock.SingleVoteManager;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.host.Host;
@@ -104,8 +101,6 @@ import com.caucho.server.host.HostContainer;
 import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
 import com.caucho.server.log.AccessLog;
-import com.caucho.server.repository.FileRepository;
-import com.caucho.server.repository.Repository;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
 import com.caucho.server.webapp.ErrorPage;
@@ -114,7 +109,6 @@ import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
-import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.Vfs;
@@ -150,13 +144,8 @@ public class Server extends ProtocolDispatchServer
   private InjectManager _cdiManager;
 
   private BamService _bamService;
-  private GitRepository _git;
-  private Repository _repository;
-  private FileRepository _localRepository;
   private PersistentStoreConfig _persistentStoreConfig;
 
-  private DistributedCacheManager _distributedCacheManager;
-  private AbstractLockManager _distributedLockManager;
   private AbstractVoteManager _distributedVoteManager;
 
   private HostContainer _hostContainer;
@@ -295,10 +284,8 @@ public class Server extends ProtocolDispatchServer
     Config.setProperty("server", new ServerVar(_selfServer), getClassLoader());
     Config.setProperty("cluster", new ClusterVar(), getClassLoader());
 
-    _distributedCacheManager = createDistributedCacheManager();
-    
     _resinSystem.addService(new DeployNetworkService());
-    
+
     // _selfServer.getServerProgram().configure(this);
   }
 
@@ -402,81 +389,6 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * Returns the repository
-   */
-  public GitRepository getGit()
-  {
-    if (! isResinServer())
-      return null;
-
-    synchronized (this) {
-      if (_git == null && _resin != null) {
-        // initialize git repository
-        Path root = _resin.getResinDataDirectory();
-
-        // QA
-        if (root instanceof MemoryPath) {
-          String userName = System.getProperty("user.name");
-
-          root = Vfs.lookup("file:/tmp/" + userName + "/qa");
-        }
-
-        _git = new GitRepository(root.lookup(".git"));
-
-        try {
-          _git.initDb();
-        } catch (Exception e) {
-          log.log(Level.WARNING, e.toString(), e);
-        }
-      }
-
-      return _git;
-    }
-  }
-
-  /**
-   * Returns the deployment repository
-   */
-  public Repository getRepository()
-  {
-    if (! isResinServer())
-      return null;
-
-    synchronized (this) {
-      if (_repository == null)
-        _repository = createRepository();
-    }
-
-    _repository.init();
-
-    return _repository;
-  }
-
-  /**
-   * Returns the local repository
-   */
-  public FileRepository getLocalRepository()
-  {
-    if (! isResinServer())
-      return null;
-
-    synchronized (this) {
-      if (_localRepository == null)
-        _localRepository = new FileRepository(this);
-    }
-
-    return _localRepository;
-  }
-
-  /**
-   * Creates a new deployment repository
-   */
-  protected Repository createRepository()
-  {
-    return getLocalRepository();
-  }
-
-  /**
    * Creates the bam broker manager
    */
   protected HempBrokerManager createBrokerManager()
@@ -506,41 +418,6 @@ public class Server extends ProtocolDispatchServer
   public CloudPod getPod()
   {
     return _selfServer.getCloudServer().getPod();
-  }
-
-  /**
-   * Returns the distributed cache manager
-   */
-  public DistributedCacheManager getDistributedCacheManager()
-  {
-    return _distributedCacheManager;
-  }
-
-  /**
-   * Returns the distributed cache manager
-   */
-  protected DistributedCacheManager createDistributedCacheManager()
-  {
-    return new FileCacheManager(this);
-  }
-
-  /**
-   * Returns the distributed lock manager
-   */
-  public AbstractLockManager getDistributedLockManager()
-  {
-    if (_distributedLockManager == null)
-      _distributedLockManager = createDistributedLockManager();
-
-    return _distributedLockManager;
-  }
-
-  /**
-   * Returns the distributed cache manager
-   */
-  protected AbstractLockManager createDistributedLockManager()
-  {
-    return new SingleLockManager(this);
   }
 
   /**
@@ -1078,8 +955,6 @@ public class Server extends ProtocolDispatchServer
   public AbstractCache createProxyCache()
     throws ConfigException
   {
-    log.warning(L.l("<proxy-cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
-
     if (_cache == null)
       _cache = instantiateProxyCache();
 
@@ -1097,6 +972,8 @@ public class Server extends ProtocolDispatchServer
   
   protected AbstractCache instantiateProxyCache()
   {
+    log.warning(L.l("<proxy-cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
+
     return new AbstractCache();
   }
 
@@ -1602,7 +1479,9 @@ public class Server extends ProtocolDispatchServer
       threadPool.setIdleMin(_threadIdleMin);
 
     threadPool.setExecutorTaskMax(_threadExecutorTaskMax);
-
+    
+    if (_selfServer.getStage() != null)
+      setStage(_selfServer.getStage());
     /*
     if (_keepaliveSelectEnable) {
       try {
@@ -1706,9 +1585,9 @@ public class Server extends ProtocolDispatchServer
         getSystemStore();
 
       // start the repository
-      Repository repository = getRepository();
-      if (repository != null)
-        repository.start();
+      // AbstractRepository repository = getRepository();
+      // if (repository != null)
+      //   repository.start();
 
       // getCluster().start();
 
@@ -1795,6 +1674,7 @@ public class Server extends ProtocolDispatchServer
   /**
    * Handles the alarm.
    */
+  @Override
   public void handleAlarm(Alarm alarm)
   {
     if (! _lifecycle.isActive())
@@ -1805,7 +1685,7 @@ public class Server extends ProtocolDispatchServer
         // XXX: message slightly wrong
         String msg = L.l("Resin restarting due to configuration change");
 
-        getResin().startShutdown(msg);
+        ShutdownService.getCurrent().shutdown(ExitCode.MODIFIED, msg);
         return;
       }
     } finally {
@@ -1820,7 +1700,7 @@ public class Server extends ProtocolDispatchServer
   public boolean isModified()
   {
     boolean isModified = getClassLoader().isModified();
-
+    
     if (isModified)
       getClassLoader().logModified(log);
 
@@ -1883,6 +1763,7 @@ public class Server extends ProtocolDispatchServer
   /**
    * Returns true if the server is currently active and accepting requests
    */
+  @Override
   public boolean isActive()
   {
     return _lifecycle.isActive();
@@ -2008,27 +1889,17 @@ public class Server extends ProtocolDispatchServer
   {
   }
 
-  /**
-   * Creates an returns a load balancer based on the cluster name.
-   *
-   * @param clusterName the name of the cluster
-   */
-  public LoadBalanceManager createClusterLoadBalancer(String clusterName)
+  @Override
+  public void restart()
   {
-    throw new ConfigException(L.l("Cluster LoadBalancer requires Resin Professional."));
+    String msg = L.l("Server restarting due to configuration change");
+    
+    ShutdownService.shutdownActive(ExitCode.MODIFIED, msg);
   }
-
-  /**
-   * Creates and returns a load balancer configured explicitly
-   */
-  public CustomLoadBalanceManager createProxyLoadBalancer(String probeCategory)
-  {
-    return new SingleLoadBalanceManager(probeCategory);
-  }
-
   /**
    * Closes the server.
    */
+  @Override
   public void stop()
   {
     Thread thread = Thread.currentThread();
@@ -2152,9 +2023,6 @@ public class Server extends ProtocolDispatchServer
 
       // getClassLoader().destroy();
 
-      if (_distributedCacheManager != null)
-        _distributedCacheManager.close();
-
       _hostContainer = null;
       _cache = null;
     } finally {
@@ -2163,7 +2031,7 @@ public class Server extends ProtocolDispatchServer
       Resin resin = _resin;
 
       if (resin != null)
-        resin.startShutdown(L.l("Resin shutdown from Server.destroy()"));
+        resin.destroy();
     }
   }
 

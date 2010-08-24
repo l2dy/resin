@@ -44,6 +44,14 @@ abstract public class AbstractLockManager implements LockManager {
   @Override
   abstract public Lock getOrCreateLock(String name);
   
+  public void start()
+  {
+  }
+  
+  public void close()
+  {
+  }
+  
   @Override
   public String toString()
   {

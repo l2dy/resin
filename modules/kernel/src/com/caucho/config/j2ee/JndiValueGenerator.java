@@ -28,13 +28,19 @@
 
 package com.caucho.config.j2ee;
 
+import java.util.logging.Logger;
+
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.program.ValueGenerator;
+import com.caucho.util.L10N;
 
 public class JndiValueGenerator extends ValueGenerator {
+  private static final Logger log = Logger.getLogger(JndiValueGenerator.class.getName());
+  private static final L10N L = new L10N(JndiValueGenerator.class);
+  
   private final String _location;
   private final String _jndiName;
   private final Class<?> _type;
@@ -44,6 +50,9 @@ public class JndiValueGenerator extends ValueGenerator {
     _location = location;
     _type = type;
     _jndiName = jndiName;
+    
+    if (_jndiName == null || "".equals(_jndiName))
+      throw new IllegalArgumentException(L.l("JNDI name cannot be empty"));
   }
 
   @Override

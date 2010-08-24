@@ -34,6 +34,7 @@ import com.caucho.util.L10N;
 import javax.el.ELContext;
 import javax.el.ELException;
 import javax.el.PropertyNotFoundException;
+import javax.el.ValueReference;
 import java.util.logging.Logger;
 
 /**
@@ -86,6 +87,16 @@ public class StringValueExpression extends AbstractValueExpression
     if (context == null)
       throw new NullPointerException("context can't be null");
 
+    if (_expr.isConstant())
+      return String.class;
+
+    Class type = _expr.getType(context);
+
+    if (! context.isPropertyResolved())
+      throw new PropertyNotFoundException(L.l(
+        "'{0}' not found in context '{1}'.",
+        _expr.getExpressionString(), context));
+
     return String.class;
   }
 
@@ -97,6 +108,19 @@ public class StringValueExpression extends AbstractValueExpression
     if (context == null)
       throw new NullPointerException("context can't be null");
 
-    return _expr.evalString(context);
+    Object result = _expr.evalString(context);
+
+    if (! context.isPropertyResolved() && (result == null || "".equals(result)))
+      throw new PropertyNotFoundException(L.l(
+        "'{0}' not found in context '{1}'.",
+        _expr.getExpressionString(), context));
+
+    return result;
+  }
+
+  @Override
+  public ValueReference getValueReference(ELContext context)
+  {
+    return _expr.getValueReference(context);
   }
 }

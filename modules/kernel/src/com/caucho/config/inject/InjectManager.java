@@ -123,6 +123,7 @@ import com.caucho.config.j2ee.EjbHandler;
 import com.caucho.config.j2ee.PersistenceContextHandler;
 import com.caucho.config.j2ee.PersistenceUnitHandler;
 import com.caucho.config.j2ee.ResourceHandler;
+import com.caucho.config.program.ResourceProgramManager;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.config.reflect.BaseType;
 import com.caucho.config.reflect.BaseTypeFactory;
@@ -201,6 +202,7 @@ public final class InjectManager
   private InjectManager _parent;
 
   private EnvironmentClassLoader _classLoader;
+  private ClassLoader _jndiClassLoader;
   
   private final InjectScanManager _scanManager;
   private final ExtensionManager _extensionManager
@@ -219,6 +221,9 @@ public final class InjectManager
 
   private HashMap<Class<?>,InjectionPointHandler> _injectionMap
     = new HashMap<Class<?>,InjectionPointHandler>();
+  
+  private ResourceProgramManager _resourceManager
+    = new ResourceProgramManager();
 
   //
   // self configuration
@@ -240,8 +245,8 @@ public final class InjectManager
   private HashMap<Class<?>,WebComponent> _beanMap
     = new HashMap<Class<?>,WebComponent>();
 
-  private HashMap<String,ArrayList<Bean<?>>> _namedBeanMap
-    = new HashMap<String,ArrayList<Bean<?>>>();
+  private ConcurrentHashMap<String,ArrayList<Bean<?>>> _namedBeanMap
+    = new ConcurrentHashMap<String,ArrayList<Bean<?>>>();
 
   private HashMap<Type,Bean<?>> _newBeanMap
     = new HashMap<Type,Bean<?>>();
@@ -572,6 +577,16 @@ public final class InjectManager
   {
     return _classLoader;
   }
+  
+  public ClassLoader getJndiClassLoader()
+  {
+    return _jndiClassLoader;
+  }
+  
+  public void setJndiClassLoader(ClassLoader loader)
+  {
+    _jndiClassLoader = loader;
+  }
 
   public InjectManager getParent()
   {
@@ -719,7 +734,7 @@ public final class InjectManager
   protected ArrayList<Bean<?>> findByName(String name)
   {
     // #3334 - shutdown timing issues
-    HashMap<String,ArrayList<Bean<?>>> namedBeanMap = _namedBeanMap;
+    ConcurrentHashMap<String,ArrayList<Bean<?>>> namedBeanMap = _namedBeanMap;
 
     if (namedBeanMap == null)
       return null;
@@ -772,7 +787,7 @@ public final class InjectManager
   }
 
   //
-  // javax.webbeans.Container
+  // javax.enterprise.context.Conversation
   //
 
   public Conversation createConversation()
@@ -827,7 +842,7 @@ public final class InjectManager
 
   /**
    * Returns a new instance for a class, but does not register the
-   * component with webbeans.
+   * component with CDI.
    */
   public <T> BeanBuilder<T> createBeanFactory(AnnotatedType<T> type)
   {
@@ -1206,6 +1221,11 @@ public final class InjectManager
 
     registerJmx(bean);
   }
+  
+  public ResourceProgramManager getResourceManager()
+  {
+    return _resourceManager;
+  }
 
   private void registerJmx(Bean<?> bean)
   {
@@ -1313,6 +1333,9 @@ public final class InjectManager
    */
   private Set<Bean<?>> resolve(Type type, Annotation []bindings)
   {
+    if (type == null)
+      throw new NullPointerException();
+    
     if (bindings == null || bindings.length == 0) {
       if (Object.class.equals(type))
         return resolveAllBeans();
@@ -1948,6 +1971,19 @@ public final class InjectManager
     
     if (factory != null)
       return factory.create(null, null, null);
+    else
+      return null;
+  }
+
+  /**
+   * Convenience for Resin.
+   */
+  public <T> T findReference(Bean<T> bean)
+  {
+    Context context = getContext(bean.getScope());
+    
+    if (context != null)
+      return context.get(bean);
     else
       return null;
   }

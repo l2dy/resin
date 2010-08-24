@@ -128,8 +128,9 @@ class WatchdogManager implements AlarmListener {
     log.setLevel("all");
     log.init();
 
-    if (System.getProperty("log.level") != null)
+    if (System.getProperty("log.level") != null) {
       Logger.getLogger("").setLevel(Level.FINER);
+    }
     else
       Logger.getLogger("").setLevel(Level.INFO);
 
@@ -138,19 +139,10 @@ class WatchdogManager implements AlarmListener {
 
     ResinELContext elContext = _args.getELContext();
     
-    Path rootDirectory = _args.getRootDirectory();
-    Path dataDirectory = rootDirectory.lookup("watchdog-data");
-    
     Resin resin = Resin.createWatchdog();
     
     resin.preConfigureInit();
-    /*
-    NetworkServer network = new NetworkServer("watchdog",
-                                              rootDirectory,
-                                              dataDirectory,
-                                              null);
     
-    */
     Thread thread = Thread.currentThread();
     thread.setContextClassLoader(resin.getClassLoader());
 
@@ -195,7 +187,6 @@ class WatchdogManager implements AlarmListener {
         boot.chown(logDirectory, server.getUserName(), server.getGroupName());
       }
     }
-
 
     server.getConfig().logInit(logStream);
 
@@ -639,6 +630,8 @@ class WatchdogManager implements AlarmListener {
       }
     } catch (Exception e) {
       log().log(Level.WARNING, e.toString(), e);
+      System.out.println(e);
+      e.printStackTrace();
     } finally {
       System.exit(1);
     }

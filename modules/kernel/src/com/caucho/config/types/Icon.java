@@ -32,8 +32,6 @@ package com.caucho.config.types;
  * Configuration for the init-param pattern.
  */
 public class Icon {
-  private String _value;
-  
   private String _smallIcon;
   private String _largeIcon;
 
@@ -42,7 +40,6 @@ public class Icon {
    */
   public void setValue(String value)
   {
-    _value = value;
   }
 
   /**

@@ -52,9 +52,11 @@ public class ResinSystem
   private static final L10N L = new L10N(ResinSystem.class);
   private static final Logger log
     = Logger.getLogger(ResinSystem.class.getName());
-
+  
   private static final EnvironmentLocal<ResinSystem> _serverLocal
     = new EnvironmentLocal<ResinSystem>();
+
+  private static final ClassLoader _systemClassLoader;
 
   private final String _id;
   private EnvironmentClassLoader _classLoader;
@@ -175,6 +177,23 @@ public class ResinSystem
       return manager.getService(serviceClass);
     else
       return null;
+  }
+  
+  /**
+   * Returns the current system id.
+   */
+  public static String getCurrentId()
+  {
+    ResinSystem system = getCurrent();
+    
+    if (system == null) {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+      throw new IllegalStateException(L.l("ResinSystem is not available in this context.\n  {0}",
+                                          loader));
+    }
+    
+    return system.getId();
   }
   
   /**
@@ -346,6 +365,7 @@ public class ResinSystem
   /**
    * Adds a new service.
    */
+  @SuppressWarnings("unchecked")
   public <T extends ResinService> T 
   addServiceIfAbsent(Class<?> serviceApi, T service)
   {
@@ -446,6 +466,9 @@ public class ResinSystem
           log.fine(service + " starting");
 
         service.start();
+        
+        if (log.isLoggable(Level.FINER))
+          log.finer(service + " active");
       }
     } catch (RuntimeException e) {
       log.log(Level.WARNING, e.toString(), e);
@@ -609,5 +632,16 @@ public class ResinSystem
       else
         return b.getClass().getName().compareTo(a.getClass().getName());
     }
+  }
+  
+  static {
+    ClassLoader systemClassLoader = null;
+    
+    try {
+      systemClassLoader = ClassLoader.getSystemClassLoader();
+    } catch (Exception e) {
+    }
+    
+    _systemClassLoader = systemClassLoader;
   }
 }

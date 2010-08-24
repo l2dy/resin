@@ -46,7 +46,6 @@ import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionManagement;
 import javax.ejb.TransactionManagementType;
-import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.ConfigException;
@@ -58,7 +57,6 @@ import com.caucho.ejb.session.AbstractSessionManager;
 import com.caucho.ejb.session.SingletonManager;
 import com.caucho.ejb.session.StatefulManager;
 import com.caucho.ejb.session.StatelessManager;
-import com.caucho.java.gen.JavaClassGenerator;
 import com.caucho.util.L10N;
 
 /**
@@ -210,7 +208,7 @@ public class EjbSessionBean<X> extends EjbBean<X> {
     }
   }
 
-  private void fillClassDefaults()
+  protected void fillClassDefaults()
   {
     AnnotatedTypeImpl<X> ejbClass = getAnnotatedType();
     
@@ -404,6 +402,7 @@ public class EjbSessionBean<X> extends EjbBean<X> {
     manager.setMappedName(getMappedName());
     manager.setId(getEJBModuleName() + "#" + getEJBName());
     manager.setContainerTransaction(_isContainerTransaction);
+    manager.setResourceList(getResourceList());
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();

@@ -35,6 +35,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.context.spi.CreationalContext;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
@@ -57,7 +58,8 @@ public class EnvEntry extends ResourceGroupConfig implements Validator {
   private String _name;
   private Class<?> _type;
   private String _value;
-
+  private Object _objectValue;
+  
   public EnvEntry()
   {
   }
@@ -102,9 +104,9 @@ public class EnvEntry extends ResourceGroupConfig implements Validator {
   /**
    * Sets the env-entry-value
    */
-  public void setEnvEntryValue(String value)
+  public void setEnvEntryValue(RawString value)
   {
-    _value = value;
+    _value = value.getValue();
   }
 
   /**
@@ -119,82 +121,179 @@ public class EnvEntry extends ResourceGroupConfig implements Validator {
    * Gets the env-entry-value
    */
   // XXX: ejb/0fd0 vs ejb/0g03
-  // PostConstruct called from com.caucho.ejb.cfg.EjbSessionBean.
   @PostConstruct
   public void init()
     throws Exception
   {
     if (_name == null)
       throw new ConfigException(L.l("env-entry needs 'env-entry-name' attribute"));
+    
+    /*
     if (_type == null)
       throw new ConfigException(L.l("env-entry needs 'env-entry-type' attribute"));
+      */
 
     super.init();
 
     // actually, should register for validation
+    /*
+    if (_value == null)
+      return;
+      */
+    
+    
+    if (! isProgram())
+      deploy();
+  }
+  
+  /**
+   * Configures the bean using the current program.
+   * 
+   * @param bean the bean to configure
+   * @param env the Config environment
+   */
+  @Override
+  public <T> void inject(T bean, CreationalContext<T> env)
+  {
+    
+  }
+  
+  @Override
+  public Object getValue()
+  {
+    if (getLookupName() != null) {
+      try {
+        return Jndi.lookup(getLookupName());
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+    }
+    
+    if (_objectValue == null)
+      deploy();
+    /*
+    if (_objectValue == null)
+      throw new NullPointerException(toString());
+    */
+    return _objectValue;
+  }
+
+  @Override
+  public void deploy()
+  {
+    if (_objectValue != null)
+      return;
+    
+    super.deploy();
+
+    Thread thread = Thread.currentThread();
+    ClassLoader loader = thread.getContextClassLoader();
+    try {
+      if (getJndiClassLoader() != null)
+        thread.setContextClassLoader(getJndiClassLoader());
+      
+      Jndi.bindDeepShort(_name, this);
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    } finally {
+      thread.setContextClassLoader(loader);
+    }
+    
     if (_value == null)
       return;
     
     LinkedHashSet<Type> types = new LinkedHashSet<Type>();
     
-    types.add(_type);
-
+    Class<?> type = _type;
     Object value = _value;
-
-    if (_type.equals(String.class)) {
+    
+    if (type == null)
+      type = inferTypeFromInjection();
+    
+    if (type != null)
+      types.add(type);
+    else
+      types.add(value.getClass());
+    
+    if (getLookupName() != null) {
     }
-    else if (_type.equals(Boolean.class)) {
-      value = new Boolean(Expr.toBoolean(_value, null));
+    else if (type == null) {
+    }
+    else if (type.equals(String.class)) {
+    }
+    else if (Boolean.class.equals(type) || boolean.class.equals(type)) {
+      if (_value != null)
+        value = new Boolean("true".equals(_value.toLowerCase()));
+      else
+        value = Boolean.FALSE;
       
       types.add(boolean.class);
     }
-    else if (_type.equals(Byte.class)) {
+    else if (Byte.class.equals(type) || byte.class.equals(type)) {
       value = new Byte((byte) Expr.toLong(_value, null));
       
       types.add(byte.class);
     }
-    else if (_type.equals(Short.class)) {
+    else if (Short.class.equals(type) || short.class.equals(type)) {
       value = new Short((short) Expr.toLong(_value, null));
       
       types.add(short.class);
     }
-    else if (_type.equals(Integer.class)) {
+    else if (Integer.class.equals(type) || int.class.equals(type)) {
       value = new Integer((int) Expr.toLong(_value, null));
       
       types.add(int.class);
     }
-    else if (_type.equals(Long.class)) {
+    else if (Long.class.equals(type) || long.class.equals(type)) {
       value = new Long(Expr.toLong(_value, null));
       
       types.add(long.class);
     }
-    else if (_type.equals(Float.class)) {
+    else if (Float.class.equals(type) || float.class.equals(type)) {
       value = new Float((float) Expr.toDouble(_value, null));
       
       types.add(float.class);
     }
-    else if (_type.equals(Double.class)) {
+    else if (Double.class.equals(type) || double.class.equals(type)) {
       value = new Double(Expr.toDouble(_value, null));
       
       types.add(double.class);
     }
-    else if (_type.equals(Character.class)) {
+    else if (Character.class.equals(type) || char.class.equals(type)) {
       String v = Expr.toString(_value, null);
 
       if (v == null || v.length() == 0)
-        value = null;
+        value = new Character(' ');
       else
         value = new Character(v.charAt(0));
       
       types.add(char.class);
     }
+    else if (Enum.class.isAssignableFrom(type)) {
+      value = Enum.valueOf((Class) type, _value);
+    }
+    else if (Class.class.isAssignableFrom(type)) {
+      try {
+        loader = Thread.currentThread().getContextClassLoader();
 
+        value = Class.forName(_value, false, loader);
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+    }
+    
+    _objectValue = value;
+    
     if (value == null)
       return;
     
     InjectManager cdiManager = InjectManager.create();
     BeanBuilder<?> builder = cdiManager.createBeanFactory(value.getClass());
-    builder.name(_name);
+    
+    // CDI names can't have '.'
+    if (_name.indexOf('.') < 0)
+      builder.name(_name);
+    
     // server/1516
     builder.qualifier(Names.create(_name));
     builder.qualifier(DefaultLiteral.DEFAULT);
@@ -202,14 +301,13 @@ public class EnvEntry extends ResourceGroupConfig implements Validator {
     builder.type(types);
 
     cdiManager.addBean(builder.singleton(value));
-
-    Jndi.bindDeepShort(_name, value);
   }
 
   /**
-   * Validates the resource-ref, i.e. checking that it exists in
+   * Validates the env-entry, i.e. checking that it exists in
    * JNDI.
    */
+  @Override
   public void validate()
     throws ConfigException
   {

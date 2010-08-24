@@ -29,14 +29,11 @@
 
 package com.caucho.remote.hessian;
 
-import com.caucho.config.*;
-import com.caucho.hessian.server.*;
-import com.caucho.remote.*;
-import com.caucho.remote.server.*;
+import javax.servlet.Servlet;
 
-import javax.ejb.*;
-import javax.jws.*;
-import javax.servlet.*;
+import com.caucho.hessian.server.HessianServlet;
+import com.caucho.remote.ServiceException;
+import com.caucho.remote.server.AbstractProtocolServletFactory;
 
 /**
  * Hessian factory for creating @HessianService servlets. 
@@ -50,7 +47,8 @@ public class HessianProtocolServletFactory
    * @param serviceClass the remoteApi exposed to the server
    * @param service the managed service object
    */
-  public Servlet createServlet(Class serviceClass, Object service)
+  @Override
+  public Servlet createServlet(Class<?> serviceClass, Object service)
     throws ServiceException
   {
     HessianServlet servlet = new HessianServlet();

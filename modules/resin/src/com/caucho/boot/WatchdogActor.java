@@ -30,17 +30,27 @@
 package com.caucho.boot;
 
 import java.io.Serializable;
+import java.util.logging.Logger;
 
+import com.caucho.bam.Message;
 import com.caucho.bam.SimpleActor;
+import com.caucho.server.resin.WarningMessage;
 
 /**
  * Service for handling the distributed cache
  */
 public class WatchdogActor extends SimpleActor
 {
+  private static final Logger log
+    = Logger.getLogger(WatchdogActor.class.getName());
+  
+  private WatchdogChildProcess _child;
+  
   WatchdogActor(WatchdogChildProcess watchdog)
   {
     setJid("watchdog");
+    
+    _child = watchdog;
   }
   
   public Serializable queryGet(Serializable payload)
@@ -54,6 +64,14 @@ public class WatchdogActor extends SimpleActor
                              "resin@admin.resin.caucho",
                              "watchdog@admin.resin.caucho",
                              new WatchdogStopQuery(""));
+  }
+  
+  @Message
+  public void onWarning(String to, String from, WarningMessage warning)
+  {
+    log.warning("Watchdog received warning "
+                + "from Resin[" + _child.getId() + ",pid=" + _child.getPid() + "]:"
+                + "\n  " + warning.getMessage());
   }
   
   /*

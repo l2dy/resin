@@ -29,43 +29,13 @@
 
 package com.caucho.ejb.manager;
 
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
+import javax.annotation.ManagedBean;
 import javax.ejb.MessageDriven;
 import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.ejb.Stateless;
-import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.InjectionTarget;
-import javax.jms.ConnectionFactory;
 
-import com.caucho.amber.manager.AmberContainer;
-import com.caucho.amber.manager.AmberPersistenceUnit;
-import com.caucho.config.ConfigException;
-import com.caucho.ejb.cfg.EjbConfigManager;
-import com.caucho.ejb.cfg.EjbRootConfig;
-import com.caucho.ejb.protocol.EjbProtocolManager;
-import com.caucho.ejb.server.AbstractEjbBeanManager;
-import com.caucho.java.WorkDir;
-import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentClassLoader;
-import com.caucho.loader.EnvironmentListener;
-import com.caucho.loader.EnvironmentLocal;
-import com.caucho.loader.SimpleLoader;
 import com.caucho.loader.enhancer.AbstractScanClass;
-import com.caucho.loader.enhancer.ScanClass;
-import com.caucho.loader.enhancer.ScanClassAllow;
-import com.caucho.loader.enhancer.ScanListener;
-import com.caucho.loader.enhancer.ScanMatch;
-import com.caucho.util.CharBuffer;
-import com.caucho.util.L10N;
-import com.caucho.vfs.JarPath;
 import com.caucho.vfs.Path;
 
 /**
@@ -80,6 +50,8 @@ class EjbScanClass extends AbstractScanClass {
     = Singleton.class.getName().toCharArray();
   private static final char []MESSAGE_DRIVEN
     = MessageDriven.class.getName().toCharArray();
+  private static final char []MANAGED_BEAN
+    = ManagedBean.class.getName().toCharArray();
   
   private Path _root;
   private String _className;
@@ -108,6 +80,9 @@ class EjbScanClass extends AbstractScanClass {
     else if (isMatch(buffer, offset, length, MESSAGE_DRIVEN)) {
       _isEjb = true;
     }
+    else if (isMatch(buffer, offset, length, MANAGED_BEAN)) {
+      _isEjb = true;
+    }
   }
 
   @Override
@@ -131,5 +106,11 @@ class EjbScanClass extends AbstractScanClass {
     if (_isEjb) {
       _ejbContainer.addScanClass(_root, _className);
     }
+  }
+
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _className + "]";
   }
 }

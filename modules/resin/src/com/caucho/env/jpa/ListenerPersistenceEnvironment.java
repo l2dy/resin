@@ -53,7 +53,7 @@ public class ListenerPersistenceEnvironment implements AddLoaderListener
   @Override
   public void addLoader(EnvironmentClassLoader loader)
   {
-    ManagerPersistence manager = ManagerPersistence.create(loader);
+    PersistenceManager manager = PersistenceManager.create(loader);
 
     // called to configure the enhancer when the classloader updates before
     // any loading of the class

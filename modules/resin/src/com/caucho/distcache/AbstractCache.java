@@ -29,6 +29,7 @@
 
 package com.caucho.distcache;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -52,6 +53,7 @@ import javax.cache.CacheStatistics;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
+import com.caucho.env.distcache.DistCacheService;
 import com.caucho.loader.Environment;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.distcache.CacheConfig;
@@ -65,7 +67,7 @@ import com.caucho.util.LruCache;
  */
 
 abstract public class AbstractCache extends AbstractMap
-  implements ObjectCache, ByteStreamCache, CacheStatistics
+  implements ObjectCache, ByteStreamCache, CacheStatistics, Closeable
 {
   private static final L10N L = new L10N(AbstractCache.class);
 
@@ -73,6 +75,7 @@ abstract public class AbstractCache extends AbstractMap
     = Logger.getLogger(AbstractCache.class.getName());
 
   private CacheManager _localManager;
+  private DistributedCacheManager _manager;
 
   private String _name = null;
 
@@ -88,8 +91,6 @@ abstract public class AbstractCache extends AbstractMap
   private boolean _isInit;
   private boolean _isClosed;
 
-  private DistributedCacheManager _manager;
-
   private long _priorMisses = 0;
   private long _priorHits = 0;
 
@@ -98,7 +99,6 @@ abstract public class AbstractCache extends AbstractMap
 
   public AbstractCache()
   {
-    _localManager = CacheManager.createManager();
   }
 
   /**
@@ -380,6 +380,11 @@ abstract public class AbstractCache extends AbstractMap
   {
     _persistenceOption = persistenceOption;
   }
+  
+  protected void setCacheManager(CacheManager cacheManager)
+  {
+    _localManager = cacheManager;
+  }
 
   /**
    * Initialize the cache.
@@ -406,12 +411,20 @@ abstract public class AbstractCache extends AbstractMap
       _config.setCacheKey(_manager.createSelfHashKey(_config.getGuid(),
                                                      _config.getKeySerializer()));
 
+      if (_localManager == null) {
+        DistCacheService cacheService = DistCacheService.getCurrent();
+        
+        _localManager = cacheService.getCacheManager();
+      }
+      
       if (_localManager.putIfAbsent(_guid, this) != null) {
         throw new ConfigException(L.l("'{0}' with full name '{1}' is an invalid Cache name because it's already used by another cache.",
                                       this, _guid));
       }
 
       _entryCache = new LruCache<Object,DistCacheEntry>(512);
+      
+      Environment.addCloseListener(this);
     }
   }
 
@@ -918,6 +931,8 @@ abstract public class AbstractCache extends AbstractMap
   public void close()
   {
     _isClosed = true;
+    
+    _localManager.remove(_guid);
   }
 
   @Override
@@ -974,16 +989,24 @@ abstract public class AbstractCache extends AbstractMap
     setScopeMode(scope);
   }
 
+  protected void setManager(DistributedCacheManager manager)
+  {
+    _manager = manager;
+  }
+  
   private void initServer()
     throws ConfigException
   {
-    Server server = Server.getCurrent();
+    if (_manager != null)
+      return;
+    
+    DistCacheService cacheService = DistCacheService.getCurrent();
 
-    if (server == null)
+    if (cacheService == null)
       throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a clustered environment",
                                     getClass().getSimpleName()));
 
-    _manager = server.getDistributedCacheManager();
+    _manager = cacheService.getDistCacheManager();
 
     if (_manager == null)
       throw new IllegalStateException("distributed cache manager not available");

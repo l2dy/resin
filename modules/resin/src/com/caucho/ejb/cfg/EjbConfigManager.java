@@ -32,6 +32,7 @@ package com.caucho.ejb.cfg;
 import java.util.*;
 import java.util.logging.*;
 
+import javax.annotation.ManagedBean;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.*;
@@ -84,10 +85,10 @@ public class EjbConfigManager extends EjbConfig {
       else
         ejbModuleName = getEjbModuleName(root);
 
-      Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
+      Path ejbJarXml = getEjbJarPath(root);
 
-      if (ejbJarXml.canRead()) {
-        EjbJar ejbJar = configurePath(root, ejbModuleName);
+      if (ejbJarXml != null) {
+        EjbJar ejbJar = configurePath(root, ejbJarXml, ejbModuleName);
 
         rootConfig.setModuleName(ejbJar.getModuleName());
       }
@@ -97,6 +98,22 @@ public class EjbConfigManager extends EjbConfig {
     }
 
     return rootConfig;
+  }
+  
+  private Path getEjbJarPath(Path root)
+  {
+    Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
+    
+    if (ejbJarXml.canRead())
+      return ejbJarXml;
+    
+    if (root.getFullPath().endsWith("WEB-INF/classes/"))
+      ejbJarXml = root.lookup("../ejb-jar.xml");
+    
+    if (ejbJarXml.canRead())
+      return ejbJarXml;
+    else
+      return null;
   }
   
   public void configureRootPath(Path root)
@@ -110,10 +127,10 @@ public class EjbConfigManager extends EjbConfig {
     else
       ejbModuleName = getEjbModuleName(root);
 
-    Path ejbJarXml = root.lookup("META-INF/ejb-jar.xml");
+    Path ejbJarXml = getEjbJarPath(root);
 
-    if (ejbJarXml.canRead()) {
-      EjbJar ejbJar = configurePath(root, ejbModuleName);
+    if (ejbJarXml != null) {
+      configurePath(root, ejbJarXml, ejbModuleName);
     }
   }
   
@@ -148,6 +165,12 @@ public class EjbConfigManager extends EjbConfig {
       InjectManager manager = InjectManager.create(loader);
       
       AnnotatedType<X> annType = manager.createAnnotatedType(type);
+      
+      if (annType.isAnnotationPresent(ManagedBean.class)) {
+        // ioc/00b0
+        manager.discoverBean(annType);
+        return;
+      }
       
       addAnnotatedType(annType, annType, null, moduleName);
     }
@@ -184,15 +207,22 @@ public class EjbConfigManager extends EjbConfig {
 
   private EjbJar configurePath(Path root)
   {
-    return configurePath(root, getEjbModuleName(root));
+    return configurePath(root, 
+                         getEjbJarPath(root),
+                         getEjbModuleName(root));
   }
 
-  private EjbJar configurePath(Path root, String ejbModuleName)
+  private EjbJar configurePath(Path root,
+                               Path ejbJarPath,
+                               String ejbModuleName)
   {
     if (root.getScheme().equals("jar"))
       root.setUserPath(root.getURL());
 
-    Path path = root.lookup("META-INF/ejb-jar.xml");
+    Path path = ejbJarPath;
+    
+    if (path == null)
+      return null;
 
     Environment.addDependency(path);
 

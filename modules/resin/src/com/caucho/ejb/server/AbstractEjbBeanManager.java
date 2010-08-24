@@ -37,25 +37,24 @@ import java.util.logging.Logger;
 import javax.ejb.FinderException;
 import javax.ejb.Timer;
 import javax.ejb.TimerService;
-import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.InjectionTarget;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.transaction.UserTransaction;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.LineConfigException;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.OwnerCreationalContext;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.config.types.ResourceGroupConfig;
 import com.caucho.ejb.cfg.AroundInvokeConfig;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.manager.EjbModule;
-import com.caucho.ejb.session.AbstractSessionContext;
 import com.caucho.inject.RequestContext;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.DynamicClassLoader;
@@ -103,18 +102,13 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   private EnvironmentClassLoader _loader;
 
   private ConfigProgram _serverProgram;
+  private ArrayList<ResourceGroupConfig> _resourceList;
 
   // injection/postconstruct from Java Injection
   private EjbInjectionTarget<X> _producer;
 
   private boolean _isContainerTransaction = true;
   private long _transactionTimeout;
-
-  // Generated classes
-  private Class<? extends X> _contextImplClass;
-
-  // generated Java Injection bean
-  private Bean<X> _component;
 
   private final Lifecycle _lifecycle = new Lifecycle();
   private InjectManager _moduleInjectManager;
@@ -148,11 +142,14 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     _loader = EnvironmentClassLoader.create(ejbManager.getClassLoader());
     // XXX: 4.0.7 this is complicated by decorator vs context injection
     _loader.setAttribute("caucho.inject", false);
+    _loader.setAttribute("ejb.manager", false);
     
     _producer = new EjbInjectionTarget<X>(this, annotatedType);
     
     _moduleInjectManager = InjectManager.create();
     _ejbInjectManager = InjectManager.create(_loader);
+    
+    _ejbInjectManager.setJndiClassLoader(_moduleInjectManager.getClassLoader());
   }
 
   /**
@@ -208,11 +205,6 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     return _bean;
   }
   
-  private EjbInjectionTarget<X> getProducer()
-  {
-    return _producer;
-  }
-
   public void setAroundInvoke(AroundInvokeConfig aroundInvoke)
   {
   }
@@ -373,6 +365,9 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     try {
       if (_jndiEnv == null)
         _jndiEnv = (Context) new InitialContext();//.lookup("java:comp/env");
+      
+      if (jndiName == null)
+        throw new IllegalArgumentException();
 
       if (jndiName.indexOf(':') < 0)
         jndiName = "java:comp/env/" + jndiName;
@@ -428,6 +423,12 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   {
     return _transactionTimeout;
   }
+  
+  @Configurable
+  public void setBusinessLocal(Class<?> local)
+  {
+    
+  }
 
   /**
    * Returns the timer service.
@@ -457,14 +458,6 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   public DynamicClassLoader getClassLoader()
   {
     return _loader;
-  }
-
-  /**
-   * Gets the generated skeleton class
-   */
-  public Class getBeanSkelClass()
-  {
-    return _contextImplClass;
   }
 
   public void bind()
@@ -497,12 +490,12 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    */
   abstract public <T> Object getLocalJndiProxy(Class<T> api);
 
-  public AbstractContext getContext()
+  public AbstractContext<X> getContext()
   {
     return null;
   }
 
-  public AbstractContext getContext(Object key) throws FinderException
+  public AbstractContext<?> getContext(Object key) throws FinderException
   {
     return getContext(key, true);
   }
@@ -510,7 +503,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   /**
    * Returns the context with the given key
    */
-  abstract public AbstractContext getContext(Object key, boolean forceLoad)
+  abstract public AbstractContext<?> getContext(Object key, boolean forceLoad)
       throws FinderException;
 
   public void timeout(Timer timer)
@@ -523,7 +516,8 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     try {
       RequestContext.begin();
       // XXX: needs reintegration
-      OwnerCreationalContext env = new OwnerCreationalContext(_producer.getBean());
+      OwnerCreationalContext env
+        = new OwnerCreationalContext(_producer.getBean());
       Object instance = newInstance(env);
       
       Method method = _producer.getTimeoutMethod();
@@ -552,7 +546,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     return _producer.newInstance(env);
   }
   
-  public void destroy(Object instance, CreationalContextImpl env)
+  public void destroy(Object instance, CreationalContextImpl<?> env)
   {
     /*
     if (instance != null)
@@ -581,8 +575,6 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
 
       _loader.start();
 
-      bindContext();
-
       if (_serverProgram != null)
         _serverProgram.configure(this);
 
@@ -600,12 +592,15 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   
   protected void bindContext()
   {
+    for (ResourceGroupConfig resource : _resourceList) {
+      resource.deploy();
+    }
   }
 
   protected void bindInjection()
   {
     _producer.setEnvLoader(_loader);
-    _producer.bindInjection();   
+    _producer.bindInjection();
   }
 
   protected void postStart()
@@ -626,6 +621,11 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   public void setContainerTransaction(boolean isContainerTransaction)
   {
     _isContainerTransaction = isContainerTransaction;
+  }
+  
+  public void setResourceList(ArrayList<ResourceGroupConfig> resourceList)
+  {
+    _resourceList = resourceList;
   }
 
   /**

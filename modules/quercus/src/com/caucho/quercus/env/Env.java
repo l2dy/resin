@@ -4493,7 +4493,7 @@ public class Env
   /**
    * Returns an introspected Java class definition.
    */
-  public JavaClassDef getJavaClassDefinition(Class type)
+  public JavaClassDef getJavaClassDefinition(Class<?> type)
   {
     JavaClassDef def = _quercus.getJavaClassDefinition(type, type.getName());
 
@@ -4514,10 +4514,19 @@ public class Env
       }
     }
     catch (Throwable e) {
-      if (useImport)
+      if (log.isLoggable(Level.FINEST))
+        log.log(Level.FINEST, e.toString(), e);
+      
+      if (useImport) {
         def = importJavaClass(className);
+        
+        if (def != null)
+          return def;
+      }
+      /*
       else
-        log.log(Level.FINER, e.toString(), e);
+        throw createErrorException(e);
+        */
     }
 
     return def;
@@ -4546,11 +4555,17 @@ public class Env
       for (String entry : wildcardList) {
         fullName = entry + '.' + className;
 
-        JavaClassDef def = getJavaClassDefinition(fullName, false);
+        JavaClassDef def;
+        
+        try {
+          def = getJavaClassDefinition(fullName, false);
 
-        if (def != null) {
-          _importMap.putQualified(className, fullName);
-          return def;
+          if (def != null) {
+            _importMap.putQualified(className, fullName);
+            return def;
+          }
+        } catch (Exception e) {
+          log.log(Level.ALL, e.toString(), e);
         }
       }
     }
@@ -6052,6 +6067,25 @@ public class Env
     String exMsg = prefix + fullMsg;
 
     return new QuercusRuntimeException(fullMsg);
+  }
+
+  /**
+   * A fatal runtime error.
+   */
+  public QuercusRuntimeException createErrorException(Throwable e)
+    throws QuercusRuntimeException
+  {
+    Location location = getLocation();
+
+    String prefix = location.getMessagePrefix();
+
+    String fullMsg = e.toString() + getFunctionLocation();
+
+    error(B_ERROR, location, fullMsg);
+
+    String exMsg = prefix + fullMsg;
+
+    return new QuercusRuntimeException(fullMsg, e);
   }
 
   /**

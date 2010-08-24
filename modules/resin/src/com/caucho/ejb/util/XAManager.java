@@ -268,18 +268,18 @@ public class XAManager {
     
     if (_ejbManager != null)
       appExn = _ejbManager.getSystemException(e.getClass());
-    
+
     if (appExn == null || appExn.isRollback()) {
       if (xa != null)
         xa.setRollbackOnly(e);
       
-      return true;
+      return appExn == null;
     }
     else
       return false;
   }
 
-  public void applicationException(Exception e)
+  public void applicationException(Throwable e)
   {
     TransactionImpl xa = getTransaction();
     

@@ -177,6 +177,11 @@ class WatchdogClient
     return _watchdog.startConsole();
   }
 
+  public void stopConsole()
+  {
+    _watchdog.stop();
+  }
+
   //
   // watchdog commands
   //
@@ -341,6 +346,7 @@ class WatchdogClient
       String uid = "";
       
       client.setEncryptPassword(true);
+
       client.connect(uid, getResinSystemAuthKey());
 
       _conn = client;
@@ -381,14 +387,16 @@ class WatchdogClient
 
       appendEnvPath(env, "LD_LIBRARY_PATH", libexecPath);
       appendEnvPath(env, "DYLD_LIBRARY_PATH", libexecPath);
-      appendEnvPath(env, "PATH", resinHome.lookup("win64").getNativePath());
+      if (CauchoSystem.isWindows())
+        appendEnvPath(env, "Path", resinHome.lookup("win64").getNativePath());
     }
     else {
       libexecPath = resinHome.lookup("libexec").getNativePath();
 
       appendEnvPath(env, "LD_LIBRARY_PATH", libexecPath);
       appendEnvPath(env, "DYLD_LIBRARY_PATH", libexecPath);
-      appendEnvPath(env, "PATH", resinHome.lookup("win32").getNativePath());
+      if (CauchoSystem.isWindows())
+        appendEnvPath(env, "Path", resinHome.lookup("win32").getNativePath());
     }
 
     ArrayList<String> list = new ArrayList<String>();
@@ -485,11 +493,19 @@ class WatchdogClient
     stdOs.close();
   }
 
-  private void appendEnvPath(Map<String,String> env,
+  public static void appendEnvPath(Map<String,String> env,
                              String prop,
                              String value)
   {
     String oldValue = env.get(prop);
+
+    if (oldValue == null && CauchoSystem.isWindows()) {
+      String winProp = prop.toUpperCase();
+      oldValue = env.get(winProp);
+
+      if (oldValue != null)
+        prop = winProp;
+    }
 
     if (oldValue != null && ! "".equals(oldValue))
       value = value + File.pathSeparator + oldValue;

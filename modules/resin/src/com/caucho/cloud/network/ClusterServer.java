@@ -49,7 +49,6 @@ import com.caucho.config.program.ContainerProgram;
 import com.caucho.config.types.Period;
 import com.caucho.management.server.ClusterServerMXBean;
 import com.caucho.network.balance.ClientSocketFactory;
-import com.caucho.server.cluster.Machine;
 import com.caucho.util.Alarm;
 
 /**
@@ -67,8 +66,6 @@ public final class ClusterServer {
 
   private final NetworkClusterService _clusterService;
   private final CloudServer _cloudServer;
-
-  private Machine _machine;
 
   private boolean _isDynamic;
 
@@ -102,6 +99,7 @@ public final class ClusterServer {
   private ContainerProgram _serverProgram
     = new ContainerProgram();
 
+  private String _stage;
   private ArrayList<String> _pingUrls = new ArrayList<String>();
 
   private boolean _isSelf;
@@ -214,22 +212,6 @@ public final class ClusterServer {
   public CloudCluster getCluster()
   {
     return _cloudServer.getCluster();
-  }
-
-  /**
-   * Returns the machine.
-   */
-  public Machine getMachine()
-  {
-    return _machine;
-  }
-
-  /**
-   * Returns the machine.
-   */
-  public void setMachine(Machine machine)
-  {
-    _machine = machine;
   }
 
   /**
@@ -512,6 +494,16 @@ public final class ClusterServer {
     _portDefaults.addProgram(program);
   }
 
+  public void setStage(String stage)
+  {
+    _stage = stage;
+  }
+  
+  public String getStage()
+  {
+    return _stage;
+  }
+  
   /**
    * Adds a ping url for availability testing
    */

@@ -39,6 +39,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.config.ConfigException;
+import com.caucho.env.shutdown.ExitCode;
+import com.caucho.env.shutdown.ShutdownService;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
@@ -68,6 +70,8 @@ public final class ThreadPool {
 
   private static final AtomicReference<ThreadPool> _globalThreadPool
     = new AtomicReference<ThreadPool>();
+  
+  private final String _name;
 
   private final AtomicInteger _gId = new AtomicInteger();
   
@@ -147,6 +151,13 @@ public final class ThreadPool {
 
   public ThreadPool()
   {
+    this("system");
+  }
+
+  public ThreadPool(String name)
+  {
+    _name = name;
+    
     _launcher = new ThreadLauncher();
 
     // initialize default values
@@ -297,7 +308,7 @@ public final class ThreadPool {
    */
   public int getThreadActiveCount()
   {
-    return _activeCount.get() - _idleCount.get();
+    return _activeCount.get() - _idleCount.get() - _priorityIdleCount.get();
   }
 
   /**
@@ -655,8 +666,9 @@ public final class ThreadPool {
                                ClassLoader loader,
                                boolean isPriority)
   {
-    if (! _priorityQueue.isEmpty())
+    if (! _priorityQueue.isEmpty()) {
       return false;
+    }
     
     if (_taskQueue.isEmpty()) {
       ResinThread thread = popIdleThread();
@@ -682,6 +694,11 @@ public final class ThreadPool {
     }
   }
 
+  void startIdleThread()
+  {
+    _launcher.wake();
+  }
+  
   /**
    * Returns the next available task, returning null if the thread
    * should exit.
@@ -693,16 +710,17 @@ public final class ThreadPool {
     if (item != null)
       return item;
 
+    int priorityIdleCount = _priorityIdleCount.get();
     int idleCount = _idleCount.get();
 
     // if we have spare threads, process any task queue item
-    if (_priorityIdleMin <= idleCount) {
+    if (_priorityIdleMin <= priorityIdleCount + idleCount) {
       item = _taskQueue.poll();
       
       if (item != null)
         return item;
     }
-    
+
     return null;
   }
   
@@ -742,7 +760,7 @@ public final class ThreadPool {
     }
     else {
       _idleCount.incrementAndGet();
-      
+
       pushIdleThread(_idleHead, thread);
     }
   }
@@ -872,6 +890,7 @@ public final class ThreadPool {
   private boolean doStart()
   {
     int idleCount = _idleCount.get();
+    int priorityIdleCount = _priorityIdleCount.get();
     int startingCount = _startingCount.get();
 
     int threadCount = _activeCount.get() + startingCount;
@@ -879,7 +898,8 @@ public final class ThreadPool {
     if (_threadMax < threadCount) {
       return false;
     }
-    else if (idleCount + startingCount < _idleMin) {
+    else if (idleCount + startingCount < _idleMin
+             || priorityIdleCount + startingCount < _priorityIdleMin) {
       _startingCount.incrementAndGet();
 
       return true;
@@ -888,7 +908,7 @@ public final class ThreadPool {
       return false;
     }
   }
-  
+
   public void close()
   {
     if (this == _globalThreadPool.get())
@@ -898,9 +918,10 @@ public final class ThreadPool {
     interrupt();
   }
 
+  @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[]";
+    return getClass().getSimpleName() + "[" + _name + "]";
   }
 
   final class OverflowThread extends Thread {
@@ -969,9 +990,10 @@ public final class ThreadPool {
           return true;
         } catch (Throwable e) {
           e.printStackTrace();
-          System.err.println("Resin exiting because of failed thread");
+          
+          String msg = "Resin exiting because of failed thread";
 
-          System.exit(1);
+          ShutdownService.shutdownActive(ExitCode.THREAD, msg);
         }
       }
       else {
@@ -985,6 +1007,7 @@ public final class ThreadPool {
       return false;
     }
 
+    @Override
     public void run()
     {
       ClassLoader systemLoader = ClassLoader.getSystemClassLoader();
@@ -992,8 +1015,8 @@ public final class ThreadPool {
       Thread.currentThread().setContextClassLoader(systemLoader);
 
       try {
-        for (int i = 0; i < _idleMin; i++)
-          startConnection(false);
+        while (startConnection(false)) {
+        }
       } catch (Throwable e) {
         e.printStackTrace();
       }
@@ -1003,7 +1026,10 @@ public final class ThreadPool {
           startConnection(true);
         } catch (Throwable e) {
           e.printStackTrace();
-          System.exit(10);
+          
+          String msg = "ThreadPool start connection failed";
+          
+          ShutdownService.shutdownActive(ExitCode.THREAD, msg);
         }
       }
     }

@@ -30,7 +30,7 @@
 package com.caucho.server.distcache;
 
 import com.caucho.cloud.topology.TriadOwner;
-import com.caucho.server.cluster.Server;
+import com.caucho.env.service.ResinSystem;
 import com.caucho.util.HashKey;
 
 /**
@@ -38,9 +38,9 @@ import com.caucho.util.HashKey;
  */
 public class FileCacheManager
   extends AbstractDataCacheManager<FileCacheEntry> {
-  public FileCacheManager(Server server)
+  public FileCacheManager(ResinSystem resinSystem)
   {
-    super(server);
+    super(resinSystem);
   }
 
   /**

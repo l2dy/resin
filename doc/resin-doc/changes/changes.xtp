@@ -11,6 +11,35 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.10 - Aug 23, 2010">
+<ul>
+<li>candi: _namedBeanMap is active and needs to be a ConcurrentHashMap (rep by Wesley Wu)</li>
+<li>hessian: for HessianServlet, do not attempt to find implicit API (#4168, rep by Riccardo Cohen)</li>
+<li>remote: add cxt to artifacts (#4314, rep by Riccardo Cohen)</li>
+<li>remote: cxt needs to have WebServiceContext (#4314, rep by Riccardo Cohen)</li>
+<li>remote: @HessianRemote as servlet was instantiating two instances (#4175, rep by Jeff Schnitzer)</li>
+<li>embed: ResinBeanContainer verified to work with XA and Database (#4160, rep by Michael Barker)</li>
+<li>proxy-cache: proxy-cache requiring Pro warning was being shown even when proxy-cache was available (#4173)</li>
+<li>admin: jmx-service, log-service in the old &lt;management> allowed for open source (#4172)</li>
+<li>database/xa: distinct &lt;database> should be distinct Resource Managers (#4176, rep by Takahiro Fukuda)</li>
+<li>cluster: removed &lt;machine> tag as obsolete</li>
+<li>load-balance: fixes to weight and warmup</li>
+<li>load-balance: created LoadBalanceService for testability</li>
+<li>watchdog: added logging of Resin exit codes on detected shutdown</li>
+<li>system: added ShutdownService to centralize Resin shutdown</li>
+<li>system: added WarningService to send Resin messages to the watchdog</li>
+<li>embed: add ResinEmbed.setRootDirectory and WebAppEmbed.setArchivePath (rep by Danny Yates)</li>
+<li>resin-admin: jmx hide &amp; show acted on wrong detail boxes. (#4145, Rep by Jamison Novak)</li>
+<li>jpa: eclipselink properties for Resin JTA not set when eclipselink found by scanning (#4167, rep by Riccardo Cohen)</li>
+<li>thread: alarm locking issue (rep by Wesley Wu, Jan Kriesten)</li>
+<li>win: fixed dll loading issue (#4159), rep hans</li>
+<li>servlet: fixed cross context include issue (#4117), rep Brian Deng</li>
+<li>servlet: fixed getInputStream issue for String params with Servlet3.0 Part (#4153), rep by Wesley Wu</li>
+<li>servlet: remove &lt;multipart-form> from app-default.xml (#4102, rep by Brian Deng)</li>
+<li>file: range parsing issue with firefox and FileServlet (#4149, rep by Fred Howell)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.9 - 2010-07-26">
 <ul>
 <li>remoting: add userName and password to HessianClient (#4130, rep by Jeff Schnitzer)</li>

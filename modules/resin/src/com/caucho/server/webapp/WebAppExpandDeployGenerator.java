@@ -29,24 +29,23 @@
 
 package com.caucho.server.webapp;
 
-import com.caucho.config.ConfigException;
-import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentListener;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.ExpandDeployGenerator;
-import com.caucho.server.deploy.VersionEntry;
-import com.caucho.server.repository.Repository;
-import com.caucho.server.cluster.Server;
-import com.caucho.util.L10N;
-import com.caucho.vfs.CaseInsensitive;
-import com.caucho.vfs.Path;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
-import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.config.ConfigException;
+import com.caucho.env.repository.RepositoryService;
+import com.caucho.loader.Environment;
+import com.caucho.loader.EnvironmentListener;
+import com.caucho.server.cluster.Server;
+import com.caucho.server.deploy.DeployContainer;
+import com.caucho.server.deploy.ExpandDeployGenerator;
+import com.caucho.server.deploy.VersionEntry;
+import com.caucho.util.L10N;
+import com.caucho.vfs.CaseInsensitive;
+import com.caucho.vfs.Path;
 
 /**
  * The generator for the web-app deploy
@@ -97,24 +96,23 @@ public class WebAppExpandDeployGenerator
       log.log(Level.WARNING, e.toString(), e);
     }
 
+    if (RepositoryService.getCurrent() != null)
+      setRepository(RepositoryService.getCurrentRepository());
+
+    String hostName = webAppContainer.getHostName();
+    if ("".equals(hostName))
+      hostName = "default";
+
+    String stage = "default";
+
     Server server = Server.getCurrent();
 
-    if (server != null) {
-      setRepository(server.getRepository());
+    if (server != null)
+      stage = server.getStage();
 
-      String hostName = webAppContainer.getHostName();
-      if ("".equals(hostName))
-        hostName = "default";
+    setRepositoryTag("wars/" + stage + "/" + hostName);
 
-      String stage = "default";
-
-      if (server != null)
-        stage = server.getStage();
-
-      setRepositoryTag("wars/" + stage + "/" + hostName);
-
-      setEntryNamePrefix("/");
-    }
+    setEntryNamePrefix("/");
 
     _admin = new WebAppExpandDeployGeneratorAdmin(this);
   }
@@ -273,7 +271,7 @@ public class WebAppExpandDeployGenerator
 
     if (contextPath.equals(baseContextPath)
         && (getRepository() != null
-            && getRepository().getTagRoot(baseRepositoryTag) != null)) {
+            && getRepository().getTagContentHash(baseRepositoryTag) != null)) {
       baseController
         = new WebAppVersioningController(contextPath,
                                          baseContextPath,
@@ -285,7 +283,7 @@ public class WebAppExpandDeployGenerator
     if (! isValidDirectory(rootDirectory, segmentName)
         && ! jarPath.canRead()
         && (getRepository() != null
-            && getRepository().getTagRoot(repositoryTag) == null)) {
+            && getRepository().getTagContentHash(repositoryTag) == null)) {
       return baseController;
     }
 
@@ -316,7 +314,7 @@ public class WebAppExpandDeployGenerator
       return baseController;
     }
     else if ((getRepository() != null
-              && getRepository().getTagRoot(baseRepositoryTag) != null)) {
+              && getRepository().getTagContentHash(baseRepositoryTag) != null)) {
       WebAppController versionController
         = _container.getWebAppGenerator().findController(baseSegmentName);
 
@@ -531,7 +529,7 @@ public class WebAppExpandDeployGenerator
 
     if (! rootDirectory.isDirectory()
         && (jarPath == null || ! jarPath.isFile())
-        && getRepository().getTagRoot(versionTag) == null)
+        && getRepository().getTagContentHash(versionTag) == null)
       return null;
     else if (rootDirectory.isDirectory()
              && ! isValidDirectory(rootDirectory, versionName.substring(1)))
