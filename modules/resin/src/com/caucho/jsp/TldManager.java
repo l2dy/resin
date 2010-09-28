@@ -560,6 +560,8 @@ public class TldManager {
                                       location));
       */
     }
+    else if (location.startsWith("WEB-INF/")) // jsp/189a
+      path = _resourceManager.resolvePath(location);
     else if (! location.startsWith("/"))
       path = _resourceManager.resolvePath("WEB-INF/" + location);
     else
@@ -696,7 +698,7 @@ public class TldManager {
       TldPreload taglib = parseTldPreload(is);
 
       taglib.setPath(path);
-      String appDir = _webApp.getAppDir().getPath();
+      String appDir = _webApp.getRootDirectory().getPath();
       String tagPath = path.getPath();
 
       if (tagPath.startsWith(appDir))

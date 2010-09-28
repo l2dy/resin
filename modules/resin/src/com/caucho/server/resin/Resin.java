@@ -37,6 +37,7 @@ import java.lang.reflect.Method;
 import java.net.BindException;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.URL;
 import java.util.Date;
 import java.util.Properties;
 import java.util.logging.Level;
@@ -66,10 +67,12 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.distcache.DistCacheService;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
+import com.caucho.env.lock.LockService;
+import com.caucho.env.lock.SingleLockManager;
 import com.caucho.env.repository.AbstractRepository;
 import com.caucho.env.repository.LocalRepositoryService;
-import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositoryService;
+import com.caucho.env.repository.RepositorySpi;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.service.RootDirectoryService;
 import com.caucho.env.shutdown.ExitCode;
@@ -88,10 +91,10 @@ import com.caucho.naming.Jndi;
 import com.caucho.server.admin.Management;
 import com.caucho.server.cluster.ClusterPod;
 import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServerConfig;
+import com.caucho.server.cluster.ServletContainerConfig;
 import com.caucho.server.cluster.ServletService;
 import com.caucho.server.distcache.FileCacheManager;
-import com.caucho.server.distlock.LockService;
-import com.caucho.server.distlock.SingleLockManager;
 import com.caucho.server.resin.ResinArgs.BoundPort;
 import com.caucho.server.webbeans.ResinCdiProducer;
 import com.caucho.util.Alarm;
@@ -121,7 +124,7 @@ public class Resin
 
   private boolean _isEmbedded;
 
-  private String _serverId = "";
+  private String _serverId = "default";
   private final boolean _isWatchdog;
   
   private ResinArgs _args;
@@ -131,14 +134,17 @@ public class Resin
 
   private Path _resinDataDirectory;
   
-  private ResinSystem _resinSystem;
+  private final ResinSystem _resinSystem;
   
   private long _shutdownWaitMax = 60000L;
 
   private Lifecycle _lifecycle;
 
   private BootResinConfig _bootResinConfig;
-  private Server _server;
+  private CloudServer _selfServer;
+  
+  private ServletContainerConfig _servletContainerConfig;
+  private Server _servletContainer;
 
   private long _initialStartTime;
   private long _startTime;
@@ -168,15 +174,15 @@ public class Resin
   /**
    * Creates a new resin server.
    */
-  protected Resin(ClassLoader loader, boolean isWatchdog)
+  protected Resin(ResinSystem system, boolean isWatchdog)
   {
-    this(loader, isWatchdog, null);
+    this(system, isWatchdog, null);
   }
 
   /**
    * Creates a new resin server.
    */
-  protected Resin(ClassLoader loader,
+  protected Resin(ResinSystem system,
                   boolean isWatchdog,
                   String licenseErrorMessage)
   {
@@ -187,29 +193,34 @@ public class Resin
 
     // DynamicClassLoader.setJarCacheEnabled(true);
     Environment.init();
-
-    if (loader == null)
-      loader = ClassLoader.getSystemClassLoader();
+    
+    _resinSystem = system;
 
     initEnvironment();
+
+    try {
+      URL.setURLStreamHandlerFactory(new ResinURLStreamHandlerFactory());
+    } catch (java.lang.Error e) {
+      //operation permitted once per jvm; catching for harness.
+    }
   }
 
   /**
    * Creates a new Resin instance
    */
-  public static Resin create()
+  public static Resin create(String id)
   {
-    return create(Thread.currentThread().getContextClassLoader(), false);
+    ResinSystem system = new ResinSystem(id);
+    
+    return create(system, false);
   }
 
   /**
    * Creates a new Resin instance
    */
-  public static Resin createWatchdog()
+  public static Resin createWatchdog(ResinSystem system)
   {
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
-
-    Resin resin = create(loader, true);
+    Resin resin = create(system, true);
 
     return resin;
   }
@@ -217,20 +228,17 @@ public class Resin
   /**
    * Creates a new Resin instance
    */
-  public static Resin create(ClassLoader loader, boolean isWatchdog)
+  public static Resin create(ResinSystem system, boolean isWatchdog)
   {
     String licenseErrorMessage = null;
 
     Resin resin = null;
-    
-    if (loader == null)
-      loader = Thread.currentThread().getContextClassLoader();
 
     try {
       Class<?> cl = Class.forName("com.caucho.server.resin.ProResin");
-      Constructor<?> ctor = cl.getConstructor(new Class[] { ClassLoader.class, boolean.class });
+      Constructor<?> ctor = cl.getConstructor(new Class[] { ResinSystem.class, boolean.class });
 
-      resin = (Resin) ctor.newInstance(loader, isWatchdog);
+      resin = (Resin) ctor.newInstance(system, isWatchdog);
     } catch (ConfigException e) {
       log().log(Level.FINER, e.toString(), e);
 
@@ -282,10 +290,10 @@ public class Resin
         // message should already be set above
       }
 
-      resin = new Resin(loader, isWatchdog, licenseErrorMessage);
+      resin = new Resin(system, isWatchdog, licenseErrorMessage);
     }
 
-    _resinLocal.set(resin, loader);
+    _resinLocal.set(resin, system.getClassLoader());
 
     // resin.initEnvironment();
 
@@ -295,17 +303,19 @@ public class Resin
   /**
    * Creates a new Resin instance
    */
-  public static Resin createOpenSource()
+  public static Resin createOpenSource(String id)
   {
-    return createOpenSource(Thread.currentThread().getContextClassLoader());
+    ResinSystem system = new ResinSystem(id);
+    
+    return createOpenSource(system);
   }
 
   /**
    * Creates a new Resin instance
    */
-  public static Resin createOpenSource(ClassLoader loader)
+  public static Resin createOpenSource(ResinSystem system)
   {
-    return new Resin(loader, false, null);
+    return new Resin(system, false, null);
   }
 
   /**
@@ -395,11 +405,13 @@ public class Resin
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
+      /*
       String serverName = getServerId();
       if (serverName == null || "".equals(serverName))
         serverName = "default";
       
       _resinSystem = new ResinSystem(serverName);
+      */
       
       thread.setContextClassLoader(getClassLoader());
 
@@ -413,6 +425,8 @@ public class Resin
 
         if (_rootDirectory == null)
           setRootDirectory(_args.getRootDirectory());
+        
+        _pingSocket = _args.getPingSocket();
       }
       
       if (getRootDirectory() == null)
@@ -488,9 +502,13 @@ public class Resin
     
     DistCacheService distCache = createDistCacheService();
     _resinSystem.addService(DistCacheService.class, distCache);
-
+  }
+  
+  protected void addServices()
+  {
     LockService lockService = createLockService();
     _resinSystem.addService(LockService.class, lockService);
+    
   }
   
   protected DistCacheService createDistCacheService()
@@ -554,6 +572,9 @@ public class Resin
    */
   public void setServerId(String serverId)
   {
+    if ("".equals(serverId))
+      serverId = "default";
+    
     Config.setProperty("serverId", serverId);
 
     _serverId = serverId;
@@ -768,7 +789,7 @@ public class Resin
    */
   public LifecycleState getLifecycleState()
   {
-    return _lifecycle;
+    return _lifecycle.getState();
   }
 
   /**
@@ -787,7 +808,7 @@ public class Resin
    */
   public Server getServer()
   {
-    return _server;
+    return _servletContainer;
   }
 
   /**
@@ -802,16 +823,21 @@ public class Resin
   {
     return 0;
   }
+  
+  public CloudServer getSelfServer()
+  {
+    return _selfServer;
+  }
 
   public Server createServer()
   {
-    if (_server == null) {
+    if (_servletContainer == null) {
       configure();
 
       // _server.start();
     }
 
-    return _server;
+    return _servletContainer;
   }
 
   protected ClusterServer loadDynamicServer(ClusterPod pod,
@@ -841,16 +867,17 @@ public class Resin
 
       // force a GC on start
       System.gc();
-      
-      initRepository();
 
-      _server = createServer();
+      _servletContainer = createServer();
+      
+      NetworkListenService listenService 
+        = _resinSystem.getService(NetworkListenService.class);
 
       if (_args != null) {
         for (BoundPort port : _args.getBoundPortList()) {
-          _server.bind(port.getAddress(),
-                       port.getPort(),
-                       port.getServerSocket());
+          listenService.bind(port.getAddress(),
+                             port.getPort(),
+                             port.getServerSocket());
         }
       }
 
@@ -862,6 +889,7 @@ public class Resin
         _serverId));
         }
       */
+      
 
       log().severe(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
     } finally {
@@ -874,7 +902,7 @@ public class Resin
     LocalRepositoryService localRepositoryService
       = new LocalRepositoryService();
 
-    Repository localRepository = localRepositoryService.getRepository();
+    RepositorySpi localRepository = localRepositoryService.getRepositorySpi();
 
     _resinSystem.addService(localRepositoryService);
 
@@ -883,7 +911,7 @@ public class Resin
     _resinSystem.addService(new RepositoryService(repository));
   }
   
-  protected AbstractRepository createRepository(Repository localRepository)
+  protected AbstractRepository createRepository(RepositorySpi localRepository)
   {
     return (AbstractRepository) localRepository;
   }
@@ -993,15 +1021,20 @@ public class Resin
     try {
       thread.setContextClassLoader(_resinSystem.getClassLoader());
       
-      if (_server == null) {
+      if (_servletContainer == null) {
         BootResinConfig bootResin = configureBoot();
   
         _rootDirectory = bootResin.getRootDirectory();
   
         configureRoot(bootResin);
-  
+        
         configureServer();
+        
+        if (! isWatchdog()) {
+          addServices();
+        }
       }
+      
     } catch (Exception e) {
       throw ConfigException.create(e);
     } finally {
@@ -1068,7 +1101,7 @@ public class Resin
     if (serverName == null || serverName.isEmpty())
       serverName = "default";
   
-    dataDirectory = dataDirectory.lookup(serverName);
+    dataDirectory = dataDirectory.lookup("./" + serverName);
     
     RootDirectoryService rootService
       = new RootDirectoryService(_rootDirectory, dataDirectory);
@@ -1082,7 +1115,7 @@ public class Resin
   private void configureServer()
     throws IOException
   {
-    if (_server != null)
+    if (_servletContainer != null)
       return;
     
     BootResinConfig bootResin = _bootResinConfig;
@@ -1102,27 +1135,31 @@ public class Resin
         clusterConfig.init();
       }
       else {
-          throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
-                                          _serverId));
-      }
-        
-      if (clusterConfig.getServerList().size() > 0) {
         throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
                                         _serverId));
       }
       
+      /*
+      if (clusterConfig.getPodList().size() > 0) {
+        throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
+                                        _serverId));
+      }
+      */
+      
       bootServer = clusterConfig.createServer();
       bootServer.setId("");
       bootServer.init();
+      clusterConfig.addServer(bootServer);
       // bootServer.configureServer();
     }
     
-    CloudServer cloudServer = bootServer.getCloudServer();
+    _selfServer = bootServer.getCloudServer();
     
-    NetworkClusterService networkService = new NetworkClusterService(cloudServer);
+    NetworkClusterService networkService
+      = new NetworkClusterService(_selfServer);
     _resinSystem.addService(networkService);
     
-    ClusterServer server = cloudServer.getData(ClusterServer.class);
+    ClusterServer server = _selfServer.getData(ClusterServer.class);
     
     LoadBalanceService loadBalanceService;
     loadBalanceService = new LoadBalanceService(createLoadBalanceFactory());
@@ -1132,25 +1169,40 @@ public class Resin
     BamService bamService = new BamService(server.getBamAdminName());
     _resinSystem.addService(bamService);
     
-    _server = createServer(networkService);
+    initRepository();
+    
+    _servletContainer = createServer(networkService);
 
     if (_stage != null)
-      _server.setStage(_stage);
+      _servletContainer.setStage(_stage);
     
-    NetworkListenService listenService = new NetworkListenService(cloudServer);
+    NetworkListenService listenService
+      = new NetworkListenService(_selfServer);
     
     _resinSystem.addService(listenService);
     
-    ServletService servletService = new ServletService(_server);
+    ServletService servletService = new ServletService(_servletContainer);
     _resinSystem.addService(servletService);
     
     ResinConfig resinConfig = new ResinConfig(this);
     
     bootResin.getProgram().configure(resinConfig);
-
-    bootServer.getCluster().getProgram().configure(_server);
     
-    _server.init();
+    _servletContainerConfig = new ServletContainerConfig(_servletContainer);
+
+    bootServer.getPod().getCluster().getProgram().configure(_servletContainerConfig);
+    
+    ServerConfig config = new ServerConfig(_servletContainerConfig);
+    bootServer.getServerProgram().configure(config);
+    
+    _servletContainerConfig.init();
+    
+    _servletContainer.init();
+  }
+  
+  protected ServletContainerConfig getServletContainerConfig()
+  {
+    return _servletContainerConfig;
   }
   
   protected LoadBalanceFactory createLoadBalanceFactory()
@@ -1160,7 +1212,7 @@ public class Resin
   
   protected Server createServer(NetworkClusterService clusterService)
   {
-    return new Server(_resinSystem, clusterService);
+    return new Server(this, _resinSystem, clusterService);
   }
 
   public Management createResinManagement()
@@ -1221,9 +1273,11 @@ public class Resin
 
       validateEnvironment();
       
-      final Resin resin = Resin.create();
+      ResinArgs args = new ResinArgs(argv);
 
-      ResinArgs args = new ResinArgs(resin, argv);
+      ResinSystem system = new ResinSystem(args.getServerId());
+      
+      final Resin resin = Resin.create(system, false);
 
       resin.setArgs(args);
 
@@ -1325,12 +1379,8 @@ public class Resin
     public String getAddress()
     {
       try {
-        Server server = _server;
-
-        if (server != null) {
-          ClusterServer clusterServer = server.getSelfServer();
-
-          return clusterServer.getAddress();
+        if (_selfServer != null) {
+          return _selfServer.getAddress();
         }
         else
           return InetAddress.getLocalHost().getHostAddress();
@@ -1346,12 +1396,8 @@ public class Resin
      */
     public int getPort()
     {
-      Server server = _server;
-
-      if (server != null) {
-        ClusterServer clusterServer = server.getSelfServer();
-
-        return clusterServer.getPort();
+      if (_selfServer != null) {
+        return _selfServer.getPort();
       }
       else
         return 0;

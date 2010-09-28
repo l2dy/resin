@@ -56,8 +56,6 @@ public class ResinSystem
   private static final EnvironmentLocal<ResinSystem> _serverLocal
     = new EnvironmentLocal<ResinSystem>();
 
-  private static final ClassLoader _systemClassLoader;
-
   private final String _id;
   private EnvironmentClassLoader _classLoader;
   
@@ -95,14 +93,18 @@ public class ResinSystem
   public ResinSystem(String id,
                      ClassLoader loader)
   {
+    if (id == null || id.isEmpty())
+      id = "default";
+    
     _id = id;
 
-    if (loader instanceof EnvironmentClassLoader)
+    if (loader instanceof EnvironmentClassLoader) {
       _classLoader = (EnvironmentClassLoader) loader;
+    }
     else {
       // the environment id must be independent of the server because
       // of cluster cache requirements. 
-      _classLoader = EnvironmentClassLoader.create(loader, "system:");
+      _classLoader = EnvironmentClassLoader.create(loader, "resin-system:");
     }
 
     _serverLocal.set(this, _classLoader);
@@ -279,7 +281,7 @@ public class ResinSystem
    */
   public boolean isAfterStarting()
   {
-    return _lifecycle.isAfterStarting();
+    return _lifecycle.getState().isAfterStarting();
   }
 
   /**
@@ -632,16 +634,5 @@ public class ResinSystem
       else
         return b.getClass().getName().compareTo(a.getClass().getName());
     }
-  }
-  
-  static {
-    ClassLoader systemClassLoader = null;
-    
-    try {
-      systemClassLoader = ClassLoader.getSystemClassLoader();
-    } catch (Exception e) {
-    }
-    
-    _systemClassLoader = systemClassLoader;
   }
 }

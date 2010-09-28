@@ -74,14 +74,7 @@ public class AccessLogWriter extends AbstractRolloverLog
   private LogBuffer _logTail;
   private int _logQueueSize;
 
-  private boolean _isFlushing;
-
-  private final AtomicBoolean _hasFlushThread = new AtomicBoolean();
-  private final AtomicBoolean _isThreadWake = new AtomicBoolean();
-
   private final LogWriterTask _logWriterTask = new LogWriterTask();
-  private Thread _flushThread;
-
   private SemaphoreMeter _semaphoreProbe;
 
   AccessLogWriter(AccessLog log)
@@ -94,7 +87,7 @@ public class AccessLogWriter extends AbstractRolloverLog
     _length = 0;
     */
 
-    _semaphoreProbe = MeterService.createSemaphoreMeter("Resin|Log|Semaphore");
+    // _semaphoreProbe = MeterService.createSemaphoreMeter("Resin|Log|Semaphore");
   }
 
   @Override
@@ -118,8 +111,6 @@ public class AccessLogWriter extends AbstractRolloverLog
 
   void writeBuffer(LogBuffer buffer)
   {
-    int queueSize = 0;
-
     synchronized (_bufferLock) {
       if (_logTail != null) {
         _logTail.setNext(buffer);
@@ -133,7 +124,7 @@ public class AccessLogWriter extends AbstractRolloverLog
       }
     }
 
-    if (_logQueueSize > 32 || _isAutoFlush) {
+    if (_logQueueSize > 64 || _isAutoFlush) {
       _logWriterTask.wake();
     }
   }
@@ -230,7 +221,8 @@ public class AccessLogWriter extends AbstractRolloverLog
       Thread.interrupted();
       _logSemaphore.acquire();
 
-      _semaphoreProbe.acquire();
+      if (_semaphoreProbe != null)
+        _semaphoreProbe.acquire();
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -246,7 +238,9 @@ public class AccessLogWriter extends AbstractRolloverLog
   void freeBuffer(LogBuffer logBuffer)
   {
     _logSemaphore.release();
-    _semaphoreProbe.release();
+    
+    if (_semaphoreProbe != null)
+      _semaphoreProbe.release();
 
     logBuffer.setNext(null);
 

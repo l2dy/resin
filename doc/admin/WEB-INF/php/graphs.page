@@ -2,15 +2,15 @@
 
 $cache = resin_create_distcache("resin:admin:graph");
 
-$p_hash = $_REQUEST['h'];
+$p_hash = htmlspecialchars($_REQUEST['h']);
 
 $p_submit = $_REQUEST['submit'];
-$p_graph = $_REQUEST['graph'];
-$p_period = $_REQUEST['p'];
+$p_graph = htmlspecialchars($_REQUEST['graph']);
+$p_period = htmlspecialchars($_REQUEST['p']);
 if ($_REQUEST['period'])
-  $p_period = $_REQUEST['period'];
-if ($_REQUEST['np'])
-  $p_period = $_REQUEST['np'];
+  $p_period = htmlspecialchars($_REQUEST['period']);
+
+$p_servers = explode(" ", htmlspecialchars($_REQUEST['server-set']));
 
 $user = quercus_servlet_request()->getRemoteUser();
 
@@ -33,23 +33,15 @@ if ($p_hash && ! $p_submit) {
   $item = $cache->get($p_hash);
   $p_name = $item['name'];
   $p_checks = $item['checks'];
-  $p_servers = $item['servers'];
 }
 else if ($p_submit) {
   $is_refresh = true;
 
-  $p_name = $_REQUEST['name'];
-  $p_checks = $_REQUEST['checks'];
-  $p_servers = $_REQUEST['servers'];
-
-  if (! $p_name) {
-    $p_submit = null;
-    $p_name = $p_servers[0] . "|" . $p_checks[0];
-  }
+  $p_name = htmlspecialchars($_REQUEST['name']);
+  $p_checks = array_map(htmlspecialchars, $_REQUEST['checks']);
 
   $item = array("name"=>$p_name,
-                "checks"=>$p_checks,
-                "servers"=>$p_servers);
+                "checks"=>$p_checks);
 
   $ser = serialize($item);
   $p_hash = dechex(crc32($ser));
@@ -71,19 +63,13 @@ else if ($p_submit) {
 
 $query = "&h=" . $p_hash . "&p=" . $p_period;
 
-if ($is_refresh) {
-  // redirect so the refresh will work
-  $g_next_url = "?q=" . $_REQUEST['q'] . "&s=" . $_REQUEST['s'] . $query;
-  header("Location: " . $_SERVER['SCRIPT_URL'] . $g_next_url);
-  return;
-}
-
 require_once "WEB-INF/php/inc.php";
 
-if (! admin_init($query, true)) {
+if (! admin_init($query, false)) {
   return;
 }
 
+echo "<h1>Graphs" . print_help("Graphs") . "</h1>\n";
 $names = array();
 
 $full_height = 500;
@@ -107,269 +93,451 @@ foreach ($p_checks as $check) {
   }
 }
 
-$stat = $g_mbean_server->lookup("resin:type=StatService");
-
-if (! $stat)
-  return;
-
 if (! $p_name)
   $p_name = $p_names[0];
 
-if (! $p_name) {
-  $p_name = $self_index . "|Resin|Server|Uptime";
-  $p_names[] = $p_name;
-}
-
-echo "<p><b>Note:</b> this page requires HTML 5 canvas support.  You may need
-to use Firefox 3.5 or other HTML 5-capable browser
-to see the graphs properly.</p>\n";
+echo "<div id='canvas-warning'><p><b>Note:</b> this page requires HTML 5 
+canvas support.  You may need to use Firefox 3.5 or other HTML 5-capable browser
+to see the graphs properly.</p></div>\n";
 
 $user_graphs = $user_item['user-graphs'];
 
-// existing graphs
+echo "<div id='graph-content' style='display:none'>\n";
 
-echo "<h3>Select Defined Graph</h3>\n";
-echo "<form name='def_graph' method='POST' action='" . $g_next_url . "'>";
-echo "<select name='graph' onchange='javascript:document.forms.def_graph.submit();'>\n";
+echo '<div id="new-graph-drawer">';
+echo '<div id="new-graph-form">';
+display_new_graph_form();
+echo '</div>';
+echo '</div>';
 
-$selected = false;
-foreach ($user_item['user-graphs'] as $name => $hash) {
-  echo "<option ";
-  if ($p_hash == $hash) {
-    $selected = true;
-    echo " selected";
-  }
-  echo " value='" . $name . "'>" . $name . "\n";
-}
-if (! $selected)
-  echo "<option selected>--------\n";
+echo '<div style="float: left; width: %40;">';
+display_main_graph();
+echo '</div>';
+echo "</div>";
 
-echo "</select>\n";
-echo "</form>";
+display_footer($g_page, javascript_main_graph());
 
-echo "<h1><a href=" . $g_next_url . ">Graph: $p_name</a></h1>";
-
-echo "Time: "
-
-if ($p_period == 60)
-  echo " 1h";
-else
-  echo " <a href=" . $g_next_url . "&np=" . (60) . ">1h</a>";
-
-if ($p_period == 6 * 60)
-  echo " 6h";
-else
-  echo " <a href=" . $g_next_url . "&np=" . (6 * 60) . ">6h</a>";
-
-if ($p_period == 24 * 60)
-  echo " 24h";
-else
-  echo " <a href=" . $g_next_url . "&np=" . (24 * 60) . ">24h</a>";
-
-if ($p_period == 7 * 24 * 60)
-  echo " 7d";
-else
-  echo " <a href=" . $g_next_url . "&np=" . (7 * 24 * 60) . ">7d</a>";
-
-if ($p_period == 30 * 24 * 60)
-  echo " 30d";
-else
-  echo " <a href=" . $g_next_url . "&np=" . (30 * 24 * 60) . ">30d</a>";
-?>
-<p>
-
-<?php
-
-draw_main_graph();
-
-// graph_draw("graph", $p_names, $full_width, $full_height, $start, -1, $step);
-
-$full_names = $stat->statisticsNames();
-
-$names = array();
-$servers = array();
-foreach ($full_names as $name) {
-  $values = preg_split('/[|]/', $name);
-
-  $server = array_shift($values);
-
-  if (! in_array($server, $servers)) {
-    $servers[] = $server;
-  }
-  
-  $section_array = null;
-  $section_array[] = array_shift($values);
-  $section_array[] = array_shift($values);
-
-  $section = join($section_array, '|');
-
-  $name = join($values, '|');
-
-  $names = $sections[$section];
-  if (! in_array($name, $names))
-    $names[] = $name;
-  $sections[$section] = $names;
-}
-
-/*
-echo "<ul>";
-foreach ($sections as $section => $names) {
-  echo "<li>$section\n";
-  echo "<ul>";
-  foreach ($names as $name) {
-    echo "<li>$name\n";
-  }
-  echo "</ul>";
-}
-echo "</ul>";
-*/
-
-if ($p_graph) {
-  $rest_url = "rest.php?q=graph&graph={$p_graph}&period={$p_period}";
-
-  echo "<div><a href='{$rest_url}'>Embedded graph URL</a></div>";
-}
-elseif ($p_hash) {
-  $rest_url = "rest.php?q=graph&hash={$p_hash}&period={$p_period}";
-
-  echo "<div><a href='{$rest_url}'>Embedded graph URL</a></div>";
-}
-
-echo "<br>";
-
-// server
-echo "<h3>Add New Graph</h3>";
-echo "<br>";
-
-echo "<form method='post' action='" . $g_next_url . "'>"
-echo "<input type='hidden' name='submit' value='true'>\n";
-
-echo "<input type='submit' value='Create Graph'><br>\n";
-
-echo "Graph Name: ";
-echo "<input name='name' size='40'><br>";
-
-echo "Servers: ";
-ksort($servers);
-foreach ($servers as $server) {
-  echo "<input type='checkbox' name='servers[]'";
-  echo " value='$server'>$server\n";      
-}
-echo "<br>";
-echo "Data: ";
-
-// data selection
-/*
-echo "<table width='600'>";
-echo "<tr align='top'>";
-echo "<td valign='top' width='40%'>";
-echo "<select id='name_src' multiple='yes'>";
-echo "<option disabled='true'>-- select at least one --</option>\n";
-ksort($sections);
-foreach ($sections as $section => $names) {
-  sort($names);
-  foreach ($names as $name) {
-    echo "<option>$section|$name\n";
-  }
-}
-echo "</select>";
-echo "<td valign='top' align='center'>";
-echo "<font size='+1'><a href='#' onclick=\"select_name('name_src', 'name_dst')\">>>></a></font><br>";
-echo "<font size='+1'><a href='#' onclick=\"select_name('name_dst', 'name_src')\">&lt;&lt;&lt;</a></font>";
-echo "<td valign='top' width='40%'>";
-echo "<select id='name_dst' multiple='yes' name='names'>";
-echo "<option disabled='true'>-- select at least one --</option>\n";
-echo "</select>\n";
-echo "</tr>";
-echo "</table>\n";
-*/
-
-$i = 0;
-
-ksort($sections);
-echo "<ul>"
-foreach ($sections as $section => $names) {
-  $i++;
-
-/*
-  echo "<li class='close' id='lc_$i'>";
-  echo "<a href='#' onclick='show(\"lo_$i\");hide(\"lc_$i\");'>";
-  echo "$section</a>"
-  echo "</li>";
-
-  echo "<li class='open' id='lo_$i'>";
-  echo "<a href='#' onclick='show(\"lc_$i\");hide(\"lo_$i\");'>";
-  echo $section;
-  echo "</a>";
-*/
-
-  echo "<li class='open' id='lc_$i'>";
-  echo "<img src='images/close-item.png'";
-  echo " onclick='show_n(\"lo_$i\");hide(\"lc_$i\");'></img> ";
-  echo "$section"
-  echo "</li>";
-
-  echo "<li class='open' id='lo_$i' style='display:none'";
-  echo "<img src='images/open-item.png'";
-  echo " onclick='show_n(\"lc_$i\");hide(\"lo_$i\");'></img> ";
-  echo $section;
-
-  sort($names);
-  echo "<ul style='list-style-type:none'>";
-  foreach ($names as $name) {
-    echo "<li><input type='checkbox' name='checks[]'";
-    /*
-    if (in_array("$section|$name", $p_checks))
-      echo " checked='true'";
-    */
-      
-    echo "value='$section|$name'>$name<br>\n";
-  }
-  echo "</ul>";
-  echo "</li>";
-}
-echo "</ul>";
-
-echo "</form>\n";
-
-function draw_main_graph()
+function display_graph_selection()
 {
+  global $p_period;
+  global $p_hash;
+  global $user_item;
+  global $g_next_url;
+  global $g_server;
+  global $self_index;
+
+  echo "<form name='def_graph' method='POST' action='" . $g_next_url . "'>";
+  echo "<input type='hidden' name='period' value='$p_period'/>\n";
+  echo "<b>Meters:</b>\n";
+  echo "<select name='graph' onchange='javascript:document.forms.def_graph.submit();'>\n";
+
+  $selected = false;
+  foreach ($user_item['user-graphs'] as $name => $hash) {
+    echo "<option ";
+    if ($p_hash == $hash) {
+      $selected = true;
+      echo " selected";
+    }
+    echo " value='{$name}'>{$name}</option>\n";
+  }
+  if (! $selected)
+    echo "<option selected>--------</option>\n";
+
+  echo "</select>\n";
+
+  $cluster_size = count($g_server->Cluster->Servers);
+
+  echo "<b>Server Set:</b>\n";
+  echo "<select name='server-set'>\n";
+
+  echo "<option value='$self_index'";
+
+  if ($_REQUEST['server-set'] == $self_index)
+    echo " selected";
+
+  echo ">This Server</option>\n";
+
+  for ($i = 0; $i < min(3, $cluster_size); $i++) {
+    $triad .= sprintf("%02d ", $i);
+  }
+
+  $triad = trim($triad);
+
+  echo "<option value='$triad'";
+
+  if ($_REQUEST['server-set'] == $triad)
+    echo " selected";
+
+  echo ">Triad</option>\n";
+
+  if ($cluster_size > 3) {
+    for ($i = 3; $i < $cluster_size; $i++) {
+      $non_triad .= sprintf("%02d ", $i);
+    }
+
+    $non_triad = trim($non_triad);
+
+    echo "<option value='$non_triad'";
+
+    if ($_REQUEST['server-set'] == $non_triad)
+      echo " selected";
+
+    echo ">Non-triad servers</option>\n";
+  }
+
+  for ($i = 0; $i < $cluster_size; $i++) {
+    $all .= sprintf("%02d ", $i);
+  }
+
+  $all = trim($all);
+
+  echo "<option value='$all'";
+
+  if ($_REQUEST['server-set'] == $all)
+    echo " selected";
+
+  echo ">All servers in cluster</option>\n";
+
+  echo "</select><br/>\n";
+
+  $graph_layout = $_REQUEST['graph-layout'];
+
+  echo "<input name='graph-layout' type='radio' value='single-graph'";
+
+  if ($graph_layout != 'multi-graph')
+    echo " checked";
+
+  echo ">Show one graph for all servers</input><br/>";
+
+  echo "<input name='graph-layout' type='radio' value='multi-graph'";
+
+  if ($graph_layout == 'multi-graph')
+    echo " checked";
+
+  echo ">Show graphs for each server</input>";
+
+  echo "</form>";
+}
+
+function display_period_selection()
+{
+  global $p_period;
+  global $g_next_url;
+
+  echo "<div class='graph-period'>\n";
+
+  echo "Time: "
+
+  echo "<select name='period'>\n";
+
+  echo " <option value='" . (60) . "'";
+
+  if ($p_period == 60)
+    echo " selected";
+
+  echo ">1 hour</option>\n";
+
+  echo " <option value='" . (6 * 60) . "'";
+
+  if ($p_period == 6 * 60)
+    echo " selected";
+
+  echo ">6 hours</option>\n";
+
+  echo " <option value='" . (24 * 60) . "'";
+
+  if ($p_period == 24 * 60)
+    echo " selected";
+
+  echo ">24 hours</option>\n";
+
+  echo " <option value='" . (7 * 24 * 60) . "'";
+
+  if ($p_period == 7 * 24 * 60)
+    echo " selected";
+
+  echo ">7 days</option>\n";
+
+  echo " <option value='" . (7 * 24 * 60) . "'";
+
+  if ($p_period == 7 * 24 * 60)
+    echo " selected";
+
+  echo ">7 days</option>\n";
+
+  echo "</select>\n";
+  echo "</div>\n";
+}
+
+function display_main_graph() 
+{
+  global $g_next_url;
   global $p_name;
-  global $p_names;
+  global $p_graph;
+  global $p_hash;
   global $p_period;
 
-  $name = $p_name;
+  display_period_selection();
+
+  echo "<div class='graph'></div>";
+
+  /*
+   * XXX graph now requires flot -- include in rest output?
+  if ($p_graph) {
+    $rest_url = "rest.php?q=graph&graph={$p_graph}&period={$p_period}";
+
+    echo "<div><a href='{$rest_url}'>Embedded graph URL</a></div>";
+  }
+  elseif ($p_hash) {
+    $rest_url = "rest.php?q=graph&hash={$p_hash}&period={$p_period}";
+
+    echo "<div><a href='{$rest_url}'>Embedded graph URL</a></div>";
+  }*/
+
+  echo "<br>";
+}
+
+function display_new_graph_form() 
+{
+  global $p_period;
+  global $p_hash;
+  global $p_graph;
+  global $p_names;
+  global $g_next_url;
+  global $g_mbean_server;
+
+  display_graph_selection();
+
+  $stat = $g_mbean_server->lookup("resin:type=StatService");
+
+  if (! $stat)
+    return;
+
+  $full_names = $stat->statisticsNames();
+
+  $names = array();
+  $servers = array();
+  foreach ($full_names as $name) {
+    $values = preg_split('/[|]/', $name);
+
+    $server = array_shift($values);
+
+    if (! in_array($server, $servers)) {
+      $servers[] = $server;
+    }
+    
+    $section_array = null;
+    $section_array[] = array_shift($values);
+    $section_array[] = array_shift($values);
+
+    $section = join($section_array, '|');
+
+    $name = join($values, '|');
+
+    $names = $sections[$section];
+    if (! in_array($name, $names))
+      $names[] = $name;
+    $sections[$section] = $names;
+  }
+
+  // server
+  echo "<form method='post' action='" . $g_next_url . "'>"
+  echo "<input type='hidden' name='submit' value='true'>\n";
+  echo "<h2><span id='meter-switch' class='switch'></span>Meters</h2>";
+  echo "<button id='clear-graph' style='margin: 0 1em'>Clear Meters</button>";
+
+  $i = 0;
+
+  ksort($sections);
+  echo "<ul class='meters'>"
+  foreach ($sections as $section => $names) {
+    $i++;
+    echo "<li class='meter-section'>";
+    
+    $section_id = "meter-" . crc32($section);
+    echo "<span class='switch' id='$section_id'>$section</span>";
+
+    sort($names);
+    echo "<ul class='toggle-meter-switch toggle-$section_id'>";
+    foreach ($names as $name) {
+      echo "<li><input class='meter' type='checkbox' name='checks[]' ";
+
+      $regexp = str_replace('|', '[|]', "/[0-9][0-9]|{$section}|{$name}/");
+
+      if (preg_grep($regexp, $p_names)) {
+        echo "checked ";
+      }
+        
+      echo "value='$section|$name'>$name<br>\n";
+    }
+    echo "</ul>";
+    echo "</li>";
+  }
+  echo "</ul>";
+
+  echo "<div style='text-align: right'>\n";
+  echo "<div id='validation-notice' class='ui-state-error ui-corner-all' style='display:none'></div>\n";
+  echo "<input name='name' style='width: 100%;'></input>\n";
+  echo "<input type='submit' value='Save Meters'><br>\n";
+  echo "</div>\n";
+
+  echo "</form>\n";
+}
+
+function javascript_main_graph()
+{
+  global $g_next_url;
 
   $width = 600 - 60;
   $height = 400 - 40;
 
-  $now = time();
-  $start = $now - $p_period * 60;
-  $dt = date_create();
-  $tz = date_timezone_get($dt);
-  $offset = timezone_offset_get($tz, $dt);
+  $javascript = <<<EOF
 
-  $time = $start + $offset;
+if (document.createElement('canvas').getContext) {
+  $("div#canvas-warning").hide();
+  $("div#graph-content").show();
+}
 
-  if ($p_period <= 60) {
-  }
-  else if ($p_period <= 12 * 60) {
-    $time += 3600 - 1;
-    $time -= $time % 3600;
-  }
-  else if ($p_period <= 24 * 60) {
-    $time += 3 * 3600 - 1;
-    $time -= $time % (3 * 3600);
-  }
-  else {
-    $time += 24 * 3600 - 1;
-    $time -= $time % (24 * 3600);
-  }
+function GraphManager() {
+  var graphDiv = $('div.graph');
 
-  $start = $time - $offset;
-  $end = $start + $p_period * 60;
+  var updateGraph = function(element, canvasHtml) {
+    if (canvasHtml.indexOf("<div") == 0) {
+      element.empty();
+      element.append(canvasHtml);
+    }
+    else {
+      location.reload();
+    }
+  };
 
-  stat_graph("graph", $width, $height, $start, $end, $p_names);
+  var highlightSections = function() {
+    $("li.meter-section").each(function() {
+      var switchElement = $(this).find("span.switch");
+      var meterCheckedCount = 
+        $(this).find("input.meter:checkbox:checked").length;
+
+      if (meterCheckedCount > 0) 
+        switchElement.css("font-weight", "bold");
+      else  
+        switchElement.css("font-weight", "normal");
+    });
+  };
+
+  var refresh = function() {
+    highlightSections();
+
+    var servers = $("select[name=server-set] option:selected")
+                    .attr("value")
+                    .split(" ");
+
+    var checks = $("input.meter:checkbox:checked").map(function() {
+      return $(this).attr("value");
+    });
+
+    var period = $("select[name=period] option:selected").attr("value");
+
+    // synchronize the period in the hidden input in the Meters form
+    $("input[name=period]").attr("value", period);
+
+    var isMultiGraph = 
+      ($("input[name=graph-layout]:checked").attr("value") == "multi-graph");
+
+    if (isMultiGraph) {
+      graphDiv.empty();
+
+      $.each(servers, function(i, server) {
+        var element = $("<div></div>");
+        graphDiv.append(element);
+
+        $.post("rest.php?q=graph",
+               { canvas : "graph-" + server,
+                 servers: [ server ],
+                 checks : checks,
+                 period : period,
+                 width : "${width}",
+                 height : "${height}" },
+               function(canvasHtml) {
+                 updateGraph(element, canvasHtml);
+               },
+               "text/html");
+      });
+    }
+    else {
+      $.post("rest.php?q=graph",
+             { canvas : "graph-" + servers.join("-"),
+               servers: servers,
+               checks : checks,
+               period : period,
+               width : "${width}",
+               height : "${height}" },
+             function(canvasHtml) {
+               updateGraph(graphDiv, canvasHtml);
+             },
+             "text/html");
+    }   
+  };
+
+  refresh();
+  window.setInterval(refresh, 60000);
+
+  $("input.meter:checkbox").change(refresh);
+  $("form[name=def_graph] :input:not(input[type=hidden])").change(refresh);
+  $("select[name=period]").change(refresh);
+
+  $("button#clear-graph").click(function() {
+    $("input.meter:checkbox:checked").each(function() {
+      $(this).attr("checked", false);
+      $(this).change();
+    });
+    
+    return false;
+  });
+
+  var nameInput = $("input[name=name]");
+
+  nameInput.attr("value", "Meter Set Name");
+  nameInput.css("color", "#999");
+  nameInput.focusin(function() {
+    if (nameInput.attr("value") == "Meter Set Name") {
+      nameInput.attr("value", "");
+      nameInput.css("color", "black");
+    }
+  });
+
+  nameInput.focusout(function() {
+    if (nameInput.attr("value") == "") {
+      nameInput.attr("value", "Meter Set Name");
+      nameInput.css("color", "#999");
+    }
+  });
+
+  var validationNotice = $("#validation-notice");
+  nameInput.closest("form").submit( function() {
+    var html = "";
+
+    if ($("input.meter:checkbox:checked").length == 0) {
+      html += "Please select at least one meter for this set<br/>";
+    }
+
+    if (nameInput.attr("value") == "Meter Set Name"
+        || nameInput.attr("value") == "") {
+      html += "Please input a name for this meter set<br/>";
+    }
+
+    if (html != "") {
+      validationNotice.html(html);
+      validationNotice.show();
+      return false;
+    }
+  });
+}
+
+new GraphManager();
+
+EOF;
+
+  return $javascript;
 }
 
 ?>

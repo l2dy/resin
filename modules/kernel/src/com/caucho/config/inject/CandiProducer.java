@@ -181,8 +181,9 @@ public class CandiProducer<X> implements InjectionTarget<X>
       else
         value = _instanceClass.newInstance();
 
-      if (env != null)
+      if (env != null) {
         env.push(value);
+      }
       
       if (_decoratorBeans != null) {
         if (env != null)
@@ -259,6 +260,16 @@ public class CandiProducer<X> implements InjectionTarget<X>
       throw new CreationException(e);
     }
   }
+  
+  public ConfigProgram []getPostConstructProgram()
+  {
+    return _initProgram;
+  }
+  
+  public void setPostConstructProgram(ConfigProgram []initProgram)
+  {
+    _initProgram = initProgram;
+  }
 
   @Override
   public void postConstruct(X instance)
@@ -274,7 +285,8 @@ public class CandiProducer<X> implements InjectionTarget<X>
       else {
         for (ConfigProgram program : _initProgram) {
           // log.info("POST: " + program);
-          program.inject(instance, env);
+          if (program != null)
+            program.inject(instance, env);
         }
       }
 

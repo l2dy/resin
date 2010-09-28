@@ -88,7 +88,7 @@ public class ResinEmbed
   private static final String EMBED_CONF
     = "classpath:com/caucho/resin/resin-embed.xml";
 
-  private Resin _resin = Resin.create();
+  private final Resin _resin;
   private String _configFile = EMBED_CONF;
 
   private CloudCluster _cluster;
@@ -116,7 +116,7 @@ public class ResinEmbed
    */
   public ResinEmbed()
   {
-    _resin = Resin.create();
+    _resin = Resin.create("embed");
     _resin.setRootDirectory(Vfs.lookup());
   }
 
@@ -293,6 +293,8 @@ public class ResinEmbed
         port.bindTo(_server);
       }
 
+      _resin.start();
+      
       HostConfig hostConfig = new HostConfig();
       _server.addHost(hostConfig);
       _host = _server.getHost("", 0);
@@ -313,10 +315,8 @@ public class ResinEmbed
 
         config.addBuilderProgram(new WebAppProgram(webApp));
 
-        _host.addWebApp(config);
+        _host.getWebAppContainer().addWebApp(config);
       }
-      
-      _resin.start();
     } catch (Exception e) {
       throw ConfigException.create(e);
     } finally {

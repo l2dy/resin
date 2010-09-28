@@ -29,55 +29,73 @@
 
 package com.caucho.server.host;
 
-import com.caucho.bam.*;
+import java.net.InetAddress;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
+
+import com.caucho.bam.Broker;
+import com.caucho.cloud.network.NetworkListenService;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.SingletonBean;
-import com.caucho.hemp.broker.*;
+import com.caucho.env.deploy.EnvironmentDeployInstance;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.hemp.broker.HempBroker;
+import com.caucho.hemp.broker.HempBrokerManager;
+import com.caucho.http.log.AccessLog;
 import com.caucho.lifecycle.Lifecycle;
+import com.caucho.lifecycle.LifecycleState;
 import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.make.AlwaysModified;
 import com.caucho.management.server.HostMXBean;
 import com.caucho.network.listen.SocketLinkListener;
-import com.caucho.server.cluster.Cluster;
+import com.caucho.rewrite.DispatchRule;
+import com.caucho.rewrite.RewriteFilter;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.deploy.EnvironmentDeployInstance;
-import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
-import com.caucho.server.resin.*;
+import com.caucho.server.dispatch.InvocationBuilder;
+import com.caucho.server.e_app.EarConfig;
+import com.caucho.server.e_app.EarDeployGenerator;
+import com.caucho.server.resin.Resin;
+import com.caucho.server.rewrite.RewriteDispatch;
+import com.caucho.server.webapp.ErrorPage;
+import com.caucho.server.webapp.ErrorPageManager;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.server.webapp.WebAppContainer;
+import com.caucho.server.webapp.WebAppExpandDeployGenerator;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
 
-import java.net.*;
-import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.regex.*;
-
 /**
  * Resin's virtual host implementation.
  */
-public class Host extends WebAppContainer
+public class Host
   implements EnvironmentBean, Dependency, SchemaBean,
-             EnvironmentDeployInstance
+             EnvironmentDeployInstance, InvocationBuilder
 {
-  private static final Logger log = Logger.getLogger(Host.class.getName());
   private static final L10N L = new L10N(Host.class);
-
+  private static final Logger log = Logger.getLogger(Host.class.getName());
+  
   private static EnvironmentLocal<Host> _hostLocal
     = new EnvironmentLocal<Host>("caucho.host");
 
-  private HostContainer _parent;
+  private final Server _servletContainer;
+  private final HostContainer _parent;
 
   // The Host entry
-  private HostController _controller;
+  private final HostController _controller;
+  private final Path _rootDirectory;
+  
+  private EnvironmentClassLoader _classLoader;
 
   // The canonical host name.  The host name may include the port.
   private String _hostName = "";
@@ -86,6 +104,9 @@ public class Host extends WebAppContainer
 
   private String _serverName = "";
   private int _serverPort = 0;
+  
+  private final WebAppContainer _webAppContainer;
+  private ErrorPageManager _errorPageManager;
 
   // The secure host
   private String _secureHostName;
@@ -99,23 +120,43 @@ public class Host extends WebAppContainer
 
   private Throwable _configException;
 
-  private boolean _isRootDirSet;
-  private boolean _isDocDirSet;
-
   private String _configETag = null;
+  
+  private final Lifecycle _lifecycle;
 
   /**
    * Creates the webApp with its environment loader.
    */
-  public Host(HostContainer parent, HostController controller, String hostName)
+  public Host(HostContainer parent, 
+              HostController controller, 
+              String hostName)
   {
-    super(EnvironmentClassLoader.create("host:" + controller.getName()),
-          new Lifecycle(log, "Host[" + hostName + "]", Level.INFO));
+    _servletContainer = parent.getServer();
+    
+    if (_servletContainer == null)
+      throw new IllegalStateException(L.l("Host requires an active Servlet container"));
+    
+    _classLoader = EnvironmentClassLoader.create("host:" + controller.getName());
 
+    _parent = parent;
+    _controller = controller;
+    
+    _rootDirectory = controller.getRootDirectory();
+    
+    if (controller.getId().startsWith("error/"))
+      _lifecycle = new Lifecycle(log, "Host[" + controller.getId() + "]", Level.FINEST);
+    else
+      _lifecycle = new Lifecycle(log, "Host[" + controller.getId() + "]", Level.INFO);
+    
+    InjectManager.create(_classLoader);
+    
+    _webAppContainer = new WebAppContainer(_servletContainer, 
+                                           this, 
+                                           _rootDirectory,
+                                           getClassLoader(), 
+                                           _lifecycle);
+    
     try {
-      _controller = controller;
-
-      setParent(parent);
       setHostName(hostName);
 
       _hostLocal.set(this, getClassLoader());
@@ -144,10 +185,6 @@ public class Host extends WebAppContainer
       _isDefaultHost = true;
 
     addHostAlias(name);
-
-    // getEnvironmentClassLoader().setId("host:" + name);
-
-    // _jmxContext.put("J2EEServer", name);
 
     int p = name.indexOf("://");
 
@@ -192,15 +229,7 @@ public class Host extends WebAppContainer
   {
     return _hostName;
   }
-
-  /**
-   * Returns the host (as an webApp container)
-   */
-  public Host getHost()
-  {
-    return this;
-  }
-
+  
   /**
    * Returns the secure host name.  Used for redirects.
    */
@@ -228,29 +257,27 @@ public class Host extends WebAppContainer
   /**
    * Returns the relax schema.
    */
+  @Override
   public String getSchema()
   {
     return "com/caucho/server/host/host.rnc";
   }
 
   /**
-   * Returns the URL for the container.
+   * Returns id for the host
    */
   public String getId()
   {
-    if (_url != null && ! "".equals(_url))
-      return _url;
-    else if (_hostName == null
-             || _hostName.equals("")) {
-      return getURL();
-    }
-    else if (_hostName.startsWith("http:")
-             || _hostName.startsWith("https:"))
-      return _hostName;
-    else if (_hostName.equals(""))
-      return "http://default";
-    else
-      return "http://" + _hostName;
+    return _controller.getId();
+  }
+  
+  public String getIdTail()
+  {
+    String id = _controller.getId();
+    
+    int p = id.indexOf("/host/");
+    
+    return id.substring(p + 6);
   }
 
   /**
@@ -267,8 +294,12 @@ public class Host extends WebAppContainer
 
       if (server == null)
         return "http://localhost";
+      
+      ResinSystem resinSystem = server.getResinSystem();
+      NetworkListenService listenService 
+        = resinSystem.getService(NetworkListenService.class);
 
-      for (SocketLinkListener port : server.getPorts()) {
+      for (SocketLinkListener port : listenService.getListeners()) {
         if ("http".equals(port.getProtocolName())) {
           String address = port.getAddress();
 
@@ -279,7 +310,7 @@ public class Host extends WebAppContainer
         }
       }
 
-      for (SocketLinkListener port : server.getPorts()) {
+      for (SocketLinkListener port : listenService.getListeners()) {
         if ("https".equals(port.getProtocolName())) {
           String address = port.getAddress();
           if (address == null || address.equals(""))
@@ -316,6 +347,11 @@ public class Host extends WebAppContainer
 
     _controller.addExtHostAlias(name);
   }
+  
+  public LifecycleState getState()
+  {
+    return _lifecycle.getState();
+  }
 
   /**
    * Gets the alias list.
@@ -328,6 +364,7 @@ public class Host extends WebAppContainer
   /**
    * Adds an alias.
    */
+  @Configurable
   public void addHostAliasRegexp(String name)
   {
     name = name.trim();
@@ -346,59 +383,179 @@ public class Host extends WebAppContainer
   }
 
   /**
-   * Sets the parent container.
-   */
-  private void setParent(HostContainer parent)
-  {
-    _parent = parent;
-
-    setDispatchServer(parent.getDispatchServer());
-
-    if (! _isRootDirSet) {
-      setRootDirectory(parent.getRootDirectory());
-      _isRootDirSet = false;
-    }
-  }
-
-  /**
    * Gets the environment class loader.
    */
-  public EnvironmentClassLoader getEnvironmentClassLoader()
+  @Override
+  public EnvironmentClassLoader getClassLoader()
   {
-    return (EnvironmentClassLoader) getClassLoader();
+    return _classLoader;
   }
 
-  /**
-   * Sets the root dir.
-   */
-  public void setRootDirectory(Path rootDir)
+  public Path getRootDirectory()
   {
-    super.setRootDirectory(rootDir);
-    _isRootDirSet = true;
-
-    if (! _isDocDirSet) {
-      setDocumentDirectory(rootDir);
-      _isDocDirSet = false;
-    }
+    return _rootDirectory;
   }
-
+  
+  @Configurable
+  public void setAccessLog(AccessLog log)
+  {
+    _webAppContainer.setAccessLog(log);
+  }
+  
   /**
    * Sets the doc dir.
    */
   public void setDocumentDirectory(Path docDir)
   {
-    super.setDocumentDirectory(docDir);
-    _isDocDirSet = true;
+    _webAppContainer.setDocumentDirectory(docDir);
+  }
+
+  public WebAppContainer getWebAppContainer()
+  {
+    return _webAppContainer;
+  }
+  
+  @Configurable
+  public void addErrorPage(ErrorPage errorPage)
+  {
+    getErrorPageManager().addErrorPage(errorPage);
+  }
+  
+  public ErrorPageManager getErrorPageManager()
+  {
+    if (_errorPageManager == null) {
+      _errorPageManager = new ErrorPageManager(getServer(), this, null);
+    }
+    
+    return _errorPageManager;
+  }
+  
+  @Configurable
+  public void addWebApp(WebAppConfig config)
+  {
+    getWebAppContainer().addWebApp(config);
+  }
+  
+  @Configurable
+  public void addWebAppDefault(WebAppConfig config)
+  {
+    getWebAppContainer().addWebAppDefault(config);
   }
 
   /**
+   * Sets the war-expansion
+   */
+  @Configurable
+  public WebAppExpandDeployGenerator createWarDeploy()
+  {
+    return getWebAppContainer().createWebAppDeploy();
+  }
+
+  /**
+   * Sets the war-expansion
+   */
+  @Configurable
+  public void addWarDeploy(WebAppExpandDeployGenerator webAppDeploy)
+    throws ConfigException
+  {
+    getWebAppContainer().addWarDeploy(webAppDeploy);
+  }
+
+  /**
+   * Sets the war-expansion
+   */
+  @Configurable
+  public WebAppExpandDeployGenerator createWebAppDeploy()
+  {
+    return getWebAppContainer().createWebAppDeploy();
+  }
+
+  /**
+   * Sets the war-expansion
+   */
+  public void addWebAppDeploy(WebAppExpandDeployGenerator deploy)
+    throws ConfigException
+  {
+    getWebAppContainer().addWebAppDeploy(deploy);
+  }
+
+  /**
+   * Sets the ear-expansion
+   */
+  @Configurable
+  public EarDeployGenerator createEarDeploy()
+    throws Exception
+  {
+    return getWebAppContainer().createEarDeploy();
+  }
+
+  /**
+   * Adds the ear-expansion
+   */
+  @Configurable
+  public void addEarDeploy(EarDeployGenerator earDeploy)
+    throws Exception
+  {
+    getWebAppContainer().addEarDeploy(earDeploy);
+  }
+  
+  @Configurable
+  public void addEarDefault(EarConfig config)
+  {
+    getWebAppContainer().addEarDefault(config);
+  }
+
+  /**
+   * Sets the war-dir for backwards compatibility.
+   */
+  @Configurable
+  public void setWarDir(Path warDir)
+    throws ConfigException
+  {
+    getWebAppContainer().setWarDir(warDir);
+  }
+
+  /**
+   * Sets the war-expand-dir.
+   */
+  public void setWarExpandDir(Path warDir)
+  {
+    getWebAppContainer().setWarExpandDir(warDir);
+  }
+
+  /**
+   * Adds a rewrite dispatch rule
+   */
+  public void add(DispatchRule dispatchRule)
+  {
+    _webAppContainer.add(dispatchRule);
+  }
+
+  /**
+   * Adds a rewrite dispatch rule
+   */
+  public void add(RewriteFilter dispatchAction)
+  {
+    _webAppContainer.add(dispatchAction);
+  }
+
+  /**
+   * Adds rewrite-dispatch (backward compat).
+   */
+  public RewriteDispatch createRewriteDispatch()
+  {
+    return _webAppContainer.createRewriteDispatch();
+  }
+  
+  /**
    * Sets the config exception.
    */
+  @Override
   public void setConfigException(Throwable e)
   {
     if (e != null) {
       _configException = e;
-      getEnvironmentClassLoader().addDependency(AlwaysModified.create());
+      _classLoader.addDependency(AlwaysModified.create());
 
       if (log.isLoggable(Level.FINE))
         log.log(Level.FINE, e.toString(), e);
@@ -408,6 +565,7 @@ public class Host extends WebAppContainer
   /**
    * Gets the config exception.
    */
+  @Override
   public Throwable getConfigException()
   {
     return _configException;
@@ -418,14 +576,7 @@ public class Host extends WebAppContainer
    */
   public Server getServer()
   {
-    if (_parent != null) {
-      DispatchServer server = _parent.getDispatchServer();
-
-      if (server instanceof Server)
-        return (Server) server;
-    }
-
-    return null;
+    return _parent.getServer();
   }
 
   /**
@@ -471,18 +622,27 @@ public class Host extends WebAppContainer
   public void preConfigInit()
   {
   }
+  
+  @Override
+  public void init()
+  {
+    
+  }
 
   /**
    * Starts the host.
    */
-  protected void startImpl()
+  @Override
+  public void start()
   {
+    if (! _lifecycle.toStarting())
+      return;
+    
     if (getURL().equals("") && _parent != null) {
       _url = _parent.getURL();
     }
 
-    EnvironmentClassLoader loader;
-    loader = getEnvironmentClassLoader();
+    EnvironmentClassLoader loader = _classLoader;
 
     // server/1al2
     // loader.setId("host:" + getURL());
@@ -499,14 +659,16 @@ public class Host extends WebAppContainer
       // loader needs to start first, so Host managed beans will be
       // initialized before the webappd
       loader.start();
-
-      super.startImpl();
+      
+      getWebAppContainer().start();
 
       if (_parent != null)
         _parent.clearCache();
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
+    
+    _lifecycle.toActive();
   }
 
   private void initBam()
@@ -553,7 +715,9 @@ public class Host extends WebAppContainer
    */
   public void clearCache()
   {
-    super.clearCache();
+    _parent.clearCache();
+    
+    _webAppContainer.clearCache();
 
     setConfigETag(null);
   }
@@ -561,6 +725,7 @@ public class Host extends WebAppContainer
   /**
    * Builds the invocation for the host.
    */
+  @Override
   public Invocation buildInvocation(Invocation invocation)
     throws ConfigException
   {
@@ -574,7 +739,7 @@ public class Host extends WebAppContainer
       thread.setContextClassLoader(getClassLoader());
 
       if (_configException == null)
-        return super.buildInvocation(invocation);
+        return _webAppContainer.buildInvocation(invocation);
       else {
         invocation.setFilterChain(new ExceptionFilterChain(_configException));
         invocation.setDependency(AlwaysModified.create());
@@ -589,9 +754,10 @@ public class Host extends WebAppContainer
   /**
    * Returns true if the host is modified.
    */
+  @Override
   public boolean isModified()
   {
-    return (isDestroyed() || getEnvironmentClassLoader().isModified());
+    return (_lifecycle.isDestroyed() || _classLoader.isModified());
   }
 
   /**
@@ -599,18 +765,22 @@ public class Host extends WebAppContainer
    */
   public boolean isModifiedNow()
   {
-    return (isDestroyed() || getEnvironmentClassLoader().isModifiedNow());
+    return (_lifecycle.isDestroyed() || _classLoader.isModifiedNow());
   }
 
   /**
    * Log the reason for modification.
    */
+  @Override
   public boolean logModified(Logger log)
   {
-    if (isDestroyed())
+    if (_lifecycle.isDestroyed()) {
+      log.finer(this + " is destroyed");
+      
       return true;
+    }
     else
-      return getEnvironmentClassLoader().logModified(log);
+      return _classLoader.logModified(log);
   }
 
   /**
@@ -624,6 +794,7 @@ public class Host extends WebAppContainer
   /**
    * Returns true if the host is idle
    */
+  @Override
   public boolean isDeployIdle()
   {
     return false;
@@ -638,13 +809,13 @@ public class Host extends WebAppContainer
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
-      EnvironmentClassLoader envLoader = getEnvironmentClassLoader();
+      EnvironmentClassLoader envLoader = _classLoader;
       thread.setContextClassLoader(envLoader);
 
       if (! _lifecycle.toStopping())
         return false;
 
-      super.stop();
+      _webAppContainer.stop();
 
       if (_bamBroker != null)
         _bamBroker.close();
@@ -662,21 +833,22 @@ public class Host extends WebAppContainer
   /**
    * Closes the host.
    */
+  @Override
   public void destroy()
   {
     stop();
 
-    if (isDestroyed())
+    if (! _lifecycle.toDestroy())
       return;
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
-    EnvironmentClassLoader classLoader = getEnvironmentClassLoader();
+    EnvironmentClassLoader classLoader = _classLoader;
 
     thread.setContextClassLoader(classLoader);
 
     try {
-      super.destroy();
+      _webAppContainer.destroy();
     } finally {
       thread.setContextClassLoader(oldLoader);
 
@@ -684,8 +856,9 @@ public class Host extends WebAppContainer
     }
   }
 
+  @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + getHostName() + "]";
+    return getClass().getSimpleName() + "[" + getId() + "]";
   }
 }

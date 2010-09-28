@@ -43,6 +43,8 @@ public class LocalRepositoryService
 
   private FileRepository _fileRepository;
   
+  private LocalRepositoryAdmin _admin;
+  
   public LocalRepositoryService()
   {
     GitService git = GitService.create();
@@ -66,9 +68,22 @@ public class LocalRepositoryService
     return _fileRepository;
   }
   
+  public RepositorySpi getRepositorySpi()
+  {
+    return _fileRepository;
+  }
+  
+  @Override
+  public int getStartPriority()
+  {
+    return START_PRIORITY;
+  }
+  
   @Override
   public void start()
   {
     _fileRepository.start();
+    
+    _admin = new LocalRepositoryAdmin(this);
   }
 }

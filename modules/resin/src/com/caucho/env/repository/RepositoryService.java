@@ -48,11 +48,42 @@ public class RepositoryService extends AbstractResinService
   public RepositoryService(AbstractRepository repository)
   {
     _repository = repository;
+    
+    if (repository == null)
+      throw new NullPointerException();
+  }
+
+  public RepositoryService()
+  {
+    this(new FileRepository());
   }
   
   public static RepositoryService getCurrent()
   {
     return ResinSystem.getCurrentService(RepositoryService.class);
+  }
+  
+  public static RepositoryService create()
+  {
+    ResinSystem system = ResinSystem.getCurrent();
+    
+    if (system == null) {
+      throw new IllegalStateException(L.l("{0} requires an active {1}",
+                                          RepositoryService.class.getSimpleName(),
+                                          ResinSystem.class.getSimpleName()));
+    }
+
+    RepositoryService service = system.getService(RepositoryService.class);
+    
+    if (service == null) {
+      service = new RepositoryService();
+      
+      system.addServiceIfAbsent(service);
+      
+      service = system.getService(RepositoryService.class);
+    }
+    
+    return service;
   }
   
   public static Repository getCurrentRepository()
@@ -65,7 +96,22 @@ public class RepositoryService extends AbstractResinService
     return service.getRepository();
   }
   
+  public static RepositorySpi getCurrentRepositorySpi()
+  {
+    RepositoryService service = getCurrent();
+    
+    if (service == null)
+      throw new IllegalStateException(L.l("RepositoryService is not available in this context"));
+    
+    return service.getRepositorySpi();
+  }
+  
   public Repository getRepository()
+  {
+    return _repository;
+  }
+  
+  public RepositorySpi getRepositorySpi()
   {
     return _repository;
   }

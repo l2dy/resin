@@ -118,9 +118,9 @@ public class SocketLinkListener extends TaskWorker
   private InetAddress _socketAddress;
 
   private int _idleThreadMin = 2;
-  private int _idleThreadMax = 8;
+  private int _idleThreadMax = 20;
 
-  private int _acceptListenBacklog = 100;
+  private int _acceptListenBacklog = 1000;
 
   private int _connectionMax = 1024 * 1024;
 
@@ -171,6 +171,10 @@ public class SocketLinkListener extends TaskWorker
   private final AtomicInteger _idleThreadCount = new AtomicInteger();
   private final AtomicInteger _startThreadCount = new AtomicInteger();
 
+  // active requests that are closing after the request like an access-log
+  // but should not trigger a new thread launch.
+  private final AtomicInteger _shutdownRequestCount = new AtomicInteger();
+  
   // reaper alarm for timed out comet requests
   private Alarm _suspendAlarm;
 
@@ -637,6 +641,11 @@ public class SocketLinkListener extends TaskWorker
   {
     return _keepaliveTimeMax;
   }
+  
+  protected void setKeepaliveConnectionTimeMaxMillis(long timeout)
+  {
+    _keepaliveTimeMax = timeout;
+  }
 
   /**
    * Gets the suspend max.
@@ -659,6 +668,11 @@ public class SocketLinkListener extends TaskWorker
   public long getKeepaliveTimeout()
   {
     return _keepaliveTimeout;
+  }
+  
+  protected void setKeepaliveTimeoutMillis(long timeout)
+  {
+    _keepaliveTimeout = timeout;
   }
 
   public boolean isKeepaliveSelectEnabled()
@@ -724,7 +738,6 @@ public class SocketLinkListener extends TaskWorker
   @Configurable
   public void addContentProgram(ConfigProgram program)
   {
-    
   }
 
   //
@@ -829,7 +842,11 @@ public class SocketLinkListener extends TaskWorker
    */
   private boolean isStartThreadRequired()
   {
-    return (_startThreadCount.get() + _idleThreadCount.get() < _idleThreadMin);
+    int startCount = _startThreadCount.get();
+    int idleCount = _idleThreadCount.get();
+    int shutdownCount = _shutdownRequestCount.get();
+    
+    return (startCount + idleCount + shutdownCount < _idleThreadMin);
   }
   
   /**
@@ -1117,8 +1134,9 @@ public class SocketLinkListener extends TaskWorker
   void enable()
   {
     if (_lifecycle.toActive()) {
-      if (_serverSocket != null)
+      if (_serverSocket != null) {
         _serverSocket.listen(_acceptListenBacklog);
+      }
     }
   }
 
@@ -1209,8 +1227,9 @@ public class SocketLinkListener extends TaskWorker
 
         Thread.interrupted();
         if (_serverSocket.accept(socket)) {
-          if (_throttle.accept(socket))
+          if (_throttle.accept(socket)) {
             return true;
+          }
           else
             socket.close();
         }
@@ -1248,7 +1267,29 @@ public class SocketLinkListener extends TaskWorker
   {
     _startThreadCount.decrementAndGet();
 
-    wake();
+    if (isStartThreadRequired()) {
+      wake();
+    }
+  }
+
+  /**
+   * request threads in a shutdown, but not yet idle.
+   */
+  void requestShutdownBegin()
+  {
+    _shutdownRequestCount.incrementAndGet();
+  }
+
+  /**
+   * request threads in a shutdown, but not yet idle.
+   */
+  void requestShutdownEnd()
+  {
+    _shutdownRequestCount.decrementAndGet();
+
+    if (isStartThreadRequired()) {
+      wake();
+    }
   }
 
   /**
@@ -1323,7 +1364,7 @@ public class SocketLinkListener extends TaskWorker
 
     // boolean isSelectManager = getServer().isSelectManagerEnabled();
 
-    if (_isKeepaliveSelectEnable) {
+    if (_isKeepaliveSelectEnable && _selectManager != null) {
       timeout = getBlockingTimeoutForSelect();
     }
 
@@ -1408,9 +1449,10 @@ public class SocketLinkListener extends TaskWorker
   /**
    * Returns true if the port is closed.
    */
+  @Override
   public boolean isClosed()
   {
-    return _lifecycle.isAfterActive();
+    return ! _lifecycle.getState().isRunnable();
   }
 
   //
@@ -1520,6 +1562,7 @@ public class SocketLinkListener extends TaskWorker
   /**
    * The port thread is responsible for creating new connections.
    */
+  @Override
   public long runTask()
   {
     if (_lifecycle.isDestroyed())
@@ -1527,7 +1570,6 @@ public class SocketLinkListener extends TaskWorker
 
     try {
       TcpSocketLink startConn = null;
-
       if (isStartThreadRequired()
           && _lifecycle.isActive()
           && _activeConnectionCount.get() < _connectionMax) {

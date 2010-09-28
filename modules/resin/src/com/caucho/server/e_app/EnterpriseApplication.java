@@ -31,11 +31,11 @@ package com.caucho.server.e_app;
 
 import com.caucho.config.ConfigException;
 import com.caucho.ejb.manager.EjbManager;
+import com.caucho.env.deploy.EnvironmentDeployInstance;
 import com.caucho.inject.Module;
 import com.caucho.java.WorkDir;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.*;
-import com.caucho.server.deploy.EnvironmentDeployInstance;
 import com.caucho.server.webapp.WebAppContainer;
 import com.caucho.server.webapp.WebAppController;
 import com.caucho.server.webapp.WebAppConfig;
@@ -72,8 +72,6 @@ public class EnterpriseApplication
   private EnvironmentClassLoader _loader;
 
   private String _name;
-
-  private Path _rootDir;
 
   private EarDeployController _controller;
 
@@ -197,17 +195,9 @@ public class EnterpriseApplication
   /**
    * Sets the root directory.
    */
-  public void setRootDirectory(Path rootDir)
-  {
-    _rootDir = rootDir;
-  }
-
-  /**
-   * Sets the root directory.
-   */
   public Path getRootDirectory()
   {
-    return _rootDir;
+    return _controller.getRootDirectory();
   }
 
   /**
@@ -408,9 +398,11 @@ public class EnterpriseApplication
       return;
 
     try {
-      Vfs.setPwd(_rootDir, _loader);
+      Path rootDir = getRootDirectory();
+      
+      Vfs.setPwd(rootDir, _loader);
 
-      _loader.addJarManifestClassPath(_rootDir);
+      _loader.addJarManifestClassPath(rootDir);
 
       // server/13bb vs TCK
       if ("1.4".equals(_version)) {
@@ -441,10 +433,10 @@ public class EnterpriseApplication
       }
     
       // ioc/0p63
-      Path ejbJar = _rootDir.lookup("META-INF/ejb-jar.xml");
+      Path ejbJar = rootDir.lookup("META-INF/ejb-jar.xml");
 
       if (ejbJar.canRead()) {
-        ejbManager.configureRootPath(_rootDir);
+        ejbManager.configureRootPath(rootDir);
       }
 
       _loader.start();
@@ -468,9 +460,11 @@ public class EnterpriseApplication
     try {
       fillDefaultLib();
 
-      for (String file : _rootDir.list()) {
+      Path rootDir = getRootDirectory();
+      
+      for (String file : rootDir.list()) {
         if (file.endsWith(".jar")) {
-          Path path = _rootDir.lookup(file);
+          Path path = rootDir.lookup(file);
           Path jar = JarPath.create(path);
 
           try {
@@ -519,9 +513,11 @@ public class EnterpriseApplication
     // ejb/0fa0
     if (_libraryDirectory != null)
       libDir = _libraryDirectory;
+    
+    Path rootDir = getRootDirectory();
 
-    if (_rootDir.lookup(libDir).isDirectory()) {
-      Path lib = _rootDir.lookup(libDir);
+    if (rootDir.lookup(libDir).isDirectory()) {
+      Path lib = rootDir.lookup(libDir);
 
       for (String file : lib.list()) {
         if (file.endsWith(".jar")) {
@@ -594,7 +590,7 @@ public class EnterpriseApplication
   {
     String webUri = web.getWebURI();
     String contextUrl = web.getContextRoot();
-    Path path = _rootDir.lookup(webUri);
+    Path path = getRootDirectory().lookup(webUri);
     Path archivePath = null;
 
     if (contextUrl == null)
@@ -645,12 +641,14 @@ public class EnterpriseApplication
       contextUrl = "/" + contextUrl;
 
     controller = findWebAppEntry(contextUrl);
+    
+    String id = "production/webapp/default" + contextUrl;
 
     if (controller == null) {
-      controller = new WebAppController(contextUrl,
-                                        contextUrl,
+      controller = new WebAppController(id, 
                                         path,
-                                        _webAppContainer);
+                                        _webAppContainer,
+                                        contextUrl);
       
       _webApps.add(controller);
     }

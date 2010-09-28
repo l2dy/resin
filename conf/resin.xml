@@ -87,7 +87,7 @@
                 rollover-period="1W"/>
 
       <!-- creates the webapps directory for .war expansion -->
-      <web-app-deploy path="webapps"/>
+      <web-app-deploy path="webapps" versioning="true"/>
 
       <!--
          - Defaults applied to each web-app.
@@ -100,6 +100,7 @@
         <!-- enable persistent sessions -->
         <session-config>
           <use-persistent-store/>
+          <enable-url-rewriting>false</enable-url-rewriting>
         </session-config>
      
         <!--
@@ -143,11 +144,9 @@
       <!--
          - If starting Resin as root on Unix, specify the user name
          - and group name for the web server user.
+       <user-name>www-data</user-name>
+       <group-name>www-data</group-name>
         -->
-      <resin:if test="${resin.userName == 'root'}">
-        <user-name>www-data</user-name>
-        <group-name>www-data</group-name>
-      </resin:if>
     </server-default>
 
     <!-- define the servers in the cluster -->

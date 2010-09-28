@@ -51,9 +51,9 @@ public class BootServerConfig implements SchemaBean
 {
   private static final L10N L = new L10N(BootServerConfig.class);
   
-  private final BootClusterConfig _cluster;
+  private final BootPodConfig _pod;
   
-  private String _id;
+  private String _id = "default";
   
   private String _address = "127.0.0.1";
   private int _port = -1;
@@ -67,14 +67,14 @@ public class BootServerConfig implements SchemaBean
   /**
    * Creates a new resin server.
    */
-  public BootServerConfig(BootClusterConfig cluster)
+  public BootServerConfig(BootPodConfig pod)
   {
-    _cluster = cluster;
+    _pod = pod;
   }
   
-  public BootClusterConfig getCluster()
+  public BootPodConfig getPod()
   {
-    return _cluster;
+    return _pod;
   }
 
   /**
@@ -100,6 +100,9 @@ public class BootServerConfig implements SchemaBean
   @Configurable
   public void setId(String id)
   {
+    if (id.equals(""))
+      id = "default";
+    
     _id = id;
   }
   
@@ -135,6 +138,11 @@ public class BootServerConfig implements SchemaBean
     _serverProgram.addProgram(program);
   }
   
+  public ConfigProgram getServerProgram()
+  {
+    return _serverProgram;
+  }
+  
   public CloudServer getCloudServer()
   {
     return _cloudServer;
@@ -143,7 +151,7 @@ public class BootServerConfig implements SchemaBean
   @PostConstruct
   public void init()
   {
-    CloudPod pod = _cluster.getCloudPod();
+    CloudPod pod = _pod.getCloudPod();
     
     if (pod.getServerLength() >= 64) {
       throw new ConfigException(L.l("The server cannot be added to the current pod because it would be more than 64 servers to the pod."));

@@ -51,6 +51,7 @@ class IdentityIndexExpr extends RowIterateExpr {
   /**
    * Binds the expression.
    */
+  @Override
   public Expr bind(Query query)
     throws SQLException
   {
@@ -62,6 +63,7 @@ class IdentityIndexExpr extends RowIterateExpr {
   /**
    * Returns true if shifting the child rows will make a difference.
    */
+  @Override
   boolean allowChildRowShift(QueryContext context, TableIterator rowIter)
   {
     return false;
@@ -70,6 +72,7 @@ class IdentityIndexExpr extends RowIterateExpr {
   /**
    * Sets the initial row.
    */
+  @Override
   boolean init(QueryContext context, TableIterator rowIter)
     throws SQLException, IOException
   {
@@ -85,6 +88,7 @@ class IdentityIndexExpr extends RowIterateExpr {
   /**
    * Sets the initial row.
    */
+  @Override
   boolean initRow(QueryContext context, TableIterator tableIter)
     throws SQLException, IOException
   {
@@ -139,6 +143,7 @@ class IdentityIndexExpr extends RowIterateExpr {
     return false;
   }
 
+  @Override
   public String toString()
   {
     return "(" + _columnExpr + " = " + _expr + ")";

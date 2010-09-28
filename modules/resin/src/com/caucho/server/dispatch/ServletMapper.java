@@ -279,7 +279,8 @@ public class ServletMapper {
     }
 
     if (servletName == null) {
-      matchResult = matchWelcomeFileResource(invocation, vars);
+      // matchResult = matchWelcomeFileResource(invocation, vars);
+      matchResult = null;
 
       if (matchResult != null)
         servletName = matchResult.getServletName();
@@ -300,24 +301,6 @@ public class ServletMapper {
         // inv.setRawURI(inv.getRawURI() + file);
       }
     }
-
-    /*
-    if (servletName == null && matchResult == null) {
-      vars.clear();
-
-      matchResult = matchWelcomeServlet(invocation, vars);
-
-      if (matchResult != null)
-        servletName = matchResult.getServletName();
-
-      if (servletName != null && ! contextURI.endsWith("/")
-          && ! (invocation instanceof SubInvocation)) {
-        String contextPath = invocation.getContextPath();
-
-        return new RedirectFilterChain(contextPath + contextURI + "/");
-      }
-    }
-    */
 
     if (servletName == null) {
       servletName = _defaultServlet;
@@ -500,7 +483,7 @@ public class ServletMapper {
 
     WebApp app = (WebApp) _webApp;
 
-    Path contextPath = app.getAppDir().lookup(app.getRealPath(contextURI));
+    Path contextPath = app.getRootDirectory().lookup(app.getRealPath(contextURI));
 
     if (! contextPath.isDirectory())
       return;
@@ -510,7 +493,7 @@ public class ServletMapper {
 
       String realPath = app.getRealPath(contextURI + "/" + file);
 
-      Path path = app.getAppDir().lookup(realPath);
+      Path path = app.getRootDirectory().lookup(realPath);
 
       dependencyList.add(new Depend(path));
     }
@@ -588,10 +571,39 @@ public class ServletMapper {
     if (_servletMap != null)
       value = _servletMap.map(uri, vars);
 
-    if (value == null)
-      return null;
-    else
+    if (value != null)
       return uri;
+    else
+      return null;
+  }
+  
+  public String getServletClassByUri(String uri)
+  {
+    ArrayList<String> vars = new ArrayList<String>();
+
+    ServletMapping value = null;
+
+    if (_servletMap != null)
+      value = _servletMap.map(uri, vars);
+
+    if (value != null) {
+      Class<?> servletClass = value.getServletClass();
+
+      if (servletClass != null)
+        return value.getServletClass().getName();
+      else {
+        String servletName = value.getServletName();
+        
+        ServletConfigImpl config = _servletManager.getServlet(servletName);
+        
+        if (config != null)
+          return config.getServletClassName();
+        else
+          return servletName;
+      }
+    }
+    else
+      return null;
   }
 
   /**

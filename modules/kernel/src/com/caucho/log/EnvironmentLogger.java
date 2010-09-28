@@ -533,8 +533,17 @@ class EnvironmentLogger extends Logger implements ClassLoaderListener {
     int oldEffectiveLevel = getEffectiveLevel(loader);
     
     Level newEffectiveLevel = calculateEffectiveLevel(loader);
+
+    /*
+    if (loader == _systemClassLoader) {
+      _finestEffectiveLevel = newEffectiveLevel;
+      _finestEffectiveLevelValue = newEffectiveLevel.intValue();
+      super.setLevel(_finestEffectiveLevel);
+    }
+    */
     
-    if (oldEffectiveLevel == newEffectiveLevel.intValue())
+    if (oldEffectiveLevel == newEffectiveLevel.intValue()
+        && loader != _systemClassLoader)
       return;
     
     _finestEffectiveLevel = newEffectiveLevel;
@@ -800,6 +809,7 @@ class EnvironmentLogger extends Logger implements ClassLoaderListener {
   /**
    * Classloader destroy callback
    */
+  @Override
   public void classLoaderDestroy(DynamicClassLoader loader)
   {
     removeLoader(loader);
@@ -819,6 +829,7 @@ class EnvironmentLogger extends Logger implements ClassLoaderListener {
     updateEffectiveLevel(_systemClassLoader);
   }
 
+  @Override
   public String toString()
   {
     return "EnvironmentLogger[" + getName() + "]";

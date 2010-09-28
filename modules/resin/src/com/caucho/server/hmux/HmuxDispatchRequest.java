@@ -41,7 +41,9 @@ import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.host.Host;
+import com.caucho.server.host.HostController;
 import com.caucho.server.webapp.WebApp;
+import com.caucho.server.webapp.WebAppContainer;
 import com.caucho.server.webapp.WebAppController;
 import com.caucho.util.Alarm;
 import com.caucho.util.Base64;
@@ -83,7 +85,7 @@ public class HmuxDispatchRequest {
   {
     _request = request;
 
-    _server = (Server) request.getDispatchServer();
+    _server = request.getServer();
   }
 
   /**
@@ -199,15 +201,22 @@ public class HmuxDispatchRequest {
 
     Host host = _server.getHost(hostName, 80);
     if (host == null) {
-      writeString(os, HmuxRequest.HMUX_HEADER, "check-interval");
-      writeString(os, HmuxRequest.HMUX_STRING,
-                  String.valueOf(_server.getDependencyCheckInterval() / 1000));
+      HostController controller = _server.getHostController(hostName, 80);
+      
+      if (controller != null) {
+        writeString(os, HMUX_UNAVAILABLE, "");
+      }
+      else {
+        writeString(os, HmuxRequest.HMUX_HEADER, "check-interval");
+        writeString(os, HmuxRequest.HMUX_STRING,
+                    String.valueOf(_server.getDependencyCheckInterval() / 1000));
+      }
 
       if (isLoggable)
-        log.fine(dbgId() + "host '" + host + "' not configured");
+        log.fine(dbgId() + "host '" + hostName + "' not configured");
       return;
     }
-    else if (! host.isActive()) {
+    else if (! host.getState().isActive()) {
       writeString(os, HMUX_UNAVAILABLE, "");
 
       if (isLoggable)
@@ -227,7 +236,7 @@ public class HmuxDispatchRequest {
       writeString(os, HMUX_NO_CHANGE, "");
       return;
     }
-    else if (etag.equals("h-" + host.getHostName())) {
+    else if (etag.equals("h-" + host.getName())) {
       if (isLoggable) {
         log.fine(dbgId() + "host alias '" + hostName + " -> '"
                  + host + "' no change");
@@ -269,8 +278,10 @@ public class HmuxDispatchRequest {
 
     if (hostName.equals(canonicalHostName)) {
       crc64 = queryCluster(os, host, crc64);
+
+      WebAppContainer webAppContainer = host.getWebAppContainer();
       
-      WebAppController controller = host.findByURI(url);
+      WebAppController controller = webAppContainer.findByURI(url);
       if (controller != null) {
         try {
           controller.request();
@@ -279,13 +290,9 @@ public class HmuxDispatchRequest {
         }
       }
 
-      ArrayList<WebAppController> appList = host.getWebAppList();
-
-      for (int i = 0; i < appList.size(); i++) {
-        WebAppController appEntry = appList.get(i);
-
-        if (appEntry.getParent() != null &&
-            appEntry.getParent().isDynamicDeploy()) {
+      for (WebAppController appEntry : webAppContainer.getWebAppList()) {
+        if (appEntry.getParent() != null
+            && appEntry.getParent().isDynamicDeploy()) {
           continue;
         }
 
@@ -346,7 +353,7 @@ public class HmuxDispatchRequest {
     }
     else {
       // aliased hosts use the host name as the etag
-      writeString(os, HMUX_ETAG, "h-" + host.getHostName());
+      writeString(os, HMUX_ETAG, "h-" + host.getName());
     }
   }
   

@@ -29,9 +29,6 @@
 
 package com.caucho.resin;
 
-import com.caucho.resin.deploy.*;
-import com.caucho.server.cluster.*;
-
 /**
  * Enables the local deployment service at /resin.deploy
  *
@@ -55,8 +52,10 @@ public class WebAppLocalDeployEmbed extends WebAppEmbed
     super.setContextPath(LOCAL_DEPLOY_CONTEXT_PATH);
 
     _deploy = new ServletMappingEmbed();
+    /*
     _deploy.setServletClass(LocalDeployServlet.class.getName());
     _deploy.setServletName(LocalDeployServlet.class.getName());
+    */
     _deploy.setUrlPattern("/");
     _deploy.addProperty("enable", true);
     _deploy.addProperty("role", "*");

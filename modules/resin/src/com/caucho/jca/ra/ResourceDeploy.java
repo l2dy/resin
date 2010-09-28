@@ -30,9 +30,11 @@
 package com.caucho.jca.ra;
 
 import com.caucho.config.ConfigException;
+import com.caucho.env.deploy.DeployController;
+import com.caucho.env.deploy.DeployMode;
 import com.caucho.jca.cfg.ResourceConfig;
 import com.caucho.lifecycle.Lifecycle;
-import com.caucho.server.deploy.DeployController;
+import com.caucho.lifecycle.LifecycleState;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -341,22 +343,22 @@ public class ResourceDeploy {
     return -1;
   }
 
-  public String getStartupMode()
+  public DeployMode getStartupMode()
   {
-    return DeployController.STARTUP_AUTOMATIC;
+    return DeployMode.AUTOMATIC;
   }
 
-  public String getRedeployMode()
+  public DeployMode getRedeployMode()
   {
-    return DeployController.REDEPLOY_MANUAL;
+    return DeployMode.MANUAL;
   }
 
   public String getState()
   {
-    if (!_isInit)
-      return Lifecycle.getStateName(Lifecycle.IS_NEW);
+    if (! _isInit)
+      return LifecycleState.NEW.toString();
     else
-      return Lifecycle.getStateName(Lifecycle.IS_ACTIVE);
+      return LifecycleState.ACTIVE.toString();
   }
 
   public void start()

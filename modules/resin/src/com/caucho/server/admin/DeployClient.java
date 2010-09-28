@@ -32,13 +32,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.Map;
 
 import com.caucho.bam.ActorClient;
 import com.caucho.bam.Broker;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.ServiceUnavailableException;
+import com.caucho.cloud.deploy.CopyTagQuery;
+import com.caucho.cloud.deploy.RemoveTagQuery;
+import com.caucho.cloud.deploy.SetTagQuery;
 import com.caucho.env.git.GitCommitJar;
 import com.caucho.env.git.GitCommitTree;
+import com.caucho.env.repository.CommitBuilder;
+import com.caucho.env.repository.Repository;
+import com.caucho.env.repository.RepositoryException;
+import com.caucho.env.repository.RepositoryTagEntry;
+import com.caucho.env.repository.RepositoryTagListener;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.cluster.Server;
 import com.caucho.util.L10N;
@@ -49,7 +58,7 @@ import com.caucho.vfs.StreamSource;
 /**
  * Deploy Client API
  */
-public class DeployClient
+public class DeployClient implements Repository
 {
   private static final L10N L = new L10N(DeployClient.class);
   public static final String USER_ATTRIBUTE = "user";
@@ -59,6 +68,8 @@ public class DeployClient
   private Broker _broker;
   private ActorClient _bamClient;
   private String _deployJid;
+  
+  private String _url;
   
   public DeployClient()
   {
@@ -89,6 +100,8 @@ public class DeployClient
   {
     String url = "http://" + host + ":" + port + "/hmtp";
     
+    _url = url;
+    
     HmtpClient client = new HmtpClient(url);
     try {
       client.setVirtualHost("admin.resin");
@@ -104,6 +117,11 @@ public class DeployClient
                                                 e);
     }
   }
+  
+  public String getUrl()
+  {
+    return _url;
+  }
 
   /**
    * Uploads the contents of a jar/zip file to a Resin server.  
@@ -114,40 +132,93 @@ public class DeployClient
    * @param jar path to the jar file
    * @param attributes commit attributes including user, message, and version
    */
-  public String deployJarContents(String tag,
-                                  Path jar,
-                                  HashMap<String,String> attributes)
-    throws IOException
+  @Override
+  public String commitArchive(CommitBuilder commit,
+                              Path jar)
   {
-    GitCommitJar commit = new GitCommitJar(jar);
+    commit.validate();
+    
+    GitCommitJar gitCommit = null;
 
     try {
-      return deployJar(tag, commit, attributes);
-    } 
+      gitCommit = new GitCommitJar(jar);
+      
+      String tag = commit.getId();
+      
+      return deployJar(tag, gitCommit, commit.getAttributes());
+    }
+    catch (IOException e) {
+      throw new RepositoryException(e);
+    }
     finally {
-      commit.close();
+      if (gitCommit != null)
+        gitCommit.close();
     }
   }
 
   /**
-   * Uploads a stream to a jar/zip file to a Resin server
+   * Uploads the contents of a jar/zip file to a Resin server.  
+   * The jar is unzipped and each component is uploaded separately.
+   * For wars, this means that only the changed files need updates.
    *
    * @param tag symbolic name of the jar file to add
-   * @param is stream containing a jar/zip
+   * @param jar path to the jar file
    * @param attributes commit attributes including user, message, and version
    */
-  public String deployJarContents(String tag,
-                                  InputStream is,
-                                  HashMap<String,String> attributes)
-    throws IOException
+  @Override
+  public String commitArchive(CommitBuilder commit,
+                              InputStream is)
   {
-    GitCommitJar commit = new GitCommitJar(is);
+    commit.validate();
+    
+    GitCommitJar gitCommit = null;
 
     try {
-      return deployJar(tag, commit, attributes);
-    } 
+      gitCommit = new GitCommitJar(is);
+      
+      String tag = commit.getId();
+      
+      return deployJar(tag, gitCommit, commit.getAttributes());
+    }
+    catch (IOException e) {
+      throw new RepositoryException(e);
+    }
     finally {
-      commit.close();
+      if (gitCommit != null)
+        gitCommit.close();
+    }
+  }
+
+  /**
+   * Uploads the contents of a jar/zip file to a Resin server.  
+   * The jar is unzipped and each component is uploaded separately.
+   * For wars, this means that only the changed files need updates.
+   *
+   * @param tag symbolic name of the jar file to add
+   * @param jar path to the jar file
+   * @param attributes commit attributes including user, message, and version
+   */
+  @Override
+  public String commitPath(CommitBuilder commit,
+                           Path path)
+  {
+    commit.validate();
+    
+    GitCommitJar gitCommit = null;
+
+    try {
+      gitCommit = new GitCommitJar(path);
+      
+      String tag = commit.getId();
+      
+      return deployJar(tag, gitCommit, commit.getAttributes());
+    }
+    catch (IOException e) {
+      throw new RepositoryException(e);
+    }
+    finally {
+      if (gitCommit != null)
+        gitCommit.close();
     }
   }
 
@@ -158,22 +229,17 @@ public class DeployClient
    * @param sourceTag the source tag from which to copy
    * @param attributes commit attributes including user and message
    */
-  public Boolean copyTag(String tag,
-                         String sourceTag,
-                         HashMap<String,String> attributes)
+  public Boolean copyTag(CommitBuilder target,
+                         CommitBuilder source)
   {
-    String user = null;
-    String message = null;
-    String version = null;
+    target.validate();
+    source.validate();
+    
+    String targetId = target.getId();
+    String sourceId = source.getId();
 
-    if (attributes != null) {
-      user = attributes.get(USER_ATTRIBUTE);
-      message = attributes.get(MESSAGE_ATTRIBUTE);
-      version = attributes.get(VERSION_ATTRIBUTE);
-    }
-
-    CopyTagQuery query = 
-      new CopyTagQuery(tag, sourceTag, user, message, version);
+    CopyTagQuery query
+      = new CopyTagQuery(targetId, sourceId, target.getAttributes());
 
     return (Boolean) querySet(query);
   }
@@ -184,13 +250,14 @@ public class DeployClient
    * @param tag the tag to remove
    * @param attributes commit attributes including user and message
    */
-  public Boolean removeTag(String tag, 
-                           HashMap<String,String> attributes)
+  @Override
+  public boolean removeTag(CommitBuilder commit)
   {
-    String user = attributes.get(USER_ATTRIBUTE);
-    String message = attributes.get(MESSAGE_ATTRIBUTE);
+    commit.validate();
+    
+    String tag = commit.getId();
 
-    RemoveTagQuery query = new RemoveTagQuery(tag, user, message);
+    RemoveTagQuery query = new RemoveTagQuery(tag, commit.getAttributes());
 
     return (Boolean) querySet(query);
   }
@@ -229,9 +296,9 @@ public class DeployClient
   // low-level routines
   //
 
-  protected String deployJar(String tag,
-                             GitCommitJar commit,
-                             HashMap<String,String> attributes)
+  private String deployJar(String tag,
+                           GitCommitJar commit,
+                           Map<String,String> attributes)
     throws IOException
   {
     String []files = getCommitList(commit.getCommitList());
@@ -244,13 +311,10 @@ public class DeployClient
 
       querySet(query);
     }
-
-    String result = setTag(tag, commit.getDigest(), attributes);
-
-    // XXX 
-    deploy(tag);
-
-    return result;
+    
+    putTag(tag, commit.getDigest(), attributes);
+    
+    return commit.getDigest();
   }
 
   public void sendFile(String sha1, long length, InputStream is)
@@ -258,10 +322,10 @@ public class DeployClient
   {
     InputStream blobIs = GitCommitTree.writeBlob(is, length);
 
-    sendRawFile(sha1, blobIs);
+    writeRawGitFile(sha1, blobIs);
   }
 
-  public void sendRawFile(String sha1, InputStream is)
+  public void writeRawGitFile(String sha1, InputStream is)
     throws IOException
   {
     InputStreamSource iss = new InputStreamSource(is);
@@ -295,9 +359,34 @@ public class DeployClient
     return (String) querySet(query);
   }
 
-  protected String setTag(String tag,
-                          String sha1,
-                          HashMap<String,String> attributes)
+  private boolean putTag(String tag,
+                         String contentHash,
+                         Map<String,String> attributes)
+  {
+    if (tag == null)
+      throw new NullPointerException();
+    if (contentHash == null)
+      throw new NullPointerException();
+    
+    HashMap<String,String> attributeCopy;
+
+    if (attributes != null)
+      attributeCopy = new HashMap<String,String>(attributes);
+    else
+      attributeCopy = new HashMap<String,String>();
+    
+    // server/2o66
+    SetTagQuery query
+      = new SetTagQuery(tag, contentHash, attributeCopy);
+
+    querySet(query);
+    
+    return true;
+  }
+  
+  private String setTag(String tag,
+                        String contentHash,
+                        HashMap<String,String> attributes)
   {
     HashMap<String,String> attributeCopy;
 
@@ -306,13 +395,9 @@ public class DeployClient
     else
       attributeCopy = new HashMap<String,String>();
 
-    String user = attributeCopy.remove(USER_ATTRIBUTE);
-    String message = attributeCopy.remove(MESSAGE_ATTRIBUTE);
-    String version = attributeCopy.remove(VERSION_ATTRIBUTE);
-
     // server/2o66
     SetTagQuery query
-      = new SetTagQuery(tag, sha1, user, message, version, attributeCopy);
+      = new SetTagQuery(tag, contentHash, attributeCopy);
 
     return (String) querySet(query);
   }
@@ -370,33 +455,10 @@ public class DeployClient
    * Undeploy a controller based on a deployment tag: wars/foo.com/my-war
    *
    * @param tag the encoded controller name
-   *
-   * @deprecated
    */
-  public Boolean undeploy(String tag)
+  public boolean undeploy(CommitBuilder tag)
   {
-    ControllerUndeployQuery query = new ControllerUndeployQuery(tag);
-
-    return (Boolean) querySet(query);
-  }
-
-  /**
-   * Undeploys a tag
-   *
-   * @param tag symbolic name of the jar file to add
-   * @param user user name for the commit message
-   * @param message the commit message
-   *
-   * @deprecated
-   */
-  public Boolean undeploy(String tag,
-                          String user,
-                          String message,
-                          HashMap<String,String> extraAttr)
-  {
-    UndeployQuery query = new UndeployQuery(tag, user, message);
-
-    return (Boolean) querySet(query);
+    return removeTag(tag);
   }
 
   /**
@@ -462,6 +524,46 @@ public class DeployClient
       return getClass().getSimpleName() + "[" + _deployJid + "]";
     else
       return getClass().getSimpleName() + "[" + _bamClient + "]";
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.env.repository.Repository#addListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
+   */
+  @Override
+  public void addListener(String tagName, RepositoryTagListener listener)
+  {
+    // TODO Auto-generated method stub
+    
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.env.repository.Repository#getTagContentHash(java.lang.String)
+   */
+  @Override
+  public String getTagContentHash(String tag)
+  {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.env.repository.Repository#getTagMap()
+   */
+  @Override
+  public Map<String, RepositoryTagEntry> getTagMap()
+  {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.env.repository.Repository#removeListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
+   */
+  @Override
+  public void removeListener(String tagName, RepositoryTagListener listener)
+  {
+    // TODO Auto-generated method stub
+    
   }
 }
 

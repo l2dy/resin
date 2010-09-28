@@ -80,9 +80,12 @@ public class PDF {
   private PDFPage _page;
   private PDFStream _stream;
 
+  private Env _env;
+
   public PDF(Env env)
   {
     _out = new PDFWriter(env.getOut());
+    _env = env;
   }
 
   public boolean begin_document(@Optional String fileName,
@@ -291,7 +294,8 @@ public class PDF {
       Font face = _faceMap.get(name);
 
       if (face == null) {
-        face = new AfmParser().parse(name);
+        Path p = _env.getQuercus().getPwd().lookup("WEB-INF/lib/");
+        face = new AfmParser().parse(String.valueOf(p), name);
 
         _faceMap.put(name, face);
       }
@@ -1019,6 +1023,11 @@ public class PDF {
   public boolean end_document(@Optional String optList)
     throws IOException
   {
+    if(null == _out)
+    {
+      // output stream already closed;
+      return false;
+    }
     if (_pageGroup.size() > 0) {
       _out.writePageGroup(_pageParentId, _pageGroup);
       _pageGroup.clear();

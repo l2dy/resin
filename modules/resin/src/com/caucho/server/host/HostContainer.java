@@ -29,42 +29,46 @@
 
 package com.caucho.server.host;
 
+import java.util.ArrayList;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.servlet.DispatcherType;
+import javax.servlet.FilterChain;
+
+import com.caucho.config.ConfigException;
+import com.caucho.env.deploy.DeployContainer;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.make.AlwaysModified;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.dispatch.DispatchBuilder;
-import com.caucho.server.dispatch.DispatchServer;
+import com.caucho.server.dispatch.InvocationBuilder;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.rewrite.RewriteDispatch;
-import com.caucho.server.webapp.*;
-import com.caucho.util.L10N;
+import com.caucho.server.webapp.AccessLogFilterChain;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.server.webapp.WebAppConfig;
+import com.caucho.server.webapp.WebAppFilterChain;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
-
-import javax.servlet.FilterChain;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Resin's host container implementation.
  */
-public class HostContainer implements DispatchBuilder {
+public class HostContainer implements InvocationBuilder {
   private static final Logger log
     = Logger.getLogger(HostContainer.class.getName());
-  private static final L10N L = new L10N(HostContainer.class);
-
+  
+  // the owning servlet container
+  private final Server _server;
+  
   // The environment class loader
   private EnvironmentClassLoader _classLoader;
 
-  private DispatchServer _dispatchServer;
-
-  private WebApp _errorWebApp;
+  private Host _errorHost;
 
   private String _url = "";
   
@@ -79,11 +83,11 @@ public class HostContainer implements DispatchBuilder {
 
   // The host deploy
   private DeployContainer<HostController> _hostDeploy
-    = new DeployContainer<HostController>();
+    = new DeployContainer<HostController>(HostController.class);
   
   // Cache of hosts
-  private HashMap<String,HostController> _hostMap
-    = new HashMap<String,HostController>();
+  private ConcurrentHashMap<String,HostController> _hostMap
+    = new ConcurrentHashMap<String,HostController>();
 
   // Regexp host
   private ArrayList<HostConfig> _hostRegexpList = new ArrayList<HostConfig>();
@@ -96,20 +100,30 @@ public class HostContainer implements DispatchBuilder {
   private ArrayList<EarConfig> _earDefaultList
     = new ArrayList<EarConfig>();
 
-  // The configure exception
-  private Throwable _configException;
-
   // lifecycle
   private final Lifecycle _lifecycle = new Lifecycle();
 
   /**
    * Creates the webApp with its environment loader.
    */
-  public HostContainer()
+  public HostContainer(Server server)
   {
-    _classLoader = EnvironmentClassLoader.create();
+    _server = server;
+    _classLoader = server.getClassLoader();
 
     _rootDir = Vfs.lookup();
+
+    /*
+    _errorHost = createErrorHost();
+    
+    if (_errorHost == null)
+      throw new NullPointerException();
+      */
+  }
+  
+  public String getStageTag()
+  {
+    return "production";
   }
 
   /**
@@ -118,14 +132,6 @@ public class HostContainer implements DispatchBuilder {
   public ClassLoader getClassLoader()
   {
     return _classLoader;
-  }
-
-  /**
-   * Gets the environment class loader.
-   */
-  public void setClassLoader(EnvironmentClassLoader classLoader)
-  {
-    _classLoader = classLoader;
   }
 
   /**
@@ -145,19 +151,11 @@ public class HostContainer implements DispatchBuilder {
   }
 
   /**
-   * Sets the dispatch server.
-   */
-  public void setDispatchServer(DispatchServer server)
-  {
-    _dispatchServer = server;
-  }
-
-  /**
    * Gets the dispatch server.
    */
-  public DispatchServer getDispatchServer()
+  public Server getServer()
   {
-    return _dispatchServer;
+    return _server;
   }
 
   /**
@@ -206,7 +204,9 @@ public class HostContainer implements DispatchBuilder {
    */
   public HostExpandDeployGenerator createHostDeploy()
   {
-    return new HostExpandDeployGenerator(_hostDeploy, this);
+    String id = getStageTag() + "/host";
+    
+    return new HostExpandDeployGenerator(id, _hostDeploy, this);
   }
 
   /**
@@ -283,7 +283,8 @@ public class HostContainer implements DispatchBuilder {
   public void clearCache()
   {
     _hostMap.clear();
-    _dispatchServer.clearCache();
+    
+    getServer().clearCache();
   }
 
   /**
@@ -330,12 +331,13 @@ public class HostContainer implements DispatchBuilder {
       String queryString = invocation.getQueryString();
 
       FilterChain chain = invocation.getFilterChain();
-      FilterChain rewriteChain = _rewriteDispatch.map(url,
+      FilterChain rewriteChain = _rewriteDispatch.map(DispatcherType.REQUEST,
+                                                      url,
                                                       queryString,
                                                       chain);
 
       if (rewriteChain != chain) {
-        Server server = (Server) _dispatchServer;
+        Server server = getServer();
         WebApp webApp = server.getDefaultWebApp();
         invocation.setWebApp(webApp);
 
@@ -357,7 +359,7 @@ public class HostContainer implements DispatchBuilder {
     return invocation;
   }
 
-  public ArrayList<HostController> getHostList()
+  public HostController []getHostList()
   {
     return _hostDeploy.getControllers();
   }
@@ -374,6 +376,20 @@ public class HostContainer implements DispatchBuilder {
         return controller.request();
       else
         return null;
+    } catch (Throwable e) {
+      log.log(Level.WARNING, e.toString(), e);
+      
+      return null;
+    }
+  }
+
+  /**
+   * Returns the matching host.
+   */
+  public HostController getHostController(String hostName, int port)
+  {
+    try {
+      return findHost(hostName, port);
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);
       
@@ -402,32 +418,30 @@ public class HostContainer implements DispatchBuilder {
 
     HostController hostController = null;
     
-    synchronized (_hostMap) {
-      hostController = _hostMap.get(fullHost);
+    hostController = _hostMap.get(fullHost);
 
-      if (hostController != null && ! hostController.isDestroyed())
-        return hostController;
-    }
+    if (hostController != null && ! hostController.getState().isDestroyed())
+      return hostController;
 
-    if (hostController == null || hostController.isDestroyed())
+    if (hostController == null || hostController.getState().isDestroyed())
       hostController = _hostMap.get(shortHost);
 
-    if (hostController == null || hostController.isDestroyed())
+    if (hostController == null || hostController.getState().isDestroyed())
       hostController = findHostController(fullHost);
 
-    if (hostController == null || hostController.isDestroyed())
+    if (hostController == null || hostController.getState().isDestroyed())
       hostController = findHostController(shortHost);
 
-    if (hostController == null || hostController.isDestroyed())
+    if (hostController == null || hostController.getState().isDestroyed())
       hostController = findHostController("");
 
-    synchronized (_hostMap) {
-      if (hostController != null && ! hostController.isDestroyed())
-        _hostMap.put(fullHost, hostController);
-      else {
-        hostController = null;
-        _hostMap.remove(fullHost);
-      }
+    if (hostController == null) {
+    }
+    else if (! hostController.getState().isDestroyed())
+      _hostMap.put(fullHost, hostController);
+    else {
+      hostController = null;
+      _hostMap.remove(fullHost);
     }
 
     return hostController;
@@ -453,25 +467,54 @@ public class HostContainer implements DispatchBuilder {
    */
   public WebApp getErrorWebApp()
   {
-    if (_errorWebApp == null
-        && _classLoader != null
-        && ! _classLoader.isModified()) {
-      Thread thread = Thread.currentThread();
-      ClassLoader loader = thread.getContextClassLoader();
-      try {
-        thread.setContextClassLoader(_classLoader);
+    Host errorHost = getErrorHost();
+    
+    if (errorHost != null)
+      return errorHost.getWebAppContainer().getErrorWebApp();
+    else
+      return null;
+  }
+  
+  private Host createErrorHost()
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader loader = thread.getContextClassLoader();
+    try {
+      thread.setContextClassLoader(_classLoader);
 
-        _errorWebApp = new WebApp(getRootDirectory().lookup("caucho-host-error"));
-        _errorWebApp.init();
-        _errorWebApp.start();
-      } catch (Throwable e) {
-        log.log(Level.WARNING, e.toString(), e);
-      } finally {
-        thread.setContextClassLoader(loader);
-      }
+      Path rootDirectory = Vfs.lookup("memory:/error");
+      HostController controller
+        = new HostController("error/host/error", rootDirectory, "error", 
+                             null, this, null);
+      controller.init();
+      controller.startOnInit();
+      controller.start();
+      
+      Host host = controller.request();
+
+      return host;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    } finally {
+      thread.setContextClassLoader(loader);
     }
+  }
+  
+  private Host getErrorHost()
+  {
+    if (! _lifecycle.isActive())
+      return null;
+    
+    Host defaultHost = getHost("", 0);
+    
+    if (defaultHost != null)
+      return defaultHost;
+    else {
+      if (_errorHost == null)
+        _errorHost = createErrorHost();
 
-    return _errorWebApp;
+      return _errorHost;
+    }
   }
 
   /**
@@ -479,10 +522,8 @@ public class HostContainer implements DispatchBuilder {
    */
   public void start()
   {
-    if (! _lifecycle.toStarting())
+    if (! _lifecycle.toActive())
       return;
-
-    // _classLoader.start();
 
     _lifecycle.toActive();
 

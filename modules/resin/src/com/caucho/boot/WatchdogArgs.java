@@ -63,6 +63,8 @@ class WatchdogArgs
   private int _watchdogPort;
   private boolean _isVerbose;
   private StartMode _startMode;
+  
+  private ArrayList<String> _tailArgs = new ArrayList<String>();
 
   private boolean _isDynamicServer;
   private String _dynamicCluster;
@@ -71,9 +73,15 @@ class WatchdogArgs
 
   WatchdogArgs(String[] argv)
   {
-    String logLevel = System.getProperty("caucho.logger.level");
+    this(argv, true);
+  }
 
-    setLogLevel(logLevel);
+  WatchdogArgs(String[] argv, boolean isTop)
+  {
+    String logLevel = System.getProperty("resin.log.level");
+
+    if (isTop)
+      setLogLevel(logLevel);
 
     _resinHome = calculateResinHome();
     _rootDirectory = calculateResinRoot(_resinHome);
@@ -203,6 +211,26 @@ class WatchdogArgs
   {
     return _startMode == StartMode.CONSOLE;
   }
+  
+  StartMode getStartMode()
+  {
+    return _startMode;
+  }
+  
+  public ArrayList<String> getTailArgs()
+  {
+    return _tailArgs;
+  }
+  
+  public String getArg(String arg)
+  {
+    for (int i = 0; i + 1 < _argv.length; i++) {
+      if (_argv[i].equals(arg) || _argv[i].equals("-" + arg))
+        return _argv[i + 1];
+    }
+    
+    return null;
+  }
 
   public ResinELContext getELContext()
   {
@@ -211,7 +239,7 @@ class WatchdogArgs
 
   private void setLogLevel(String levelName)
   {
-    Level level = Level.WARNING;
+    Level level = Level.INFO;
 
     if ("off".equals(levelName))
       level = Level.OFF;
@@ -320,20 +348,23 @@ class WatchdogArgs
       else if ("console".equals(arg)) {
         _startMode = StartMode.CONSOLE;
       }
+      else if ("gui".equals(arg)) {
+        _startMode = StartMode.GUI;
+      }
+      else if ("kill".equals(arg)) {
+        _startMode = StartMode.KILL;
+      }
+      else if ("deploy".equals(arg)) {
+        _startMode = StartMode.DEPLOY;
+      }
       else if ("status".equals(arg)) {
         _startMode = StartMode.STATUS;
       }
       else if ("start".equals(arg)) {
         _startMode = StartMode.START;
       }
-      else if ("gui".equals(arg)) {
-        _startMode = StartMode.GUI;
-      }
       else if ("stop".equals(arg)) {
         _startMode = StartMode.STOP;
-      }
-      else if ("kill".equals(arg)) {
-        _startMode = StartMode.KILL;
       }
       else if ("restart".equals(arg)) {
         _startMode = StartMode.RESTART;
@@ -344,6 +375,9 @@ class WatchdogArgs
       else if ("version".equals(arg)) {
         System.out.println(VersionFactory.getFullVersion());
         System.exit(0);
+      }
+      else if (_startMode != null) {
+        _tailArgs.add(arg);
       }
       else {
         System.out.println(L().l("unknown argument '{0}'", argv[i]));
@@ -675,12 +709,13 @@ class WatchdogArgs
 
   enum StartMode {
     CONSOLE,
+    DEPLOY,
     STATUS,
     START,
     GUI,
     STOP,
     KILL,
     RESTART,
-    SHUTDOWN
+    SHUTDOWN,
   };
 }

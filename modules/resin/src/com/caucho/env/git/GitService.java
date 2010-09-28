@@ -57,6 +57,7 @@ public class GitService extends AbstractResinService {
   public GitService()
   {
   }
+  
   public GitService(Path root)
   {
     _root = root;
@@ -101,7 +102,7 @@ public class GitService extends AbstractResinService {
     throws IOException
   {
     if (_root == null)
-    _root = RootDirectoryService.getCurrentDataDirectory().lookup(".git");
+      _root = RootDirectoryService.getCurrentDataDirectory().lookup(".git");
     
     if (_root.lookup("HEAD").canRead())
       return;
@@ -308,7 +309,7 @@ public class GitService extends AbstractResinService {
     throws IOException
   {
     GitObjectStream is = open(sha1);
-    
+
     try {
       if (GitType.TREE == is.getType()) {
         GitTree tree = is.parseTree();
@@ -370,10 +371,10 @@ public class GitService extends AbstractResinService {
     }
   }
 
-  public boolean contains(String sha1)
+  public boolean contains(String hash)
   {
-    String prefix = sha1.substring(0, 2);
-    String suffix = sha1.substring(2);
+    String prefix = hash.substring(0, 2);
+    String suffix = hash.substring(2);
 
     Path path = _root.lookup("objects").lookup(prefix).lookup(suffix);
 
@@ -659,8 +660,8 @@ public class GitService extends AbstractResinService {
     }
   }
 
-  private String writeData(OutputStream os, String type,
-                           InputStream is, long length)
+  public static String writeData(OutputStream os, String type,
+                                 InputStream is, long length)
     throws IOException
   {
     TempBuffer buf = TempBuffer.allocate();

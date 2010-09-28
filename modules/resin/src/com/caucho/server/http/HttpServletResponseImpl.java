@@ -29,23 +29,30 @@
 
 package com.caucho.server.http;
 
-import com.caucho.VersionFactory;
-import com.caucho.server.cache.*;
-import com.caucho.server.session.SessionManager;
-import com.caucho.server.session.CookieImpl;
-import com.caucho.server.util.CauchoSystem;
-import com.caucho.server.webapp.WebApp;
-import com.caucho.server.webapp.ErrorPageManager;
-import com.caucho.util.*;
-import com.caucho.xml.XmlChar;
-
-import java.io.*;
-import java.util.*;
-import java.util.logging.Logger;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Locale;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import javax.servlet.*;
-import javax.servlet.http.*;
+import javax.servlet.ServletOutputStream;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpSession;
+
+import com.caucho.VersionFactory;
+import com.caucho.server.cache.AbstractCacheEntry;
+import com.caucho.server.cache.AbstractCacheFilterChain;
+import com.caucho.server.session.CookieImpl;
+import com.caucho.server.session.SessionManager;
+import com.caucho.server.util.CauchoSystem;
+import com.caucho.server.webapp.ErrorPageManager;
+import com.caucho.server.webapp.WebApp;
+import com.caucho.util.HTTPUtil;
+import com.caucho.util.L10N;
 
 /**
  * User facade for http responses.
@@ -156,6 +163,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * Returns a PrintWriter with the proper character encoding for writing
    * text data to the client.
    */
+  @Override
   public PrintWriter getWriter()
     throws IOException
   {
@@ -183,6 +191,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @param size the new output buffer size.
    */
+  @Override
   public void setBufferSize(int size)
   {
     _responseStream.setBufferSize(size);
@@ -191,6 +200,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   /**
    * Returns the size of the output buffer.
    */
+  @Override
   public int getBufferSize()
   {
     return _responseStream.getBufferSize();
@@ -270,6 +280,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @throws IllegalStateException if <code>isCommitted()</code> is true.
    */
+  @Override
   public void resetBuffer()
   {
     _responseStream.clearBuffer();
@@ -563,6 +574,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @param code the HTTP status code
    */
+  @Override
   public void sendError(int code)
     throws IOException
   {
@@ -575,6 +587,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * @param code the HTTP error code
    * @param value a string message
    */
+  @Override
   public void sendError(int code, String value)
     throws IOException
   {
@@ -606,6 +619,8 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     ErrorPageManager errorManager = null;
     if (webApp != null)
       errorManager = webApp.getErrorPageManager();
+    else
+      errorManager = getRequest().getServer().getErrorPageManager();
 
     setStatus(code, value);
 
@@ -853,7 +868,8 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       if (encoding != null
           && _charEncoding != null
           && ! encoding.equalsIgnoreCase(_charEncoding)) {
-        log.fine(_request.getRequestURI() + ": setEncoding(" + encoding + ") ignored because writer already initialized with charset=" + _charEncoding);
+        if (log.isLoggable(Level.FINE))
+          log.fine(_request.getRequestURI() + ": setEncoding(" + encoding + ") ignored because writer already initialized with charset=" + _charEncoding);
       }
 
       return;
@@ -882,6 +898,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @param url the possibly relative url to send to the browser
    */
+  @Override
   public void sendRedirect(String url)
     throws IOException
   {
@@ -898,6 +915,39 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     resetBuffer();
 
     setStatus(SC_MOVED_TEMPORARILY);
+
+    String encoding = getCharacterEncoding();
+    boolean isLatin1 = "iso-8859-1".equals(encoding);
+    
+    String path = encodeAbsoluteRedirect(url);
+
+    setHeader("Location", path);
+    
+    if (isLatin1)
+      setHeader("Content-Type", "text/html; charset=iso-8859-1");
+    else
+      setHeader("Content-Type", "text/html; charset=utf-8");
+
+    String msg = "The URL has moved <a href=\"" + path + "\">here</a>";
+
+    // The data is required for some WAP devices that can't handle an
+    // empty response.
+    if (_writer != null) {
+      _writer.println(msg);
+    }
+    else {
+      ServletOutputStream out = getOutputStream();
+      out.println(msg);
+    }
+    // closeConnection();
+
+    _request.saveSession(); // #503
+
+    close();
+  }
+  
+  public String encodeAbsoluteRedirect(String url)
+  {
     String path = getAbsolutePath(url);
 
     // Bug #3051
@@ -912,6 +962,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
       if (ch == '<')
         cb.append("%3c");
+      else if (ch == '"') {
+        cb.append("%22");
+      }
       else if (ch < 0x80)
         cb.append(ch);
       else if (isLatin1) {
@@ -935,31 +988,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       }
     }
 
-    path = cb.toString();
-
-    setHeader("Location", path);
-
-    if (isLatin1)
-      setHeader("Content-Type", "text/html; charset=iso-8859-1");
-    else
-      setHeader("Content-Type", "text/html; charset=utf-8");
-
-    String msg = "The URL has moved <a href=\"" + path + "\">here</a>";
-
-    // The data is required for some WAP devices that can't handle an
-    // empty response.
-    if (_writer != null) {
-      _writer.println(msg);
-    }
-    else {
-      ServletOutputStream out = getOutputStream();
-      out.println(msg);
-    }
-    // closeConnection();
-
-    _request.saveSession(); // #503
-
-    close();
+    return cb.toString();
   }
 
   /**
@@ -1251,6 +1280,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * @param string the url to encode
    * @return a url with session information encoded
    */
+  @Override
   public String encodeURL(String string)
   {
     HttpServletRequestImpl request = getRequest();

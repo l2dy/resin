@@ -29,17 +29,13 @@
 
 package com.caucho.rewrite;
 
-import com.caucho.server.dispatch.FilterConfigImpl;
-import com.caucho.server.dispatch.FilterFilterChain;
-import com.caucho.server.webapp.WebApp;
-
-import java.util.ArrayList;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
+
+import com.caucho.server.dispatch.FilterConfigImpl;
+import com.caucho.server.dispatch.FilterFilterChain;
+import com.caucho.server.webapp.WebApp;
 
 /**
  * Wraps a Java filter in a RewriteFilter

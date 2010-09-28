@@ -29,23 +29,6 @@
 
 package com.caucho.server.host;
 
-import com.caucho.config.Config;
-import com.caucho.config.ConfigException;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.types.PathBuilder;
-import com.caucho.el.EL;
-import com.caucho.management.server.HostMXBean;
-import com.caucho.server.deploy.DeployController;
-import com.caucho.server.deploy.DeployControllerAdmin;
-import com.caucho.server.deploy.EnvironmentDeployController;
-import com.caucho.server.e_app.EarConfig;
-import com.caucho.server.webapp.WebAppConfig;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Depend;
-import com.caucho.vfs.Dependency;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,6 +36,21 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.caucho.config.Config;
+import com.caucho.config.types.PathBuilder;
+import com.caucho.el.EL;
+import com.caucho.env.deploy.DeployControllerAdmin;
+import com.caucho.env.deploy.DeployControllerApi;
+import com.caucho.env.deploy.DeployControllerType;
+import com.caucho.env.deploy.EnvironmentDeployController;
+import com.caucho.management.server.HostMXBean;
+import com.caucho.server.e_app.EarConfig;
+import com.caucho.server.webapp.WebAppConfig;
+import com.caucho.vfs.Depend;
+import com.caucho.vfs.Dependency;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 /**
  * A configuration entry for a host
@@ -62,12 +60,14 @@ public class HostController
 {
   private static final Logger log
     = Logger.getLogger(HostController.class.getName());
-  private static final L10N L = new L10N(HostController.class);
   
   private HostContainer _container;
 
+  private final String _idKey;
+  
   // The host name is the canonical name
-  private String _hostName;
+  private final String _hostName;
+
   // The regexp name is the matching name of the regexp
   private String _regexpName;
 
@@ -85,19 +85,21 @@ public class HostController
   private ArrayList<Pattern> _hostAliasRegexps = new ArrayList<Pattern>();
 
   // The host variables.
-  private final Var _hostVar = new Var();
-  private final HostAdmin _admin = new HostAdmin(this);
+  private final HostVar _hostVar = new HostVar(this);
+  private HostAdmin _admin;
 
   private ArrayList<Dependency> _dependList = new ArrayList<Dependency>();
 
   HostController(String id,
+                 Path rootDirectory,
+                 String hostName,
                  HostConfig config,
                  HostContainer container,
                  Map<String,Object> varMap)
   {
-    super(id, config);
+    super(id, rootDirectory, config);
 
-    setHostName(id);
+    _hostName = hostName;
 
     if (varMap != null)
       getVariableMap().putAll(varMap);
@@ -106,30 +108,40 @@ public class HostController
 
     setContainer(container);
     
-    setRootDirectory(config.calculateRootDirectory(getVariableMap()));
+    int p = id.lastIndexOf('/');
+    _idKey = id.substring(p + 1);
+    
+    if (config != null) {
+      _regexp = config.getRegexp();
+      _entryHostAliases.addAll(config.getHostAliases());
+      _hostAliases.addAll(config.getHostAliases());
+      _entryHostAliasRegexps.addAll(config.getHostAliasRegexps());
+      _hostAliasRegexps.addAll(config.getHostAliasRegexps());
+    }
+    
+    if (! isErrorHost()) {
+      _admin = new HostAdmin(this);
+    }
   }
 
   public HostController(String id,
                         Path rootDirectory,
+                        String hostName,
                         HostContainer container)
   {
-    super(id, rootDirectory);
-
-    addHostAlias(id);
-    setHostName(id);
-
-    // jsp/101r
-    // getVariableMap().put("name", id);
-    getVariableMap().put("host", _hostVar);
-    
-    setContainer(container);
+    this(id, rootDirectory, hostName, null, container, null);
+  }
+  
+  private boolean isErrorHost()
+  {
+    return getId().startsWith("error/");
   }
 
   public void setContainer(HostContainer container)
   {
     _container = container;
     
-    if (_container != null) {
+    if (_container != null && ! isErrorHost()) {
       for (HostConfig defaultConfig : _container.getHostDefaultList())
         addConfigDefault(defaultConfig);
     }
@@ -140,12 +152,15 @@ public class HostController
    */
   public String getName()
   {
-    String name = super.getId();
+    /*
+    String name = getHostName();
     
-    if (name != null)
-      return name;
+    if (name.isEmpty())
+      return "default";
     else
-      return getHostName();
+      return name;
+      */
+    return _idKey;
   }
 
   /**
@@ -153,26 +168,7 @@ public class HostController
    */
   public String getHostName()
   {
-    if ("".equals(_hostName))
-      return "default";
-    else
-      return _hostName;
-  }
-
-  /**
-   * Sets the host's canonical name
-   */
-  public void setHostName(String name)
-  {
-    if (name != null)
-      name = name.trim();
-    
-    if (name == null || name.equals("*"))
-      name = "";
-    
-    name = name.toLowerCase();
-
-    _hostName = name;
+    return _hostName;
   }
 
   /**
@@ -235,6 +231,15 @@ public class HostController
   {
     _regexp = regexp;
   }
+  
+  @Override
+  public DeployControllerType getControllerType()
+  {
+    if (_regexp != null)
+      return DeployControllerType.DYNAMIC;
+    else
+      return super.getControllerType();
+  }
 
   /**
    * Sets the root directory pattern
@@ -272,9 +277,11 @@ public class HostController
   /**
    * Initialize the entry.
    */
+  @Override
   protected void initBegin()
   {
     try {
+      /*
       try {
         if (getConfig() == null || getHostName() != null) {
         }
@@ -290,6 +297,7 @@ public class HostController
 
       if (_hostName == null)
         _hostName = "";
+      */
 
       ArrayList<String> aliases = null;
 
@@ -317,9 +325,10 @@ public class HostController
   /**
    * Returns the "name" property.
    */
+  @Override
   protected String getMBeanId()
   {
-    String name = _hostName;
+    String name = getName();
     
     if (name == null)
       name = "";
@@ -335,17 +344,18 @@ public class HostController
   /**
    * Returns true for a matching name.
    */
+  @Override
   public boolean isNameMatch(String name)
   {
-    if (name.equals("default"))
-      name = "";
-    
     if (_hostName.equalsIgnoreCase(name))
       return true;
 
     for (int i = _hostAliases.size() - 1; i >= 0; i--) {
-      if (name.equalsIgnoreCase(_hostAliases.get(i)))
+      String alias = _hostAliases.get(i);
+      
+      if (name.equalsIgnoreCase(alias)) {
         return true;
+      }
     }
 
     for (int i = _hostAliasRegexps.size() - 1; i >= 0; i--) {
@@ -398,7 +408,7 @@ public class HostController
       }
 
       varMap.put("regexp", vars);
-      varMap.put("host", new TestVar(matcher.group(0), vars));
+      varMap.put("host", new HostRegexpVar(matcher.group(0), vars));
 
       Path path = PathBuilder.lookupPath(_rootDirectoryPattern, varMap);
       
@@ -416,6 +426,7 @@ public class HostController
   /**
    * Merges two entries.
    */
+  /*
   protected HostController merge(HostController newController)
   {
     if (getConfig() != null && getConfig().getRegexp() != null)
@@ -430,9 +441,12 @@ public class HostController
       try {
         thread.setContextClassLoader(getParentClassLoader());
 
+        String id = newController.getId();
+        
         HostController mergedController
-          = new HostController(newController.getHostName(),
+          = new HostController(id,
                                getRootDirectory(),
+                               newController.getHostName(),
                                _container);
 
         mergedController.mergeController(this);
@@ -443,9 +457,9 @@ public class HostController
           ConfigException e;
 
           e = new ConfigException(L.l("Illegal merge of {0} and {1}.  Both hosts have the same root-directory '{2}'.",
-                                        getHostName(),
-                                        newController.getHostName(),
-                                        getRootDirectory()));
+                                      getId(),
+                                      newController.getId(),
+                                      getRootDirectory()));
 
           log.warning(e.getMessage());
           log.log(Level.FINEST, e.toString(), e);
@@ -463,33 +477,38 @@ public class HostController
       }
     }
   }
+  */
 
   /**
    * Merges with the old controller.
    */
-  protected void mergeController(DeployController oldControllerV)
+  @Override
+  public void merge(DeployControllerApi<Host> newControllerV)
   {
-    super.mergeController(oldControllerV);
+    super.merge(newControllerV);
 
-    HostController oldController = (HostController) oldControllerV;
+    HostController newController = (HostController) newControllerV;
     
-    _entryHostAliases.addAll(oldController._entryHostAliases);
-    if (! oldController.getHostName().equals(""))
-      _entryHostAliases.add(oldController.getHostName());
-    _entryHostAliasRegexps.addAll(oldController._entryHostAliasRegexps);
+    _entryHostAliases.addAll(newController._entryHostAliases);
+    if (! newController.getHostName().equals(""))
+      _entryHostAliases.add(newController.getHostName());
+    _entryHostAliasRegexps.addAll(newController._entryHostAliasRegexps);
     
-    _hostAliases.addAll(oldController._hostAliases);
-    _hostAliasRegexps.addAll(oldController._hostAliasRegexps);
-
+    _hostAliases.addAll(newController._hostAliases);
+    _hostAliasRegexps.addAll(newController._hostAliasRegexps);
+    
+    /*
     if (_regexp == null) {
-      _regexp = oldController._regexp;
-      _rootDirectoryPattern = oldController._rootDirectoryPattern;
+      _regexp = newController._regexp;
+      _rootDirectoryPattern = newController._rootDirectoryPattern;
     }
+    */
   }
 
   /**
    * Creates a new instance of the host object.
    */
+  @Override
   protected Host instantiateDeployInstance()
   {
     return new Host(_container, this, _hostName);
@@ -498,13 +517,13 @@ public class HostController
   /**
    * Creates the host.
    */
+  @Override
   protected void configureInstance(Host host)
-    throws Throwable
+    throws Exception
   {
     _hostAliases.clear();
     _hostAliases.addAll(_entryHostAliases);
 
-    InjectManager webBeans = InjectManager.create();
     Config.setProperty("host", _hostVar);
 
     for (Map.Entry<String,Object> entry : getVariableMap().entrySet()) {
@@ -516,15 +535,16 @@ public class HostController
 
     if (_container != null) {
       for (EarConfig config : _container.getEarDefaultList())
-        host.addEarDefault(config);
+        host.getWebAppContainer().addEarDefault(config);
 
       for (WebAppConfig config : _container.getWebAppDefaultList())
-        host.addWebAppDefault(config);
+        host.getWebAppContainer().addWebAppDefault(config);
     }
 
     super.configureInstance(host);
   }
 
+  @Override
   protected void extendJMXContext(Map<String,String> context)
   {
     context.put("Host", getMBeanId());
@@ -533,6 +553,7 @@ public class HostController
   /**
    * Returns the appropriate log for debugging.
    */
+  @Override
   protected Logger getLog()
   {
     return log;
@@ -541,6 +562,7 @@ public class HostController
   /**
    * Returns equality.
    */
+  @Override
   public boolean equals(Object o)
   {
     if (! (o instanceof HostController))
@@ -554,149 +576,9 @@ public class HostController
   /**
    * Returns a printable view.
    */
+  @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + getName() + "]";
-  }
-
-  /**
-   * EL variables for the host.
-   */
-  public class Var {
-    public String getName()
-    {
-      return HostController.this.getName();
-    }
-    
-    public String getHostName()
-    {
-      return HostController.this.getHostName();
-    }
-    
-    public String getUrl()
-    {
-      Host host = getDeployInstance();
-      
-      if (host != null)
-        return host.getURL();
-      else if (_hostName.equals(""))
-        return "";
-      else if (_hostName.startsWith("http:")
-               || _hostName.startsWith("https:"))
-        return _hostName;
-      else
-        return "http://" + _hostName;
-    }
-
-    public ArrayList getRegexp()
-    {
-      return (ArrayList) getVariableMap().get("regexp");
-    }
-    
-    public Path getRoot()
-    {
-      Host host = getDeployInstance();
-      
-      if (host != null)
-        return host.getRootDirectory();
-      else
-        return HostController.this.getRootDirectory();
-    }
-    
-    /**
-     * @deprecated
-     */
-    public Path getRootDir()
-    {
-      return getRoot();
-    }
-
-    /**
-     * @deprecated
-     */
-    public Path getRootDirectory()
-    {
-      return getRoot();
-    }
-    
-    public Path getDocumentDirectory()
-    {
-      Host host = getDeployInstance();
-      
-      if (host != null)
-        return host.getDocumentDirectory();
-      else
-        return null;
-    }
-    
-    public Path getDocDir()
-    {
-      return getDocumentDirectory();
-    }
-    
-    public Path getWarDirectory()
-    {
-      Host host = getDeployInstance();
-      
-      if (host != null)
-        return host.getWarDir();
-      else
-        return null;
-    }
-    
-    public Path getWarDir()
-    {
-      return getWarDirectory();
-    }
-    
-    public Path getWarExpandDirectory()
-    {
-      Host host = getDeployInstance();
-      
-      if (host != null)
-        return host.getWarExpandDir();
-      else
-        return null;
-    }
-    
-    public Path getWarExpandDir()
-    {
-      return getWarExpandDirectory();
-    }
-    
-    public String toString()
-    {
-      return "Host[" + getId() + "]";
-    }
-  }
-
-  /**
-   * EL variables for the host, when testing for regexp identity .
-   */
-  public class TestVar {
-    private String _name;
-    private ArrayList<String> _regexp;
-
-    TestVar(String name, ArrayList<String> regexp)
-    {
-      _name = name;
-      _regexp = regexp;
-    }
-    
-    public String getName()
-    {
-      return _name;
-    }
-    
-    public String getHostName()
-    {
-      return _name;
-    }
-    
-    public ArrayList<String> getRegexp()
-    {
-      // server/13t0
-      return _regexp;
-    }
+    return getClass().getSimpleName() + "[" + getId() + "]";
   }
 }

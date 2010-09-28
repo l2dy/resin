@@ -37,7 +37,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.bam.ActorStream;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
@@ -94,6 +93,8 @@ public final class ClusterServer {
 
   private int _loadBalanceWeight = 100;
   
+  private long _clusterIdleTime = 3 * 60000L;
+  
   private ConfigProgram _portDefaults = new ContainerProgram();
 
   private ContainerProgram _serverProgram
@@ -102,14 +103,13 @@ public final class ClusterServer {
   private String _stage;
   private ArrayList<String> _pingUrls = new ArrayList<String>();
 
-  private boolean _isSelf;
-
   // runtime
 
   private ClientSocketFactory _serverPool;
 
   private AtomicBoolean _isActive = new AtomicBoolean();
   private AtomicLong _stateTimestamp = new AtomicLong();
+  private AtomicLong _lastHeartbeatTime = new AtomicLong();
 
   // admin
 
@@ -386,6 +386,15 @@ public final class ClusterServer {
   {
     return _loadBalanceRecoverTime;
   }
+
+  /**
+   * The cluster idle-time.
+   */
+  public long getClusterIdleTime()
+  {
+    return _clusterIdleTime;
+  }
+
   
   //
   // port defaults
@@ -553,62 +562,6 @@ public final class ClusterServer {
   }
 
   /**
-   * Arguments on boot
-   */
-  public void addJavaExe(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJvmArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJvmClasspath(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogJvmArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogPassword(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogPort(int port)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogAddress(String addr)
-  {
-  }
-
-  /**
    * Sets a port.
    */
   public void setPort(int port)
@@ -625,25 +578,11 @@ public final class ClusterServer {
   }
 
   /**
-   * Sets the user name.
-   */
-  public void setUserName(String userName)
-  {
-  }
-
-  /**
-   * Sets the group name.
-   */
-  public void setGroupName(String groupName)
-  {
-  }
-
-  /**
    * Returns true for the self server
    */
   public boolean isSelf()
   {
-    return _isSelf;
+    return _clusterService.getSelfServer() == getCloudServer();
   }
 
   /**
@@ -654,14 +593,6 @@ public final class ClusterServer {
     return _serverPool;
   }
   
-  /**
-   * Returns the bam queue to the server.
-   */
-  public ActorStream getHmtpStream()
-  {
-    return null;
-  }
-
   /**
    * Returns true if the server is remote and active.
    */
@@ -725,17 +656,18 @@ public final class ClusterServer {
   private ClientSocketFactory createServerPool(String serverId)
   {
     ClientSocketFactory pool = new ClientSocketFactory(serverId,
-                                     getId(),
-                                     "Resin|Cluster",
-                                     getStatId(),
-                                     getAddress(),
-                                     getPort(),
-                                     isSSL());
+                                                       getId(),
+                                                       "Resin|Cluster",
+                                                       getStatId(),
+                                                       getAddress(),
+                                                       getPort(),
+                                                       isSSL());
 
     pool.setLoadBalanceConnectTimeout(getLoadBalanceConnectTimeout());
     pool.setLoadBalanceConnectionMin(getLoadBalanceConnectionMin());
     pool.setLoadBalanceSocketTimeout(getLoadBalanceSocketTimeout());
-    pool.setLoadBalanceIdleTime(getLoadBalanceIdleTime());
+    // pool.setLoadBalanceIdleTime(getLoadBalanceIdleTime());
+    pool.setLoadBalanceIdleTime(getClusterIdleTime());
     pool.setLoadBalanceRecoverTime(getLoadBalanceRecoverTime());
     pool.setLoadBalanceWarmupTime(getLoadBalanceWarmupTime());
     pool.setLoadBalanceWeight(getLoadBalanceWeight());
@@ -770,18 +702,27 @@ public final class ClusterServer {
   {
     return _stateTimestamp.get();
   }
+  
+  public long getLastHeartbeatTime()
+  {
+    return _lastHeartbeatTime.get();
+  }
 
   /**
    * Notify that a start event has been received.
    */
   public boolean notifyStart()
   {
+    long now = Alarm.getCurrentTime();
+    
+    _lastHeartbeatTime.set(now);
+
     boolean isActive = _isActive.getAndSet(true);
     
     if (isActive)
       return false;
     
-    _stateTimestamp.set(Alarm.getCurrentTime());
+    _stateTimestamp.set(now);
 
     if (_serverPool != null)
       _serverPool.notifyStart();
@@ -799,6 +740,8 @@ public final class ClusterServer {
    */
   public boolean notifyStop()
   {
+    _lastHeartbeatTime.set(0);
+    
     boolean isActive = _isActive.getAndSet(false);
     
     if (! isActive)

@@ -35,13 +35,16 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.types.RawString;
 import com.caucho.el.EL;
 import com.caucho.el.MapVariableResolver;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.ExpandDeployGenerator;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployMode;
+import com.caucho.env.deploy.ExpandDeployGenerator;
+import com.caucho.env.deploy.ExpandVersion;
 import com.caucho.vfs.Path;
 
 import javax.el.ELContext;
 import javax.el.ELResolver;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -66,10 +69,11 @@ public class HostExpandDeployGenerator
   /**
    * Creates the new host deploy.
    */
-  public HostExpandDeployGenerator(DeployContainer<HostController> container,
+  public HostExpandDeployGenerator(String id,
+                                   DeployContainer<HostController> container,
                                    HostContainer hostContainer)
   {
-    super(container, hostContainer.getRootDirectory());
+    super(id, container, hostContainer.getRootDirectory());
     
     _container = hostContainer;
   }
@@ -106,9 +110,9 @@ public class HostExpandDeployGenerator
   {
     log.config("lazy-init is deprecated.  Use <startup>lazy</startup> instead.");
     if (lazyInit)
-      setStartupMode("lazy");
+      setStartupMode(DeployMode.LAZY);
     else
-      setStartupMode("automatic");
+      setStartupMode(DeployMode.AUTOMATIC);
   }
 
   /**
@@ -146,58 +150,60 @@ public class HostExpandDeployGenerator
   /**
    * Returns the current array of application entries.
    */
-  public HostController createController(String name)
+  @Override
+  public HostController createController(ExpandVersion version)
   {
+    String key = version.getKey();
+    
+    /*
     // server/13g3
     if (name.equals(""))
       return null;
+      */
     
     /*
     if (! isDeployedKey(name))
       return null;
     */
     
-    Path rootDirectory = getExpandDirectory().lookup("./" + name);
+    Path rootDirectory = getExpandPath(key);
 
-    String hostName = name;
+    String hostName = keyToName(key);
 
-    if ("default".equals(hostName))
-      hostName = "";
+    String stage = _container.getServer().getStage();
+    String id = stage + "/host/" + key;
+    
+    String hostNamePattern = getHostName();
+
+    if (hostNamePattern != null && ! key.equals("default")) {
+      HashMap<String,Object> varMap = new HashMap<String,Object>();
+      varMap.put("host", new HostRegexpVar(key));
+      
+      ELContext parentEnv = Config.getEnvironment();
+      ELResolver resolver = new MapVariableResolver(varMap);
+
+      ELContext env = new ConfigELContext(resolver);
+
+      hostName = EL.evalString(hostNamePattern, env);
+    }
 
     HostController controller
-      = new HostController(hostName, rootDirectory, _container);
+      = new HostController(id, rootDirectory, hostName, _container);
 
-    Path jarPath = getArchiveDirectory().lookup("./" + name + ".jar");
+    Path jarPath = getArchivePath(key);
     controller.setArchivePath(jarPath);
     
+    for (int i = 0; i < _hostDefaults.size(); i++)
+      controller.addConfigDefault(_hostDefaults.get(i));
+    
+    /*
     if (rootDirectory.isDirectory()
         && ! isValidDirectory(rootDirectory, name))
       return null;
     else if (! rootDirectory.isDirectory()
              && ! jarPath.isFile())
       return null;
-
-    try {
-      String hostNamePattern = getHostName();
-
-      if (hostNamePattern != null) {
-        ELContext parentEnv = Config.getEnvironment();
-        ELResolver resolver
-          = new MapVariableResolver(controller.getVariableMap());
-
-        ELContext env = new ConfigELContext(resolver);
-
-        controller.setHostName(EL.evalString(hostNamePattern, env));
-      }
-      else
-        controller.setHostName(hostName);
-
-      controller.addDepend(jarPath);
-    } catch (Throwable e) {
-      log.log(Level.WARNING, e.toString(), e);
-      
-      controller.setConfigException(e);
-    }
+      */
 
     return controller;
   }
@@ -206,6 +212,7 @@ public class HostExpandDeployGenerator
   /**
    * Adds configuration to the current controller
    */
+  @Override
   protected HostController mergeController(HostController controller,
                                            String key)
   {
@@ -235,6 +242,24 @@ public class HostExpandDeployGenerator
 
     return controller;
   }
+  
+  @Override
+  public String nameToKey(String name)
+  {
+    if (name.isEmpty())
+      return "default";
+    else
+      return name;
+  }
+  
+  @Override
+  public String keyToName(String key)
+  {
+    if (key.equals("default"))
+      return "";
+    else
+      return key;
+  }
 
   @Override
   protected void destroyImpl()
@@ -262,6 +287,6 @@ public class HostExpandDeployGenerator
 
   public String toString()
   {
-    return "HostExpandDeployGenerator[" + getExpandDirectory() + "]";
+    return getClass().getSimpleName() + "[" + getExpandDirectory() + "]";
   }
 }

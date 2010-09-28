@@ -54,9 +54,9 @@ import com.caucho.network.listen.SocketLinkDuplexListener;
 import com.caucho.network.listen.TcpSocketLink;
 import com.caucho.security.SecurityContextProvider;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationDecoder;
+import com.caucho.server.dispatch.InvocationServer;
 import com.caucho.server.webapp.ErrorPageManager;
 import com.caucho.server.webapp.RequestDispatcherImpl;
 import com.caucho.server.webapp.WebApp;
@@ -89,19 +89,6 @@ public abstract class AbstractHttpRequest
   private static final L10N L = new L10N(AbstractHttpRequest.class);
 
   protected static final CaseInsensitiveIntMap _headerCodes;
-
-  public static final String REQUEST_URI = "javax.servlet.include.request_uri";
-  public static final String CONTEXT_PATH = "javax.servlet.include.context_path";
-  public static final String SERVLET_PATH = "javax.servlet.include.servlet_path";
-  public static final String PATH_INFO = "javax.servlet.include.path_info";
-  public static final String QUERY_STRING = "javax.servlet.include.query_string";
-
-  public static final String STATUS_CODE = "javax.servlet.error.status_code";
-  public static final String EXCEPTION_TYPE = "javax.servlet.error.exception_type";
-  public static final String MESSAGE = "javax.servlet.error.message";
-  public static final String EXCEPTION = "javax.servlet.error.exception";
-  public static final String ERROR_URI = "javax.servlet.error.request_uri";
-  public static final String SERVLET_NAME = "javax.servlet.error.servlet_name";
 
   public static final String JSP_EXCEPTION = "javax.servlet.jsp.jspException";
 
@@ -151,7 +138,7 @@ public abstract class AbstractHttpRequest
   private final HashMapImpl<String,String[]> _form
     = new HashMapImpl<String,String[]>();
 
-  private final ErrorPageManager _errorManager = new ErrorPageManager(null);
+  private ErrorPageManager _errorManager;
 
   // Efficient date class for printing date headers
   private final QDate _calendar = new QDate();
@@ -184,7 +171,10 @@ public abstract class AbstractHttpRequest
   protected AbstractHttpRequest(Server server, SocketLink conn)
   {
     _server = server;
-
+    
+    if (server == null)
+      throw new NullPointerException();
+    
     _conn = conn;
 
     if (conn != null)
@@ -240,9 +230,9 @@ public abstract class AbstractHttpRequest
   /**
    * returns the dispatch server.
    */
-  public final DispatchServer getDispatchServer()
+  public final InvocationServer getInvocationServer()
   {
-    return _server;
+    return _server.getInvocationServer();
   }
 
   protected final CharBuffer getCharBuffer()
@@ -1425,12 +1415,14 @@ public abstract class AbstractHttpRequest
                         host, getServerPort(),
                         uri, uriLength);
 
-    Invocation invocation = _server.getInvocation(_invocationKey);
+    InvocationServer server = _server.getInvocationServer();
+    
+    Invocation invocation = server.getInvocation(_invocationKey);
 
     if (invocation != null)
       return invocation.getRequestInvocation(_requestFacade);
 
-    invocation = _server.createInvocation();
+    invocation = server.createInvocation();
     invocation.setSecure(isSecure());
 
     if (host != null) {
@@ -1457,7 +1449,8 @@ public abstract class AbstractHttpRequest
                                        int uriLength)
     throws IOException
   {
-    InvocationDecoder decoder = _server.getInvocationDecoder();
+    InvocationServer server = _server.getInvocationServer();
+    InvocationDecoder decoder = server.getInvocationDecoder();
 
     decoder.splitQueryAndUnescape(invocation, uri, uriLength);
 
@@ -1465,19 +1458,17 @@ public abstract class AbstractHttpRequest
       _server.logModified(log);
 
       _requestFacade.setInvocation(invocation);
-      if (_server instanceof Server)
-        invocation.setWebApp(((Server) _server).getDefaultWebApp());
+      invocation.setWebApp(_server.getErrorWebApp());
 
       HttpServletResponse res = _responseFacade;
       res.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE);
 
-      restartServer();
+      _server.restart();
 
       return null;
     }
 
-    invocation = _server.buildInvocation(_invocationKey.clone(),
-                                         invocation);
+    invocation = server.buildInvocation(_invocationKey.clone(), invocation);
 
     return invocation.getRequestInvocation(_requestFacade);
   }
@@ -1487,6 +1478,7 @@ public abstract class AbstractHttpRequest
    *
    * @return true if the connection should stay open (keepalive)
    */
+  @Override
   public boolean handleResume()
     throws IOException
   {
@@ -1577,7 +1569,12 @@ public abstract class AbstractHttpRequest
     throws IOException
   {
     try {
-      getErrorManager().sendServletError(e, _requestFacade, _responseFacade);
+      ErrorPageManager errorManager = getErrorManager();
+      
+      if (errorManager != null)
+        getErrorManager().sendServletError(e, _requestFacade, _responseFacade);
+      else
+        _responseFacade.sendError(503);
     } catch (ClientDisconnectException e1) {
       throw e1;
     } catch (Throwable e1) {
@@ -1598,27 +1595,10 @@ public abstract class AbstractHttpRequest
    */
   protected ErrorPageManager getErrorManager()
   {
-    Server server = (Server) _server;
+    if (_errorManager == null)
+      _errorManager = _server.getErrorPageManager();
 
-    WebApp webApp = server.getWebApp("error.resin", 80, "/");
-
-    if (webApp != null)
-      return webApp.getErrorPageManager();
-    else
-      return _errorManager;
-  }
-
-  /**
-   * Returns the depth of the request calls.
-   */
-  public int getRequestDepth(int depth)
-  {
-    return depth + 1;
-  }
-
-  public int getRequestDepth()
-  {
-    return 0;
+    return _errorManager;
   }
 
   /**
@@ -1695,7 +1675,6 @@ public abstract class AbstractHttpRequest
    */
   protected void restartServer()
   {
-    _server.update();
   }
 
   /**

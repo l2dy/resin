@@ -40,6 +40,7 @@ import com.caucho.xml.*;
 import com.caucho.xpath.XPath;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.TimeoutException;
+import com.caucho.env.repository.CommitBuilder;
 
 import org.w3c.dom.*;
 
@@ -279,20 +280,26 @@ public class DeploymentManagerImpl
       String type = XPath.evalString("/deployment-plan/archive-type", doc);
       String name = XPath.evalString("/deployment-plan/name", doc);
 
-      String tag = type + "s/default/default/" + name;
-
+      CommitBuilder commit = new CommitBuilder();
+      if (type.equals("war"))
+        commit.type("webapp");
+      if (type.equals("ear"))
+        commit.type("entapp");
+      commit.tagKey("default/" + name);
+      //String tag = type + "s/default/default/" + name;
+/*
       HashMap<String,String> attributes = new HashMap<String,String>();
       attributes.put(DeployClient.USER_ATTRIBUTE, _user);
       attributes.put(DeployClient.MESSAGE_ATTRIBUTE, "");
-
+*/
       if (archive != null)
-        _deployClient.deployJarContents(tag, 
-                                        Vfs.lookup(archive.getAbsolutePath()),
-                                        attributes);
+        _deployClient.commitArchive(commit, 
+                                    Vfs.lookup(archive.getAbsolutePath()));
       else
-        _deployClient.deployJarContents(tag, 
-                                        archiveStream,
-                                        attributes);
+        _deployClient.commitArchive(commit, 
+                                    archiveStream);
+      
+      String tag = commit.getId();
 
       _deployClient.deploy(tag);
 
@@ -480,8 +487,12 @@ public class DeploymentManagerImpl
 
         String host = targetModuleID.getTarget().getName();
         String tag = targetModuleID.getModuleID();
+        
+        CommitBuilder builder = new CommitBuilder();
+        builder.type("webapp");
+        builder.tagKey(tag);
 
-        _deployClient.undeploy(tag, _user, "", null);
+        _deployClient.undeploy(builder);
 
         sb.append(tag).append(' ');
       }

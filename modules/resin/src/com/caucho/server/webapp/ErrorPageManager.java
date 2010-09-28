@@ -55,7 +55,7 @@ import com.caucho.java.LineMapException;
 import com.caucho.java.ScriptStackTrace;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.BadRequestException;
-import com.caucho.server.http.AbstractHttpRequest;
+import com.caucho.server.host.Host;
 import com.caucho.server.http.CauchoRequest;
 import com.caucho.server.http.CauchoResponse;
 import com.caucho.server.http.HttpServletRequestImpl;
@@ -83,24 +83,13 @@ public class ErrorPageManager {
 
   public static final char []MSIE_PADDING;
 
-  public static String REQUEST_URI = "javax.servlet.include.request_uri";
-  public static String CONTEXT_PATH = "javax.servlet.include.context_path";
-  public static String SERVLET_PATH = "javax.servlet.include.servlet_path";
-  public static String PATH_INFO = "javax.servlet.include.path_info";
-  public static String QUERY_STRING = "javax.servlet.include.query_string";
-
-  public static String STATUS_CODE = "javax.servlet.error.status_code";
-  public static String EXCEPTION_TYPE = "javax.servlet.error.exception_type";
-  public static String MESSAGE = "javax.servlet.error.message";
-  public static String EXCEPTION = "javax.servlet.error.exception";
-  public static String ERROR_URI = "javax.servlet.error.request_uri";
-  public static String SERVLET_NAME = "javax.servlet.error.servlet_name";
-
   public static String JSP_EXCEPTION = "javax.servlet.jsp.jspException";
 
   public static String SHUTDOWN = "com.caucho.shutdown";
 
-  private final WebApp _app;
+  private final Server _server;
+  private final Host _host;
+  private final WebApp _webApp;
   private WebAppContainer _appContainer;
   private HashMap<Object,String> _errorPageMap = new HashMap<Object,String>();
   private String _defaultLocation;
@@ -110,9 +99,33 @@ public class ErrorPageManager {
   /**
    * Create error page manager.
    */
-  public ErrorPageManager(WebApp app)
+  public ErrorPageManager(Server server)
   {
-    _app = app;
+    this(server, null, null);
+  }
+
+  /**
+   * Create error page manager.
+   */
+  public ErrorPageManager(Server server, WebApp webApp)
+  {
+    this(server, null, webApp);
+  }
+  
+  /**
+   * Create error page manager.
+   */
+  public ErrorPageManager(Server server, Host host, WebApp app)
+    {
+    _webApp = app;
+
+    _server = server;
+    _host = host;
+    
+    if (_server == null)
+      throw new IllegalStateException(L.l("{0} requires an active {1}",
+                                          getClass().getSimpleName(),
+                                          Server.class.getSimpleName()));
   }
 
   /**
@@ -161,14 +174,7 @@ public class ErrorPageManager {
    */
   protected boolean isDevelopmentModeErrorPage()
   {
-    if (_app != null && _app.getServer() != null)
-      return _app.getServer().isDevelopmentModeErrorPage();
-    else if (Resin.getCurrent() != null
-             && Resin.getCurrent().getServer() != null) {
-      return Resin.getCurrent().getServer().isDevelopmentModeErrorPage();
-    }
-    else
-      return true;
+    return _server.isDevelopmentModeErrorPage();
   }
 
   /**
@@ -336,7 +342,7 @@ public class ErrorPageManager {
 
       response.resetBuffer();
 
-      response.setStatus(response.SC_BAD_REQUEST, title);
+      response.setStatus(HttpServletResponse.SC_BAD_REQUEST, title);
 
       if (location == null)
         log.warning(e.toString());
@@ -394,19 +400,19 @@ public class ErrorPageManager {
         errorPageExn = rootExn;
 
       request.setAttribute(JSP_EXCEPTION, errorPageExn);
-      request.setAttribute(EXCEPTION, errorPageExn);
-      request.setAttribute(EXCEPTION_TYPE, errorPageExn.getClass());
+      request.setAttribute(RequestDispatcher.ERROR_EXCEPTION, errorPageExn);
+      request.setAttribute(RequestDispatcher.ERROR_EXCEPTION_TYPE, errorPageExn.getClass());
       if (request instanceof HttpServletRequest)
-        request.setAttribute(ERROR_URI,
+        request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
                              ((HttpServletRequest) request).getRequestURI());
 
       String servletName = getServletName(request);
 
       if (servletName != null)
-        request.setAttribute(AbstractHttpRequest.SERVLET_NAME, servletName);
+        request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, servletName);
 
-      request.setAttribute(STATUS_CODE, new Integer(500));
-      request.setAttribute(MESSAGE, errorPageExn.getMessage());
+      request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE, new Integer(500));
+      request.setAttribute(RequestDispatcher.ERROR_MESSAGE, errorPageExn.getMessage());
       /*
         if (_app != null && _app.getServer().isClosed())
         setAttribute(SHUTDOWN, "shutdown");
@@ -417,10 +423,12 @@ public class ErrorPageManager {
         // can't use filters because of error pages due to filters
         // or security.
 
-        if (_app != null)
-          disp = _app.getRequestDispatcher(location);
-        else if (_appContainer != null)
-          disp = _appContainer.getRequestDispatcher(location);
+        WebApp webApp = getWebApp();
+        
+        if (webApp != null)
+          disp = webApp.getRequestDispatcher(location);
+        else if (_host != null)
+          disp = _host.getWebAppContainer().getRequestDispatcher(location);
 
         if (disp != null) {
           ((RequestDispatcherImpl) disp).error(request, response);
@@ -492,7 +500,7 @@ public class ErrorPageManager {
 
       out.println("</pre></code>");
 
-      Server server = Server.getCurrent();
+      Server server = _server;
       String version = null;
 
       if (server == null) {
@@ -592,6 +600,8 @@ public class ErrorPageManager {
                             int code, String message)
     throws IOException
   {
+    if (message == null)
+      Thread.dumpStack();
     response.resetBuffer();
 
     /* XXX: if we've already got an error, won't this just mask it?
@@ -641,12 +651,14 @@ public class ErrorPageManager {
                         escapeHtml(request.getPageURI())));
       }
 
+      Server server = _server;
+      
       String version = null;
-      if (_app == null) {
+      if (server == null) {
       }
-      else if (_app.getServer() != null
-               && _app.getServer().getServerHeader() != null) {
-        version = _app.getServer().getServerHeader();
+      else if (server != null
+               && server.getServerHeader() != null) {
+        version = server.getServerHeader();
       }
       else if (CauchoSystem.isTesting()) {
       }
@@ -696,7 +708,7 @@ public class ErrorPageManager {
     if (request.getRequestDepth(0) > 16)
       return false;
 
-    else if (request.getAttribute(AbstractHttpRequest.ERROR_URI) != null) {
+    else if (request.getAttribute(RequestDispatcher.ERROR_REQUEST_URI) != null) {
       return false;
     }
 
@@ -710,30 +722,32 @@ public class ErrorPageManager {
     if (location == null && _parent != null)
       return _parent.handleErrorStatus(request, response, code, message);
 
-    if (_app == null && _appContainer == null)
+    WebApp webApp = getWebApp();
+    
+    if (webApp == null && _host == null)
       return false;
 
     if (location != null && ! location.equals(request.getRequestURI())) {
-      request.setAttribute(AbstractHttpRequest.STATUS_CODE,
+      request.setAttribute(RequestDispatcher.ERROR_STATUS_CODE,
                             new Integer(code));
-      request.setAttribute(AbstractHttpRequest.MESSAGE,
+      request.setAttribute(RequestDispatcher.ERROR_MESSAGE,
                            message);
-      request.setAttribute(AbstractHttpRequest.ERROR_URI,
+      request.setAttribute(RequestDispatcher.ERROR_REQUEST_URI,
                            request.getRequestURI());
 
       String servletName = getServletName(request);
 
       if (servletName != null)
-        request.setAttribute(AbstractHttpRequest.SERVLET_NAME, servletName);
+        request.setAttribute(RequestDispatcher.ERROR_SERVLET_NAME, servletName);
 
       try {
         RequestDispatcher disp = null;
         // can't use filters because of error pages due to filters
         // or security.
-        if (_app != null)
-          disp = _app.getRequestDispatcher(location);
-        else if (_appContainer != null)
-          disp = _appContainer.getRequestDispatcher(location);
+        if (webApp != null)
+          disp = webApp.getRequestDispatcher(location);
+        else if (_host != null)
+          disp = _host.getWebAppContainer().getRequestDispatcher(location);
 
         //disp.forward(request, this, "GET", false);
 
@@ -763,9 +777,9 @@ public class ErrorPageManager {
   /**
    * Returns the URL of an error page for the given exception.
    */
-  String getErrorPage(Throwable e, Class limit)
+  String getErrorPage(Throwable e, Class<?> limit)
   {
-    Class cl = e.getClass();
+    Class<?> cl = e.getClass();
     for (; cl != null; cl = cl.getSuperclass()) {
       String location = (String) _errorPageMap.get(cl.getName());
       if (location != null)
@@ -792,6 +806,16 @@ public class ErrorPageManager {
     }
 
     return null;
+  }
+  
+  private WebApp getWebApp()
+  {
+    if (_webApp != null)
+      return _webApp;
+    else if (_host != null)
+      return _host.getWebAppContainer().findWebAppByURI("/");
+    else
+      return null;
   }
 
   /**
@@ -906,28 +930,30 @@ public class ErrorPageManager {
 
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _app + "]";
+    return getClass().getSimpleName() + "[" + _webApp + "]";
   }
 
   static {
     MSIE_PADDING = ("\n\n\n\n" +
                     "<!--\n" +
-                    "   - Unfortunately, Microsoft has added a clever new\n" +
-                    "   - \"feature\" to Internet Explorer.  If the text in\n" +
-                    "   - an error's message is \"too small\", specifically\n" +
-                    "   - less than 512 bytes, Internet Explorer returns\n" +
-                    "   - its own error message.  Yes, you can turn that\n" +
-                    "   - off, but *surprise* it's pretty tricky to find\n" +
-                    "   - buried as a switch called \"smart error\n" +
-                    "   - messages\"  That means, of course, that many of\n" +
-                    "   - Resin's error messages are censored by default.\n" +
-                    "   - And, of course, you'll be shocked to learn that\n" +
-                    "   - IIS always returns error messages that are long\n" +
-                    "   - enough to make Internet Explorer happy.  The\n" +
-                    "   - workaround is pretty simple: pad the error\n" +
-                    "   - message with a big comment to push it over the\n" +
-                    "   - five hundred and twelve byte minimum.  Of course,\n" +
-                    "   - that's exactly what you're reading right now.\n" +
+                    "   - Because some older browsers replace their own messages\n" +
+                    "   - to replace server error messages if the server\n" +
+                    "   - message is too short, it's necessary to pad out\n" +
+                    "   - the error message to be at least 512 bytes.  With\n" +
+                    "   - this padding, Resin more informative error messages\n" +
+                    "   - are available, making  debugging more straightforward.\n" +
+                    "   - \n" +
+                    "   - \n" +
+                    "   - Padding message repeats:\n" +
+                    "   - \n" +
+                    "   - \n" +
+                    "   - Because some older browsers replace their own messages\n" +
+                    "   - to replace server error messages if the server\n" +
+                    "   - message is too short, it's necessary to pad out\n" +
+                    "   - the error message to be at least 512 bytes.  With\n" +
+                    "   - this padding, Resin more informative error messages\n" +
+                    "   - are available, making  debugging more straightforward.\n" +
+                    "   - \n" +
                     "   -->\n").toCharArray();
   }
 }

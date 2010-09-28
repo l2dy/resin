@@ -30,6 +30,23 @@ package com.caucho.env.health;
 
 public abstract class AbstractHealthCheck implements HealthCheck {
   /**
+   * Returns the health check name
+   */
+  @Override
+  public String getName()
+  {
+    String simpleName = getClass().getSimpleName();
+    
+    if (simpleName.endsWith("HealthCheck")) {
+      int prefixLen = simpleName.length() - "HealthCheck".length();
+      
+      return "Resin|" + simpleName.substring(0, prefixLen);
+    }
+    else
+      return "Resin|" + simpleName;
+  }
+  
+  /**
    * Returns the health status for this health check.
    */
   @Override
@@ -44,6 +61,12 @@ public abstract class AbstractHealthCheck implements HealthCheck {
   @Override
   public String getHealthStatusMessage()
   {
-    return "";
+    return "ok";
+  }
+ 
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[]";
   }
 }

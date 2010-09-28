@@ -90,6 +90,7 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
    * True if the implementation is a proxy, i.e. an interface stub which
    * calls an instance class.
    */
+  @Override
   public boolean isProxy()
   {
     return true;
@@ -165,6 +166,11 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     for (AnnotatedType<? super X> apiType : getLocalApi()) {
       out.print(", " + apiType.getJavaClass().getName());
     }
+
+    for (AnnotatedType<? super X> apiType : getRemoteApi()) {
+      out.print(", " + apiType.getJavaClass().getName());
+    }
+    
     out.println();
   }
 
@@ -209,8 +215,6 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
   private void generateConstructor(JavaWriter out)
     throws IOException
   {
-    String beanClassName = getBeanType().getJavaClass().getName();
-    
     out.println();
     out.print("public " + getClassName() + "(SingletonManager manager");
     out.println(", SingletonContext context)");
@@ -218,7 +222,6 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.pushDepth();
 
     out.println("_manager = manager;");
-
     out.popDepth();
     out.println("}");
 

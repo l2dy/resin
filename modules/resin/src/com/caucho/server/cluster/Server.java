@@ -29,10 +29,6 @@
 
 package com.caucho.server.cluster;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
@@ -47,21 +43,16 @@ import com.caucho.bam.ActorStream;
 import com.caucho.bam.Broker;
 import com.caucho.bam.SimpleActorClient;
 import com.caucho.cloud.bam.BamService;
-import com.caucho.cloud.deploy.DeployNetworkService;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterService;
-import com.caucho.cloud.network.NetworkListenService;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
-import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
-import com.caucho.config.SchemaBean;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.GlobalCache;
+import com.caucho.env.deploy.DeployControllerService;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownService;
@@ -72,28 +63,22 @@ import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.ClassLoaderListener;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
-import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.make.AlwaysModified;
-import com.caucho.management.server.CacheItem;
 import com.caucho.management.server.EnvironmentMXBean;
 import com.caucho.management.server.ServerMXBean;
-import com.caucho.network.listen.AbstractSelectManager;
-import com.caucho.network.listen.SocketLinkListener;
-import com.caucho.network.listen.TcpSocketLink;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.PermissionManager;
-import com.caucho.server.admin.Management;
-import com.caucho.server.cache.AbstractCache;
+import com.caucho.server.cache.AbstractProxyCache;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.dispatch.InvocationBuilder;
+import com.caucho.server.dispatch.InvocationDecoder;
 import com.caucho.server.dispatch.InvocationMatcher;
-import com.caucho.server.dispatch.ProtocolDispatchServer;
+import com.caucho.server.dispatch.InvocationServer;
 import com.caucho.server.distcache.PersistentStoreConfig;
-import com.caucho.server.distlock.AbstractVoteManager;
-import com.caucho.server.distlock.SingleVoteManager;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.host.Host;
 import com.caucho.server.host.HostConfig;
@@ -104,18 +89,18 @@ import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
 import com.caucho.server.webapp.ErrorPage;
+import com.caucho.server.webapp.ErrorPageManager;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
+import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
-import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.Vfs;
 
-public class Server extends ProtocolDispatchServer
-  implements EnvironmentBean, SchemaBean, AlarmListener,
-             ClassLoaderListener
+public class Server
+  implements AlarmListener, ClassLoaderListener, InvocationBuilder, Dependency
 {
   private static final L10N L = new L10N(Server.class);
   private static final Logger log
@@ -134,8 +119,6 @@ public class Server extends ProtocolDispatchServer
   private final NetworkClusterService _clusterService;
   private final ClusterServer _selfServer;
 
-  private NetworkListenService _listenService;
-
   private Throwable _configException;
 
   private ServerAuthManager _authManager;
@@ -144,13 +127,13 @@ public class Server extends ProtocolDispatchServer
   private InjectManager _cdiManager;
 
   private BamService _bamService;
-  private PersistentStoreConfig _persistentStoreConfig;
 
-  private AbstractVoteManager _distributedVoteManager;
-
+  private InvocationServer _invocationServer;
   private HostContainer _hostContainer;
+  
+  private ErrorPageManager _errorPageManager = new ErrorPageManager(this);
 
-  private String _stage = "default";
+  private String _stage = "production";
   private boolean _isPreview;
 
   private String _serverHeader;
@@ -161,17 +144,9 @@ public class Server extends ProtocolDispatchServer
 
   private boolean _isDevelopmentModeErrorPage;
 
-  private Management _management;
-
-  private long _memoryFreeMin = 1024 * 1024;
-  private long _permGenFreeMin = 1024 * 1024;
-
   private long _shutdownWaitMax = 60 * 1000;
-
-  private int _threadMax = 4096;
-  private int _threadExecutorTaskMax = -1;
-  private int _threadIdleMin = -1;
-  private int _threadIdleMax = -1;
+  
+  private boolean _isIgnoreClientDisconnect = true;
 
   // <cluster> configuration
 
@@ -180,8 +155,10 @@ public class Server extends ProtocolDispatchServer
   private ServerAdmin _admin;
 
   private Alarm _alarm;
-  private AbstractCache _cache;
+  private AbstractProxyCache _proxyCache;
 
+  private PersistentStoreConfig _persistentStoreConfig;
+  
   //
   // internal databases
   //
@@ -199,21 +176,26 @@ public class Server extends ProtocolDispatchServer
   /**
    * Creates a new servlet server.
    */
-  public Server(ResinSystem resinSystem,
+  public Server(Resin resin,
+                ResinSystem resinSystem,
                 NetworkClusterService clusterService)
   {
+    if (resin == null)
+      throw new NullPointerException();
+    
     if (resinSystem == null)
       throw new NullPointerException();
     
     if (clusterService == null)
       throw new NullPointerException();
     
+    _resin = resin;
     _resinSystem = resinSystem;
     _clusterService = clusterService;
     
+    _invocationServer = new InvocationServer(this);
+    
     _selfServer = _clusterService.getSelfServer().getData(ClusterServer.class);
-
-    _resin = Resin.getCurrent();
 
     // pod id can't include the server since it's used as part of
     // cache ids
@@ -223,7 +205,7 @@ public class Server extends ProtocolDispatchServer
     String id = _selfServer.getId();
     
     if ("".equals(id))
-      id = "default";
+      throw new IllegalStateException();
     
     // cannot set the based on server-id because of distributed cache
     // _classLoader.setId("server:" + id);
@@ -268,9 +250,7 @@ public class Server extends ProtocolDispatchServer
   {
     _cdiManager = InjectManager.create();
     
-    _hostContainer = new HostContainer();
-    _hostContainer.setClassLoader(getClassLoader());
-    _hostContainer.setDispatchServer(this);
+    _hostContainer = new HostContainer(this);
 
     _alarm = new Alarm(this);
     
@@ -280,11 +260,8 @@ public class Server extends ProtocolDispatchServer
     // XXX:
     _authManager.setAuthenticationRequired(false);
     _bamService.setLinkManager(_authManager);
-    
-    Config.setProperty("server", new ServerVar(_selfServer), getClassLoader());
-    Config.setProperty("cluster", new ClusterVar(), getClassLoader());
 
-    _resinSystem.addService(new DeployNetworkService());
+    // _resinSystem.addService(new DeployUpdateService());
 
     // _selfServer.getServerProgram().configure(this);
   }
@@ -300,14 +277,6 @@ public class Server extends ProtocolDispatchServer
   public ResinSystem getResinSystem()
   {
     return _resinSystem;
-  }
-  
-  public NetworkListenService getListenService()
-  {
-    if (_listenService == null)
-      _listenService = NetworkListenService.getCurrent();
-    
-    return _listenService;
   }
   
   public boolean isResinServer()
@@ -326,7 +295,6 @@ public class Server extends ProtocolDispatchServer
   /**
    * Returns the classLoader
    */
-  @Override
   public EnvironmentClassLoader getClassLoader()
   {
     return _resinSystem.getClassLoader();
@@ -418,25 +386,6 @@ public class Server extends ProtocolDispatchServer
   public CloudPod getPod()
   {
     return _selfServer.getCloudServer().getPod();
-  }
-
-  /**
-   * Returns the distributed vote manager
-   */
-  public AbstractVoteManager getDistributedVoteManager()
-  {
-    if (_distributedVoteManager == null)
-      _distributedVoteManager = createDistributedVoteManager();
-
-    return _distributedVoteManager;
-  }
-
-  /**
-   * Returns the distributed vote manager
-   */
-  protected AbstractVoteManager createDistributedVoteManager()
-  {
-    return new SingleVoteManager(this);
   }
 
   /**
@@ -541,69 +490,12 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * Creates a persistent store instance.
-   */
-  public PersistentStoreConfig createPersistentStore()
-  {
-    if (_persistentStoreConfig == null)
-      _persistentStoreConfig = new PersistentStoreConfig();
-
-    return _persistentStoreConfig;
-  }
-
-  /**
-   * Creates a persistent store instance.
-   */
-  public PersistentStoreConfig getPersistentStoreConfig()
-  {
-    return _persistentStoreConfig;
-  }
-
-  public void startPersistentStore()
-  {
-  }
-
-  public Object createJdbcStore()
-    throws ConfigException
-  {
-    return null;
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJavaExe(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJvmArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJvmArgLine(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addJvmClasspath(String args)
-  {
-  }
-
-  /**
    * Sets the stage id
    */
   public void setStage(String stage)
   {
     if (stage == null || "".equals(stage))
-      _stage = "default";
+      _stage = "production";
     else
       _stage = stage;
 
@@ -627,112 +519,6 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * The Resin system classloader
-   */
-  public void setSystemClassLoader(String loader)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogJvmArg(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogLog(ConfigProgram args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogPassword(String args)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogPort(int port)
-  {
-  }
-
-  /**
-   * Arguments on boot
-   */
-  public void addWatchdogAddress(String addr)
-  {
-  }
-
-  /**
-   * Sets the minimum free memory after a GC
-   */
-  public void setMemoryFreeMin(Bytes min)
-  {
-    _memoryFreeMin = min.getBytes();
-  }
-
-  /**
-   * Sets the minimum free memory after a GC
-   */
-  public long getMemoryFreeMin()
-  {
-    return _memoryFreeMin;
-  }
-
-  /**
-   * Sets the minimum free memory after a GC
-   */
-  public void setPermGenFreeMin(Bytes min)
-  {
-    _permGenFreeMin = min.getBytes();
-  }
-
-  /**
-   * Sets the minimum free memory after a GC
-   */
-  public long getPermGenFreeMin()
-  {
-    return _permGenFreeMin;
-  }
-
-  public Management createManagement()
-  {
-    if (_resin != null)
-      return _resin.createResinManagement();
-    else
-      return null;
-    
-    /*
-    if (_management == null && _resin != null) {
-      _management = _resin.createResinManagement();
-
-      // _management.setCluster(getCluster());
-    }
-
-    return _management;
-    */
-  }
-
-  /**
-   * Sets the redeploy mode
-   */
-  public void setRedeployMode(String redeployMode)
-  {
-  }
-
-  /**
    * Sets the max wait time for shutdown.
    */
   public void setShutdownWaitMax(Period waitTime)
@@ -746,42 +532,6 @@ public class Server extends ProtocolDispatchServer
   public long getShutdownWaitMax()
   {
     return _shutdownWaitMax;
-  }
-
-  /**
-   * Sets the maximum thread-based keepalive
-   */
-  public void setThreadMax(int max)
-  {
-    if (max < 0)
-      throw new ConfigException(L.l("<thread-max> ({0}) must be greater than zero.",
-                                    max));
-
-    _threadMax = max;
-  }
-
-  /**
-   * Sets the maximum executor (background) thread.
-   */
-  public void setThreadExecutorTaskMax(int max)
-  {
-    _threadExecutorTaskMax = max;
-  }
-
-  /**
-   * Sets the minimum number of idle threads in the thread pool.
-   */
-  public void setThreadIdleMin(int min)
-  {
-    _threadIdleMin = min;
-  }
-
-  /**
-   * Sets the maximum number of idle threads in the thread pool.
-   */
-  public void setThreadIdleMax(int max)
-  {
-    _threadIdleMax = max;
   }
 
   //
@@ -811,20 +561,26 @@ public class Server extends ProtocolDispatchServer
   {
     return _configException != null;
   }
-
+  
   /**
-   * Returns the relax schema.
+   * True if client disconnects should be invisible to servlets.
    */
-  @Override
-  public String getSchema()
+  public boolean isIgnoreClientDisconnect()
   {
-    return "com/caucho/server/resin/cluster.rnc";
+    return _isIgnoreClientDisconnect;
+  }
+  
+  /**
+   * True if client disconnections should be invisible to servlets.
+   */
+  public void setIgnoreClientDisconnect(boolean isIgnore)
+  {
+    _isIgnoreClientDisconnect = isIgnore;
   }
 
   /**
    * Returns the id.
    */
-  @Override
   public String getServerId()
   {
     return _selfServer.getId();
@@ -846,14 +602,6 @@ public class Server extends ProtocolDispatchServer
   public Path getRootDirectory()
   {
     return _hostContainer.getRootDirectory();
-  }
-
-  /**
-   * Sets the root directory.
-   */
-  public void setRootDir(Path path)
-  {
-    setRootDirectory(path);
   }
 
   /**
@@ -944,37 +692,28 @@ public class Server extends ProtocolDispatchServer
     return _hostContainer.createRewriteDispatch();
   }
 
-  public AbstractCache getProxyCache()
+  public AbstractProxyCache getProxyCache()
   {
-    return _cache;
+    return _proxyCache;
   }
 
   /**
    * Creates the proxy cache.
    */
-  public AbstractCache createProxyCache()
+  public AbstractProxyCache createProxyCache()
     throws ConfigException
   {
-    if (_cache == null)
-      _cache = instantiateProxyCache();
+    if (_proxyCache == null)
+      _proxyCache = instantiateProxyCache();
 
-    return _cache;
-  }
-
-  /**
-   * backward compatibility for proxy cache
-   */
-  public AbstractCache createCache()
-    throws ConfigException
-  {
-    return createProxyCache();
+    return _proxyCache;
   }
   
-  protected AbstractCache instantiateProxyCache()
+  protected AbstractProxyCache instantiateProxyCache()
   {
     log.warning(L.l("<proxy-cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
 
-    return new AbstractCache();
+    return new AbstractProxyCache();
   }
 
   /**
@@ -991,6 +730,14 @@ public class Server extends ProtocolDispatchServer
   public long getDependencyCheckInterval()
   {
     return Environment.getDependencyCheckInterval(getClassLoader());
+  }
+
+  /**
+   * Sets the max-uri
+   */
+  public void setMaxUriLength(int length)
+  {
+    getInvocationDecoder().setMaxURILength(length);
   }
 
   /**
@@ -1066,52 +813,20 @@ public class Server extends ProtocolDispatchServer
   {
     getInvocationDecoder().setEncoding(encoding);
   }
-
-  /**
-   * Creates the ping.
-   */
-  public Object createPing()
-    throws ConfigException
+  
+  public String getURLCharacterEncoding()
   {
-    return createManagement().createPing();
+    return getInvocationDecoder().getEncoding();
   }
-
-  /**
-   * Adds the ping.
-   */
-  /*
-  public void addPing(Object ping)
-    throws ConfigException
+  
+  public InvocationDecoder getInvocationDecoder()
   {
-    createManagement().addPing(ping);
+    return getInvocationServer().getInvocationDecoder();
   }
-  */
-
-  /**
-   * Sets true if the select manager should be enabled
-   */
-  @Override
-  public boolean isSelectManagerEnabled()
+  
+  public InvocationServer getInvocationServer()
   {
-    return getSelectManager() != null;
-  }
-
-  public void addSelectManager(SelectManagerCompat selectManager)
-  {
-
-  }
-
-  /**
-   * Returns the number of select keepalives available.
-   */
-  public int getFreeKeepaliveSelect()
-  {
-    AbstractSelectManager selectManager = getSelectManager();
-
-    if (selectManager != null)
-      return selectManager.getFreeKeepalive();
-    else
-      return Integer.MAX_VALUE / 2;
+    return _invocationServer;
   }
 
   /**
@@ -1120,6 +835,16 @@ public class Server extends ProtocolDispatchServer
   public void addErrorPage(ErrorPage errorPage)
   {
     getErrorWebApp().addErrorPage(errorPage);
+  }
+  
+  public void setPersistentStore(PersistentStoreConfig config)
+  {
+    _persistentStoreConfig = config;
+  }
+  
+  public PersistentStoreConfig getPersistentStore()
+  {
+    return _persistentStoreConfig;
   }
 
   //
@@ -1150,52 +875,6 @@ public class Server extends ProtocolDispatchServer
     return _lifecycle.getStateName();
   }
 
-  /**
-   * Returns the select keepalive count.
-   */
-  public int getKeepaliveSelectCount()
-  {
-    AbstractSelectManager selectManager = getSelectManager();
-
-    if (selectManager != null)
-      return selectManager.getSelectCount();
-    else
-      return -1;
-  }
-
-  /**
-   * Returns the cache stuff.
-   */
-  public ArrayList<CacheItem> getCacheStatistics()
-  {
-    ArrayList<Invocation> invocationList = getInvocations();
-
-    if (invocationList == null)
-      return null;
-
-    HashMap<String,CacheItem> itemMap = new HashMap<String,CacheItem>();
-
-    for (int i = 0; i < invocationList.size(); i++) {
-      Invocation inv = (Invocation) invocationList.get(i);
-
-      String uri = inv.getURI();
-      int p = uri.indexOf('?');
-      if (p >= 0)
-        uri = uri.substring(0, p);
-
-      CacheItem item = itemMap.get(uri);
-
-      if (item == null) {
-        item = new CacheItem();
-        item.setUrl(uri);
-
-        itemMap.put(uri, item);
-      }
-    }
-
-    return null;
-  }
-
   public double getCpuLoad()
   {
     return 0;
@@ -1208,6 +887,7 @@ public class Server extends ProtocolDispatchServer
   /**
    * Sets the invocation
    */
+  @Override
   public Invocation buildInvocation(Invocation invocation)
     throws ConfigException
   {
@@ -1229,32 +909,6 @@ public class Server extends ProtocolDispatchServer
       invocation.setDependency(AlwaysModified.create());
 
       return invocation;
-    }
-  }
-
-  /**
-   * Returns the matching servlet pattern for a URL.
-   */
-  public String getServletPattern(String hostName, int port, String url)
-  {
-    try {
-      Host host = _hostContainer.getHost(hostName, port);
-
-      if (host == null)
-        return null;
-
-      WebApp app = host.findWebAppByURI(url);
-
-      if (app == null)
-        return null;
-
-      String pattern = app.getServletPattern(url);
-
-      return pattern;
-    } catch (Throwable e) {
-      log.log(Level.WARNING, e.toString(), e);
-
-      return null;
     }
   }
 
@@ -1303,7 +957,7 @@ public class Server extends ProtocolDispatchServer
       if (host == null)
         return null;
 
-      return host.findWebAppByURI(url);
+      return host.getWebAppContainer().findWebAppByURI(url);
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);
 
@@ -1316,25 +970,33 @@ public class Server extends ProtocolDispatchServer
    */
   public WebApp getErrorWebApp()
   {
-    HostContainer hostContainer = _hostContainer;
-
-    if (hostContainer != null)
-      return hostContainer.getErrorWebApp();
+    if (isActive())
+      return _hostContainer.getErrorWebApp();
     else
       return null;
+  }
+  
+  public ErrorPageManager getErrorPageManager()
+  {
+    WebApp errorWebApp = getErrorWebApp();
+    
+    if (errorWebApp != null)
+      return errorWebApp.getErrorPageManager();
+    else
+      return _errorPageManager;
   }
 
   /**
    * Returns the host controllers.
    */
-  public Collection<HostController> getHostControllers()
+  public HostController []getHostControllers()
   {
     HostContainer hostContainer = _hostContainer;
 
     if (hostContainer == null)
-      return Collections.emptyList();
+      return new HostController[0];
 
-    return Collections.unmodifiableList(hostContainer.getHostList());
+    return hostContainer.getHostList();
   }
 
   /**
@@ -1352,11 +1014,17 @@ public class Server extends ProtocolDispatchServer
   }
 
   /**
-   * Returns the {@link SocketLinkListener}s for this server.
+   * Returns the matching servlet pattern for a URL.
    */
-  public Collection<SocketLinkListener> getPorts()
+  public HostController getHostController(String hostName, int port)
   {
-    return getListenService().getListeners();
+    try {
+      return _hostContainer.getHostController(hostName, port);
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+
+      return null;
+    }
   }
 
   /**
@@ -1434,10 +1102,10 @@ public class Server extends ProtocolDispatchServer
       return;
     
     // _classLoader.init();
+    
+    _invocationServer.init();
 
-    super.init();
-
-    _admin = new ServerAdmin(this);
+    _admin = createAdmin();
 
     /*
     if (_resin != null) {
@@ -1446,65 +1114,16 @@ public class Server extends ProtocolDispatchServer
       createManagement().init();
     }
     */
-
-    if (_threadIdleMax > 0
-        && _threadMax > 0
-        && _threadMax < _threadIdleMax)
-      throw new ConfigException(L.l("<thread-idle-max> ({0}) must be less than <thread-max> ({1})",
-                                    _threadIdleMax, _threadMax));
-
-    if (_threadIdleMin > 0
-        && _threadIdleMax > 0
-        && _threadIdleMax < _threadIdleMin)
-      throw new ConfigException(L.l("<thread-idle-min> ({0}) must be less than <thread-idle-max> ({1})",
-                                    _threadIdleMin, _threadIdleMax));
-
-    if (_threadMax > 0
-        && _threadExecutorTaskMax > 0
-        && _threadMax < _threadExecutorTaskMax)
-      throw new ConfigException(L.l("<thread-executor-task-max> ({0}) must be less than <thread-max> ({1})",
-                                    _threadExecutorTaskMax, _threadMax));
-
-    ThreadPool threadPool = ThreadPool.getThreadPool();
-
-    if (_threadMax > 0)
-      threadPool.setThreadMax(_threadMax);
-
-    /*
-    if (_threadIdleMax > 0)
-      threadPool.setThreadIdleMax(_threadIdleMax);
-      */
-
-    if (_threadIdleMin > 0)
-      threadPool.setIdleMin(_threadIdleMin);
-
-    threadPool.setExecutorTaskMax(_threadExecutorTaskMax);
     
     if (_selfServer.getStage() != null)
       setStage(_selfServer.getStage());
-    /*
-    if (_keepaliveSelectEnable) {
-      try {
-        Class<?> cl = Class.forName("com.caucho.server.connection.JniSelectManager");
-        Method method = cl.getMethod("create", new Class[0]);
-
-        initSelectManager((AbstractSelectManager) method.invoke(null, null));
-      } catch (ClassNotFoundException e) {
-        log.warning(L.l("'select-manager' requires Resin Professional.  See http://www.caucho.com for information and licensing."));
-      } catch (Throwable e) {
-        log.warning(L.l("Cannot enable select-manager {0}", e.toString()));
-
-        log.log(Level.FINER, e.toString());
-      }
-
-      if (getSelectManager() != null) {
-        if (_keepaliveSelectMax > 0)
-          getSelectManager().setSelectMax(_keepaliveSelectMax);
-      }
-    }
-    */
   }
-
+  
+  protected ServerAdmin createAdmin()
+  {
+    return new ServerAdmin(this);
+  }
+  
   /**
    * Start the server.
    */
@@ -1575,41 +1194,17 @@ public class Server extends ProtocolDispatchServer
 
       _lifecycle.toStarting();
 
-      startImpl();
-
-      if (_resin != null && _resin.getManagement() != null)
-        _resin.getManagement().start(this);
-
       // initialize the system distributed store
       if (isResinServer())
         getSystemStore();
 
-      // start the repository
-      // AbstractRepository repository = getRepository();
-      // if (repository != null)
-      //   repository.start();
-
-      // getCluster().start();
-
-      // handled by the network server itself
-      // _classLoader.start();
-
       _hostContainer.start();
-
-      // initialize the environment admin
-      // _classLoader.getAdmin();
-
-      startPersistentStore();
 
       // getCluster().startRemote();
 
       _alarm.queue(ALARM_INTERVAL);
 
       _lifecycle.toActive();
-
-      // dynamic updates from the cluster start after we're capable of
-      // handling messages
-      startClusterUpdate();
 
       logModules();
     } catch (RuntimeException e) {
@@ -1646,31 +1241,6 @@ public class Server extends ProtocolDispatchServer
   {
   }
 
-  public void startClusterUpdate()
-  {
-    /*
-    try {
-      if (_clusterStore != null)
-        _clusterStore.startUpdate();
-    } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
-    }
-    */
-  }
-
-  public void bind(String address, int port, QServerSocket ss)
-    throws Exception
-  {
-    getListenService().bind(address, port, ss);
-  }
-
-  /**   
-   * Notifications to cluster servers that we've started
-   */
-  protected void notifyClusterStart()
-  {
-  }
-
   /**
    * Handles the alarm.
    */
@@ -1699,12 +1269,26 @@ public class Server extends ProtocolDispatchServer
   @Override
   public boolean isModified()
   {
-    boolean isModified = getClassLoader().isModified();
+    DynamicClassLoader classLoader = getClassLoader();
     
-    if (isModified)
-      getClassLoader().logModified(log);
+    if (classLoader != null)
+      return classLoader.isModified();
+    else
+      return true;
+  }
+  
+  @Override
+  public boolean logModified(Logger log)
+  {
+    DynamicClassLoader classLoader = getClassLoader();
+    
+    if (classLoader != null)
+      return classLoader.logModified(log);
+    else {
+      log.info(this + " is closed");
 
-    return isModified;
+      return true;
+    }
   }
 
   /**
@@ -1712,12 +1296,12 @@ public class Server extends ProtocolDispatchServer
    */
   public boolean isModifiedNow()
   {
-    boolean isModified = getClassLoader().isModifiedNow();
-
-    if (isModified)
-      log.fine("server is modified");
-
-    return isModified;
+    DynamicClassLoader classLoader = getClassLoader();
+    
+    if (classLoader != null)
+      return classLoader.isModifiedNow();
+    else
+      return true;
   }
 
   /**
@@ -1725,7 +1309,7 @@ public class Server extends ProtocolDispatchServer
    */
   public boolean isAfterStarting()
   {
-    return _lifecycle.isAfterStarting();
+    return _lifecycle.getState().isAfterStarting();
   }
 
   /**
@@ -1763,7 +1347,6 @@ public class Server extends ProtocolDispatchServer
   /**
    * Returns true if the server is currently active and accepting requests
    */
-  @Override
   public boolean isActive()
   {
     return _lifecycle.isActive();
@@ -1807,7 +1390,7 @@ public class Server extends ProtocolDispatchServer
       }
     };
 
-    invalidateMatchingInvocations(matcher);
+    getInvocationServer().invalidateMatchingInvocations(matcher);
   }
 
   /**
@@ -1825,10 +1408,10 @@ public class Server extends ProtocolDispatchServer
     // the invocation cache must be cleared first because the old
     // filter chain entries must not point to the cache's
     // soon-to-be-invalid entries
-    super.clearCache();
+    getInvocationServer().clearCache();
 
-    if (_cache != null)
-      _cache.clear();
+    if (_proxyCache != null)
+      _proxyCache.clear();
   }
 
   /**
@@ -1836,8 +1419,8 @@ public class Server extends ProtocolDispatchServer
    */
   public long getProxyCacheHitCount()
   {
-    if (_cache != null)
-      return _cache.getHitCount();
+    if (_proxyCache != null)
+      return _proxyCache.getHitCount();
     else
       return 0;
   }
@@ -1847,25 +1430,10 @@ public class Server extends ProtocolDispatchServer
    */
   public long getProxyCacheMissCount()
   {
-    if (_cache != null)
-      return _cache.getMissCount();
+    if (_proxyCache != null)
+      return _proxyCache.getMissCount();
     else
       return 0;
-  }
-
-  /**
-   * Finds the TcpConnection given the threadId
-   */
-  public TcpSocketLink findConnectionByThreadId(long threadId)
-  {
-    for (SocketLinkListener port : getPorts()) {
-      TcpSocketLink conn = port.findConnectionByThreadId(threadId);
-
-      if (conn != null)
-        return conn;
-    }
-
-    return null;
   }
 
   /**
@@ -1876,20 +1444,6 @@ public class Server extends ProtocolDispatchServer
     return null;
   }
 
-  public void addDynamicServer(String clusterId,
-                               String serverId,
-                               String address,
-                               int port)
-  {
-  }
-
-  public void removeDynamicServer(String clusterId,
-                                  String address,
-                                  int port)
-  {
-  }
-
-  @Override
   public void restart()
   {
     String msg = L.l("Server restarting due to configuration change");
@@ -1899,7 +1453,6 @@ public class Server extends ProtocolDispatchServer
   /**
    * Closes the server.
    */
-  @Override
   public void stop()
   {
     Thread thread = Thread.currentThread();
@@ -1911,6 +1464,7 @@ public class Server extends ProtocolDispatchServer
       if (! _lifecycle.toStopping())
         return;
 
+      // getInvocationServer().stop();
       // notify other servers that we've stopped
       notifyStop();
 
@@ -1919,9 +1473,6 @@ public class Server extends ProtocolDispatchServer
 
       if (alarm != null)
         alarm.dequeue();
-
-      if (getSelectManager() != null)
-        getSelectManager().stop();
 
       try {
         if (_systemStore != null)
@@ -1973,8 +1524,6 @@ public class Server extends ProtocolDispatchServer
       _lifecycle.toStop();
     } finally {
       thread.setContextClassLoader(oldLoader);
-
-      super.stop();
     }
   }
 
@@ -2002,29 +1551,17 @@ public class Server extends ProtocolDispatchServer
       thread.setContextClassLoader(getClassLoader());
 
       try {
-        Management management = _management;
-        _management = null;
-
-        if (management != null)
-          management.destroy();
-      } catch (Throwable e) {
-        log.log(Level.WARNING, e.toString(), e);
-      }
-
-      try {
         _hostContainer.destroy();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }
 
-      super.destroy();
-
       log.fine(this + " destroyed");
 
+      getInvocationServer().destroy();
       // getClassLoader().destroy();
 
-      _hostContainer = null;
-      _cache = null;
+      _proxyCache = null;
     } finally {
       DynamicClassLoader.setOldLoader(thread, oldLoader);
 
@@ -2040,148 +1577,5 @@ public class Server extends ProtocolDispatchServer
     return (getClass().getSimpleName()
             + "[id=" + getServerId()
             + ",cluster=" + _selfServer.getCluster().getId() + "]");
-  }
-
-  /**
-   * EL variables
-   */
-  public class ClusterVar {
-    /**
-     * Returns the resin.id
-     */
-    public String getId()
-    {
-      return getCluster().getId();
-    }
-
-    /**
-     * Returns the root directory.
-     *
-     * @return root directory
-     */
-    public Path getRoot()
-    {
-      return getRootDirectory();
-    }
-
-    /**
-     * Returns the root directory.
-     *
-     * @return root directory
-     */
-    public Path getRootDir()
-    {
-      return getRootDirectory();
-    }
-
-    /**
-     * Returns the root directory.
-     *
-     * @return root directory
-     */
-    public Path getRootDirectory()
-    {
-      return Server.this.getRootDirectory();
-    }
-  }
-
-  public class ServerVar {
-    private final ClusterServer _server;
-
-    public ServerVar(ClusterServer server)
-    {
-      _server = server;
-    }
-
-    public String getId()
-    {
-      return _server.getId();
-    }
-
-    private int getPort(SocketLinkListener port)
-    {
-      if (port == null)
-        return 0;
-
-      return port.getPort();
-    }
-
-    private String getAddress(SocketLinkListener port)
-    {
-      if (port == null)
-        return null;
-
-      String address = port.getAddress();
-
-      if (address == null || address.length() == 0)
-        address = "INADDR_ANY";
-
-      return address;
-    }
-
-    private SocketLinkListener getFirstPort(String protocol, boolean isSSL)
-    {
-      for (SocketLinkListener port : getListenService().getListeners()) {
-        if (protocol.equals(port.getProtocolName()) && (port.isSSL() == isSSL))
-          return port;
-      }
-
-      return null;
-    }
-
-    public String getAddress()
-    {
-      return _selfServer.getAddress();
-    }
-
-    public int getPort()
-    {
-      return _selfServer.getPort();
-    }
-
-    public String getHttpAddress()
-    {
-      return getAddress(getFirstPort("http", false));
-    }
-
-    public int getHttpPort()
-    {
-      return getPort(getFirstPort("http", false));
-    }
-
-
-    public String getHttpsAddress()
-    {
-      return getAddress(getFirstPort("http", true));
-    }
-
-    public int getHttpsPort()
-    {
-      return getPort(getFirstPort("http", true));
-    }
-
-    /**
-     * @deprecated backwards compat.
-     */
-    public Path getRoot()
-    {
-      Resin resin =  Resin.getLocal();
-
-      return resin == null ? Vfs.getPwd() : resin.getRootDirectory();
-    }
-  }
-
-  public static class SelectManagerCompat {
-    private boolean _isEnable = true;
-
-    public void setEnable(boolean isEnable)
-    {
-      _isEnable = isEnable;
-    }
-
-    public boolean isEnable()
-    {
-      return _isEnable;
-    }
   }
 }

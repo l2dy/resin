@@ -70,7 +70,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public ClusterMXBean getCluster()
   {
-    return _server.getCluster().getData(ClusterMXBean.class);
+    return _server.getCluster().getAdmin();
   }
 
   /**
@@ -147,7 +147,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getIdleTime()
   {
-    return _server.getLoadBalanceIdleTime();
+    return _server.getClusterIdleTime();
   }
 
   /**
@@ -208,6 +208,27 @@ public class ClusterServerAdmin extends AbstractManagedObject
       return pool.getState();
     else
       return "self";
+  }
+  
+  //
+  // Heartbeat status
+  //
+  
+  @Override
+  public boolean isHeartbeatActive()
+  {
+    return _server.isActive();
+  }
+  
+  @Override
+  public Date getLastHeartbeatTime()
+  {
+    long lastHeartbeatTime = _server.getLastHeartbeatTime();
+
+    if (lastHeartbeatTime > 0)
+      return new Date(lastHeartbeatTime);
+    else
+      return null;
   }
 
   @Override

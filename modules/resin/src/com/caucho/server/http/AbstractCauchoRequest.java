@@ -32,6 +32,7 @@ package com.caucho.server.http;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.dispatch.ServletInvocation;
 import com.caucho.server.session.SessionImpl;
 import com.caucho.server.session.SessionManager;
@@ -374,6 +375,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     if (principal == null)
       throw new ServletException("can't authenticate a user");
   }
+  
   @Override
   public boolean login(boolean isFail)
   {
@@ -383,6 +385,15 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       if (webApp == null) {
         if (log.isLoggable(Level.FINE))
           log.finer("authentication failed, no web-app found");
+
+        getResponse().sendError(HttpServletResponse.SC_FORBIDDEN);
+
+        return false;
+      }
+      
+      if (webApp.isSecure() && ! isSecure()) {
+        if (log.isLoggable(Level.FINE))
+          log.finer("authentication failed, requires secure");
 
         getResponse().sendError(HttpServletResponse.SC_FORBIDDEN);
 
@@ -575,7 +586,16 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     return inRole;
   }
 
-
+  @Override
+  public SocketLink getSocketLink()
+  {
+    AbstractHttpRequest request = getAbstractHttpRequest();
+    
+    if (request != null)
+      return request.getConnection();
+    else
+      return null;
+  }
   //
   // lifecycle
   //

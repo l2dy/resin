@@ -31,7 +31,8 @@ package com.caucho.server.host;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.RawString;
-import com.caucho.server.deploy.DeployConfig;
+import com.caucho.env.deploy.DeployConfig;
+import com.caucho.env.deploy.DeployMode;
 import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
@@ -106,8 +107,13 @@ public class HostConfig extends DeployConfig {
     String cleanName = cleanHostName(id);
     
     setId(cleanName);
+    
+    // server/1f17
+    if (! _hostAliases.contains(cleanName))
+      _hostAliases.add(cleanName);
   }
 
+  @Override
   public void setId(String cleanName)
   {
     super.setId(cleanName);
@@ -163,6 +169,9 @@ public class HostConfig extends DeployConfig {
         }
       }
     }
+    
+    if (name.equals("*"))
+      name = "";
 
     if (! _hostAliases.contains(name))
       _hostAliases.add(name);
@@ -233,9 +242,9 @@ public class HostConfig extends DeployConfig {
     throws ConfigException
   {
     if (lazyInit)
-      setStartupMode("lazy");
+      setStartupMode(DeployMode.LAZY);
     else
-      setStartupMode("automatic");
+      setStartupMode(DeployMode.AUTOMATIC);
   }
 
   /**

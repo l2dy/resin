@@ -43,8 +43,6 @@ import javax.servlet.http.HttpServletResponse;
 public class ExprCondition
   extends AbstractCondition
 {
-  private static final L10N L = new L10N(ExprCondition.class);
-
   private Expr _expr;
 
   public ExprCondition(String expr)
@@ -54,12 +52,13 @@ public class ExprCondition
     _expr = new ELParser(elContext, expr).parse();
   }
 
-
+  @Override
   public String getTagName()
   {
     return "expr";
   }
 
+  @Override
   public boolean isMatch(HttpServletRequest request,
                          HttpServletResponse response)
   {

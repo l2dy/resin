@@ -29,25 +29,37 @@
 
 package com.caucho.lifecycle;
 
-import com.caucho.util.Alarm;
+import static com.caucho.lifecycle.LifecycleState.ACTIVE;
+import static com.caucho.lifecycle.LifecycleState.DESTROYED;
+import static com.caucho.lifecycle.LifecycleState.DESTROYING;
+import static com.caucho.lifecycle.LifecycleState.FAILED;
+import static com.caucho.lifecycle.LifecycleState.INIT;
+import static com.caucho.lifecycle.LifecycleState.INITIALIZING;
+import static com.caucho.lifecycle.LifecycleState.STARTING;
+import static com.caucho.lifecycle.LifecycleState.STOPPED;
+import static com.caucho.lifecycle.LifecycleState.STOPPED_IDLE;
+import static com.caucho.lifecycle.LifecycleState.STOPPING;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.util.Alarm;
 
 /**
  * Lifecycle class.
  */
-public final class Lifecycle implements LifecycleState {
+public final class Lifecycle {
   private final Logger _log;
   private String _name;
   
   private Level _level = Level.FINE;
   private Level _lowLevel = Level.FINER;
   
-  private final AtomicInteger _state = new AtomicInteger();
+  private final AtomicReference<LifecycleState> _state
+    = new AtomicReference<LifecycleState>(LifecycleState.NEW);
 
   private long _activeCount;
   private long _failCount;
@@ -128,17 +140,23 @@ public final class Lifecycle implements LifecycleState {
       _lowLevel = level;
   }
 
+  public final LifecycleState getState()
+  {
+    return _state.get();
+  }
+  
   /**
    * Returns the current state.
    */
-  public int getState()
+  public int getStateOrdinal()
   {
-    return _state.get();
+    return _state.get().ordinal();
   }
 
   /**
    * Returns the state name for the passed state.
    */
+  /*
   public static String getStateName(int state)
   {
     switch (state) {
@@ -166,13 +184,14 @@ public final class Lifecycle implements LifecycleState {
         return "unknown";
     }
   }
+  */
 
   /**
    * Returns the current state name.
    */
   public String getStateName()
   {
-    return getStateName(_state.get());
+    return getState().toString();
   }
 
   /**
@@ -212,7 +231,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isInitializing()
   {
-    return _state.get() == IS_INITIALIZING;
+    return getState().isInitializing();
   }
 
   /**
@@ -220,7 +239,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isInit()
   {
-    return _state.get() == IS_INIT;
+    return getState().isInit();
   }
 
   /**
@@ -228,15 +247,24 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isBeforeInit()
   {
-    return _state.get() < IS_INIT;
+    return getState().isBeforeInit();
   }
 
   /**
-   * Returns true for the init state.
+   * True for any state after initialization.
    */
   public boolean isAfterInit()
   {
-    return _state.get() >= IS_INIT;
+    return getState().isAfterInit();
+  }
+
+  /**
+   * True for an idle state, where any request would transition to an
+   * active state.
+   */
+  public boolean isIdle()
+  {
+    return getState().isIdle();
   }
 
   /**
@@ -244,23 +272,25 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isStarting()
   {
-    return _state.get() == IS_STARTING;
+    return getState().isStarting();
   }
 
   /**
    * Returns true if the service is starting.
    */
+  /*
   public boolean isAfterStarting()
   {
-    return _state.get() >= IS_STARTING;
+    return getState().isAfterStarting();
   }
+  */
 
   /**
    * Returns true for the warmup state.
    */
   public boolean isWarmup()
   {
-    return _state.get() == IS_WARMUP;
+    return getState().isWarmup();
   }
 
   /**
@@ -268,37 +298,39 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isBeforeActive()
   {
-    return _state.get() < IS_ACTIVE;
+    return getState().isBeforeActive();
   }
 
   /**
    * Returns true for the closing states
    */
+  /*
   public boolean isAfterActive()
   {
-    return IS_ACTIVE < _state.get();
+    return getState().isAfterActive();
   }
+  */
 
   /**
    * Wait for a period of time until the service starts.
    */
   public boolean waitForActive(long timeout)
   {
-    int state = _state.get();
+    LifecycleState state = getState();
 
-    if (state == IS_ACTIVE)
+    if (state.isActive())
       return true;
-    else if (state > IS_ACTIVE)
+    else if (state.isAfterActive())
       return false;
     
     long waitEnd = Alarm.getCurrentTime() + timeout;
 
     synchronized (this) {
-      while ((state = _state.get()) < IS_ACTIVE
+      while ((state = _state.get()).isBeforeActive()
              && Alarm.getCurrentTime() < waitEnd) {
-        if (state == IS_ACTIVE)
+        if (state.isActive())
           return true;
-        else if (IS_ACTIVE < state)
+        else if (state.isAfterActive())
           return false;
         else if (Alarm.isTest())
           return false;
@@ -314,7 +346,7 @@ public final class Lifecycle implements LifecycleState {
       }
     }
     
-    return _state.get() == IS_ACTIVE;
+    return _state.get().isActive();
   }
 
   /**
@@ -322,7 +354,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isActive()
   {
-    return _state.get() == IS_ACTIVE;
+    return getState().isActive();
   }
 
   /**
@@ -330,9 +362,20 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isRunnable()
   {
+    return getState().isRunnable();
+    /*
     int state = _state.get();
     
     return IS_WARMUP <= state && state <= IS_ACTIVE;
+    */
+  }
+
+  /**
+   * Returns true for the closing states
+   */
+  public boolean isAfterStopping()
+  {
+    return getState().isAfterStopping();
   }
 
   /**
@@ -340,7 +383,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isError()
   {
-    return isFailed();
+    return getState().isError();
   }
 
   /**
@@ -348,7 +391,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isFailed()
   {
-    return _state.get() == IS_FAILED;
+    return getState().isError();
   }
 
   /**
@@ -356,7 +399,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isStopping()
   {
-    return IS_STOPPING <= _state.get();
+    return getState().isStopping();
   }
 
   /**
@@ -364,7 +407,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isStopped()
   {
-    return IS_STOPPING <= _state.get();
+    return getState().isStopped();
   }
 
   /**
@@ -372,7 +415,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isDestroying()
   {
-    return IS_DESTROYING <= _state.get();
+    return getState().isDestroying();
   }
 
   /**
@@ -380,7 +423,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean isDestroyed()
   {
-    return IS_DESTROYED <= _state.get();
+    return getState().isDestroyed();
   }
   
   /**
@@ -390,7 +433,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toInitializing()
   {
-    return toNextState(IS_INITIALIZING);
+    return toNextState(INITIALIZING);
   }
 
   /**
@@ -400,7 +443,7 @@ public final class Lifecycle implements LifecycleState {
     */
    public boolean toInit()
    {
-     return toNextState(IS_INIT);
+     return toNextState(INIT);
    }
   
   /**
@@ -410,15 +453,15 @@ public final class Lifecycle implements LifecycleState {
     */
    public boolean toPostInit()
    {
-     if (_state.compareAndSet(IS_STOPPED, IS_INIT)) {
+     if (_state.compareAndSet(STOPPED, INIT)) {
        _lastChangeTime = Alarm.getCurrentTime();
 
-       notifyListeners(IS_STOPPED, IS_INIT);
+       notifyListeners(STOPPED, INIT);
 
        return true;
      }
      else
-       return _state.get() == IS_INIT;
+       return _state.get().isInit();
    }
 
   /**
@@ -428,21 +471,21 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toStarting()
   {
-    int state;
+    LifecycleState state;
     
     do {
       state = _state.get();
 
-      if (IS_STARTING <= state && state != IS_STOPPED)
+      if (state.isAfterStarting() && ! state.isStopped())
         return false;
-    } while (! _state.compareAndSet(state, IS_STARTING));
+    } while (! _state.compareAndSet(state, STARTING));
 
     _lastChangeTime = Alarm.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level) && _log.isLoggable(Level.FINE))
       _log.fine(_name + " starting");
 
-    notifyListeners(state, IS_STARTING);
+    notifyListeners(state, STARTING);
 
     return true;
   }
@@ -454,21 +497,21 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toActive()
   {
-    int state;
+    LifecycleState state;
     
     do {
       state = _state.get();
 
-      if (IS_ACTIVE <= state && state != IS_STOPPED)
+      if (state.isAfterActive() && ! state.isStopped())
         return false;
-    } while (! _state.compareAndSet(state, IS_ACTIVE));
+    } while (! _state.compareAndSet(state, ACTIVE));
 
     _lastChangeTime = Alarm.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level))
       _log.log(_level, _name + " active");
 
-    notifyListeners(state, IS_ACTIVE);
+    notifyListeners(state, ACTIVE);
 
     synchronized (this) {
       notifyAll();
@@ -494,21 +537,21 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toFail()
   {
-    int state;
+    LifecycleState state;
     
     do {
       state = _state.get();
       
-      if (IS_DESTROYING <= state)
+      if (state.isAfterDestroying())
         return false;
-    } while (! _state.compareAndSet(state, IS_FAILED));
+    } while (! _state.compareAndSet(state, FAILED));
 
     _lastChangeTime = Alarm.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level))
       _log.log(_level, _name + " fail");
 
-    notifyListeners(state, IS_FAILED);
+    notifyListeners(state, FAILED);
 
     _failCount++;
     
@@ -522,23 +565,33 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toStopping()
   {
-    int state;
+    LifecycleState state;
     
     do {
       state = _state.get();
       
-      if (IS_STOPPING <= state || state == IS_STARTING)
+      if (state.isAfterStopping() || state.isStarting())
         return false;
-    } while (! _state.compareAndSet(state, IS_STOPPING));
+    } while (! _state.compareAndSet(state, STOPPING));
 
     _lastChangeTime = Alarm.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_level))
       _log.log(_level, _name + " stopping");
 
-    notifyListeners(state, IS_STOPPING);
+    notifyListeners(state, STOPPING);
 
     return true;
+  }
+  
+  /**
+   * Changes to the idle (stopped) state.
+   *
+   * @return true if the transition is allowed
+   */
+  public boolean toIdle()
+  {
+    return toState(STOPPED_IDLE);
   }
   
   /**
@@ -548,7 +601,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toStop()
   {
-    return toNextState(IS_STOPPED);
+    return toNextState(STOPPED);
   }
   
   /**
@@ -558,7 +611,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toDestroying()
   {
-    return toNextState(IS_DESTROYING);
+    return toNextState(DESTROYING);
   }
   
   /**
@@ -568,7 +621,7 @@ public final class Lifecycle implements LifecycleState {
    */
   public boolean toDestroy()
   {
-    return toNextState(IS_DESTROYED);
+    return toNextState(DESTROYED);
   }
   
   /**
@@ -576,21 +629,40 @@ public final class Lifecycle implements LifecycleState {
    *
    * @return true if the transition is allowed
    */
-  private boolean toNextState(int newState)
+  private boolean toNextState(LifecycleState newState)
   {
-    int state;
+    LifecycleState state;
     
     do {
       state = _state.get();
       
-      if (newState <= state)
+      if (newState.ordinal() <= state.ordinal())
         return false;
     } while (! _state.compareAndSet(state, newState));
 
     _lastChangeTime = Alarm.getCurrentTime();
 
     if (_log != null && _log.isLoggable(_lowLevel))
-      _log.log(_lowLevel, _name + " " + getStateName(newState));
+      _log.log(_lowLevel, _name + " " + newState);
+
+    notifyListeners(state, newState);
+
+    return true;
+  }
+  
+  /**
+   * Changes to the next state.
+   *
+   * @return true if the transition is allowed
+   */
+  private boolean toState(LifecycleState newState)
+  {
+    LifecycleState state = _state.getAndSet(newState);
+
+    _lastChangeTime = Alarm.getCurrentTime();
+
+    if (_log != null && _log.isLoggable(_lowLevel))
+      _log.log(_lowLevel, _name + " " + newState);
 
     notifyListeners(state, newState);
 
@@ -660,7 +732,7 @@ public final class Lifecycle implements LifecycleState {
   /**
    * Returns the listeners.
    */
-  private void notifyListeners(int oldState, int newState)
+  private void notifyListeners(LifecycleState oldState, LifecycleState newState)
   {
     // initial must be outside synchronized to avoid any blocking
     // for fail-safe shutdown

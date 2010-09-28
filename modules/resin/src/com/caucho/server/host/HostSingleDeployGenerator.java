@@ -30,9 +30,11 @@
 package com.caucho.server.host;
 
 import com.caucho.config.Config;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.DeployGenerator;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployGenerator;
+import com.caucho.vfs.Path;
 
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.logging.Logger;
 
@@ -85,6 +87,7 @@ public class HostSingleDeployGenerator
   /**
    * Gets the parent loader.
    */
+  @Override
   public ClassLoader getParentClassLoader()
   {
     return _container.getClassLoader();
@@ -93,6 +96,7 @@ public class HostSingleDeployGenerator
   /**
    * Returns the log.
    */
+  @Override
   protected Logger getLog()
   {
     return log;
@@ -106,17 +110,17 @@ public class HostSingleDeployGenerator
   {
     super.initImpl();
 
-    String hostName = null;
-    String id = null;
+    String hostName = "";
+    String hostId = null;
     
     String rawId = _config.getId();
     String rawHostName = _config.getHostName();
 
     if (rawId != null) {
-      id = Config.evalString(rawId);
+      hostId = Config.evalString(rawId);
 
-      if (id.equals("*"))  // server/1f20
-        id = "";
+      if (hostId.equals("*"))  // server/1f20
+        hostId = "";
     }
 
     if (rawHostName != null) {
@@ -125,43 +129,69 @@ public class HostSingleDeployGenerator
       if (rawHostName.equals("*"))  // server/1f20
         hostName = "";
     }
+    
+    String stage = _container.getServer().getStage();
+    
+    String id;
+    
+    if (hostName.equals(""))
+      id = stage + "/host/default";
+    else
+      id = stage + "/host/" + hostName;
+      
+    Path rootDirectory = _config.calculateRootDirectory();
 
     if (hostName != null) {
-      _controller = new HostController(hostName, _config, _container, null);
+      _controller = new HostController(id, rootDirectory,
+                                       hostName, _config, _container, null);
 
-      if (id != null)
-        _controller.addHostAlias(id);
+      if (hostId != null)
+        _controller.addHostAlias(hostId);
     }
-    else if (id != null)
-      _controller = new HostController(id, _config, _container, null);
     else
-      _controller = new HostController("", _config, _container, null);
+      _controller = new HostController(id, rootDirectory,
+                                       hostId, _config, _container, null);
   }
 
   /**
    * Returns the deployed keys.
    */
-  protected void fillDeployedKeys(Set<String> keys)
+  @Override
+  protected void fillDeployedNames(Set<String> names)
   {
-    keys.add(_controller.getName());
+    String key = _controller.getName();
+    
+    if (key.equals("default"))
+      names.add("");
+    else
+      names.add(key);
   }
   
   /**
    * Returns the current array of application entries.
    */
-  public HostController generateController(String name)
+  @Override
+  public void generateController(String name, ArrayList<HostController> list)
   {
     if (_controller.isNameMatch(name)) {
-      return new HostController(_controller.getName(), _config,
+      Path rootDirectory = _config.calculateRootDirectory();
+      
+      HostController host;
+      host = new HostController(_controller.getId(), rootDirectory,
+                                _controller.getHostName(), _config,
                                 _container, null);
+
+      // host = host.merge(_controller);
+      
+      list.add(host);
     }
-    else
-      return null;
   }
   
   /**
    * Merges the controllers.
    */
+  /*
+  @Override
   public HostController mergeController(HostController controller,
                                         String name)
   {
@@ -183,7 +213,9 @@ public class HostSingleDeployGenerator
       return _controller;
     }
   }
+  */
 
+  @Override
   public Throwable getConfigException()
   {
     Throwable configException =  super.getConfigException();
@@ -194,11 +226,12 @@ public class HostSingleDeployGenerator
     return configException;
   }
 
+  @Override
   public String toString()
   {
     if (_config == null)
-      return "HostSingleDeployGenerator[]";
+      return getClass().getSimpleName() + "[]";
     else
-      return "HostSingleDeployGenerator[" + _config.getHostName() + "]";
+      return getClass().getSimpleName() + "[" + _config.getHostName() + "]";
   }
 }

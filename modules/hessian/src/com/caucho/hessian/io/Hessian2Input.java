@@ -82,7 +82,7 @@ public class Hessian2Input
 
   private static Field _detailMessageField;
 
-  private static final int SIZE = 256;
+  private static final int SIZE = 1024;
   private static final int GAP = 16;
   
   // standard, unmodified factory for deserializing objects
@@ -2207,7 +2207,9 @@ public class Hessian2Input
   public Object readRef()
     throws IOException
   {
-    return _refs.get(parseInt());
+    int value = parseInt();
+    
+    return _refs.get(value);
   }
 
   /**

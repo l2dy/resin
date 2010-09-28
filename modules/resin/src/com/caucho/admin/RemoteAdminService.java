@@ -36,6 +36,7 @@ import javax.annotation.PostConstruct;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.RawString;
+import com.caucho.env.deploy.DeployMode;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.ServletMapping;
 import com.caucho.server.host.HostConfig;
@@ -80,15 +81,15 @@ public class RemoteAdminService
     try {
       HostConfig hostConfig = new HostConfig();
       hostConfig.setHostName(new RawString(_hostName));
-      hostConfig.setRootDirectory(new RawString("error:" + _hostName));
+      hostConfig.setRootDirectory(new RawString("memory:/error/" + _hostName));
       hostConfig.setSkipDefaultConfig(true);
-      hostConfig.setRedeployMode("manual");
+      hostConfig.setRedeployMode(DeployMode.MANUAL);
 
       WebAppConfig webAppConfig = new WebAppConfig();
       webAppConfig.setId("/");
-      webAppConfig.setRootDirectory(new RawString("error:/ROOT"));
+      webAppConfig.setRootDirectory(new RawString("memory:/error/ROOT"));
       webAppConfig.setSkipDefaultConfig(true);
-      webAppConfig.setRedeployMode("manual");
+      webAppConfig.setRedeployMode(DeployMode.MANUAL);
 
       hostConfig.addPropertyProgram("web-app", webAppConfig);
 

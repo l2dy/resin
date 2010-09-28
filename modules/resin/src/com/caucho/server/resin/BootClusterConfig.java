@@ -54,7 +54,6 @@ public class BootClusterConfig implements SchemaBean
   
   private BootResinConfig _resinConfig;
   private CloudCluster _cloudCluster;
-  private CloudPod _cloudPod;
   
   private String _id;
 
@@ -64,8 +63,13 @@ public class BootClusterConfig implements SchemaBean
   private ContainerProgram _serverDefaultProgram
     = new ContainerProgram();
 
+  private ArrayList<BootPodConfig> _pods
+    = new ArrayList<BootPodConfig>();
+
+  /*
   private ArrayList<BootServerConfig> _servers
     = new ArrayList<BootServerConfig>();
+    */
 
   /**
    * Creates a new resin server.
@@ -116,25 +120,50 @@ public class BootClusterConfig implements SchemaBean
   }
 
   @Configurable
+  public BootPodConfig createPod()
+    throws ConfigException
+  {
+    BootPodConfig pod = new BootPodConfig(this);
+    
+    _pods.add(pod);
+
+    return pod;
+  }
+
+  @Configurable
+  public void addPod(BootPodConfig pod)
+  {
+    _pods.add(pod);
+  }
+
+  @Configurable
   public BootServerConfig createServer()
     throws ConfigException
   {
-    BootServerConfig server = new BootServerConfig(this);
-    
-    _servers.add(server);
+    if (_pods.size() == 0) {
+      addPod(createPod());
+    }
 
-    return server;
+    BootPodConfig pod = _pods.get(0);
+
+    return pod.createServer();
   }
 
   @Configurable
   public void addServer(BootServerConfig server)
   {
-    _servers.add(server);
+    if (_pods.size() == 0) {
+      addPod(createPod());
+    }
+    
+    BootPodConfig pod = _pods.get(0);
+
+    pod.addServer(server);
   }
 
-  public ArrayList<BootServerConfig> getServerList()
+  public ArrayList<BootPodConfig> getPodList()
   {
-    return _servers;
+    return _pods;
   }
   
   public void addContentProgram(ConfigProgram program)
@@ -177,10 +206,11 @@ public class BootClusterConfig implements SchemaBean
   
   CloudPod getCloudPod()
   {
-    if (_cloudPod == null)
-      _cloudPod = getCloudCluster().createPod();
+    if (_pods.size() == 0) {
+      addPod(createPod());
+    }
     
-    return _cloudPod;
+    return _pods.get(0).getCloudPod();
   }
   
   @Override

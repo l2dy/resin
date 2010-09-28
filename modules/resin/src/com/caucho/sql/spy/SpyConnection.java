@@ -32,6 +32,9 @@ package com.caucho.sql.spy;
 import com.caucho.util.L10N;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.logging.*;
@@ -479,21 +482,78 @@ public class SpyConnection implements java.sql.Connection {
                                             int resultSetHoldability)
     throws SQLException
   {
-    return null;
+    try {
+      if (log.isLoggable(Level.FINE))
+        log.fine(L.l(
+          "{0}:prepareStatement({1}, resultSetType={2}, resultSetConcurrency={3}, resultSetHoldability={4})",
+          getId(),
+          sql,
+          resultSetType,
+          resultSetConcurrency,
+          resultSetHoldability));
+
+      PreparedStatement stmt;
+
+      stmt = _conn.prepareStatement(sql,
+                                    resultSetType,
+                                    resultSetConcurrency,
+                                    resultSetHoldability);
+
+      return stmt;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-prepareStatement(" + e + ")");
+
+      throw e;
+    }
   }
-  
+
   public PreparedStatement prepareStatement(String sql,
                                             int []columnIndexes)
     throws SQLException
   {
-    return null;
+    try {
+      if (log.isLoggable(Level.FINE)) {
+        List<Integer> list = new ArrayList<Integer>();
+        for (int i : columnIndexes)
+          list.add(i);
+
+        log.fine(L.l("{0}:prepareStatement({1}, columnIndexes={2})", getId(), sql, list));
+      }
+
+      PreparedStatement stmt;
+
+      stmt = _conn.prepareStatement(sql, columnIndexes);
+
+      return stmt;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-prepareStatement(" + e + ")");
+
+      throw e;
+    }
   }
   
   public PreparedStatement prepareStatement(String sql,
                                             String []columnNames)
     throws SQLException
   {
-    return null;
+    try {
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(L.l("{0}:prepareStatement({1}, columnNames={2})",
+                     getId(),
+                     sql,
+                     Arrays.asList(columnNames)));
+      }
+
+      PreparedStatement stmt;
+
+      stmt = _conn.prepareStatement(sql, columnNames);
+
+      return stmt;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-prepareStatement(" + e + ")");
+
+      throw e;
+    }
   }
 
   public CallableStatement prepareCall(String sql)
@@ -542,7 +602,24 @@ public class SpyConnection implements java.sql.Connection {
                                        int resultSetHoldability)
     throws SQLException
   {
-    return null;
+    try {
+      if (log.isLoggable(Level.FINE))
+        log.fine(getId() + ":prepareCall(" + sql + ",type=" + resultSetType +
+              ",concurrency=" + resultSetConcurrency + ")");
+
+      CallableStatement stmt;
+
+      stmt = _conn.prepareCall(sql,
+                               resultSetType,
+                               resultSetConcurrency,
+                               resultSetHoldability);
+
+      return stmt;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-prepareCall(" + e + ")");
+
+      throw e;
+    }
   }
 
   public boolean getAutoCommit()
@@ -642,93 +719,304 @@ public class SpyConnection implements java.sql.Connection {
   public void setHoldability(int hold)
     throws SQLException
   {
-    _conn.setHoldability(hold);
+    log.fine(getId() + ":setHoldability(" + hold + ")");
+
+    try {
+      _conn.setHoldability(hold);
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-setHoldability(" + e + ")");
+
+      throw e;
+    }
   }
 
   public int getHoldability()
     throws SQLException
   {
-    return _conn.getHoldability();
+    try {
+      int holdability = _conn.getHoldability();
+
+      log.fine(getId() + ":getHoldability() -> " + holdability);
+
+      return holdability;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-getHoldability(" + e + ")");
+
+      throw e;
+    }
   }
 
   public Savepoint setSavepoint()
     throws SQLException
   {
-    return _conn.setSavepoint();
+    log.fine(getId() + ":setSavepoint()");
+
+    try {
+      return _conn.setSavepoint();
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-setSavepoint(" + e + ")");
+
+      throw e;
+    }
   }
 
   public Savepoint setSavepoint(String name)
     throws SQLException
   {
-    return _conn.setSavepoint(name);
+    log.fine(getId() + ":setSavepoint(" + name + ")");
+
+    try {
+      return _conn.setSavepoint(name);
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-setSavepoint(" + e + ")");
+
+      throw e;
+    }
   }
 
   public void releaseSavepoint(Savepoint savepoint)
     throws SQLException
   {
-    _conn.releaseSavepoint(savepoint);
+    log.fine(getId() + ":releaseSavepoint(" + savepoint + ")");
+
+    try {
+      _conn.releaseSavepoint(savepoint);
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-releaseSavepoint(" + e + ")");
+
+      throw e;
+    }
   }
 
   public void rollback(Savepoint savepoint)
     throws SQLException
   {
-    _conn.rollback(savepoint);
+    log.fine(getId() + ":rollback(" + savepoint + ")");
+    
+    try {
+      _conn.rollback(savepoint);
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-rollback(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public Clob createClob()
+    throws SQLException
+  {
+    try {
+      Clob clob = _conn.createClob();
+
+      log.fine(getId() + ":createClob() -> " + clob);
+
+      return clob;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createClob(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public Blob createBlob()
+    throws SQLException
+  {
+    try {
+      Blob blob = _conn.createBlob();
+
+      log.fine(getId() + ":createBlob() -> " + blob);
+
+      return blob;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createBlob(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public NClob createNClob()
+    throws SQLException
+  {
+    try {
+      NClob nclob = _conn.createNClob();
+
+      log.fine(getId() + ":createNClob() -> " + nclob);
+
+      return nclob;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createNClob(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public SQLXML createSQLXML()
+    throws SQLException
+  {
+    try {
+      SQLXML xml = _conn.createSQLXML();
+
+      log.fine(getId() + ":createSQLXML() -> " + xml);
+
+      return xml;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createSQLXML(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public Array createArrayOf(String typeName, Object[] elements)
+    throws SQLException
+  {
+    try {
+      Array array = _conn.createArrayOf(typeName, elements);
+
+      log.fine(getId()
+        + ":createArrayOf(typeName="
+        + typeName
+        + ", elements="
+        + Arrays.asList(elements)
+        + ") -> "
+        + array);
+
+      return array;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createArrayOf(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public Struct createStruct(String typeName, Object[] attributes)
+    throws SQLException
+  {
+    try {
+      Struct struct = _conn.createStruct(typeName, attributes);
+
+      log.fine(getId()
+        + ":createStruct(typeName="
+        + typeName
+        + ", attributes="
+        + Arrays.asList(attributes)
+        + ") -> "
+        + struct);
+
+      return struct;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-createStruct(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public boolean isValid(int timeout)
+    throws SQLException
+  {
+    try {
+      boolean valid = _conn.isValid(timeout);
+
+      log.fine(getId() + ":isValid(" + timeout + ") -> " + valid);
+
+      return valid;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-isValid(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public void setClientInfo(String name, String value)
+    throws SQLClientInfoException
+  {
+    log.fine(getId() + ":setClientInfo(" + name + "=" + value + ")");
+
+    try {
+      _conn.setClientInfo(name, value);
+    } catch (SQLClientInfoException e) {
+      log.fine(getId() + ":exn-setClientInfo(" + e + ")");
+      throw e;
+    }
+  }
+
+  public void setClientInfo(Properties properties)
+    throws SQLClientInfoException
+  {
+    try {
+      log.fine(getId() + ":setClientInfo(" + properties + ")");
+
+      _conn.setClientInfo(properties);
+    } catch (SQLClientInfoException e) {
+      log.fine(getId() + ":exn-setClientInfo(" + e + ")");
+      
+      throw e;
+    }
+  }
+
+  public String getClientInfo(String name)
+    throws SQLException
+  {
+    try {
+      String value = _conn.getClientInfo(name);
+
+      log.fine(getId() + ":getClientInfo(" + name + ") -> " + value);
+
+      return value;
+    } catch (SQLException e) {
+      log.fine(getId() + ":getClientInfo");
+
+      throw e;
+    }
+  }
+
+  public Properties getClientInfo()
+    throws SQLException
+  {
+    try {
+      Properties clientInfo = _conn.getClientInfo();
+
+      log.fine(getId() + ":getClientInfo() -> " + clientInfo);
+
+      return clientInfo;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-getClientInfo(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public <T> T unwrap(Class<T> iface)
+    throws SQLException
+  {
+    try {
+      T t = _conn.unwrap(iface);
+
+      log.fine(getId() + ":unwrap(" + iface + ") -> " + t);
+
+      return t;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-unwrap(" + e + ")");
+
+      throw e;
+    }
+  }
+
+  public boolean isWrapperFor(Class<?> iface)
+    throws SQLException
+  {
+    try {
+      boolean isWrapper = _conn.isWrapperFor(iface);
+
+      return isWrapper;
+    } catch (SQLException e) {
+      log.fine(getId() + ":exn-isWrapperFor(" + e + ")");
+
+      throw e;
+    }
   }
 
   public String toString()
   {
     return "SpyConnection[id=" + getId() + ",conn=" + _conn + "]";
   }
-
-    public Clob createClob() throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public Blob createBlob() throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public NClob createNClob() throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public SQLXML createSQLXML() throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public boolean isValid(int timeout) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public void setClientInfo(String name, String value) throws SQLClientInfoException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public void setClientInfo(Properties properties) throws SQLClientInfoException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public String getClientInfo(String name) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public Properties getClientInfo() throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public Array createArrayOf(String typeName, Object[] elements) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public Struct createStruct(String typeName, Object[] attributes) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public <T> T unwrap(Class<T> iface) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
-
-    public boolean isWrapperFor(Class<?> iface) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
-    }
 }

@@ -36,6 +36,8 @@ import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -43,6 +45,7 @@ import javax.ejb.PostActivate;
 import javax.ejb.PrePassivate;
 import javax.enterprise.context.Dependent;
 import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InterceptionType;
@@ -51,7 +54,6 @@ import javax.interceptor.InvocationContext;
 
 import com.caucho.config.gen.InterceptorException;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
-import com.caucho.util.L10N;
 
 /**
  * InterceptorBean represents a Java interceptor
@@ -85,7 +87,6 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
     if (parentClass != null) {
       _parent = new InterceptorRuntimeBean(this, parentClass);
     }
-    
     // introspectOverrideMethods(type);
   }
   
@@ -95,7 +96,10 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
 
   public Bean<X> getBean()
   {
-    return _child;
+    if (_child != null)
+      return _child.getBean();
+    else
+      return this;
   }
   
   public Class<?> getType()
@@ -189,8 +193,9 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
     
     X value = CreationalContextImpl.findAny(env, getBean());
     
-    if (value == null)
-      throw new NullPointerException(getBean() + " " + toString());
+    if (value == null) {
+      throw new NullPointerException(getBean() + "\n  " + env + "\n  " + toString());
+    }
     
     return value;
   }
@@ -278,12 +283,16 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
     for (Method method : cl.getDeclaredMethods()) {
       if (Modifier.isStatic(method.getModifiers()))
         continue;
+      
+      AnnotatedMethod<?> annMethod = AnnotatedOverrideMap.getMethod(method);
 
-      if (method.isAnnotationPresent(AroundInvoke.class)) {
+      // XXX:
+      if (isAnnotationPresent(method, annMethod, AroundInvoke.class)) {
         Method childMethod 
           = AnnotatedTypeUtil.findDeclaredMethod(childClass, method);
 
-        if (childMethod == null) {
+        if (childMethod == null
+            || Modifier.isPrivate(childMethod.getModifiers())) {
           // ioc/0cb1
           _aroundInvoke = method;
           method.setAccessible(true);
@@ -318,6 +327,18 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
         method.setAccessible(true);
       }
     }
+  }
+  
+  private boolean isAnnotationPresent(Method method,
+                                      AnnotatedMethod<?> annMethod,
+                                      Class<? extends Annotation> annType)
+  {
+    if (method.isAnnotationPresent(annType))
+      return true;
+    else if (annMethod != null && annMethod.isAnnotationPresent(annType))
+      return true;
+    else
+      return false;
   }
 
   private void introspectOverrideMethods(Class<?> cl)
@@ -451,12 +472,25 @@ public class InterceptorRuntimeBean<X> extends AbstractInterceptorBean<X>
   @Override
   public boolean equals(Object o)
   {
-    if (! (o instanceof InterceptorRuntimeBean<?>))
+    if (o == this)
+      return true;
+    else if (o == null)
+      return false;
+    
+    if (getClass() != o.getClass())
       return false;
 
     InterceptorRuntimeBean<?> bean = (InterceptorRuntimeBean<?>) o;
 
-    return _type.equals(bean._type);
+    if (! _type.equals(bean._type))
+      return false;
+    
+    if (_child == bean._child)
+      return true;
+    else if (_child == null || ! _child.equals(bean._child))
+      return false;
+    else
+      return true;
   }
 
   @Override

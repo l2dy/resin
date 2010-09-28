@@ -34,13 +34,14 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.*;
 import com.caucho.rewrite.DispatchRule;
 import com.caucho.rewrite.RewriteFilter;
-import com.caucho.server.dispatch.DispatchServer;
+import com.caucho.server.dispatch.InvocationServer;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
+import javax.servlet.DispatcherType;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import java.util.*;
@@ -176,7 +177,8 @@ public class RewriteDispatch
     _matchRule.init();
   }
 
-  public FilterChain map(String uri,
+  public FilterChain map(DispatcherType type,
+                         String uri,
                          String queryString,
                          FilterChain chain)
   {
@@ -204,7 +206,7 @@ public class RewriteDispatch
         chain = _matchRule.map(uri, queryString, chain);
       }
 
-      chain = mapChain(0, uri, queryString, chain);
+      chain = mapChain(0, type, uri, queryString, chain);
 
       for (int i = _filterList.size() - 1; i >= 0; i--) {
         chain = _filterList.get(i).map(uri, queryString, chain);
@@ -219,6 +221,7 @@ public class RewriteDispatch
   }
 
   private FilterChain mapChain(int index,
+                               DispatcherType type,
                                String uri, String queryString,
                                FilterChain chain)
     throws ServletException
@@ -230,9 +233,9 @@ public class RewriteDispatch
     
     uri = rule.rewriteUri(uri, queryString);
 
-    FilterChain next = mapChain(index + 1, uri, queryString, chain);
+    FilterChain next = mapChain(index + 1, type, uri, queryString, chain);
 
-    return rule.map(uri, queryString, next, chain);
+    return rule.map(type, uri, queryString, next, chain);
   }
 
   public void clearCache()

@@ -43,10 +43,11 @@ import com.caucho.config.Config;
 import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.types.PathBuilder;
+import com.caucho.env.deploy.DeployConfig;
+import com.caucho.env.deploy.DeployControllerAdmin;
+import com.caucho.env.deploy.EnvironmentDeployController;
 import com.caucho.inject.Module;
-import com.caucho.server.deploy.DeployConfig;
-import com.caucho.server.deploy.DeployControllerAdmin;
-import com.caucho.server.deploy.EnvironmentDeployController;
+import com.caucho.server.cluster.Server;
 import com.caucho.server.host.Host;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
@@ -71,16 +72,11 @@ public class WebAppController
 
   private WebAppController _parent;
 
+  private String _idTail;
+  
   // The context path is the URL prefix for the web-app
   private String _contextPath;
-  private final String _versionContextPath;
-  private final String _baseContextPath;
   private String _version = "";
-  
-  private final String _deployTagName;
-
-  // true if the versioned web-app is an alias for the base web-app
-  private boolean _isVersionAlias;
 
   // Any old version web-app
   private WebAppController _oldWebAppController;
@@ -106,42 +102,76 @@ public class WebAppController
   private volatile long _lifetimeWriteBytes;
   private volatile long _lifetimeClientDisconnectCount;
 
-  private WebAppAdmin _admin = new WebAppAdmin(this);
+  private WebAppAdmin _admin;
 
-  public WebAppController()
-  {
-    this("/", "/", null, null);
-  }
-
-  public WebAppController(String contextPath,
-                          String baseContextPath,
-                          Path rootDirectory,
+  public WebAppController(String id, 
+                          Path rootDirectory, 
                           WebAppContainer container)
   {
-    super(contextPath, rootDirectory);
+    this(id, rootDirectory, container, "/");
+  }
+  
+  public WebAppController(Path rootDirectory,
+                          WebAppContainer container,
+                          String contextPath)
+  {
+    this(calculateId(container, contextPath), 
+         rootDirectory,
+         container,
+         contextPath);
+  }
+
+  public WebAppController(String id,
+                          Path rootDirectory,
+                          WebAppContainer container,
+                          String contextPath)
+  {
+    super(id, rootDirectory);
 
     _container = container;
-
-    _versionContextPath = contextPath;
-    _baseContextPath = baseContextPath;
+    
+    if (container == null)
+      throw new NullPointerException();
+    
+    if (container.getHost() == null)
+      throw new NullPointerException();
 
     _contextPath = contextPath;
     
-    String hostName;
+    _idTail = calculateIdTail(getId());
     
-    if (container != null)
-      hostName = container.getHostName();
-    else
-      hostName = "default";
+    if (! getId().startsWith("error/") && ! isVersioning()) {
+      _admin = new WebAppAdmin(this);
+    }
+  }
+  
+  private static String calculateIdTail(String id)
+  {
+    int p1 = id.indexOf('/');
+    //String stage = id.substring(0, p1);
+    int p2 = id.indexOf('/', p1 + 1);
+    //String type = id.substring(p1 + 1, p2);
+    int p3 = id.indexOf('/', p2 + 1);
+    //String host = id.substring(p2 + 1, p3);
     
-    String webAppName;
+    return id.substring(p3);
+  }
+  private static String calculateId(WebAppContainer container,
+                                    String contextPath)
+  {
+    if (contextPath.equals("") || contextPath.equals("/"))
+      contextPath = "/ROOT";
     
-    if ("".equals(_versionContextPath))
-      webAppName = "/default";
-    else
-      webAppName = _versionContextPath;
+    String stage = container.getServer().getStage();
+    String hostId = container.getHost().getIdTail();
     
-    _deployTagName = "WebApp/" + hostName + webAppName;
+    return stage + "/webapp/" + hostId + contextPath;
+  }
+  
+  public String getName()
+  {
+    // return getContextPath();
+    return _idTail;
   }
 
   /**
@@ -158,13 +188,10 @@ public class WebAppController
 
     _contextPath = contextPath;
   }
-
-  /**
-   * Returns the webApp's base context path, e.g. /foo for /foo-1.0
-   */
-  public String getBaseContextPath()
+  
+  protected boolean isVersioning()
   {
-    return _baseContextPath;
+    return false;
   }
 
   /**
@@ -173,10 +200,7 @@ public class WebAppController
   public String getContextPath(String uri)
   {
     if (getConfig() == null || getConfig().getURLRegexp() == null) {
-      if (uri.startsWith(getContextPath()))
-        return getContextPath();
-      else
-        return getBaseContextPath();
+      return getContextPath();
     }
 
     Pattern regexp = getConfig().getURLRegexp();
@@ -202,14 +226,6 @@ public class WebAppController
 
     return _contextPath;
   }
-  
-  /**
-   * Returns the deploy tag
-   */
-  public String getDeployTag()
-  {
-    return _deployTagName;
-  }
 
   /**
    * Sets the war name prefix.
@@ -232,10 +248,7 @@ public class WebAppController
    */
   public String getURL()
   {
-    if (_container != null)
-      return _container.getURL() + _contextPath;
-    else
-      return _contextPath;
+    return getHost().getURL() + _contextPath;
   }
 
   /**
@@ -253,6 +266,11 @@ public class WebAppController
   {
     return _container;
   }
+  
+  public Server getWebManager()
+  {
+    return _container.getServer();
+  }
 
   /**
    * Sets the parent controller.
@@ -267,10 +285,7 @@ public class WebAppController
    */
   public Host getHost()
   {
-    if (_container != null)
-      return _container.getHost();
-    else
-      return null;
+    return _container.getHost();
   }
 
   /**
@@ -346,11 +361,12 @@ public class WebAppController
   @Override
   protected String getMBeanId()
   {
-    String name = getId();
-    if (name.equals(""))
-      name = "/";
-
-    return name;
+    String name = getName();
+    
+    if (name.equals("/ROOT"))
+      return "/";
+    else
+      return name;
   }
 
   /**
@@ -375,7 +391,6 @@ public class WebAppController
    */
   public void setVersionAlias(boolean isVersionAlias)
   {
-    _isVersionAlias = isVersionAlias;
   }
 
   /**
@@ -384,7 +399,7 @@ public class WebAppController
    */
   public boolean isVersionAlias()
   {
-    return _isVersionAlias;
+    return false;
   }
 
   /**
@@ -455,6 +470,7 @@ public class WebAppController
   /**
    * Merges two entries.
    */
+  /*
   protected WebAppController merge(WebAppController newController)
   {
     if (getConfig() != null && getConfig().getURLRegexp() != null)
@@ -471,10 +487,10 @@ public class WebAppController
 
         //  The contextPath comes from current web-app
         WebAppController mergedController
-          = new WebAppController(getContextPath(),
-                                 getBaseContextPath(),
+          = new WebAppController(getId(),
                                  getRootDirectory(),
-                                 _container);
+                                 _container,
+                                 getContextPath());
 
         // server/1h1{2,3}
         // This controller overrides configuration from the new controller
@@ -487,6 +503,7 @@ public class WebAppController
       }
     }
   }
+  */
 
   /**
    * Returns the var.
@@ -553,6 +570,7 @@ public class WebAppController
   /**
    * Instantiate the webApp.
    */
+  @Override
   protected WebApp instantiateDeployInstance()
   {
     return new WebApp(this);
@@ -563,7 +581,6 @@ public class WebAppController
    */
   @Override
   protected void configureInstanceVariables(WebApp webApp)
-    throws Throwable
   {
     InjectManager beanManager = InjectManager.create();
     BeanBuilder<WebApp> factory = beanManager.createBeanFactory(WebApp.class);
@@ -625,7 +642,7 @@ public class WebAppController
       appDir = _container.getDocumentDirectory().lookup("./" + _contextPath);
 
     if (appDir == null && getDeployInstance() != null)
-      appDir = getDeployInstance().getAppDir();
+      appDir = getDeployInstance().getRootDirectory();
 
     return appDir;
   }
@@ -645,37 +662,27 @@ public class WebAppController
 
   public long getLifetimeConnectionCount()
   {
-    synchronized (_statisticsLock) {
-      return _lifetimeConnectionCount;
-    }
+    return _lifetimeConnectionCount;
   }
 
   public long getLifetimeConnectionTime()
   {
-    synchronized (_statisticsLock) {
-      return _lifetimeConnectionTime;
-    }
+    return _lifetimeConnectionTime;
   }
 
   public long getLifetimeReadBytes()
   {
-    synchronized (_statisticsLock) {
-      return _lifetimeReadBytes;
-    }
+    return _lifetimeReadBytes;
   }
 
   public long getLifetimeWriteBytes()
   {
-    synchronized (_statisticsLock) {
-      return _lifetimeWriteBytes;
-    }
+    return _lifetimeWriteBytes;
   }
 
   public long getLifetimeClientDisconnectCount()
   {
-    synchronized (_statisticsLock) {
-      return _lifetimeClientDisconnectCount;
-    }
+    return _lifetimeClientDisconnectCount;
   }
 
   /**
@@ -714,9 +721,9 @@ public class WebAppController
   public String toString()
   {
     if (com.caucho.util.Alarm.isTest())
-      return "WebAppController" +  "[" + getId() + "]";
+      return getClass().getSimpleName() + "[" + getId() + "]";
     else
-      return "WebAppController$" + System.identityHashCode(this) + "[" + getId() + "]";
+      return getClass().getSimpleName() + "$" + System.identityHashCode(this) + "[" + getId() + "]";
   }
 
   /**
@@ -745,7 +752,7 @@ public class WebAppController
       if (getWarName() != null)
         name = getWarName();
       else
-        name = getId();
+        name = getContextPath();
 
       if (name.startsWith("/"))
         return name;
@@ -791,7 +798,7 @@ public class WebAppController
     @Override
     public String toString()
     {
-      return "WebApp[" + getURL() + "]";
+      return "WebApp[" + getId() + "]";
     }
   }
 }

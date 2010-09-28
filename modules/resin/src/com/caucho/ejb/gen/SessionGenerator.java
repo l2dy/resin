@@ -201,10 +201,11 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
       
       if (localDefault.getJavaClass().isInterface())
         _localApi.add(localDefault); 
-      else
+      else {
         // we still want to introspect the methods, but don't add it as
         // a local api because it will be treated as an interface later
         introspectType(localDefault);
+      }
     }
     
     for (AnnotatedType<? super X> type : _localApi)
@@ -261,6 +262,14 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     for (AnnotatedMethod<? super X> method : getAnnotatedMethods()) {
       introspectMethodImpl(method);
     }
+    
+    /*
+    for (AnnotatedMethod<? super X> method : getBeanType().getMethods()) {
+      if (method.isAnnotationPresent(PostConstruct.class)) {
+        introspectMethodImpl(method);
+      }
+    }
+    */
   }
 
   private void introspectMethodImpl(AnnotatedMethod<? super X> apiMethod)
@@ -308,8 +317,9 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   {
     AspectGenerator<X> bizMethod = getAspectBeanFactory().create(method);
       
-    if (bizMethod != null)
+    if (bizMethod != null && ! _businessMethods.contains(bizMethod)) {
       _businessMethods.add(bizMethod);
+    }
   }
 
   protected void addNonBusinessMethod(AnnotatedMethod<? super X> method)

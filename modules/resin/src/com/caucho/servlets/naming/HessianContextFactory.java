@@ -51,7 +51,7 @@ public class HessianContextFactory implements InitialContextFactory {
 
       HessianModel model = new HessianModel(proxy);
     
-      return new ContextImpl(model, env);
+      return new ContextImpl(model, (Hashtable) env);
     } catch (Exception e) {
       throw new RuntimeException(e);
     }

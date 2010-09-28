@@ -30,11 +30,12 @@
 package com.caucho.server.e_app;
 
 import com.caucho.config.ConfigException;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.ExpandDeployGenerator;
+import com.caucho.env.deploy.ExpandVersion;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.inject.Module;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.ExpandDeployGenerator;
 import com.caucho.server.webapp.WebAppContainer;
 import com.caucho.vfs.Path;
 
@@ -57,10 +58,11 @@ public class EarDeployGenerator
   private ArrayList<EarConfig> _earDefaultList
     = new ArrayList<EarConfig>();
 
-  public EarDeployGenerator(DeployContainer<EarDeployController> deployContainer,
+  public EarDeployGenerator(String id,
+                            DeployContainer<EarDeployController> deployContainer,
                             WebAppContainer parentContainer)
   {
-    super(deployContainer, parentContainer.getRootDirectory());
+    super(id, deployContainer, parentContainer.getRootDirectory());
 
     try {
       setExpandPrefix("_ear_");
@@ -69,13 +71,13 @@ public class EarDeployGenerator
       throw new RuntimeException(e);
     }
 
-    setRepository(RepositoryService.getCurrentRepository());
-      
+    /*
     String hostName = parentContainer.getHostName();
     if ("".equals(hostName))
       hostName = "default";
     
     setRepositoryTag("ears/default/" + hostName);
+    */
 
     _parentContainer = parentContainer;
 
@@ -129,52 +131,25 @@ public class EarDeployGenerator
 
     _admin.register();
   }
-
-  /**
-   * Converts the archive name to the entry name, returns null if
-   * the path name is not a valid entry name.
-   */
-  protected String archiveNameToEntryName(String archiveName)
-  {
-    if (! archiveName.endsWith(".ear"))
-      return null;
-    else
-      return archiveName.substring(0, archiveName.length() - 4);
-  }
-  
+ 
   /**
    * Returns the current array of application entries.
    */
-  public EarDeployController createController(String name)
+  @Override
+  public EarDeployController createController(ExpandVersion version)
   {
-    String archiveName = name + getExtension();
-    Path archivePath = getArchiveDirectory().lookup(archiveName);
-
-    Path rootDirectory;
-
-    String tag = getRepositoryTag() + "/" + name;
-
-    if (archivePath.isDirectory()) {
-      rootDirectory = getExpandDirectory().lookup(archiveName);
-      archivePath = null;
-    }
-    else if (getRepository().getTagContentHash(tag) != null) {
-      rootDirectory = getExpandDirectory().lookup(getExpandName(name));
-    }
-    else {
-      rootDirectory = getExpandDirectory().lookup(getExpandName(name));
-
-      if (! archivePath.canRead() && ! rootDirectory.canRead())
-        return null;
-    }
+    String key = version.getKey();
+    
+    String tag = getId() + "/" + key;
+    
+    Path rootDirectory = getExpandPath(key);
+    Path archivePath = getArchivePath(key);
 
     EarDeployController controller
-      = new EarDeployController(name, rootDirectory, _parentContainer);
+      = new EarDeployController(tag, rootDirectory, key, 
+                                _parentContainer, null);
 
     controller.setArchivePath(archivePath);
-
-    controller.setRepository(getRepository());
-    controller.setRepositoryTag(tag);
 
     for (EarConfig config : _earDefaultList)
       controller.addConfigDefault(config);

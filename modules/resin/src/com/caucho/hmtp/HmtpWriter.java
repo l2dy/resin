@@ -344,16 +344,18 @@ public class HmtpWriter implements ActorStream
     }
   }
 
+  @Override
   public boolean isClosed()
   {
     return _out == null;
   }
 
+  @Override
   public void close()
   {
     if (log.isLoggable(Level.FINER))
       log.finer(this + " close");
-    
+
     try {
       Hessian2Output out = _out;
       _out = null;

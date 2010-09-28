@@ -29,8 +29,8 @@
 package com.caucho.server.webapp;
 
 import com.caucho.config.types.PathBuilder;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.DeployGenerator;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployGenerator;
 import com.caucho.vfs.Path;
 
 import java.util.ArrayList;
@@ -108,13 +108,14 @@ public class WebAppRegexpDeployGenerator
   /**
    * Returns the current array of webApp entries.
    */
-  public WebAppController generateController(String name)
+  @Override
+  public void generateController(String name, ArrayList<WebAppController> list)
   {
     Pattern regexp = _config.getURLRegexp();
     Matcher matcher = regexp.matcher(name);
 
     if (! matcher.find() || matcher.start() != 0) {
-      return null;
+      return;
     }
 
     int length = matcher.end() - matcher.start();
@@ -137,7 +138,7 @@ public class WebAppRegexpDeployGenerator
     Path appDir = null;
     
     try {
-      String appDirPath = _config.getDocumentDirectory();
+      String appDirPath = _config.getRootDirectory();
 
       if (appDirPath == null)
         appDirPath = "./" + matcher.group(0);
@@ -145,12 +146,12 @@ public class WebAppRegexpDeployGenerator
       appDir = PathBuilder.lookupPath(appDirPath, varMap);
 
       if (! appDir.isDirectory() || ! appDir.canRead()) {
-        return null;
+        return;
       }
     } catch (Exception e) {
       log.log(Level.FINER, e.toString(), e);
       
-      return null;
+      return;
     }
 
     WebAppController controller = null;
@@ -165,11 +166,23 @@ public class WebAppRegexpDeployGenerator
         for (int i = 0; i < _entries.size(); i++) {
           controller = _entries.get(i);
 
-          if (appDir.equals(controller.getRootDirectory()))
-            return controller;
+          if (appDir.equals(controller.getRootDirectory())) {
+            list.add(controller);
+            return;
+          }
         }
+        
+        String stage = _container.getServer().getStage();
+        String hostId = _container.getHost().getIdTail();
+        
+        String id;
+        
+        if (name.startsWith("/"))
+          id = stage + "/webapp/" + hostId + name;
+        else
+          id = stage + "/webapp/" + hostId + "/" + name;
 
-        controller = new WebAppController(name, name, appDir, _container);
+        controller = new WebAppController(id, appDir, _container, name);
 
         // XXX: not dynamic-deploy in the sense that the mappings are known
         //controller.setDynamicDeploy(true);
@@ -182,6 +195,8 @@ public class WebAppRegexpDeployGenerator
           controller.addConfigDefault(_webAppDefaults.get(i));
       
         _entries.add(controller);
+        
+        
       }
     } finally {
       thread.setContextClassLoader(oldLoader);
@@ -191,7 +206,7 @@ public class WebAppRegexpDeployGenerator
     
     //controller.deploy();
 
-    return controller;
+    list.add(controller);
   }
 
   public String toString()

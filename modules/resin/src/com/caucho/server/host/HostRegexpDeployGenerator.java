@@ -30,8 +30,8 @@
 package com.caucho.server.host;
 
 import com.caucho.config.Config;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.DeployGenerator;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployGenerator;
 import com.caucho.vfs.Path;
 
 import java.util.ArrayList;
@@ -99,13 +99,14 @@ public class HostRegexpDeployGenerator extends DeployGenerator<HostController> {
   /**
    * Returns the current array of application entries.
    */
-  public HostController generateController(String name)
+  @Override
+  public void generateController(String name, ArrayList<HostController> list)
   {
     Pattern regexp = _config.getRegexp();
     Matcher matcher = regexp.matcher(name);
 
     if (! matcher.find() || matcher.start() != 0) {
-      return null;
+      return;
     }
 
     Thread thread = Thread.currentThread();
@@ -128,6 +129,8 @@ public class HostRegexpDeployGenerator extends DeployGenerator<HostController> {
       }
 
       varMap.put("regexp", vars);
+      
+      varMap.put("host", new HostRegexpVar(hostName, vars));
 
       if (_config.getHostName() != null) {
         try {
@@ -137,8 +140,12 @@ public class HostRegexpDeployGenerator extends DeployGenerator<HostController> {
         }
       }
 
+      String id = _container.getServer().getStage() + "/host/" + name;
+      Path rootDirectory = _config.calculateRootDirectory(varMap);
+      
       HostController controller
-        = new HostController(name, _config, _container, varMap);
+        = new HostController(id, rootDirectory, name,
+                             _config, _container, varMap);
 
       controller.setRegexpName(name);
 
@@ -161,15 +168,16 @@ public class HostRegexpDeployGenerator extends DeployGenerator<HostController> {
       if (rootDir == null || ! rootDir.isDirectory()) {
         // server/0522
         controller.destroy();
-        return null;
+        return;
       }
 
       synchronized (_entries) {
         for (int i = 0; i < _entries.size(); i++) {
           HostController oldController = _entries.get(i);
 
-          if (rootDir.equals(oldController.getRootDirectory()))
-            return oldController;
+          if (rootDir.equals(oldController.getRootDirectory())) {
+            list.add(oldController);
+          }
         }
       
         _entries.add(controller);
@@ -183,15 +191,16 @@ public class HostRegexpDeployGenerator extends DeployGenerator<HostController> {
         log.log(Level.WARNING, e.toString(), e);
       }
       */
-      
-      return controller;
+
+      list.add(controller);
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
   }
 
+  @Override
   public String toString()
   {
-    return "HostRegexpDeployGenerator[" + _config + "]";
+    return getClass().getSimpleName() + "[" + _config + "]";
   }
 }

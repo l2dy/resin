@@ -106,6 +106,13 @@ final class EqExpr extends Expr {
         return new IndexExpr(expr, _right);
       }
     }
+    else if (_left instanceof OidExpr) {
+      OidExpr expr = (OidExpr) _left;
+
+      if (item == expr.getFromItem()) {
+        return new OidIndexExpr(expr, _right);
+      }
+    }
 
     if (_right instanceof IdExpr) {
       IdExpr expr = (IdExpr) _right;
@@ -117,6 +124,13 @@ final class EqExpr extends Expr {
       }
       else if (expr.getColumn().getIndex() != null) {
         return new IndexExpr(expr, _left);
+      }
+    }
+    else if (_right instanceof OidExpr) {
+      OidExpr expr = (OidExpr) _right;
+
+      if (item == expr.getFromItem()) {
+        return new OidIndexExpr(expr, _left);
       }
     }
 
@@ -162,6 +176,21 @@ final class EqExpr extends Expr {
   public long subCost(ArrayList<FromItem> fromList)
   {
     return _left.subCost(fromList) + _right.subCost(fromList);
+  }
+
+  /**
+   * Returns the cost based on the given FromList.
+   */
+  @Override
+  public long indexCost(ArrayList<FromItem> costItems)
+  {
+    long leftCost = _left.indexSubCost(costItems);
+    long rightCost = _right.indexSubCost(costItems);
+    
+    if (leftCost < rightCost)
+      return leftCost;
+    else
+      return rightCost;
   }
 
   /**

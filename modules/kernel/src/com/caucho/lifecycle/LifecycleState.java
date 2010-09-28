@@ -32,49 +32,197 @@ package com.caucho.lifecycle;
 /**
  * Lifecycle constants.
  */
-public interface LifecycleState {
-  public static final int IS_NEW = 0;
-  public static final int IS_INITIALIZING = 1;
-  public static final int IS_INIT = 2;
-  public static final int IS_STARTING = 3;
-  public static final int IS_STANDBY = 4;
-  public static final int IS_WARMUP = 5;
-  public static final int IS_ACTIVE = 6;
-  public static final int IS_FAILED = 7;
-  public static final int IS_STOPPING = 8;
-  public static final int IS_STOPPED = 9;
-  public static final int IS_DESTROYING = 10;
-  public static final int IS_DESTROYED = 11;
+public enum LifecycleState {
+  NEW {
+    @Override
+    public boolean isBeforeInit() { return true; }
+  },
+  
+  INITIALIZING {
+    @Override
+    public boolean isBeforeInit() { return true; }
+    
+    @Override
+    public boolean isInitializing() { return true; }
+  },
+  
+  INIT {
+    @Override
+    public boolean isInit() { return true; }
+    
+    @Override
+    public boolean isIdle() { return true; }
+  },
+  
+  STARTING {
+    @Override
+    public boolean isStarting() { return true; }
+  },
+  
+  STANDBY,
+  
+  STOPPED_IDLE {
+    @Override
+    public boolean isStoppedIdle() { return true; }
+    
+    @Override
+    public boolean isIdle() { return true; }
+    
+    @Override
+    public boolean isStopped() { return true; }
+  },
+  
+  WARMUP {
+    @Override
+    public boolean isWarmup() { return true; }
+    
+    @Override
+    public boolean isRunnable() { return true; }
+  },
+  
+  ACTIVE {
+    @Override
+    public boolean isActive() { return true; }
+    @Override
+    public boolean isRunnable() { return true; }
+  },
+  
+  FAILED {
+    @Override
+    public boolean isError() { return true; }
+  },
+  
+  STOPPING {
+    @Override
+    public boolean isStopping() { return true; }
+  },
+  
+  STOPPED {
+    @Override
+    public boolean isStopped() { return true; }
+  },
+  
+  DESTROYING {
+    @Override
+    public boolean isDestroying() { return true; }
+  },
+  
+  DESTROYED {
+    @Override
+    public boolean isDestroyed() { return true; }
+  };
 
-  public int getState();
+  //
+  // State predicates.
+  //
+  
+  public int getState() 
+  {
+    return ordinal(); 
+  }
 
-  public String getStateName();
+  public String getStateName()
+  {
+    return toString();
+  }
 
-  public boolean isInitializing();
+  public boolean isBeforeInit()
+  {
+    return false;
+  }
 
-  public boolean isInit();
+  public boolean isInitializing()
+  {
+    return false;
+  }
 
-  public boolean isBeforeInit();
+  public boolean isInit()
+  {
+    return false;
+  }
 
-  public boolean isAfterInit();
+  public boolean isAfterInit()
+  {
+    return INIT.ordinal() <= ordinal();
+  }
 
-  public boolean isStarting();
+  public boolean isStoppedIdle()
+  {
+    return false;
+  }
 
-  public boolean isBeforeActive();
+  public boolean isIdle()
+  {
+    return false;
+  }
 
-  public boolean isAfterActive();
+  public boolean isStarting()
+  {
+    return false;
+  }
 
-  public boolean isWarmup();
+  public boolean isAfterStarting()
+  {
+    return STARTING.ordinal() <= ordinal();
+  }
 
-  public boolean isActive();
+  public boolean isBeforeActive()
+  {
+    return ordinal() < ACTIVE.ordinal();
+  }
 
-  public boolean isError();
+  public boolean isWarmup()
+  {
+    return false;
+  }    
 
-  public boolean isStopping();
+  public boolean isAfterActive()
+  {
+    return ACTIVE.ordinal() <= ordinal();
+  }
 
-  public boolean isStopped();
+  public boolean isActive()
+  {
+    return false;
+  }
+  
+  public boolean isRunnable()
+  {
+    return false;
+  }
 
-  public boolean isDestroying();
+  public boolean isError()
+  {
+    return false;
+  }
 
-  public boolean isDestroyed();
+  public boolean isStopping()
+  {
+    return false;
+  }
+
+  public boolean isAfterStopping()
+  {
+    return STOPPING.ordinal() <= ordinal();
+  }
+
+  public boolean isStopped()
+  {
+    return false;
+  }
+
+  public boolean isDestroying()
+  {
+    return false;
+  }
+
+  public boolean isAfterDestroying()
+  {
+    return DESTROYING.ordinal() <= ordinal();
+  }
+
+  public boolean isDestroyed()
+  {
+    return false;
+  }
 }

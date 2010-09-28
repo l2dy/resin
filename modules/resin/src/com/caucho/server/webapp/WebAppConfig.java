@@ -31,7 +31,8 @@ package com.caucho.server.webapp;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.RawString;
-import com.caucho.server.deploy.DeployConfig;
+import com.caucho.env.deploy.DeployConfig;
+import com.caucho.env.deploy.DeployMode;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.L10N;
 
@@ -123,22 +124,6 @@ public class WebAppConfig extends DeployConfig {
   }
 
   /**
-   * Gets the app-dir.
-   */
-  public String getAppDir()
-  {
-    return getRootDirectory();
-  }
-
-  /**
-   * Sets the app-dir.
-   */
-  public String getDocumentDirectory()
-  {
-    return getAppDir();
-  }
-
-  /**
    * Sets the app-dir.
    */
   public void setDocumentDirectory(RawString dir)
@@ -155,9 +140,9 @@ public class WebAppConfig extends DeployConfig {
     log.config(L.l("lazy-init is deprecated.  Use <startup-mode>lazy</startup-mode> instead."));
 
     if (isLazy)
-      setStartupMode("lazy");
+      setStartupMode(DeployMode.LAZY);
     else
-      setStartupMode("automatic");
+      setStartupMode(DeployMode.AUTOMATIC);
   }
 
   /**
@@ -171,6 +156,7 @@ public class WebAppConfig extends DeployConfig {
   /**
    * Gets the prologue.
    */
+  @Override
   public DeployConfig getPrologue()
   {
     return _prologue;

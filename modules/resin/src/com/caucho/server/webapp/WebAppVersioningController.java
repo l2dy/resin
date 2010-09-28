@@ -29,14 +29,15 @@
 
 package com.caucho.server.webapp;
 
-import com.caucho.config.ConfigException;
-import com.caucho.util.L10N;
-import com.caucho.util.Alarm;
-import com.caucho.server.deploy.VersionEntry;
-
-import java.util.*;
-import java.util.logging.Logger;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
+
+import com.caucho.config.ConfigException;
+import com.caucho.env.deploy.ExpandVersion;
+import com.caucho.util.Alarm;
+import com.caucho.util.L10N;
 
 /**
  * A configuration entry for a versioning web-app.
@@ -48,29 +49,32 @@ public class WebAppVersioningController extends WebAppController {
 
   private static final long EXPIRE_PERIOD = 3600 * 1000L;
 
+  private final String _baseKey;
+  
   private long _versionRolloverTime = EXPIRE_PERIOD;
 
   private ArrayList<WebAppController> _controllerList
     = new ArrayList<WebAppController>();
 
   private final WebAppExpandDeployGenerator _generator;
-
-  // if the versioning has a controller matching the un-versioned path
-  private WebAppController _baseController;
   
   private long _restartTime;
   
+  private ExpandVersion _primaryVersion;
   private WebAppController _primaryController;
+  
   private boolean _isModified = true;
   private AtomicBoolean _isUpdating = new AtomicBoolean();
 
-  public WebAppVersioningController(String versionContextPath,
-                                    String baseContextPath,
+  public WebAppVersioningController(String id,
+                                    String baseKey,
+                                    String contextPath,
                                     WebAppExpandDeployGenerator generator,
                                     WebAppContainer container)
   {
-    super(versionContextPath, baseContextPath, null, container);
+    super(id + "-0.0.0.versioning", null, container, contextPath);
 
+    _baseKey = baseKey;
     _generator = generator;
   }
 
@@ -79,11 +83,7 @@ public class WebAppVersioningController extends WebAppController {
     _isModified = isModified;
   }
 
-  void setBaseController(WebAppController baseController)
-  {
-    _baseController = baseController;
-  }
-
+  @Override
   public boolean isVersioning()
   {
     return true;
@@ -97,6 +97,15 @@ public class WebAppVersioningController extends WebAppController {
     else
       return "";
   }
+  
+  @Override
+  public WebAppAdmin getAdmin()
+  {
+    if (_primaryController != null)
+      return _primaryController.getAdmin();
+    else
+      return null;
+  }
 
   /**
    * Returns the instance for a top-level request
@@ -106,12 +115,17 @@ public class WebAppVersioningController extends WebAppController {
   @Override
   public WebApp instantiateDeployInstance()
   {
+    updateVersion();
+    
     WebAppController controller = _primaryController;
 
-    if (controller != null)
-      return controller.getDeployInstance();
+    if (controller != null) {
+      WebApp webApp = controller.request();
+      
+      return webApp;
+    }
     else
-      return null;
+      throw new NullPointerException(getClass().getName());
   }
 
   /**
@@ -120,7 +134,9 @@ public class WebAppVersioningController extends WebAppController {
   @Override
   protected WebApp startImpl()
   {
-    updateVersionImpl();
+    super.startImpl();
+    
+    updateVersion();
 
     WebAppController controller = _primaryController;
 
@@ -128,6 +144,11 @@ public class WebAppVersioningController extends WebAppController {
       return controller.request();
     else
       return null;
+  }
+  
+  @Override
+  protected void destroyInstance(WebApp instance)
+  {
   }
 
   /**
@@ -141,27 +162,27 @@ public class WebAppVersioningController extends WebAppController {
     */
   }
 
+  @Override
   public boolean isModified()
   {
     if (_isModified)
       return true;
 
-    VersionEntry entry = _generator.getVersionEntry(getId());
-
+    // VersionEntry entry = _generator.getVersionEntry(getId());
+/*
     if (entry == null)
       return false;
-
-
+*/
     return false;
   }
-
+  
   public void updateVersion()
   {
-    _isModified = true;
+//    _isModified = true;
 
     updateVersionImpl();
   }
-  
+
   private void updateVersionImpl()
   {
     if (! _isUpdating.compareAndSet(false, true))
@@ -169,19 +190,19 @@ public class WebAppVersioningController extends WebAppController {
 
     try {
       synchronized (this) {
+        ExpandVersion oldPrimaryVersion = _primaryVersion;
         WebAppController oldPrimaryController = _primaryController;
         
         WebAppController newPrimaryController = null;
-        
-        String versionName = _generator.getPrimaryVersion(getId());
 
-        if (versionName != null) {
-          newPrimaryController
-            = _container.getWebAppGenerator().findController(versionName);
-        } else if (_baseController != null
-                   && _controllerList.size() == 0) {
-          // server/1h52
-          newPrimaryController = _baseController;
+        ExpandVersion version = _generator.getPrimaryVersion(_baseKey);
+        
+        if (oldPrimaryVersion != null && oldPrimaryVersion.equals(version))
+          return;
+
+        if (version != null) {
+          newPrimaryController = _generator.createVersionController(version);
+          newPrimaryController.merge(newPrimaryController);
         }
 
         if (newPrimaryController == null) {
@@ -200,6 +221,7 @@ public class WebAppVersioningController extends WebAppController {
 
         newPrimaryController.setVersionAlias(true);
         _primaryController = newPrimaryController;
+        _primaryVersion = version;
 
         _controllerList.remove(newPrimaryController);
 

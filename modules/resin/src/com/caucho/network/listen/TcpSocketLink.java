@@ -276,6 +276,18 @@ public class TcpSocketLink extends AbstractSocketLink
   }
 
   @Override
+  public void requestShutdownBegin()
+  {
+    _port.requestShutdownBegin();
+  }
+
+  @Override
+  public void requestShutdownEnd()
+  {
+    _port.requestShutdownEnd();
+  }
+
+  @Override
   public boolean isCometActive()
   {
     return _state.isCometActive() && ! _isCompleteRequested;
@@ -1068,6 +1080,7 @@ public class TcpSocketLink extends AbstractSocketLink
     abstract RequestState doTask()
       throws IOException;
 
+    @Override
     public void run()
     {
       runThread();
@@ -1120,7 +1133,7 @@ public class TcpSocketLink extends AbstractSocketLink
     public void run()
     {
       SocketLinkListener port = _port;
-
+      
       port.startConnection(TcpSocketLink.this);
 
       runThread();
@@ -1157,7 +1170,7 @@ public class TcpSocketLink extends AbstractSocketLink
 
         boolean isKeepalive = false;
         result = handleRequests(isKeepalive);
-
+        
         if (result == RequestState.THREAD_DETACHED) {
           return result;
         }

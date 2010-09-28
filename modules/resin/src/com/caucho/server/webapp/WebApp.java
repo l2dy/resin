@@ -111,6 +111,11 @@ import com.caucho.config.types.ResourceRef;
 import com.caucho.config.types.Validator;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.manager.EjbModule;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployGenerator;
+import com.caucho.env.deploy.DeployMode;
+import com.caucho.env.deploy.EnvironmentDeployInstance;
+import com.caucho.env.deploy.RepositoryDependency;
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.java.WorkDir;
 import com.caucho.jsf.cfg.JsfPropertyGroup;
@@ -138,6 +143,7 @@ import com.caucho.rewrite.IfSecure;
 import com.caucho.rewrite.Not;
 import com.caucho.rewrite.RedirectSecure;
 import com.caucho.rewrite.RewriteFilter;
+import com.caucho.rewrite.WelcomeFile;
 import com.caucho.security.AbstractSingleSignon;
 import com.caucho.security.Authenticator;
 import com.caucho.security.BasicLogin;
@@ -146,14 +152,8 @@ import com.caucho.security.Login;
 import com.caucho.security.MemorySingleSignon;
 import com.caucho.security.RoleMapManager;
 import com.caucho.security.SingleSignon;
-import com.caucho.server.cache.AbstractCache;
+import com.caucho.server.cache.AbstractProxyCache;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.DeployGenerator;
-import com.caucho.server.deploy.EnvironmentDeployInstance;
-import com.caucho.server.deploy.RepositoryDependency;
-import com.caucho.server.dispatch.DispatchBuilder;
-import com.caucho.server.dispatch.DispatchServer;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.FilterChainBuilder;
@@ -162,6 +162,7 @@ import com.caucho.server.dispatch.FilterManager;
 import com.caucho.server.dispatch.FilterMapper;
 import com.caucho.server.dispatch.FilterMapping;
 import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.dispatch.InvocationBuilder;
 import com.caucho.server.dispatch.InvocationDecoder;
 import com.caucho.server.dispatch.ServletConfigImpl;
 import com.caucho.server.dispatch.ServletManager;
@@ -185,7 +186,6 @@ import com.caucho.server.security.WebResourceCollection;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webbeans.SessionContextContainer;
-import com.caucho.transaction.TransactionManagerImpl;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.L10N;
@@ -199,8 +199,9 @@ import com.caucho.vfs.Vfs;
  * Resin's webApp implementation.
  */
 @Configurable
+@SuppressWarnings("serial")
 public class WebApp extends ServletContextImpl
-  implements Dependency, EnvironmentBean, SchemaBean, DispatchBuilder,
+  implements Dependency, EnvironmentBean, SchemaBean, InvocationBuilder,
              EnvironmentDeployInstance, ScanListener, JspConfigDescriptor,
              java.io.Serializable
 {
@@ -218,12 +219,13 @@ public class WebApp extends ServletContextImpl
   private static EnvironmentLocal<WebApp> _appLocal
     = new EnvironmentLocal<WebApp>("caucho.application");
 
-  static String []_classLoaderHackPackages;
+  private static String []_classLoaderHackPackages;
 
   // The environment class loader
   private EnvironmentClassLoader _classLoader;
 
   private Server _server;
+  private Host _host;
   // The parent
   private WebAppContainer _parent;
 
@@ -235,9 +237,6 @@ public class WebApp extends ServletContextImpl
 
   // The webbeans container
   private InjectManager _cdiManager;
-
-  // The webApp directory.
-  private final Path _appDir;
 
   private InvocationDecoder _invocationDecoder;
 
@@ -300,7 +299,7 @@ public class WebApp extends ServletContextImpl
   private String _characterEncoding;
 
   // The cache
-  private AbstractCache _cache;
+  private AbstractProxyCache _cache;
 
   private LruCache<String,FilterChainEntry> _filterChainCache
     = new LruCache<String,FilterChainEntry>(256);
@@ -367,6 +366,9 @@ public class WebApp extends ServletContextImpl
 
   private ServletRequestAttributeListener []_requestAttributeListenerArray
     = new ServletRequestAttributeListener[0];
+  
+  private ArrayList<String> _welcomeFileList
+    = new ArrayList<String>();
 
   private ArrayList<Validator> _resourceValidators
     = new ArrayList<Validator>();
@@ -423,23 +425,34 @@ public class WebApp extends ServletContextImpl
   /**
    * Creates the webApp with its environment loader.
    */
-  public WebApp(Path rootDirectory)
-  {
-    this(new WebAppController("/", "/", rootDirectory, null));
-  }
-
-  /**
-   * Creates the webApp with its environment loader.
-   */
   WebApp(WebAppController controller)
   {
-    _server = Server.getCurrent();
+    _controller = controller;
+    
+    _classLoader
+      = EnvironmentClassLoader.create(controller.getParentClassLoader(),
+                                      "web-app:" + getId());
+    
+    _server = controller.getWebManager();
 
-    if (_server != null) // JspCompiler creates no server jsp/1930)
-      _invocationDecoder = _server.getInvocationDecoder();
+    if (_server == null) {
+      throw new IllegalStateException(L.l("{0} requires an active {1}",
+                                          getClass().getSimpleName(),
+                                          Server.class.getSimpleName()));
+    }
+    
+    _host = controller.getHost();
+    
+    if (_host == null) {
+      throw new IllegalStateException(L.l("{0} requires an active {1}",
+                                          getClass().getSimpleName(),
+                                          Host.class.getSimpleName()));
+    }
+    
+    _invocationDecoder = _server.getInvocationDecoder();
 
     setVersionContextPath(controller.getContextPath());
-    _baseContextPath = controller.getBaseContextPath();
+    _baseContextPath = controller.getContextPath();
     
     _moduleName = _baseContextPath;
     
@@ -448,16 +461,13 @@ public class WebApp extends ServletContextImpl
     else if (_moduleName.startsWith("/"))
       _moduleName = _moduleName.substring(1);
 
-    _controller = controller;
-    _appDir = controller.getRootDirectory();
-
     setParent(controller.getContainer());
-
-    _classLoader
-      = EnvironmentClassLoader.create(controller.getParentClassLoader(),
-                                      "web-app:" + getId());
-
-    _lifecycle = new Lifecycle(log, toString(), Level.INFO);
+    
+    if (getId().startsWith("error/"))
+      _lifecycle = new Lifecycle(log, toString(), Level.FINER);
+    else
+      _lifecycle = new Lifecycle(log, toString(), Level.INFO);
+    
 
     initConstructor();
   }
@@ -473,9 +483,12 @@ public class WebApp extends ServletContextImpl
       // _classLoader.setId("web-app:" + getId());
 
       _appLocal.set(this, _classLoader);
+      
+      Path rootDirectory = getRootDirectory();
 
-      Vfs.setPwd(_appDir, _classLoader);
-      WorkDir.setLocalWorkDir(_appDir.lookup("WEB-INF/work"), _classLoader);
+      Vfs.setPwd(rootDirectory, _classLoader);
+      WorkDir.setLocalWorkDir(rootDirectory.lookup("WEB-INF/work"),
+                              _classLoader);
       
       EjbManager.setScanAll();
       
@@ -510,24 +523,33 @@ public class WebApp extends ServletContextImpl
       _errorFilterMapper.setFilterManager(_filterManager);
 
       _constraintManager = new ConstraintManager();
-      _errorPageManager = new ErrorPageManager(this);
-
-      if (getParent() != null)
-        _errorPageManager.setParent(getParent().getErrorPageManager());
+      
+      // _errorPageManager = new ErrorPageManager(_server, this);
+      
+      // server/003a
+      /*
+      if (! getId().startsWith("error/")) {
+        _errorPageManager.setParent(_host.getErrorPageManager());
+      }
+      */
 
       _invocationDependency = new DependencyContainer();
       _invocationDependency.add(this);
 
-      if (_controller.getRepository() != null
-          && _controller.getBaseRepositoryTag() != null) {
-        String baseTag = _controller.getBaseRepositoryTag();
-        String baseValue = _controller.getRepository().getTagContentHash(baseTag);
+      if (_controller.getRepository() != null) {
+        String tag = _controller.getId();
+        String tagValue = _controller.getRepository().getTagContentHash(tag);
 
-        _invocationDependency.add(new RepositoryDependency(baseTag, baseValue));
+        _invocationDependency.add(new RepositoryDependency(tag, tagValue));
+        
+        if (_controller.getVersionDependency() != null)
+          _invocationDependency.add(_controller.getVersionDependency());
       }
+      
+      _invocationDependency.add(_controller);
 
       _cdiManager = InjectManager.create(_classLoader);
-      _cdiManager.addPath(_appDir.lookup("WEB-INF/beans.xml"));
+      _cdiManager.addPath(getRootDirectory().lookup("WEB-INF/beans.xml"));
       _cdiManager.addExtension(new WebAppInjectExtension(_cdiManager, this));
 
       _jspApplicationContext = new JspApplicationContextImpl(this);
@@ -536,12 +558,14 @@ public class WebApp extends ServletContextImpl
       // validation
       if (CauchoSystem.isTesting()) {
       }
-      else if (_appDir.equals(CauchoSystem.getResinHome())) {
-        throw new ConfigException(L.l("web-app root-directory '{0}' can not be the same as resin.home\n", _appDir.getURL()));
+      else if (rootDirectory.equals(CauchoSystem.getResinHome())) {
+        throw new ConfigException(L.l("web-app root-directory '{0}' can not be the same as resin.home\n",
+                                      rootDirectory.getURL()));
       }
       else if (_parent != null
-               && _appDir.equals(_parent.getRootDirectory())) {
-        throw new ConfigException(L.l("web-app root-directory '{0}' can not be the same as the host root-directory\n", _appDir.getURL()));
+               && rootDirectory.equals(_parent.getRootDirectory())) {
+        throw new ConfigException(L.l("web-app root-directory '{0}' can not be the same as the host root-directory\n",
+                                      rootDirectory.getURL()));
       }
     } catch (Throwable e) {
       setConfigException(e);
@@ -600,6 +624,14 @@ public class WebApp extends ServletContextImpl
   {
     return _parent;
   }
+  
+  /**
+   * Returns the owning host.
+   */
+  public Host getHost()
+  {
+    return _host;
+  }
 
   /**
    * Returns the local webApp.
@@ -620,23 +652,9 @@ public class WebApp extends ServletContextImpl
   /**
    * Gets the dispatch server.
    */
-  public DispatchServer getDispatchServer()
-  {
-    if (_parent != null)
-      return _parent.getDispatchServer();
-    else
-      return null;
-  }
-
-  /**
-   * Gets the dispatch server.
-   */
   public Server getServer()
   {
-    if (_parent != null && _parent.getDispatchServer() instanceof Server)
-      return (Server) _parent.getDispatchServer();
-    else
-      return null;
+    return _server;
   }
   
   public String getModuleName()
@@ -677,20 +695,6 @@ public class WebApp extends ServletContextImpl
   }
 
   /**
-   * The id is the context path.
-   */
-  private void setContextPathId(String id)
-  {
-    if (! id.equals("") && ! id.startsWith("/"))
-      id = "/" + id;
-
-    if (id.endsWith("/"))
-      id = id.substring(0, id.length() - 1);
-
-    setContextPath(id);
-  }
-
-  /**
    * Gets the environment class loader.
    */
   public ClassLoader getClassLoader()
@@ -718,7 +722,7 @@ public class WebApp extends ServletContextImpl
    * Sets the redeploy-mode of the controller
    */
   @Configurable
-  public void setRedeployMode(String mode)
+  public void setRedeployMode(DeployMode mode)
   {
     if (_controller != null)
       _controller.setRedeployMode(mode);
@@ -756,9 +760,9 @@ public class WebApp extends ServletContextImpl
   /**
    * Gets the webApp directory.
    */
-  public Path getAppDir()
+  public Path getRootDirectory()
   {
-    return _appDir;
+    return _controller.getRootDirectory();
   }
 
   /**
@@ -836,14 +840,6 @@ public class WebApp extends ServletContextImpl
   /**
    * Sets the context path
    */
-  private void setContextPath(String contextPath)
-  {
-    _baseContextPath = contextPath;
-  }
-
-  /**
-   * Sets the context path
-   */
   private void setVersionContextPath(String contextPath)
   {
     _versionContextPath = contextPath;
@@ -910,10 +906,13 @@ public class WebApp extends ServletContextImpl
    */
   public String getId()
   {
+    return _controller.getId();
+    /*
     if (_parent != null)
       return _parent.getId() + _versionContextPath;
     else
       return _versionContextPath;
+      */
   }
 
   /**
@@ -921,10 +920,7 @@ public class WebApp extends ServletContextImpl
    */
   public String getHostName()
   {
-    if (_parent != null)
-      return _parent.getHostName();
-    else
-      return null;
+    return _host.getHostName();
   }
 
   /**
@@ -932,10 +928,7 @@ public class WebApp extends ServletContextImpl
    */
   public HostMXBean getHostAdmin()
   {
-    if (_parent != null && _parent.getHost() != null)
-      return _parent.getHost().getAdmin();
-    else
-      return null;
+    return _host.getAdmin();
   }
 
   /**
@@ -973,11 +966,13 @@ public class WebApp extends ServletContextImpl
   }
 
   @Configurable
-  public boolean isAllowForwardAfterFlush() {
+  public boolean isAllowForwardAfterFlush()
+  {
     return _isAllowForwardAfterFlush;
   }
 
-  public void setAllowForwardAfterFlush(boolean allowForwardAfterFlush) {
+  public void setAllowForwardAfterFlush(boolean allowForwardAfterFlush)
+  {
     _isAllowForwardAfterFlush = allowForwardAfterFlush;
   }
 
@@ -1014,7 +1009,8 @@ public class WebApp extends ServletContextImpl
     _oldWebAppExpireTime = expireTime;
   }
 
-  public Ordering createAbsoluteOrdering() {
+  public Ordering createAbsoluteOrdering()
+  {
     if (_absoluteOrdering == null)
       _absoluteOrdering = new Ordering();
 
@@ -1022,7 +1018,8 @@ public class WebApp extends ServletContextImpl
   }
 
   @Configurable
-  public Ordering createOrdering() {
+  public Ordering createOrdering() 
+  {
     log.finer(L.l("'{0}' ordering tag should not be used inside web application descriptor.", this));
 
     return new Ordering();
@@ -1639,7 +1636,9 @@ public class WebApp extends ServletContextImpl
   {
     ArrayList<String> fileList = list.getWelcomeFileList();
 
-    _servletMapper.setWelcomeFileList(fileList);
+    _welcomeFileList = new ArrayList<String>(fileList);
+    
+    //    _servletMapper.setWelcomeFileList(fileList);
   }
 
   /**
@@ -1745,7 +1744,7 @@ public class WebApp extends ServletContextImpl
   @Configurable
   public void addErrorPage(ErrorPage errorPage)
   {
-    _errorPageManager.addErrorPage(errorPage);
+    getErrorPageManager().addErrorPage(errorPage);
   }
 
   /**
@@ -1872,6 +1871,20 @@ public class WebApp extends ServletContextImpl
 
       _requestRewriteDispatch.addRule(rule);
     }
+    
+    if (rule.isForward()) {
+      if (_forwardRewriteDispatch == null)
+        _forwardRewriteDispatch = new RewriteDispatch(this);
+
+      _forwardRewriteDispatch.addRule(rule);
+    }
+    
+    if (rule.isInclude()) {
+      if (_includeRewriteDispatch == null)
+        _includeRewriteDispatch = new RewriteDispatch(this);
+
+      _includeRewriteDispatch.addRule(rule);
+    }
   }
 
   /**
@@ -1903,7 +1916,7 @@ public class WebApp extends ServletContextImpl
   public RewriteRealPath createRewriteRealPath()
   {
     if (_rewriteRealPath == null)
-      _rewriteRealPath = new RewriteRealPath(getAppDir());
+      _rewriteRealPath = new RewriteRealPath(getRootDirectory());
 
     return _rewriteRealPath;
   }
@@ -1961,6 +1974,11 @@ public class WebApp extends ServletContextImpl
 
       add(redirect);
     }
+  }
+  
+  public boolean isSecure()
+  {
+    return _isSecure;
   }
 
   @Override
@@ -2407,12 +2425,12 @@ public class WebApp extends ServletContextImpl
     for (WebAppConfig configDefault : _webAppDefaultList)
       deploy.addWebAppDefault(configDefault);
 
-    String appDir = config.getDocumentDirectory();
+    String appDir = config.getRootDirectory();
 
     if (appDir == null)
       appDir = "./" + prefix;
 
-    Path root = PathBuilder.lookupPath(appDir, null, getAppDir());
+    Path root = PathBuilder.lookupPath(appDir, null, getRootDirectory());
 
     deploy.setRootDirectory(root);
 
@@ -2478,12 +2496,7 @@ public class WebApp extends ServletContextImpl
    */
   public boolean isIgnoreClientDisconnect()
   {
-    DispatchServer server = getDispatchServer();
-
-    if (server == null)
-      return true;
-    else
-      return server.isIgnoreClientDisconnect();
+    return getServer().isIgnoreClientDisconnect();
   }
 
   /**
@@ -2564,6 +2577,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns true if the webApp is active.
    */
+  @Override
   public boolean isActive()
   {
     return _lifecycle.isActive();
@@ -2606,9 +2620,9 @@ public class WebApp extends ServletContextImpl
         _tempDir = (Path) Environment.getLevelAttribute("caucho.temp-dir");
 
       if (_tempDir == null) {
-        _tempDir = getAppDir().lookup("WEB-INF/tmp");
+        _tempDir = getRootDirectory().lookup("WEB-INF/tmp");
 
-        if (getAppDir().lookup("WEB-INF").isDirectory())
+        if (getRootDirectory().lookup("WEB-INF").isDirectory())
           _tempDir.mkdirs();
       }
       else
@@ -2719,6 +2733,10 @@ public class WebApp extends ServletContextImpl
       _roleMapManager = RoleMapManager.create();
 
       _characterEncoding = CharacterEncoding.getLocalEncoding();
+      
+      WelcomeFile welcomeFile = new WelcomeFile(_welcomeFileList);
+      
+      add(welcomeFile);
 
       if (! _isCompileContext) {
         for (int i = 0; i < _resourceValidators.size(); i++) {
@@ -2777,9 +2795,10 @@ public class WebApp extends ServletContextImpl
       while (fragments.hasMoreElements()) {
         URL url = fragments.nextElement();
 
-        if (log.isLoggable(Level.FINER))
+        if (log.isLoggable(Level.FINER)) {
           log.log(Level.FINER,
             L.l("Loading web-fragment '{0}:{1}'.", this, url));
+        }
 
         WebAppFragmentConfig fragmentConfig = new WebAppFragmentConfig();
         config.configure(fragmentConfig, Vfs.lookup(url.toString()));
@@ -3132,11 +3151,7 @@ public class WebApp extends ServletContextImpl
         throw e;
       }
 
-      if (_parent instanceof Host) {
-        Host host = (Host) _parent;
-
-        host.setConfigETag(null);
-      }
+      _host.setConfigETag(null);
 
       _lifecycle.toActive();
 
@@ -3162,7 +3177,7 @@ public class WebApp extends ServletContextImpl
 
     // _configException test is needed so compilation failures will force
     // restart
-    if (_lifecycle.isAfterActive())
+    if (_lifecycle.isAfterStopping())
       return true;
     else if (_classLoader.isModified())
       return true;
@@ -3185,9 +3200,12 @@ public class WebApp extends ServletContextImpl
   /**
    * Log the reason for modification.
    */
+  @Override
   public boolean logModified(Logger log)
   {
-    if (_lifecycle.isAfterActive()) {
+    if (_lifecycle.isAfterStopping()) {
+      log.fine(this + " modified after stopping");
+      
       // closed web-apps don't modify (XXX: errors?)
       return true;
     }
@@ -3326,7 +3344,8 @@ public class WebApp extends ServletContextImpl
 
           if (_requestRewriteDispatch != null) {
             FilterChain newChain
-              = _requestRewriteDispatch.map(invocation.getContextURI(),
+              = _requestRewriteDispatch.map(DispatcherType.REQUEST,
+                                            invocation.getContextURI(),
                                             invocation.getQueryString(),
                                             chain);
 
@@ -3412,7 +3431,7 @@ public class WebApp extends ServletContextImpl
    */
   public void clearCache()
   {
-    DispatchServer server = getDispatchServer();
+    Server server = getServer();
 
     if (server != null)
       server.clearCache();
@@ -3504,13 +3523,15 @@ public class WebApp extends ServletContextImpl
 
         if (_includeRewriteDispatch != null
             && filterMapper == _includeFilterMapper) {
-          chain = _includeRewriteDispatch.map(invocation.getContextURI(),
+          chain = _includeRewriteDispatch.map(DispatcherType.INCLUDE,
+                                              invocation.getContextURI(),
                                               invocation.getQueryString(),
                                               chain);
         }
         else if (_forwardRewriteDispatch != null
                  && filterMapper == _forwardFilterMapper) {
-          chain = _forwardRewriteDispatch.map(invocation.getContextURI(),
+          chain = _forwardRewriteDispatch.map(DispatcherType.FORWARD,
+                                              invocation.getContextURI(),
                                               invocation.getQueryString(),
                                               chain);
         }
@@ -3582,8 +3603,8 @@ public class WebApp extends ServletContextImpl
         _parent.getWebAppController(dispatchInvocation);
 
         if (subController != null
-            && (_controller.getBaseContextPath()
-                .equals(subController.getBaseContextPath()))) {
+            && (_controller.getContextPath()
+                .equals(subController.getContextPath()))) {
           isSameWebApp = true;
         }
       }
@@ -3937,6 +3958,11 @@ public class WebApp extends ServletContextImpl
    */
   public ErrorPageManager getErrorPageManager()
   {
+    if (_errorPageManager == null) {
+      _errorPageManager = new ErrorPageManager(_server, this);
+      _errorPageManager.setParent(_host.getErrorPageManager());
+    }
+    
     return _errorPageManager;
   }
 
@@ -4146,14 +4172,16 @@ public class WebApp extends ServletContextImpl
   /**
    * Closes the webApp.
    */
+  @Override
   public void destroy()
   {
     stop();
 
-    if (! _lifecycle.toDestroy())
-      return;
-
     clearCache();
+    
+    if (! _lifecycle.toDestroy()) {
+      return;
+    }
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -4257,9 +4285,15 @@ public class WebApp extends ServletContextImpl
     return new SingletonBindingHandle(WebApp.class);
   }
 
+  @Override
   public String toString()
   {
-    return "WebApp[" + getId() + "]";
+    if (_lifecycle == null)
+      return "WebApp[" + getId() + "]";
+    else if (_lifecycle.isActive())
+      return "WebApp[" + getId() + "]";
+    else
+      return "WebApp[" + getId() + "," + _lifecycle.getState() + "]";
   }
 
   static class WebAppSessionListener implements HttpSessionListener {

@@ -29,11 +29,30 @@
 
 package com.caucho.servlets;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.net.URL;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.servlet.GenericServlet;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletContext;
+import javax.servlet.ServletException;
+import javax.servlet.ServletOutputStream;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import com.caucho.server.http.CauchoRequest;
 import com.caucho.server.http.CauchoResponse;
+import com.caucho.server.http.HttpServletResponseImpl;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.util.Alarm;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.LruCache;
@@ -42,20 +61,13 @@ import com.caucho.util.RandomUtil;
 import com.caucho.vfs.CaseInsensitive;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
-
-import javax.servlet.*;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import com.caucho.vfs.Vfs;
 
 /**
  * Serves static files.  The cache headers are automatically set on these
  * files.
  */
+@SuppressWarnings("serial")
 public class FileServlet extends GenericServlet {
   private static final Logger log
     = Logger.getLogger(FileServlet.class.getName());
@@ -121,7 +133,7 @@ public class FileServlet extends GenericServlet {
     super.init(conf);
 
     _app = (WebApp) getServletContext();
-    _context = _app.getAppDir();
+    _context = _app.getRootDirectory();
 
     try {
       _dir = _app.getNamedDispatcher("directory");
@@ -160,19 +172,20 @@ public class FileServlet extends GenericServlet {
     if (! method.equalsIgnoreCase("GET")
         && ! method.equalsIgnoreCase("HEAD")
         && ! method.equalsIgnoreCase("POST")) {
-      res.sendError(res.SC_NOT_IMPLEMENTED, "Method not implemented");
+      res.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, 
+                    "Method not implemented");
       return;
     }
 
     boolean isInclude = false;
     String uri;
 
-    uri = (String) req.getAttribute("javax.servlet.include.request_uri");
+    uri = (String) req.getAttribute(RequestDispatcher.INCLUDE_REQUEST_URI);
     if (uri != null)
       isInclude = true;
     else
       uri = req.getRequestURI();
-
+    
     Cache cache = _pathCache.get(uri);
 
     String filename = null;
@@ -184,7 +197,7 @@ public class FileServlet extends GenericServlet {
       if (cauchoReq != null)
         servletPath = cauchoReq.getPageServletPath();
       else if (isInclude)
-        servletPath = (String) req.getAttribute("javax.servlet.include.servlet_path");
+        servletPath = (String) req.getAttribute(RequestDispatcher.INCLUDE_SERVLET_PATH);
       else
         servletPath = req.getServletPath();
 
@@ -195,7 +208,8 @@ public class FileServlet extends GenericServlet {
       if (cauchoReq != null)
         pathInfo = cauchoReq.getPagePathInfo();
       else if (isInclude)
-        pathInfo = (String) req.getAttribute("javax.servlet.include.path_info");
+        pathInfo
+          = (String) req.getAttribute(RequestDispatcher.INCLUDE_PATH_INFO);
       else
         pathInfo = req.getPathInfo();
 
@@ -255,7 +269,18 @@ public class FileServlet extends GenericServlet {
 
       String mimeType = webApp.getMimeType(relPath);
 
-      cache = new Cache(_calendar, path, relPath, mimeType);
+      boolean isPathReadable = path.canRead();
+      Path jarPath = null;
+
+      if (! isPathReadable) {
+        String resource = "META-INF/resources" + relPath;
+        URL url = webApp.getClassLoader().getResource(resource);
+
+        if (url != null)
+          jarPath = Vfs.lookup(url);
+      }
+
+      cache = new Cache(_calendar, path, jarPath, relPath, mimeType);
 
       _pathCache.put(uri, cache);
     }
@@ -266,10 +291,19 @@ public class FileServlet extends GenericServlet {
       req.getSession(true);
 
     if (cache.isDirectory()) {
-      if (_dir != null)
+      if (! uri.endsWith("/")) {
+        String queryString = req.getQueryString();
+        
+        if (queryString != null)
+          sendRedirect(res, uri + "/?" + queryString);
+        else
+          sendRedirect(res, uri + "/");
+      }
+      else if (_dir != null)
         _dir.forward(req, res);
       else
         res.sendError(HttpServletResponse.SC_NOT_FOUND);
+      
       return;
     }
 
@@ -328,6 +362,7 @@ public class FileServlet extends GenericServlet {
 
     res.addHeader("ETag", etag);
     res.addHeader("Last-Modified", lastModified);
+    
     if (_isEnableRange && cauchoReq != null && cauchoReq.isTop())
       res.addHeader("Accept-Ranges", "bytes");
 
@@ -367,6 +402,39 @@ public class FileServlet extends GenericServlet {
       OutputStream os = res.getOutputStream();
       cache.getPath().writeToStream(os);
     }
+  }
+  
+  private void sendRedirect(HttpServletResponse res, String url) 
+    throws IOException
+  {
+    String encUrl;
+    
+    HttpServletResponseImpl resImpl = null;
+    
+    if (res instanceof HttpServletResponseImpl) {
+      resImpl = (HttpServletResponseImpl) res;
+
+      encUrl = resImpl.encodeAbsoluteRedirect(url);
+    }
+    else
+      encUrl = res.encodeRedirectURL(url);
+    
+    try {
+      res.reset();
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
+    res.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
+    res.setHeader("Location", encUrl);
+    res.setContentType("text/html; charset=utf-8");
+    
+    PrintWriter out = res.getWriter();
+    
+    out.println("The URL has moved <a href=\"" + encUrl + "\">here</a>");
+    
+    if (resImpl != null)
+      resImpl.close();
   }
 
   private boolean handleRange(HttpServletRequest req,
@@ -543,6 +611,8 @@ public class FileServlet extends GenericServlet {
   static class Cache {
     QDate _calendar;
     Path _path;
+    Path _jarPath;
+    Path _pathResolved;
     boolean _isDirectory;
     boolean _canRead;
     long _length;
@@ -553,19 +623,20 @@ public class FileServlet extends GenericServlet {
     String _lastModifiedString;
     String _mimeType;
 
-    Cache(QDate calendar, Path path, String relPath, String mimeType)
+    Cache(QDate calendar, Path path, Path jarPath, String relPath, String mimeType)
     {
       _calendar = calendar;
       _path = path;
+      _jarPath = jarPath;
       _relPath = relPath;
       _mimeType = mimeType;
 
-      update();
+      //update();
     }
 
     Path getPath()
     {
-      return _path;
+      return _pathResolved;
     }
 
     boolean canRead()
@@ -617,18 +688,23 @@ public class FileServlet extends GenericServlet {
 
     private void updateData()
     {
-      long lastModified = _path.getLastModified();
-      long length = _path.getLength();
+      _pathResolved = _path;
+
+      if (_jarPath != null && ! _path.canRead())
+        _pathResolved = _jarPath;
+
+      long lastModified = _pathResolved.getLastModified();
+      long length = _pathResolved.getLength();
 
       if (lastModified != _lastModified || length != _length) {
         _lastModified = lastModified;
         _length = length;
-        _canRead = _path.canRead();
-        _isDirectory = _path.isDirectory();
+        _canRead = _pathResolved.canRead();
+        _isDirectory = _pathResolved.isDirectory();
 
         StringBuilder sb = new StringBuilder();
         sb.append('"');
-        Base64.encode(sb, _path.getCrc64());
+        Base64.encode(sb, _pathResolved.getCrc64());
         sb.append('"');
         _etag = sb.toString();
 

@@ -35,10 +35,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.config.types.PathBuilder;
+import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployGenerator;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentListener;
-import com.caucho.server.deploy.DeployContainer;
-import com.caucho.server.deploy.DeployGenerator;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
@@ -174,6 +174,7 @@ public class WebAppSingleDeployGenerator
   /**
    * Returns the log.
    */
+  @Override
   protected Logger getLog()
   {
     return log;
@@ -215,9 +216,10 @@ public class WebAppSingleDeployGenerator
       _rootDirectory = PathBuilder.lookupPath(rootDir, null,
                                               _container.getDocumentDirectory());
     }
-    
-    _controller = new WebAppController(_urlPrefix, _urlPrefix,
-                                       _rootDirectory, _container);
+
+    _controller = new WebAppController(_rootDirectory, 
+                                       _container,
+                                       _urlPrefix);
 
     _controller.setArchivePath(_archivePath);
 
@@ -245,7 +247,8 @@ public class WebAppSingleDeployGenerator
   /**
    * Returns the deployed keys.
    */
-  protected void fillDeployedKeys(Set<String> keys)
+  @Override
+  protected void fillDeployedNames(Set<String> keys)
   {
     keys.add(_controller.getContextPath());
   }
@@ -253,25 +256,29 @@ public class WebAppSingleDeployGenerator
   /**
    * Creates a controller given the name
    */
-  public WebAppController generateController(String name)
+  @Override
+  public void generateController(String name, ArrayList<WebAppController> list)
   {
     if (name.equals(_controller.getContextPath())) {
       WebAppController webApp;
       
-      webApp = new WebAppController(_urlPrefix, _urlPrefix,
-                                    _rootDirectory, _container);
+      webApp = new WebAppController(_controller.getId(),
+                                    _rootDirectory, 
+                                    _container,
+                                    _urlPrefix);
 
       webApp.setArchivePath(_controller.getArchivePath());
+      webApp.setStartupPriority(_controller.getStartupPriority());
+      // webApp.merge(_controller);
 
-      return webApp;
+      list.add(webApp);
     }
-    else
-      return null;
   }
   
   /**
    * Merges the controllers.
    */
+  @Override
   public WebAppController mergeController(WebAppController controller,
                                           String name)
   {
@@ -283,7 +290,9 @@ public class WebAppSingleDeployGenerator
       
       controller.setDynamicDeploy(false);
       
-      return controller.merge(_controller);
+      controller.merge(_controller);
+      
+      return controller;
     }
     // else if the names don't match, return the new controller
     else if (! _controller.isNameMatch(name))
@@ -305,6 +314,7 @@ public class WebAppSingleDeployGenerator
     }
   }
 
+  @Override
   public Throwable getConfigException()
   {
     Throwable configException =   super.getConfigException();
@@ -328,8 +338,9 @@ public class WebAppSingleDeployGenerator
     super.destroyImpl();
   }
   
+  @Override
   public String toString()
   {
-    return "WebAppSingleDeployGenerator[" + _urlPrefix + "]";
+    return getClass().getSimpleName() + "[" + _urlPrefix + "]";
   }
 }

@@ -30,7 +30,6 @@ package com.caucho.config.gen;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 
 import javax.enterprise.inject.spi.AnnotatedMethod;
 
@@ -88,6 +87,12 @@ public class MethodTailGenerator<X> extends NullGenerator<X> {
     if (! "super".equals(superVar))
       generatePostCall(out);
     */
+  }
+
+  @Override
+  public boolean isApplicationExceptionThrown()
+  {
+    return true;
   }
 
 }

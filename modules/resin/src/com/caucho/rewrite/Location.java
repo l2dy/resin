@@ -29,18 +29,14 @@
 
 package com.caucho.rewrite;
 
-import com.caucho.config.ConfigException;
-import com.caucho.config.Configurable;
-import com.caucho.server.dispatch.*;
-import com.caucho.server.webapp.*;
-import com.caucho.server.rewrite.SetHeaderFilterChain;
-import com.caucho.util.L10N;
+import java.util.ArrayList;
 
+import javax.servlet.DispatcherType;
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
-import java.util.ArrayList;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 
 
 /**
@@ -60,7 +56,7 @@ import java.util.regex.Pattern;
  * </pre>
  */
 @Configurable
-public class Location extends AbstractDispatchRule
+public class Location extends AbstractRegexpDispatchRule
 {
   private ArrayList<DispatchRule> _ruleList
     = new ArrayList<DispatchRule>();
@@ -78,25 +74,28 @@ public class Location extends AbstractDispatchRule
   }
 
   @Override
-  public FilterChain map(String uri,
+  public FilterChain map(DispatcherType type,
+                         String uri,
                          String queryString,
                          FilterChain next,
                          FilterChain tail)
     throws ServletException
   {
-    return super.map(uri, queryString, next, next);
+    return super.map(type, uri, queryString, next, next);
   }
 
   @Override
-  protected FilterChain createDispatch(String uri,
+  protected FilterChain createDispatch(DispatcherType type,
+                                       String uri,
                                        String queryString,
                                        String target,
                                        FilterChain next)
   {
-    return mapChain(0, uri, queryString, next);
+    return mapChain(0, type, uri, queryString, next);
   }
 
   private FilterChain mapChain(int index,
+                               DispatcherType type,
                                String uri, String queryString,
                                FilterChain chain)
   {
@@ -108,9 +107,9 @@ public class Location extends AbstractDispatchRule
     
       uri = rule.rewriteUri(uri, queryString);
 
-      FilterChain next = mapChain(index + 1, uri, queryString, chain);
+      FilterChain next = mapChain(index + 1, type, uri, queryString, chain);
 
-      return rule.map(uri, queryString, next, chain);
+      return rule.map(type, uri, queryString, next, chain);
     } catch (ServletException e) {
       throw ConfigException.create(e);
     }

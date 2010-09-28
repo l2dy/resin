@@ -36,7 +36,7 @@ import java.lang.annotation.Target;
  * Used to mark a method as an asynchronous method or to designate all business
  * methods of a class or interface as asynchronous.
  */
-@Target(ElementType.METHOD)
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Asynchronous {
 }
