@@ -93,7 +93,7 @@ public class UserConnection implements java.sql.Connection {
     return _mConn.getDBPool().getTimeProbe();
   }
 
-  public Class getDriverClass()
+  public Class<?> getDriverClass()
   {
     return getMConn().getDriverClass();
   }
@@ -118,6 +118,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @return a new JDBC statement.
    */
+  @Override
   public Statement createStatement()
     throws SQLException
   {
@@ -127,8 +128,12 @@ public class UserConnection implements java.sql.Connection {
 
     try {
       stmt = conn.createStatement();
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
+      throw e;
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
       throw e;
     }
 
@@ -147,6 +152,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @return a new JDBC statement.
    */
+  @Override
   public Statement createStatement(int resultSetType, int resultSetConcurrency)
     throws SQLException
   {
@@ -157,7 +163,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = conn.createStatement(resultSetType, resultSetConcurrency);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -172,6 +183,7 @@ public class UserConnection implements java.sql.Connection {
   /**
    * Creates a statement.
    */
+  @Override
   public Statement createStatement(int resultSetType,
                                    int resultSetConcurrency,
                                    int resultSetHoldability)
@@ -186,7 +198,12 @@ public class UserConnection implements java.sql.Connection {
                                   resultSetConcurrency,
                                   resultSetHoldability);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -203,6 +220,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql)
     throws SQLException
   {
@@ -216,7 +234,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getMConn().prepareStatement(this, sql);
     } catch (SQLException e) {
-      getMConn().fatalEvent(e);
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -233,6 +256,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql,
                                             int resultSetType,
                                             int resultSetConcurrency)
@@ -248,7 +272,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getDriverConnection().prepareStatement(sql, resultSetType, resultSetConcurrency);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -265,6 +294,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql,
                                             int resultSetType,
                                             int resultSetConcurrency,
@@ -284,7 +314,12 @@ public class UserConnection implements java.sql.Connection {
                                               resultSetConcurrency,
                                               resultSetHoldability);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -301,6 +336,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql,
                                             int resultSetType)
     throws SQLException
@@ -315,7 +351,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getMConn().prepareStatement(this, sql, resultSetType);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -336,6 +377,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql,
                                             int []columnIndexes)
     throws SQLException
@@ -350,7 +392,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getDriverConnection().prepareStatement(sql, columnIndexes);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -367,6 +414,7 @@ public class UserConnection implements java.sql.Connection {
    *
    * @param sql the prepared sql.
    */
+  @Override
   public PreparedStatement prepareStatement(String sql,
                                             String []columnNames)
     throws SQLException
@@ -381,7 +429,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getDriverConnection().prepareStatement(sql, columnNames);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -393,6 +446,7 @@ public class UserConnection implements java.sql.Connection {
       return stmt;
   }
 
+  @Override
   public CallableStatement prepareCall(String sql, int resultSetType,
                int resultSetConcurrency)
     throws SQLException
@@ -407,7 +461,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getDriverConnection().prepareCall(sql, resultSetType, resultSetConcurrency);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -419,6 +478,7 @@ public class UserConnection implements java.sql.Connection {
       return stmt;
   }
 
+  @Override
   public CallableStatement prepareCall(String sql)
     throws SQLException
   {
@@ -432,7 +492,12 @@ public class UserConnection implements java.sql.Connection {
     try {
       stmt = getDriverConnection().prepareCall(sql);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -444,6 +509,7 @@ public class UserConnection implements java.sql.Connection {
       return stmt;
   }
 
+  @Override
   public CallableStatement prepareCall(String sql,
                                        int resultSetType,
                                        int resultSetConcurrency,
@@ -463,7 +529,12 @@ public class UserConnection implements java.sql.Connection {
                                          resultSetConcurrency,
                                          resultSetHoldability);
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
 
@@ -480,13 +551,19 @@ public class UserConnection implements java.sql.Connection {
    *
    * @return the JDBC catalog.
    */
+  @Override
   public String getCatalog()
     throws SQLException
   {
     try {
       return getDriverConnection().getCatalog();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
@@ -494,22 +571,39 @@ public class UserConnection implements java.sql.Connection {
   /**
    * Sets the JDBC catalog.
    */
+  @Override
   public void setCatalog(String catalog)
     throws SQLException
   {
-    getMConn().setCatalog(catalog);
+    try {
+      getMConn().setCatalog(catalog);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
   }
 
   /**
    * Gets the connection's metadata.
    */
+  @Override
   public DatabaseMetaData getMetaData()
     throws SQLException
   {
     try {
       return getDriverConnection().getMetaData();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
@@ -517,13 +611,19 @@ public class UserConnection implements java.sql.Connection {
   /**
    * Returns the connection's type map.
    */
-  public Map getTypeMap()
+  @Override
+  public Map<String,Class<?>> getTypeMap()
     throws SQLException
   {
     try {
       return getDriverConnection().getTypeMap();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
@@ -531,43 +631,78 @@ public class UserConnection implements java.sql.Connection {
   /**
    * Sets the connection's type map.
    */
+  @Override
   public void setTypeMap(Map<String,Class<?>> map)
     throws SQLException
   {
-    getMConn().setTypeMap(map);
+    try {
+      getMConn().setTypeMap(map);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
   }
 
   /**
    * Calls the nativeSQL method for the connection.
    */
+  @Override
   public String nativeSQL(String sql)
     throws SQLException
   {
     try {
       return getDriverConnection().nativeSQL(sql);
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public int getTransactionIsolation()
     throws SQLException
   {
     try {
       return getDriverConnection().getTransactionIsolation();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void setTransactionIsolation(int isolation)
     throws SQLException
   {
-    getMConn().setTransactionIsolation(isolation);
+    try {
+      getMConn().setTransactionIsolation(isolation);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
   }
 
+  @Override
   public SQLWarning getWarnings()
     throws SQLException
   {
@@ -579,11 +714,17 @@ public class UserConnection implements java.sql.Connection {
       else
         return null;
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void clearWarnings()
     throws SQLException
   {
@@ -593,45 +734,85 @@ public class UserConnection implements java.sql.Connection {
       if (conn != null)
         conn.clearWarnings();
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void setReadOnly(boolean readOnly)
     throws SQLException
   {
-    getMConn().setReadOnly(readOnly);
+    try {
+      getMConn().setReadOnly(readOnly);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
   }
 
+  @Override
   public boolean isReadOnly()
     throws SQLException
   {
     try {
       return getDriverConnection().isReadOnly();
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public boolean getAutoCommit()
     throws SQLException
   {
     try {
       return getDriverConnection().getAutoCommit();
     } catch (SQLException e) {
-      fatalEvent();
+      onFatalException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onFatalException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void setAutoCommit(boolean autoCommit)
     throws SQLException
   {
-    getMConn().setAutoCommit(autoCommit);
+    try {
+      getMConn().setAutoCommit(autoCommit);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
   }
 
+  @Override
   public void commit()
     throws SQLException
   {
@@ -641,11 +822,17 @@ public class UserConnection implements java.sql.Connection {
       if (conn != null)
         conn.commit();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void rollback()
     throws SQLException
   {
@@ -655,23 +842,352 @@ public class UserConnection implements java.sql.Connection {
       if (conn != null)
         conn.rollback();
     } catch (SQLException e) {
-      fatalEvent();
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
       throw e;
     }
+  }
+
+  public void setHoldability(int hold)
+    throws SQLException
+  {
+    try {
+      getDriverConnection().setHoldability(hold);
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
+  }
+
+  @Override
+  public int getHoldability()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().getHoldability();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Savepoint setSavepoint()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().setSavepoint();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Savepoint setSavepoint(String name)
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().setSavepoint(name);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public void releaseSavepoint(Savepoint savepoint)
+    throws SQLException
+  {
+    try {
+      getDriverConnection().releaseSavepoint(savepoint);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public void rollback(Savepoint savepoint)
+    throws SQLException
+  {
+    try {
+      getDriverConnection().rollback(savepoint);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Clob createClob()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createClob();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Blob createBlob()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createBlob();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public NClob createNClob()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createNClob();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public SQLXML createSQLXML()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createSQLXML();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public boolean isValid(int timeout)
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().isValid(timeout);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public void setClientInfo(String name, String value)
+    throws SQLClientInfoException
+  {
+    try {
+      getDriverConnection().setClientInfo(name, value);
+    } catch (SQLClientInfoException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw new RuntimeException(e);
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
+  }
+
+  @Override
+  public void setClientInfo(Properties properties)
+    throws SQLClientInfoException
+  {
+    try {
+      getDriverConnection().setClientInfo(properties);
+    } catch (SQLClientInfoException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw new RuntimeException(e);
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
+    }
+  }
+
+  @Override
+  public String getClientInfo(String name)
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().getClientInfo(name);
+    } catch (SQLClientInfoException e) {
+      onSqlException(e);
+      
+      throw e;
+    } catch (SQLException e) {
+      onSqlException(e);
+      
+      throw new RuntimeException(e);
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  public Properties getClientInfo()
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().getClientInfo();
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Array createArrayOf(String typeName, Object[] elements)
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createArrayOf(typeName, elements);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  public Struct createStruct(String typeName, Object[] attributes)
+    throws SQLException
+  {
+    try {
+      return getDriverConnection().createStruct(typeName, attributes);
+    } catch (SQLException e) {
+      onSqlException(e);
+
+      throw e;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+
+      throw e;
+    }
+  }
+
+  @Override
+  @SuppressWarnings("unchecked")
+  public <T> T unwrap(Class<T> iface)
+    throws SQLException
+  {
+    return (T) getConnection();
+  }
+
+  @Override
+  public boolean isWrapperFor(Class<?> iface)
+    throws SQLException
+  {
+    return iface.isAssignableFrom(getConnection().getClass());
   }
 
   /**
    * Returns true if the connection is closed.
    */
+  @Override
   public boolean isClosed()
     throws SQLException
   {
     try {
-      return _mConn == null || getDriverConnection() == null || getDriverConnection().isClosed();
+      return (_mConn == null 
+              || getDriverConnection() == null
+              || getDriverConnection().isClosed());
     } catch (SQLException e) {
+      onSqlException(e);
+      
       log.log(Level.FINER, e.toString(), e);
 
       return true;
+    } catch (RuntimeException e) {
+      onRuntimeException(e);
+      
+      throw e;
     }
   }
 
@@ -679,6 +1195,7 @@ public class UserConnection implements java.sql.Connection {
    * Reset the connection and return the underlying JDBC connection to
    * the pool.
    */
+  @Override
   public void close() throws SQLException
   {
     ManagedConnectionImpl mConn;
@@ -725,151 +1242,6 @@ public class UserConnection implements java.sql.Connection {
       _statements = new ArrayList<Statement>();
       _statements.add(stmt);
     }
-  }
-
-  public void setHoldability(int hold)
-    throws SQLException
-  {
-    getDriverConnection().setHoldability(hold);
-  }
-
-  public int getHoldability()
-    throws SQLException
-  {
-    return getDriverConnection().getHoldability();
-  }
-
-  public Savepoint setSavepoint()
-    throws SQLException
-  {
-    return getDriverConnection().setSavepoint();
-  }
-
-  public Savepoint setSavepoint(String name)
-    throws SQLException
-  {
-    return getDriverConnection().setSavepoint(name);
-  }
-
-  public void releaseSavepoint(Savepoint savepoint)
-    throws SQLException
-  {
-    getDriverConnection().releaseSavepoint(savepoint);
-  }
-
-  public void rollback(Savepoint savepoint)
-    throws SQLException
-  {
-    getDriverConnection().rollback(savepoint);
-  }
-
-  @Override
-  public Clob createClob()
-    throws SQLException
-  {
-    return getDriverConnection().createClob();
-  }
-
-  @Override
-  public Blob createBlob()
-    throws SQLException
-  {
-    return getDriverConnection().createBlob();
-  }
-
-  @Override
-  public NClob createNClob()
-    throws SQLException
-  {
-    return getDriverConnection().createNClob();
-  }
-
-  @Override
-  public SQLXML createSQLXML()
-    throws SQLException
-  {
-    return getDriverConnection().createSQLXML();
-  }
-
-  @Override
-  public boolean isValid(int timeout)
-    throws SQLException
-  {
-    return getDriverConnection().isValid(timeout);
-  }
-
-  @Override
-  public void setClientInfo(String name, String value)
-    throws SQLClientInfoException
-  {
-      try {
-        getDriverConnection().setClientInfo(name, value);
-      } catch (SQLClientInfoException e) {
-        throw e;
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
-      }
-  }
-
-  @Override
-  public void setClientInfo(Properties properties)
-    throws SQLClientInfoException
-  {
-      try {
-        getDriverConnection().setClientInfo(properties);
-      } catch (SQLClientInfoException e) {
-        throw e;
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
-      }
-  }
-
-  @Override
-  public String getClientInfo(String name)
-    throws SQLException
-  {
-    try {
-      return getDriverConnection().getClientInfo(name);
-    } catch (SQLClientInfoException e) {
-      throw e;
-    } catch (SQLException e) {
-      throw new RuntimeException(e);
-    }
-  }
-
-  @Override
-  public Properties getClientInfo()
-    throws SQLException
-  {
-      return getDriverConnection().getClientInfo();
-  }
-
-  @Override
-  public Array createArrayOf(String typeName, Object[] elements)
-    throws SQLException
-  {
-      return getDriverConnection().createArrayOf(typeName, elements);
-  }
-
-  @Override
-  public Struct createStruct(String typeName, Object[] attributes)
-    throws SQLException
-  {
-    return getDriverConnection().createStruct(typeName, attributes);
-  }
-
-  @Override
-  public <T> T unwrap(Class<T> iface)
-    throws SQLException
-  {
-    return (T) getConnection();
-  }
-
-  @Override
-  public boolean isWrapperFor(Class<?> iface)
-    throws SQLException
-  {
-    return iface.isAssignableFrom(getConnection().getClass());
   }
 
   /**
@@ -981,12 +1353,42 @@ public class UserConnection implements java.sql.Connection {
   /**
    * Returns the underlying connection.
    */
-  private void fatalEvent(SQLException exn)
+  private void onSqlException(SQLException e)
   {
     ManagedConnectionImpl mConn = _mConn;
 
     if (mConn != null)
-      mConn.fatalEvent(exn);
+      mConn.onSqlException(e);
+  }
+
+  /**
+   * Returns the underlying connection.
+   */
+  private void onRuntimeException(RuntimeException e)
+  {
+    ManagedConnectionImpl mConn = _mConn;
+
+    if (mConn != null)
+      mConn.onRuntimeException(e);
+  }
+  
+  protected void setPingRequired()
+  {
+    ManagedConnectionImpl mConn = _mConn;
+
+    if (mConn != null)
+      mConn.setPingRequired();
+  }
+
+  /**
+   * Returns the underlying connection.
+   */
+  private void onFatalException(Exception e)
+  {
+    ManagedConnectionImpl mConn = _mConn;
+
+    if (mConn != null)
+      mConn.sendFatalEvent(e);
   }
 
   /**
@@ -1000,14 +1402,16 @@ public class UserConnection implements java.sql.Connection {
       mConn.killPool();
   }
 
+  @Override
   protected void finalize()
     throws Exception
   {
     close();
   }
 
+  @Override
   public String toString()
   {
-    return "UserConnection[" + _mConn + "]";
+    return getClass().getSimpleName() + "[" + _mConn + "]";
   }
 }

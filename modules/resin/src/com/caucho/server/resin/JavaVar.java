@@ -19,23 +19,62 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
  * @author Scott Ferguson
  */
 
-package com.caucho.transaction;
+package com.caucho.server.resin;
 
-import javax.transaction.Transaction;
+import java.util.Properties;
+
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 /**
- * A resource with a begin method.
+ * Java variables in Resin configuration ${java}.
  */
-public interface BeginResource {
+public class JavaVar {
   /**
-   * Callback when the transaction starts.
+   * Returns true for JDK 5
    */
-  public void begin(Transaction xa);
+  public boolean isJava5()
+  {
+    return true;
+  }
+
+  /**
+   * Returns the JDK home
+   */
+  public Path getHome()
+  {
+    return Vfs.lookup(System.getProperty("java.home"));
+  }
+
+  /**
+   * Returns the JDK properties
+   */
+  public Properties getProperties()
+  {
+    return System.getProperties();
+  }
+
+  /**
+   * Returns the user name
+   */
+  public String getUserName()
+  {
+    return System.getProperty("user.name");
+  }
+
+  /**
+   * Returns the JDK version
+   */
+  public String getVersion()
+  {
+    return System.getProperty("java.version");
+  }
 }

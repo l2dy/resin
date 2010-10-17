@@ -130,6 +130,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * Returns an output stream for writing to the client.  You can use
    * the output stream to write binary data.
    */
+  @Override
   public ServletOutputStream getOutputStream()
     throws IOException
   {
@@ -508,6 +509,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   /**
    * Set if the page is non-cacheable.
    */
+  @Override
   public void killCache()
   {
     _isDisableCache = true;
@@ -713,7 +715,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       return false;
     }
     else if (_matchCacheEntry != null) {
-      if (_responseStream.isCommitted()) {
+      if (isCommitted()) {
         return false;
       }
 
@@ -771,7 +773,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       return;
     }
 
-    ContentType item = _response.parseContentType(value);
+    ContentType item = AbstractHttpResponse.parseContentType(value);
 
     _contentType = item.getContentType();
 

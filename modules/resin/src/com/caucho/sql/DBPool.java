@@ -29,26 +29,6 @@
 
 package com.caucho.sql;
 
-import com.caucho.config.CauchoDeployment;
-import com.caucho.config.ConfigException;
-import com.caucho.config.SerializeHandle;
-import com.caucho.config.Names;
-import com.caucho.config.inject.BeanBuilder;
-import com.caucho.config.inject.CurrentLiteral;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.inject.SingletonBean;
-import com.caucho.config.types.InitParam;
-import com.caucho.config.types.Period;
-import com.caucho.jca.ra.ResourceManagerImpl;
-import com.caucho.loader.EnvironmentLocal;
-import com.caucho.management.server.JdbcDriverMXBean;
-import com.caucho.naming.Jndi;
-import com.caucho.transaction.ConnectionPool;
-import com.caucho.transaction.TransactionManagerImpl;
-import com.caucho.util.L10N;
-import com.caucho.config.inject.HandleAware;
-import com.caucho.config.inject.InjectManager;
-
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
@@ -64,6 +44,22 @@ import javax.resource.spi.ManagedConnectionFactory;
 import javax.sql.ConnectionPoolDataSource;
 import javax.sql.DataSource;
 import javax.sql.XADataSource;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.Names;
+import com.caucho.config.inject.BeanBuilder;
+import com.caucho.config.inject.CurrentLiteral;
+import com.caucho.config.inject.HandleAware;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.types.InitParam;
+import com.caucho.config.types.Period;
+import com.caucho.env.dbpool.ConnectionPool;
+import com.caucho.jca.ra.ResourceManagerImpl;
+import com.caucho.loader.EnvironmentLocal;
+import com.caucho.management.server.JdbcDriverMXBean;
+import com.caucho.naming.Jndi;
+import com.caucho.transaction.TransactionManagerImpl;
+import com.caucho.util.L10N;
 
 /**
  * Manages a pool of database connections.  In addition, DBPool configures
@@ -136,7 +132,7 @@ public class DBPool
 
   private DBPoolImpl _poolImpl;
   private DataSource _dataSource;
-  private DataSourceImpl _resinDataSource;
+  private UserDataSource _resinDataSource;
 
   // serialization handle
   private Object _serializationHandle;
@@ -880,8 +876,8 @@ public class DBPool
         _resinDataSource != null && _resinDataSource.isClosed()) {
       _dataSource = _localDataSourceImpl.get();
 
-      if (_dataSource instanceof DataSourceImpl)
-        _resinDataSource = (DataSourceImpl) _dataSource;
+      if (_dataSource instanceof UserDataSource)
+        _resinDataSource = (UserDataSource) _dataSource;
       else
         _resinDataSource = null;
 

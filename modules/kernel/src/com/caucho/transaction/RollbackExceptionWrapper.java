@@ -30,6 +30,7 @@ package com.caucho.transaction;
 
 import javax.transaction.RollbackException;
 
+@SuppressWarnings("serial")
 public class RollbackExceptionWrapper extends RollbackException {
   private Throwable _rootCause;
   

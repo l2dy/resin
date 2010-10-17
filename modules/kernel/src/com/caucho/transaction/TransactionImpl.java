@@ -139,6 +139,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
   private AbstractXALogStream _xaLog;
 
   private HashMap<String, Object> _properties;
+  
+  private long _beginTime;
 
   private Alarm _alarm;
 
@@ -410,6 +412,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
    * 
    * @return true if successful
    */
+  @Override
   public boolean delistResource(XAResource resource, int flag)
       throws SystemException
   {
@@ -608,17 +611,18 @@ public class TransactionImpl implements Transaction, AlarmListener {
       */
 
       throw new NotSupportedException(
-          L.l("Nested transactions are not supported. "
+          L.l("{0} nested transactions are not supported. "
               + "The previous transaction for this thread did not commit() or rollback(). "
-              + "Check that every UserTransaction.begin() has its commit() or rollback() in a finally block.\nStatus was {0}.",
-              xaState(status)));
+              + "Check that every UserTransaction.begin() has its commit() or rollback() in a finally block.\nStatus was {1}.",
+              this, xaState(status)));
     }
 
     if (_isDead)
-      throw new IllegalStateException(L
-          .l("Error trying to use dead transaction."));
+      throw new IllegalStateException(L.l("{0} error trying to use dead transaction."));
 
     _status = Status.STATUS_ACTIVE;
+    
+    _beginTime = Alarm.getCurrentTime();
 
     _rollbackException = null;
 
@@ -757,8 +761,9 @@ public class TransactionImpl implements Transaction, AlarmListener {
   /**
    * Commit the transaction.
    */
-  public void commit() throws RollbackException, HeuristicMixedException,
-      HeuristicRollbackException, SystemException
+  public void commit()
+    throws RollbackException, HeuristicMixedException,
+           HeuristicRollbackException, SystemException
   {
     _alarm.dequeue();
 
@@ -853,6 +858,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
                 rollbackInt();
               }
             } catch (XAException e) {
+              _transactionManager.addCommitResourceFail();
+              
               heuristicExn = heuristicException(heuristicExn, e);
               rollbackInt();
               throw new RollbackExceptionWrapper(L.l("all commits rolled back"), 
@@ -869,80 +876,93 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
         _status = Status.STATUS_COMMITTING;
 
-        if (allowSinglePhase) {
-          try {
-            XAResource resource = (XAResource) _resources[0];
-
-            if ((_resourceStates[0] & RES_COMMIT) != 0)
-              resource.commit(_xid, true);
-
-            if (_timeout > 0)
-              resource.setTransactionTimeout(0);
-          } catch (XAException e) {
-            log.log(Level.FINE, e.toString(), e);
-
-            heuristicExn = heuristicException(heuristicExn, e);
-          }
-        }
-
-        for (int i = 0; i < _resourceCount; i++) {
-          XAResource resource = (XAResource) _resources[i];
-
-          if (i == 0 && allowSinglePhase)
-            continue;
-
-          if ((_resourceStates[i] & RES_SHARED_RM) != 0)
-            continue;
-          if ((_resourceStates[i] & RES_COMMIT) == 0)
-            continue;
-
-          if (heuristicExn == null) {
-            try {
-              resource.commit(_resourceXids[i], false);
-
-              if (_timeout > 0)
-                resource.setTransactionTimeout(0);
-            } catch (XAException e) {
-              heuristicExn = e;
-              log.log(Level.FINE, e.toString(), e);
-            }
-          } else {
-            try {
-              resource.rollback(_resourceXids[i]);
-
-              if (_timeout > 0)
-                resource.setTransactionTimeout(0);
-            } catch (XAException e) {
-              log.log(Level.FINE, e.toString(), e);
-            }
-          }
-        }
+        Exception exn = commitResources(allowSinglePhase);
+        
+        if (heuristicExn == null)
+          heuristicExn = exn; 
       }
 
       if (heuristicExn != null && log.isLoggable(Level.FINE))
         log.fine(this + " " + heuristicExn);
+      
+      _status = Status.STATUS_ROLLEDBACK;
 
       if (heuristicExn == null)
         _status = Status.STATUS_COMMITTED;
       else if (heuristicExn instanceof RollbackException) {
-        _status = Status.STATUS_ROLLEDBACK;
         throw (RollbackException) heuristicExn;
       } else if (heuristicExn instanceof HeuristicMixedException) {
-        _status = Status.STATUS_ROLLEDBACK;
         throw (HeuristicMixedException) heuristicExn;
       } else if (heuristicExn instanceof HeuristicRollbackException) {
-        _status = Status.STATUS_ROLLEDBACK;
         throw (HeuristicRollbackException) heuristicExn;
       } else if (heuristicExn instanceof SystemException) {
-        _status = Status.STATUS_ROLLEDBACK;
         throw (SystemException) heuristicExn;
       } else {
-        _status = Status.STATUS_ROLLEDBACK;
         throw RollbackExceptionWrapper.create(heuristicExn);
       }
     } finally {
       callAfterCompletion();
     }
+  }
+    
+  private Exception commitResources(boolean allowSinglePhase)
+  {
+    Exception heuristicExn = null;
+
+    if (allowSinglePhase) {
+      try {
+        XAResource resource = (XAResource) _resources[0];
+
+        if ((_resourceStates[0] & RES_COMMIT) != 0)
+          resource.commit(_xid, true);
+
+        if (_timeout > 0)
+          resource.setTransactionTimeout(0);
+      } catch (XAException e) {
+        log.log(Level.FINE, e.toString(), e);
+
+        heuristicExn = heuristicException(heuristicExn, e);
+        
+        _transactionManager.addCommitResourceFail();
+      }
+    }
+
+    for (int i = 0; i < _resourceCount; i++) {
+      XAResource resource = (XAResource) _resources[i];
+
+      if (i == 0 && allowSinglePhase)
+        continue;
+
+      if ((_resourceStates[i] & RES_SHARED_RM) != 0)
+        continue;
+      if ((_resourceStates[i] & RES_COMMIT) == 0)
+        continue;
+
+      if (heuristicExn == null) {
+        try {
+          resource.commit(_resourceXids[i], false);
+
+          if (_timeout > 0)
+            resource.setTransactionTimeout(0);
+        } catch (XAException e) {
+          _transactionManager.addCommitResourceFail();
+          
+          heuristicExn = e;
+          log.log(Level.FINE, e.toString(), e);
+        }
+      } else {
+        try {
+          resource.rollback(_resourceXids[i]);
+
+          if (_timeout > 0)
+            resource.setTransactionTimeout(0);
+        } catch (XAException e) {
+          log.log(Level.FINE, e.toString(), e);
+        }
+      }
+    }
+    
+    return heuristicExn;
   }
 
   /**
@@ -1185,6 +1205,11 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
     if (_properties != null)
       _properties.clear();
+    
+    if (status == Status.STATUS_COMMITTED)
+      _transactionManager.endCommitTime(_beginTime);
+    else
+      _transactionManager.endRollbackTime(_beginTime);
   }
 
   @Override

@@ -27,11 +27,10 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.transaction;
+package com.caucho.env.dbpool;
 
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -55,15 +54,20 @@ import com.caucho.inject.Module;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ConnectionPoolMXBean;
+import com.caucho.transaction.ManagedXAResource;
+import com.caucho.transaction.UserTransactionImpl;
+import com.caucho.transaction.UserTransactionProxy;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
+import com.caucho.util.ThreadDump;
 import com.caucho.util.WeakAlarm;
 
 /**
  * Implementation of the connection manager.
  */
 @Module
+@SuppressWarnings("serial")
 public class ConnectionPool extends AbstractManagedObject
   implements ConnectionManager, AlarmListener, ConnectionPoolMXBean
 {
@@ -90,8 +94,8 @@ public class ConnectionPool extends AbstractManagedObject
   // max idle size
   private int _maxIdleCount = 1024;
 
-  // time before an idle connection is closed (30s default)
-  private long _idleTimeout = 30000L;
+  // time before an idle connection is closed (60s default)
+  private long _idleTimeout = 60000L;
 
   // time before an active connection is closed (6h default)
   private long _activeTimeout = 6L * 3600L * 1000L;
@@ -175,6 +179,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Gets the connection pool name.
    */
+  @Override
   public String getName()
   {
     return _name;
@@ -199,6 +204,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns true if shared connections are allowed.
    */
+  @Override
   public boolean isShareable()
   {
     return _isShareable;
@@ -303,6 +309,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the max idle time.
    */
+  @Override
   public long getMaxIdleTime()
   {
     if (Long.MAX_VALUE / 2 <= _idleTimeout)
@@ -325,6 +332,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the max idle count.
    */
+  @Override
   public int getMaxIdleCount()
   {
     return _maxIdleCount;
@@ -344,6 +352,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the max active time.
    */
+  @Override
   public long getMaxActiveTime()
   {
     if (Long.MAX_VALUE / 2 <= _activeTimeout)
@@ -366,6 +375,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the max pool time.
    */
+  @Override
   public long getMaxPoolTime()
   {
     if (Long.MAX_VALUE / 2 <= _poolTimeout)
@@ -403,6 +413,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Gets the maximum number of connections
    */
+  @Override
   public int getMaxConnections()
   {
     if (_maxConnections < Integer.MAX_VALUE / 2)
@@ -425,6 +436,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Sets the time to wait for connections
    */
+  @Override
   public long getConnectionWaitTime()
   {
     if (_connectionWaitTimeout < Long.MAX_VALUE / 2)
@@ -444,6 +456,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Gets the max number of overflow connections
    */
+  @Override
   public int getMaxOverflowConnections()
   {
     return _maxOverflowConnections;
@@ -468,6 +481,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Gets the maximum number of connections simultaneously creating
    */
+  @Override
   public int getMaxCreateConnections()
   {
     if (_maxCreateConnections < Integer.MAX_VALUE / 2)
@@ -507,6 +521,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the total connections.
    */
+  @Override
   public int getConnectionCount()
   {
     return _connectionPool.size();
@@ -515,14 +530,25 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the idle connections.
    */
+  @Override
   public int getConnectionIdleCount()
   {
     return _idlePool.size();
+  }
+  
+  /**
+   * Current number of connections being created.
+   */
+  @Override
+  public int getConnectionCreateCount()
+  {
+    return _createCount.get();
   }
 
   /**
    * Returns the active connections.
    */
+  @Override
   public int getConnectionActiveCount()
   {
     return _connectionPool.size() - _idlePool.size();
@@ -531,6 +557,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the total connections.
    */
+  @Override
   public long getConnectionCountTotal()
   {
     return _connectionCountTotal.get();
@@ -539,6 +566,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the total connections.
    */
+  @Override
   public long getConnectionCreateCountTotal()
   {
     return _connectionCreateCountTotal.get();
@@ -547,6 +575,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the total failed connections.
    */
+  @Override
   public long getConnectionFailCountTotal()
   {
     return _connectionFailCountTotal.get();
@@ -555,6 +584,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Returns the last fail time
    */
+  @Override
   public Date getLastFailTime()
   {
     return new Date(_lastFailTime);
@@ -650,8 +680,9 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Allocates the connection.
    *
-   * @return connection handle for EIS specific connection.
+   * @return connection handle for driver specific connection.
    */
+  @Override
   public Object allocateConnection(ManagedConnectionFactory mcf,
                                    ConnectionRequestInfo info)
     throws ResourceException
@@ -676,23 +707,87 @@ public class ConnectionPool extends AbstractManagedObject
     UserPoolItem userPoolItem = null;
 
     try {
-      UserTransactionImpl transaction = _tm.getUserTransaction();
+      while(true){
+        userPoolItem = null;
+        UserTransactionImpl transaction = _tm.getUserTransaction();
 
-      if (transaction != null)
-        userPoolItem = transaction.allocate(mcf, subject, info);
+        if (transaction != null)
+          userPoolItem = allocateShared(transaction, mcf, subject, info);
 
-      if (userPoolItem == null)
-        userPoolItem = allocatePoolConnection(mcf, subject, info, null);
+        if (userPoolItem == null)
+          userPoolItem = allocatePoolConnection(mcf, subject, info, null);
 
-      Object dataSource = userPoolItem.allocateUserConnection();
-
-      userPoolItem = null;
-
-      return dataSource;
+        Object userConn = userPoolItem.allocateUserConnection();
+        
+        if (userConn != null) {
+          userPoolItem = null;
+          return userConn;
+        }
+        
+        userPoolItem.close();
+      }
     } finally {
       if (userPoolItem != null)
         userPoolItem.close();
     }
+  }
+
+  /**
+   * Allocates a resource matching the parameters.  If none matches,
+   * return null.
+   */
+  private UserPoolItem allocateShared(UserTransactionImpl transaction,
+                                      ManagedConnectionFactory mcf,
+                                      Subject subject,
+                                      ConnectionRequestInfo info)
+  {
+    if (! transaction.isActive())
+      return null;
+    
+    ArrayList<ManagedXAResource> poolItems = transaction.getXaResources();
+    int length = poolItems.size();
+    
+    for (int i = 0; i < length; i++) {
+      ManagedXAResource xaResource = poolItems.get(i);
+      
+      if (xaResource instanceof ManagedPoolItem) {
+        ManagedPoolItem poolItem = (ManagedPoolItem) xaResource;
+
+        UserPoolItem item = poolItem.allocateXA(mcf, subject, info);
+
+        if (item != null)
+          return item;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Finds the pool item joined to this one.
+   * return null.
+   */
+  ManagedPoolItem findJoin(UserTransactionImpl uTrans, 
+                           ManagedPoolItem item)
+  {
+    if (! uTrans.isActive())
+      return null;
+    
+    ArrayList<ManagedXAResource> poolItems = uTrans.getXaResources();
+    int length = poolItems.size();
+    
+    for (int i = 0; i < length; i++) {
+      ManagedXAResource resource = poolItems.get(i);
+      
+      if (resource instanceof ManagedPoolItem) {
+        ManagedPoolItem poolItem = (ManagedPoolItem) resource;
+
+        if (poolItem.isJoin(item))
+          return poolItem;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -735,16 +830,18 @@ public class ConnectionPool extends AbstractManagedObject
     if (! _lifecycle.isActive())
       throw new IllegalStateException(L.l("Can't allocate connection because the connection pool is closed."));
 
-    log.warning(this + " pool overflow");
+    String message = (this + " pool overflow"
+        + " (pool-size=" + _connectionPool.size()
+        + ", max-connections=" + _maxConnections
+        + ", create-count=" + _createCount.get()
+        + ", max-create-connections=" + _maxCreateConnections
+        + ")");
 
-    // XXX: must restore
-    /*
-    Resin resin = Resin.getCurrent();
+    ConnectionPoolHealthCheck.currentWarning(message);
 
-    if (resin != null) {
-      resin.dumpThreads();
-    }
-    */
+    log.warning(message);
+
+    ThreadDump.dumpThreads();
 
     if (startCreateOverflow()) {
       try {
@@ -753,7 +850,7 @@ public class ConnectionPool extends AbstractManagedObject
         finishCreateConnection();
       }
     }
-    
+
     throw new ResourceException(L.l("Can't create overflow connection connection-max={0}",
                                     _maxConnections));
   }
@@ -772,7 +869,7 @@ public class ConnectionPool extends AbstractManagedObject
 
       long now = Alarm.getCurrentTime();
 
-      if (_lastValidCheckTime + 1000L < now) {
+      if (_lastValidCheckTime + 15000L < now) {
         _lastValidCheckTime = now;
 
         if (mcf instanceof ValidatingManagedConnectionFactory) {
@@ -796,15 +893,19 @@ public class ConnectionPool extends AbstractManagedObject
             return null;
 
           // remove can fail for threading reasons, so only succeed if it works.
-          if (_idlePool.remove(mConn)) {
-            poolItem = findPoolItem(mConn);
-            
-            if (poolItem == null)
-              throw new IllegalStateException(L.l("Unexpected non-matching PoolItem found for {0}",
-                                                  mConn));
-
-            break;
+          if (! _idlePool.remove(mConn)) {
+            mConn = null;
           }
+        }
+        
+        if (mConn != null) {
+          poolItem = findPoolItem(mConn);
+            
+          if (poolItem == null)
+            throw new IllegalStateException(L.l("Unexpected non-matching PoolItem found for {0}",
+                                                mConn));
+
+          break;
         }
       }
 
@@ -846,8 +947,9 @@ public class ConnectionPool extends AbstractManagedObject
    */
   private void validate(ValidatingManagedConnectionFactory mcf)
   {
-    Set invalid = null;
     /*
+     Set invalid = null;
+
     synchronized (_idlePool) {
     } */
   }
@@ -942,14 +1044,26 @@ public class ConnectionPool extends AbstractManagedObject
       return true;
       
     _createCount.decrementAndGet();
-      
-    throw new ResourceException(L.l("Can't allocate overflow connection after {0}ms timeout because pool is full."
-                                    + "\n  max-connections={1}, max-overflow-connections={2}, create-count={3}, pool-size={4}.",
-                                    _connectionWaitTimeout,
-                                    _maxConnections,
-                                    _maxOverflowConnections,
-                                    _createCount,
-                                    size));
+    String message = L.l("{0} cannot create overflow connection after {1}ms"
+                         + " (pool-size={2}"
+                         + ", max-connections={3}"
+                         + ", create-count={4}"
+                         + ", max-create-connections={5}"
+                         + ", max-overflow-connections={6})",
+                         this,
+                         _connectionWaitTimeout,
+                         _connectionPool.size(),
+                         _maxConnections,
+                         _createCount.get(),
+                         _maxCreateConnections,
+                         _maxOverflowConnections);
+
+    ConnectionPoolHealthCheck.currentWarning(message);
+
+    log.warning(message);
+
+    
+    throw new ResourceException(message);
  }
   
   private boolean waitForAvailableConnection(long expireTime)
@@ -1092,6 +1206,7 @@ public class ConnectionPool extends AbstractManagedObject
   /**
    * Clears the idle connections in the pool.
    */
+  @Override
   public void clear()
   {
     ArrayList<ManagedPoolItem> pool = _connectionPool;

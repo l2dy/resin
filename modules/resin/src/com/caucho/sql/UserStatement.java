@@ -28,24 +28,20 @@
 
 package com.caucho.sql;
 
-import com.caucho.env.meter.ActiveTimeSensor;
-import com.caucho.util.L10N;
-import com.caucho.util.Alarm;
-
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
 import java.sql.Statement;
-import java.util.logging.Logger;
+
+import com.caucho.env.meter.ActiveTimeSensor;
+import com.caucho.util.L10N;
 
 
 /**
  * User-view of a statement;
  */
 public class UserStatement implements Statement {
-  private final static Logger log
-    = Logger.getLogger(UserStatement.class.getName());
   protected final static L10N L = new L10N(UserStatement.class);
 
   // The connection
@@ -66,15 +62,15 @@ public class UserStatement implements Statement {
     _timeProbe = conn.getTimeProbe();
   }
 
+  @Override
   public void setPoolable(boolean poolable)
-    throws SQLException
   {
     if (! poolable)
       _isPoolable = false;
   }
 
+  @Override
   public boolean isPoolable()
-    throws SQLException
   {
     return _isPoolable;
   }
@@ -93,48 +89,58 @@ public class UserStatement implements Statement {
     return stmt;
   }
 
+  @Override
   public void addBatch(String sql)
     throws SQLException
   {
     try {
       _stmt.addBatch(sql);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void cancel()
     throws SQLException
   {
     try {
       _stmt.cancel();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void clearBatch()
     throws SQLException
   {
     try {
       _stmt.clearBatch();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
 
+  @Override
   public void clearWarnings()
     throws SQLException
   {
@@ -144,10 +150,12 @@ public class UserStatement implements Statement {
       if (stmt != null)
         stmt.clearWarnings();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -155,6 +163,7 @@ public class UserStatement implements Statement {
   /**
    * Closes the statement.
    */
+  @Override
   public void close()
     throws SQLException
   {
@@ -168,10 +177,12 @@ public class UserStatement implements Statement {
         stmt.close();
       }
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -179,6 +190,7 @@ public class UserStatement implements Statement {
   /**
    * queries the database with the given sql.
    */
+  @Override
   public ResultSet executeQuery(String sql)
     throws SQLException
   {
@@ -187,10 +199,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeQuery(sql);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -200,6 +214,7 @@ public class UserStatement implements Statement {
   /**
    * updates the database with the given sql.
    */
+  @Override
   public int executeUpdate(String sql)
     throws SQLException
   {
@@ -208,10 +223,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeUpdate(sql);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -221,6 +238,7 @@ public class UserStatement implements Statement {
   /**
    * Execute an update with the given result type.
    */
+  @Override
   public int executeUpdate(String query, int resultType)
     throws SQLException
   {
@@ -229,10 +247,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeUpdate(query, resultType);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -242,6 +262,7 @@ public class UserStatement implements Statement {
   /**
    * Execute an update checking the given columns for primary keys.
    */
+  @Override
   public int executeUpdate(String query, int []columns)
     throws SQLException
   {
@@ -250,10 +271,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeUpdate(query, columns);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -263,6 +286,7 @@ public class UserStatement implements Statement {
   /**
    * Execute an update checking the given columns for primary keys.
    */
+  @Override
   public int executeUpdate(String query, String []columns)
     throws SQLException
   {
@@ -271,10 +295,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeUpdate(query, columns);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -292,10 +318,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.execute(sql);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -305,6 +333,7 @@ public class UserStatement implements Statement {
   /**
    * executes the given query with its result type.
    */
+  @Override
   public boolean execute(String query, int resultType)
     throws SQLException
   {
@@ -313,10 +342,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.execute(query, resultType);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -327,6 +358,7 @@ public class UserStatement implements Statement {
    * executes the given query with the columns given for
    * primary key generation.
    */
+  @Override
   public boolean execute(String query, int []columns)
     throws SQLException
   {
@@ -335,10 +367,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.execute(query, columns);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -349,6 +383,7 @@ public class UserStatement implements Statement {
    * executes the given query with the columns given for
    * primary key generation.
    */
+  @Override
   public boolean execute(String query, String []columns)
     throws SQLException
   {
@@ -357,10 +392,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.execute(query, columns);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -370,6 +407,7 @@ public class UserStatement implements Statement {
   /**
    * Executes the batched sql.
    */
+  @Override
   public int[]executeBatch()
     throws SQLException
   {
@@ -378,10 +416,12 @@ public class UserStatement implements Statement {
     try {
       return _stmt.executeBatch();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     } finally {
       _timeProbe.end(startTime);
@@ -391,16 +431,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the result set of the last query.
    */
+  @Override
   public java.sql.ResultSet getResultSet()
     throws SQLException
   {
     try {
       return _stmt.getResultSet();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -408,16 +451,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the update count of the last query.
    */
+  @Override
   public int getUpdateCount()
     throws SQLException
   {
     try {
       return _stmt.getUpdateCount();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -425,6 +471,7 @@ public class UserStatement implements Statement {
   /**
    * Returns the underlying connection.
    */
+  @Override
   public Connection getConnection()
     throws SQLException
   {
@@ -434,16 +481,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the current fetch direction.
    */
+  @Override
   public int getFetchDirection()
     throws SQLException
   {
     try {
       return _stmt.getFetchDirection();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -451,6 +501,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the fetch direction.
    */
+  @Override
   public void setFetchDirection(int direction)
     throws SQLException
   {
@@ -459,10 +510,12 @@ public class UserStatement implements Statement {
 
       _stmt.setFetchDirection(direction);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -470,16 +523,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the fetch size.
    */
+  @Override
   public int getFetchSize()
     throws SQLException
   {
     try {
       return _stmt.getFetchSize();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -487,6 +543,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the fetch size.
    */
+  @Override
   public void setFetchSize(int rows)
     throws SQLException
   {
@@ -495,10 +552,12 @@ public class UserStatement implements Statement {
 
       _stmt.setFetchSize(rows);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -506,16 +565,18 @@ public class UserStatement implements Statement {
   /**
    * Returns the maximum field size.
    */
+  @Override
   public int getMaxFieldSize()
     throws SQLException
   {
     try {
       return _stmt.getMaxFieldSize();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
       throw e;
     }
   }
@@ -523,6 +584,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the maximum field size.
    */
+  @Override
   public void setMaxFieldSize(int max)
     throws SQLException
   {
@@ -531,10 +593,11 @@ public class UserStatement implements Statement {
 
       _stmt.setMaxFieldSize(max);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
       throw e;
     }
   }
@@ -542,16 +605,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the maximum rows returned by a query.
    */
+  @Override
   public int getMaxRows()
     throws SQLException
   {
     try {
       return _stmt.getMaxRows();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -559,6 +625,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the maximum rows returned by a query.
    */
+  @Override
   public void setMaxRows(int max)
     throws SQLException
   {
@@ -567,10 +634,12 @@ public class UserStatement implements Statement {
 
       _stmt.setMaxRows(max);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -578,16 +647,19 @@ public class UserStatement implements Statement {
   /**
    * Returns true if more results are available.
    */
+  @Override
   public boolean getMoreResults()
     throws SQLException
   {
     try {
       return _stmt.getMoreResults();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -595,16 +667,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the current query timeout.
    */
+  @Override
   public int getQueryTimeout()
     throws SQLException
   {
     try {
       return _stmt.getQueryTimeout();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -612,6 +687,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the query timeout.
    */
+  @Override
   public void setQueryTimeout(int seconds)
     throws SQLException
   {
@@ -620,10 +696,12 @@ public class UserStatement implements Statement {
 
       _stmt.setQueryTimeout(seconds);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -631,16 +709,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the statement's result set concurrency setting.
    */
+  @Override
   public int getResultSetConcurrency()
     throws SQLException
   {
     try {
       return _stmt.getResultSetConcurrency();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -648,16 +729,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the statement's result set type.
    */
+  @Override
   public int getResultSetType()
     throws SQLException
   {
     try {
       return _stmt.getResultSetType();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -665,16 +749,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the current sql warnings.
    */
+  @Override
   public SQLWarning getWarnings()
     throws SQLException
   {
     try {
       return _stmt.getWarnings();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -682,6 +769,7 @@ public class UserStatement implements Statement {
   /**
    * Sets the current cursor name.
    */
+  @Override
   public void setCursorName(String name)
     throws SQLException
   {
@@ -690,10 +778,12 @@ public class UserStatement implements Statement {
 
       _stmt.setCursorName(name);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -701,6 +791,7 @@ public class UserStatement implements Statement {
   /**
    * Enables escape processing.
    */
+  @Override
   public void setEscapeProcessing(boolean enable)
     throws SQLException
   {
@@ -709,10 +800,12 @@ public class UserStatement implements Statement {
 
       _stmt.setEscapeProcessing(enable);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -720,16 +813,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the next count results.
    */
+  @Override
   public boolean getMoreResults(int count)
     throws SQLException
   {
     try {
       return _stmt.getMoreResults(count);
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -737,16 +833,19 @@ public class UserStatement implements Statement {
   /**
    * Returns the generated keys for the update.
    */
+  @Override
   public java.sql.ResultSet getGeneratedKeys()
     throws SQLException
   {
     try {
       return _stmt.getGeneratedKeys();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
@@ -754,25 +853,32 @@ public class UserStatement implements Statement {
   /**
    * Returns the result set holdability.
    */
+  @Override
   public int getResultSetHoldability()
     throws SQLException
   {
     try {
       return _stmt.getResultSetHoldability();
     } catch (RuntimeException e) {
-      killPool();
+      onRuntimeException(e);
+      
       throw e;
     } catch (SQLException e) {
-      killPool();
+      onSqlException(e);
+      
       throw e;
     }
   }
 
-  public boolean isClosed() throws SQLException
+  @Override
+  public boolean isClosed() 
+    throws SQLException
   {
     return _stmt == null;
   }
 
+  @Override
+  @SuppressWarnings("unchecked")
   public <T> T unwrap(Class<T> iface)
     throws SQLException
   {
@@ -782,6 +888,7 @@ public class UserStatement implements Statement {
       return _stmt.unwrap(iface);
   }
 
+  @Override
   public boolean isWrapperFor(Class<?> iface)
     throws SQLException
   {
@@ -789,6 +896,20 @@ public class UserStatement implements Statement {
       return true;
     else
       return _stmt.isWrapperFor(iface);
+  }
+  
+  protected void onSqlException(SQLException e)
+  {
+    setPoolable(false);
+    
+    if (_conn != null)
+      _conn.setPingRequired();
+  }
+  
+  protected void onRuntimeException(RuntimeException e)
+  {
+    if (_conn != null)
+      _conn.killPool();
   }
 
   /**

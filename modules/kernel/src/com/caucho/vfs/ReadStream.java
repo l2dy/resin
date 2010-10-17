@@ -577,7 +577,8 @@ public final class ReadStream extends InputStream
    * @param length maximum number of characters to read
    * @return number of characters read or -1 on end of file.
    */
-  public final int read(char []buf, int offset, int length) throws IOException
+  public final int read(char []buf, int offset, int length)
+    throws IOException
   {
     if (_readEncoding != null)
       return _readEncoding.read(buf, offset, length);
@@ -1234,33 +1235,6 @@ public final class ReadStream extends InputStream
     _readLength = 0;
 
     int readLength = _source.read(_readBuffer, 0, _readBuffer.length);
-
-    // Setting to 0 is needed to avoid int to long conversion errors with AIX
-    if (readLength > 0) {
-      _readLength = readLength;
-      _position += readLength;
-      
-      if (_isEnableReadTime)
-        _readTime = Alarm.getCurrentTime();
-      return true;
-    }
-    else {
-      _readLength = 0;
-      return false;
-    }
-  }
-
-  private boolean readBuffer(int off)
-    throws IOException
-  {
-    if (_readBuffer == null)
-      return false;
-
-    if (_sibling != null)
-      _sibling.flush();
-
-    _readOffset = 0;
-    int readLength = _source.read(_readBuffer, off, _readBuffer.length - off);
 
     // Setting to 0 is needed to avoid int to long conversion errors with AIX
     if (readLength > 0) {

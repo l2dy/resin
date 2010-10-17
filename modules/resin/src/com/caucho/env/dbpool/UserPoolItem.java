@@ -27,9 +27,7 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.transaction;
-
-import com.caucho.util.L10N;
+package com.caucho.env.dbpool;
 
 import javax.resource.ResourceException;
 import javax.resource.spi.ConnectionEvent;
@@ -37,7 +35,10 @@ import javax.resource.spi.ConnectionRequestInfo;
 import javax.resource.spi.ManagedConnectionFactory;
 import javax.security.auth.Subject;
 import javax.transaction.RollbackException;
-import java.util.logging.Logger;
+
+import com.caucho.transaction.ManagedResource;
+import com.caucho.transaction.UserTransactionImpl;
+import com.caucho.util.L10N;
 
 /**
  * Pool item representing the user connection, i.e. matching to a Connection
@@ -57,11 +58,9 @@ import java.util.logging.Logger;
  * When the XA completes, the UserPoolItem restores
  * its current XA PoolItem to the ownPoolItem.
  */
-class UserPoolItem {
+class UserPoolItem implements ManagedResource {
   private static final L10N L = new L10N(UserPoolItem.class);
-  private static final Logger log
-    = Logger.getLogger(UserPoolItem.class.getName());
-
+  
   private ConnectionPool _cm;
   private String _id;
 
@@ -185,6 +184,7 @@ class UserPoolItem {
   /**
    * Returns the allocation stack trace.
    */
+  @Override
   public IllegalStateException getAllocationStackTrace()
   {
     return _allocationStackTrace;
@@ -193,6 +193,7 @@ class UserPoolItem {
   /**
    * Enables saving of the allocation stack traces.
    */
+  @Override
   public void setSaveAllocationStackTrace(boolean enable)
   {
     _cm.setSaveAllocationStackTrace(enable);
@@ -201,6 +202,7 @@ class UserPoolItem {
   /**
    * Return true if connections should be closed automatically.
    */
+  @Override
   public boolean isCloseDanglingConnections()
   {
     return _cm.isCloseDanglingConnections();
@@ -228,7 +230,8 @@ class UserPoolItem {
   /**
    * Returns the xa item.
    */
-  public ManagedPoolItem getXAPoolItem()
+  @Override
+  public ManagedPoolItem getXAResource()
   {
     return _sharePoolItem;
   }
@@ -236,6 +239,7 @@ class UserPoolItem {
   /**
    * Gets the user connection.
    */
+  @Override
   public Object getUserConnection()
   {
     return _userConn;
@@ -354,8 +358,8 @@ class UserPoolItem {
   /**
    * Close the connection, called from UserTransactionImpl.
    */
-  void abortConnection()
-    throws ResourceException
+  @Override
+  public void abortConnection()
   {
     ManagedPoolItem poolItem = _ownPoolItem;
     _ownPoolItem = null;
@@ -371,7 +375,6 @@ class UserPoolItem {
    */
   void close()
   {
-    ManagedPoolItem ownPoolItem = _ownPoolItem;
     _ownPoolItem = null;
 
     _userConn = null;

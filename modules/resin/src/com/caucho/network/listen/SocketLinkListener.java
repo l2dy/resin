@@ -1342,7 +1342,12 @@ public class SocketLinkListener extends TaskWorker
    */
   void keepaliveFree()
   {
-    _keepaliveAllocateCount.decrementAndGet();
+    int value = _keepaliveAllocateCount.decrementAndGet();
+    
+    if (value < 0) {
+      System.out.println("FAILED keepTalive; " + value);
+      Thread.dumpStack();
+    }
   }
 
   /**

@@ -432,7 +432,7 @@ abstract public class DeployController<I extends DeployInstance>
    * Returns the current instance.
    */
   @Override
-  public final I getDeployInstance()
+  public I getDeployInstance()
   {
     return _deployInstance;
   }
@@ -654,6 +654,8 @@ abstract public class DeployController<I extends DeployInstance>
       }
       else
         _lifecycle.toError();
+      
+      onStartComplete();
 
       // server/
       if (loader instanceof DynamicClassLoader)
@@ -668,7 +670,7 @@ abstract public class DeployController<I extends DeployInstance>
   /**
    * Stops the current instance, putting it in the lazy state.
    */
-  final void stopLazyImpl()
+  protected void stopLazyImpl()
   {
     if (! _lifecycle.isIdle()) {
       stopImpl();
@@ -680,7 +682,7 @@ abstract public class DeployController<I extends DeployInstance>
   /**
    * Stops the current instance.
    */
-  final void stopImpl()
+  protected void stopImpl()
   {
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -708,7 +710,7 @@ abstract public class DeployController<I extends DeployInstance>
     } finally  {
       if (isStopping) {
         _lifecycle.toStop();
-
+        
         onStop();
       }
       
@@ -732,6 +734,10 @@ abstract public class DeployController<I extends DeployInstance>
   }
   
   protected void onError(Throwable e)
+  {
+  }
+  
+  protected void onStartComplete()
   {
   }
   

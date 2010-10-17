@@ -670,7 +670,7 @@ a.hideOptional {
 .jmx-header {
   margin: 2px;
   padding: 1px;
-  width: 90%;
+  width: 85%;
   font-weight : bold;
 }
 
@@ -680,11 +680,11 @@ a.hideOptional {
 
 .jmx-data {
   margin-left: 0.5em;
-  width: 95%;
+  width: 85%;
 }
 
 .jmx-data-table {
-  width: 95%;
+  width: 100%;
   border-collapse: collapse;
 }
 
@@ -773,7 +773,17 @@ th.fail {
 }
 
 .warning td {
-  background : #fe9;
+  background: #f6f2e8;
+}
+/*  color : #750; */
+/* yellow (hover) #ffcc33 */
+/* hr #fab41d */
+/* red #98012e;  */
+
+.severe td {
+  color : #d02;
+  background : #e5d1ac;
+  font-style : bold;
 }
 
 span.warning {
@@ -930,7 +940,7 @@ table.schema tr th {
 }
 
 textarea {
-  width: 50%;
+  width: 85%;
   min-height: 3em;
 }
 
@@ -1002,4 +1012,46 @@ div.pie-chart {
 input.deploy {
   padding: 1em;
   font-size: 130%;
+  margin-right: 1em;
+  margin-bottom: 1em;
+}
+
+div.form-input-block {
+  display: block;
+  width: 85%;
+  margin-top: 2em;
+  margin-bottom: 4em;
+}
+
+div.form-input-title {
+  float: left;
+  width: 40%;
+  font-weight: bold;
+  font-size: 110%;
+}
+
+div.form-input-input {
+  display: inline-block;
+  width: 50%;
+}
+
+div.form-input-help {
+  padding-left: 2em;
+  font-weight: 100;
+  font-style: italic;
+  font-size: 90%;
+}
+
+.info-box { 
+  padding: 0 1em 1em 1em;
+  width: 50%;
+  margin-bottom: 1em;
+}
+
+.option-box {
+  border: 1px solid gray;
+  background: #eee;
+  padding: 1em;
+  width: 85%;
+  margin-bottom: 2em;
 }

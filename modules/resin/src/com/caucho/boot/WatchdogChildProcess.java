@@ -153,7 +153,7 @@ class WatchdogChildProcess
         WatchdogProcessLogThread logThread
           = new WatchdogProcessLogThread(stdIs, jvmOut);
 
-        ThreadPool.getCurrent().schedule(logThread);
+        ThreadPool.getCurrent().start(logThread);
 
         s = connectToChild(ss);
 
@@ -620,7 +620,7 @@ class WatchdogChildProcess
       resinArgs.add("--root-directory");
       resinArgs.add(resinRoot.getFullPath());
     }
-
+    
     if (_watchdog.getResinConf() != null) {
       resinArgs.add("-conf");
       resinArgs.add(_watchdog.getResinConf().getNativePath());

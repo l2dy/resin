@@ -31,11 +31,13 @@ package com.caucho.env.repository;
 
 import com.caucho.env.git.*;
 import com.caucho.inject.Module;
+import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
 
 import java.io.*;
 import java.util.*;
+import java.util.logging.Logger;
 
 /**
  * Map of the current tags.
@@ -43,6 +45,8 @@ import java.util.*;
 @Module
 public class RepositoryTagMap
 {
+  private static final Logger log = Logger.getLogger(RepositoryTagMap.class.getName());
+  
   private static final L10N L = new L10N(RepositoryTagMap.class);
 
   private final String _commitHash;
@@ -66,17 +70,24 @@ public class RepositoryTagMap
   }
 
   public RepositoryTagMap(AbstractRepository repository,
-                          String commitHash)
+                          String commitHash,
+                          boolean isValidate)
     throws IOException
   {
     _commitHash = commitHash;
 
     // force loading and validation from backend
-    repository.validateHash(commitHash);
+    if (isValidate)
+      repository.validateHash(commitHash);
 
     _commit = repository.readCommit(commitHash);
-
-    _sequence = Long.parseLong(_commit.get("sequence"));
+    
+    String sequence = _commit.get("sequence");
+    
+    if (sequence != null)
+      _sequence = Long.parseLong(sequence);
+    else
+      _sequence = 1;
 
     _tree = repository.readTree(_commit.getTree());
 
@@ -90,7 +101,12 @@ public class RepositoryTagMap
   {
     _tagMap = Collections.unmodifiableMap(tagMap);
 
-    _sequence = parent.getSequence() + 1;
+    long now = Alarm.getCurrentTime();
+    
+    if (parent.getSequence() < now)
+      _sequence = now;
+    else
+      _sequence = parent.getSequence() + 1;
 
     TempStream os = new TempStream();
     WriteStream out = new WriteStream(os);
@@ -135,7 +151,7 @@ public class RepositoryTagMap
 
     _commit = new GitCommit();
     _commit.setTree(treeHash);
-    _commit.put("sequence", String.valueOf(parent.getSequence() + 1));
+    _commit.put("sequence", String.valueOf(_sequence));
 
     _commitHash = repository.addCommit(_commit);
   }
@@ -198,6 +214,20 @@ public class RepositoryTagMap
       out.println(entry.getKey());
       out.println(entry.getValue().getTagEntryHash());
     }
+  }
+
+  /**
+   * @param oldTagMap
+   * @return
+   */
+  public int compareTo(RepositoryTagMap oldTagMap)
+  {
+    if (getSequence() < oldTagMap.getSequence())
+      return -1;
+    else if (oldTagMap.getSequence() < getSequence())
+      return 1;
+
+    return getCommitHash().compareTo(oldTagMap.getCommitHash());
   }
 
   @Override

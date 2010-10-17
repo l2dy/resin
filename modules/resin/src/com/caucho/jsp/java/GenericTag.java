@@ -63,7 +63,7 @@ abstract public class GenericTag extends JspContainerNode
   
   protected TagInstance _tag;
   protected TagInfo _tagInfo;
-  protected Class _tagClass;
+  protected Class<?> _tagClass;
   protected VariableInfo []_varInfo;
 
   private boolean _isDeclaringInstance;
@@ -419,7 +419,6 @@ abstract public class GenericTag extends JspContainerNode
       if (! JspTagFileSupport.class.isAssignableFrom(_tagClass)) {
         out.printClass(_tagClass);
         out.println(" " + _tag.getId() + " = null;");
-
       }
       _isDeclaringInstance = true;
 

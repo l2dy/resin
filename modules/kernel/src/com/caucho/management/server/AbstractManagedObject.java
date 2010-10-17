@@ -45,7 +45,7 @@ abstract public class AbstractManagedObject implements ManagedObjectMXBean {
   private static final Logger log
     = Logger.getLogger(AbstractManagedObject.class.getName());
   
-  private ClassLoader _classLoader;
+  private transient ClassLoader _classLoader;
   private ObjectName _objectName;
 
   protected AbstractManagedObject()
@@ -98,14 +98,16 @@ abstract public class AbstractManagedObject implements ManagedObjectMXBean {
   /**
    * The JMX name property of the mbean.
    */
+  @Override
   abstract public String getName();
 
   /**
    * The JMX type of this MBean, defaults to the prefix of the FooMXBean..
    */
+  @Override
   public String getType()
   {
-    Class []interfaces = getClass().getInterfaces();
+    Class<?> []interfaces = getClass().getInterfaces();
 
     for (int i = 0; i < interfaces.length; i++) {
       String className = interfaces[i].getName();

@@ -27,8 +27,12 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.transaction;
+package com.caucho.env.dbpool;
 
+import com.caucho.transaction.ManagedResource;
+import com.caucho.transaction.ManagedXAResource;
+import com.caucho.transaction.UserTransactionImpl;
+import com.caucho.transaction.XAExceptionWrapper;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 
@@ -55,7 +59,7 @@ import java.util.logging.Logger;
  * sharing, it's possible for several UserPoolItems to refer to the same
  * ManagedPoolItem.
  */
-class ManagedPoolItem implements ConnectionEventListener, XAResource {
+class ManagedPoolItem implements ConnectionEventListener, ManagedXAResource {
   private static final L10N L = new L10N(ManagedPoolItem.class);
   private static final Logger log
     = Logger.getLogger(ManagedPoolItem.class.getName());
@@ -108,8 +112,6 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   //
 
   private long _connectionStartTime;
-  private long _idleStartTime;
-  private long _activeStartTime;
 
   public ManagedPoolItem(ConnectionPool cm,
                   ManagedConnectionFactory mcf,
@@ -220,7 +222,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Sets the item's transaction.
    */
-  void setTransaction(UserTransactionImpl transaction)
+  @Override
+  public void setTransaction(UserTransactionImpl transaction)
   {
     _transaction = transaction;
   }
@@ -240,12 +243,15 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     long maxIdleTime = _cm.getMaxIdleTime();
     long maxPoolTime = _cm.getMaxPoolTime();
 
-    if (_hasConnectionError)
+    if (_hasConnectionError) {
       return null;
-    else if (0 < maxIdleTime && _poolEventTime + maxIdleTime < now)
+    }
+    else if (0 < maxIdleTime && _poolEventTime + maxIdleTime < now) {
       return null;
-    else if (0 < maxPoolTime && _poolStartTime + maxPoolTime < now)
+    }
+    else if (0 < maxPoolTime && _poolStartTime + maxPoolTime < now) {
       return null;
+    }
     else if (_shareHead != null)
       throw new IllegalStateException(L.l("trying to activate active pool item."));
 
@@ -267,8 +273,9 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     else
       userPoolItem = new UserPoolItem(_cm, this);
     
-    if (! isValid(subject, info, userPoolItem))
+    if (! isValid(subject, info, userPoolItem)) {
       return null;
+    }
 
     _subject = subject;
     _requestInfo = info;
@@ -398,8 +405,14 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Try to share the connection.
    */
-  boolean share(UserPoolItem userPoolItem)
+  @Override
+  public boolean share(ManagedResource resource)
   {
+    if (! (resource instanceof UserPoolItem))
+      return false;
+    
+    UserPoolItem userPoolItem = (UserPoolItem) resource;
+    
     if (this == userPoolItem.getOwnPoolItem())
       return true;
     else if (_mConn == null)           // already closed
@@ -415,6 +428,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     else if (_hasConnectionError) // had a fatal error
       return false;
 
+    /*
     // skip for now
     if (true)
       return false;
@@ -422,6 +436,9 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     userPoolItem.associate(this, _mcf, _subject, _requestInfo);
 
     return true;
+    */
+    
+    return false;
   }
 
   /**
@@ -464,8 +481,9 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     try {
       ManagedConnection mConn = getManagedConnection();
 
-      if (mConn == null)
+      if (mConn == null) {
         return false;
+      }
 
       Object userConn = userPoolItem.getUserConnection();
 
@@ -486,7 +504,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Returns the XA resource.
    */
-  void enableLocalTransactionOptimization(boolean enableOptimization)
+  @Override
+  public void enableLocalTransactionOptimization(boolean enableOptimization)
   {
     if (_xaResource == null)
       _isXATransaction = false;
@@ -503,7 +522,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Returns true if the pooled connection supports transactions.
    */
-  boolean supportsTransaction()
+  @Override
+  public boolean supportsTransaction()
   {
     // server/164j
     return _xaResource != null || _localTransaction != null;
@@ -520,7 +540,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Returns the Xid resource.
    */
-  Xid getXid()
+  @Override
+  public Xid getXid()
   {
     return _xid;
   }
@@ -531,6 +552,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
    * Remove and close the UserPoolItem associated with the PoolItem. If it's
    * the last UserPoolItem, move to the idle state.
    */
+  @Override
   public void connectionClosed(ConnectionEvent event)
   {
     Object handle = event.getConnectionHandle();
@@ -571,6 +593,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Notifies that a local transaction has started.
    */
+  @Override
   public void localTransactionStarted(ConnectionEvent event)
   {
     if (_isLocalTransaction || _xid != null)
@@ -583,6 +606,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Notifies that a local transaction has committed.
    */
+  @Override
   public void localTransactionCommitted(ConnectionEvent event)
   {
     if (_isLocalTransaction) {
@@ -599,6 +623,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Notifies that a local transaction has rolled back.
    */
+  @Override
   public void localTransactionRolledback(ConnectionEvent event)
   {
     if (_xid != null)
@@ -613,6 +638,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Notifies that a connection error has occurred.
    */
+  @Override
   public void connectionErrorOccurred(ConnectionEvent event)
   {
     _hasConnectionError = true;
@@ -651,6 +677,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * identity of resources
    */
+  @Override
   public boolean isSameRM(XAResource resource)
     throws XAException
   {
@@ -676,6 +703,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * starts work on a transaction branch
    */
+  @Override
   public void start(Xid xid, int flags)
     throws XAException
   {
@@ -696,7 +724,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
       UserTransactionImpl trans = _cm.getTransaction();
 
       if (trans != null) {
-        ManagedPoolItem xaHead = trans.findJoin(this);
+        ManagedPoolItem xaHead = _cm.findJoin(trans, this);
 
         if (xaHead != null) {
           _xaNext = xaHead._xaNext;
@@ -742,6 +770,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Sets the transaction timeout
    */
+  @Override
   public boolean setTransactionTimeout(int seconds)
     throws XAException
   {
@@ -763,6 +792,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Returns the timeout of the underlying resource.
    */
+  @Override
   public int getTransactionTimeout()
     throws XAException
   {
@@ -772,6 +802,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * forget about the transaction
    */
+  @Override
   public void forget(Xid xid)
     throws XAException
   {
@@ -786,6 +817,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Vote using phase-1 of the 2-phase commit.
    */
+  @Override
   public int prepare(Xid xid)
     throws XAException
   {
@@ -826,6 +858,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * recover the transaction
    */
+  @Override
   public Xid[]recover(int flag)
     throws XAException
   {
@@ -838,6 +871,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Ends work with the resource.  Called before commit/rollback.
    */
+  @Override
   public void end(Xid xid, int flags)
     throws XAException
   {
@@ -853,6 +887,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * rollback the resource
    */
+  @Override
   public void rollback(Xid xid)
     throws XAException
   {
@@ -896,6 +931,7 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * commit the resource
    */
+  @Override
   public void commit(Xid xid, boolean onePhase)
     throws XAException
   {
@@ -1044,16 +1080,18 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
       return;
     }
 
+    /*
     UserTransactionImpl transaction = _transaction;
     _transaction = null;
       
     if (transaction != null) {
       try {
-        transaction.delistPoolItem(this, XAResource.TMSUCCESS);
+        transaction.delistXaResource(this, XAResource.TMSUCCESS);
       } catch (Throwable e) {
         log.log(Level.FINE, e.toString(), e);
       }
     }
+    */
 
     _isLocalTransaction = false;
 
@@ -1067,7 +1105,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Closes the connection.
    */
-  void abortConnection()
+  @Override
+  public void abortConnection()
   {
     destroy();
   }
@@ -1075,7 +1114,8 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
   /**
    * Closes the connection.
    */
-  void destroy()
+  @Override
+  public void destroy()
   {
     ManagedConnection mConn = _mConn;
     _mConn = null;
@@ -1101,9 +1141,10 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
 
         userItem = next;
       }
-
-      if (transaction != null)
-        transaction.delistPoolItem(this, XAResource.TMFAIL);
+      
+      /*
+       * XXX: transaction.delistXaResource()
+       */
     } catch (Throwable e) {
       log.log(Level.FINE, e.toString(), e);
     }
@@ -1117,14 +1158,16 @@ class ManagedPoolItem implements ConnectionEventListener, XAResource {
     }
   }
 
+  @Override
   public String toString()
   {
     if (_mConn != null) {
-      return (getClass().getSimpleName() + "[" + _cm.getName() + "," + _id + ","
-              + _mConn.getClass().getSimpleName() + "]");
+      return (getClass().getSimpleName() + "[" + _cm.getName() + "," + _id
+              + "," + _mConn.getClass().getSimpleName() + "]");
     }
     else {
-      return (getClass().getSimpleName() + "[" + _cm.getName() + "," + _id + ",null]");
+      return (getClass().getSimpleName() + "[" + _cm.getName()
+              + "," + _id + ",null]");
     }
   }
 }

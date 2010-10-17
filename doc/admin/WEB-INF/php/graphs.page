@@ -5,13 +5,12 @@ $cache = resin_create_distcache("resin:admin:graph");
 $p_hash = htmlspecialchars($_REQUEST['h']);
 
 $p_submit = $_REQUEST['submit'];
-$p_graph = htmlspecialchars($_REQUEST['graph']);
+$p_graph = htmlspecialchars($_REQUEST['user-meters']);
 $p_period = htmlspecialchars($_REQUEST['p']);
 if ($_REQUEST['period'])
   $p_period = htmlspecialchars($_REQUEST['period']);
 
 $p_servers = explode(" ", htmlspecialchars($_REQUEST['server-set']));
-
 $user = quercus_servlet_request()->getRemoteUser();
 
 $user_item = $cache->get($user);
@@ -89,6 +88,9 @@ if ($p_servers == null) {
 
 foreach ($p_checks as $check) {
   foreach ($p_servers as $server) {
+    if ($server == 'self')
+      $server = $self_index;
+      
     $p_names[] = "$server|$check";
   }
 }
@@ -129,7 +131,8 @@ function display_graph_selection()
   echo "<form name='def_graph' method='POST' action='" . $g_next_url . "'>";
   echo "<input type='hidden' name='period' value='$p_period'/>\n";
   echo "<b>Meters:</b>\n";
-  echo "<select name='graph' onchange='javascript:document.forms.def_graph.submit();'>\n";
+
+  echo "<select name='user-meters' onchange='javascript:document.forms.def_graph.submit();'>\n";
 
   $selected = false;
   foreach ($user_item['user-graphs'] as $name => $hash) {
@@ -145,76 +148,46 @@ function display_graph_selection()
 
   echo "</select>\n";
 
+  $self_index = sprintf("%02d", $g_server->SelfServer->ClusterIndex);
+
   $cluster_size = count($g_server->Cluster->Servers);
+  for ($i = 0; $i < $cluster_size; $i++) {
+    if ($i > 0)
+      $all .= ' ';
+
+    $all .= sprintf("%02d", $i);
+  }
+
+  echo "<input type='hidden' name='server-self'"
+       . " value='" . $self_index . "' />\n";
+  echo "<input type='hidden' name='server-all'"
+       . " value='" . $all . "' />\n";
 
   echo "<b>Server Set:</b>\n";
   echo "<select name='server-set'>\n";
 
-  echo "<option value='$self_index'";
+  echo "<option value='self'";
 
-  if ($_REQUEST['server-set'] == $self_index)
+  if ($_REQUEST['server-set'] == 'self')
     echo " selected";
 
   echo ">This Server</option>\n";
 
-  for ($i = 0; $i < min(3, $cluster_size); $i++) {
-    $triad .= sprintf("%02d ", $i);
-  }
+  echo "<option value='cluster'";
 
-  $triad = trim($triad);
-
-  echo "<option value='$triad'";
-
-  if ($_REQUEST['server-set'] == $triad)
+  if ($_REQUEST['server-set'] == 'cluster')
     echo " selected";
 
-  echo ">Triad</option>\n";
+  echo ">All servers, multi-graph</option>\n";
 
-  if ($cluster_size > 3) {
-    for ($i = 3; $i < $cluster_size; $i++) {
-      $non_triad .= sprintf("%02d ", $i);
-    }
+  echo "<option value='combined'";
 
-    $non_triad = trim($non_triad);
-
-    echo "<option value='$non_triad'";
-
-    if ($_REQUEST['server-set'] == $non_triad)
-      echo " selected";
-
-    echo ">Non-triad servers</option>\n";
-  }
-
-  for ($i = 0; $i < $cluster_size; $i++) {
-    $all .= sprintf("%02d ", $i);
-  }
-
-  $all = trim($all);
-
-  echo "<option value='$all'";
-
-  if ($_REQUEST['server-set'] == $all)
+  if ($_REQUEST['server-set'] == 'combined')
     echo " selected";
 
-  echo ">All servers in cluster</option>\n";
+  echo ">All servers, single graph</option>\n";
 
   echo "</select><br/>\n";
-
-  $graph_layout = $_REQUEST['graph-layout'];
-
-  echo "<input name='graph-layout' type='radio' value='single-graph'";
-
-  if ($graph_layout != 'multi-graph')
-    echo " checked";
-
-  echo ">Show one graph for all servers</input><br/>";
-
-  echo "<input name='graph-layout' type='radio' value='multi-graph'";
-
-  if ($graph_layout == 'multi-graph')
-    echo " checked";
-
-  echo ">Show graphs for each server</input>";
 
   echo "</form>";
 }
@@ -341,7 +314,7 @@ function display_new_graph_form()
   }
 
   // server
-  echo "<form method='post' action='" . $g_next_url . "'>"
+  echo "<form name='name_form' method='post' action='" . $g_next_url . "'>"
   echo "<input type='hidden' name='submit' value='true'>\n";
   echo "<h2><span id='meter-switch' class='switch'></span>Meters</h2>";
   echo "<button id='clear-graph' style='margin: 0 1em'>Clear Meters</button>";
@@ -377,7 +350,9 @@ function display_new_graph_form()
 
   echo "<div style='text-align: right'>\n";
   echo "<div id='validation-notice' class='ui-state-error ui-corner-all' style='display:none'></div>\n";
-  echo "<input name='name' style='width: 100%;'></input>\n";
+  echo "<input name='name' style='width: 100%;'>"
+  echo "</input>\n";
+
   echo "<input type='submit' value='Save Meters'><br>\n";
   echo "</div>\n";
 
@@ -427,9 +402,20 @@ function GraphManager() {
   var refresh = function() {
     highlightSections();
 
-    var servers = $("select[name=server-set] option:selected")
-                    .attr("value")
-                    .split(" ");
+    var server_type = $("select[name=server-set] option:selected")
+                        .attr("value");
+
+    var servers;                        
+
+    if (server_type == "self") {                     
+      servers = [$("input[name=server-self]")
+                   .attr("value")];
+    }
+    else {
+      servers = $("input[name=server-all]")
+                .attr("value")
+                .split(" ");
+    }
 
     var checks = $("input.meter:checkbox:checked").map(function() {
       return $(this).attr("value");
@@ -441,7 +427,7 @@ function GraphManager() {
     $("input[name=period]").attr("value", period);
 
     var isMultiGraph = 
-      ($("input[name=graph-layout]:checked").attr("value") == "multi-graph");
+      ($("select[name=server-set] option:selected").attr("value") == "cluster");
 
     if (isMultiGraph) {
       graphDiv.empty();

@@ -98,13 +98,21 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
   @Override
   public void checkForUpdate()
   {
-    update(getRepositoryRootHash());
+    loadLocalRoot();
+  }
+  
+  protected void loadLocalRoot()
+  {
+    String sha1 = getRepositoryRootHash();
+    
+    if (sha1 != null)
+      updateTagMap(sha1, false);
   }
 
   /**
    * Updates based on a sha1 commit entry
    */
-  protected boolean update(String sha1)
+  protected boolean update(String sha1, boolean isNew)
   {
     String oldSha1 = _tagMap.getCommitHash();
 
@@ -112,20 +120,31 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
       return true;
     }
 
-    updateLoad(sha1);
+    updateLoad(sha1, isNew);
 
     return false;
   }
-
-  protected void updateLoad(String sha1)
+  
+  protected String getTagHash()
   {
-    updateTagMap(sha1);
+    return _tagMap.getCommitHash();
+  }
+  
+  protected long getTagSequence()
+  {
+    return _tagMap.getSequence();
   }
 
-  protected void updateTagMap(String sha1)
+  protected void updateLoad(String sha1, boolean isNew)
+  {
+    updateTagMap(sha1, isNew);
+  }
+
+  protected void updateTagMap(String sha1, boolean isNew)
   {
     try {
-      RepositoryTagMap tagMap = new RepositoryTagMap(this, sha1);
+      RepositoryTagMap tagMap
+        = new RepositoryTagMap(this, sha1, isNew);
 
       setTagMap(tagMap);
     } catch (IOException e) {
@@ -202,6 +221,11 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
     commit.validate();
     
     String contentHash = addArchive(archivePath);
+    
+    RepositoryTagEntry oldEntry = getTagMap().get(commit.getId());
+    
+    if (oldEntry != null && oldEntry.getRoot().equals(contentHash))
+      return contentHash;
     
     if (putTag(commit.getId(), 
                contentHash, 
@@ -372,12 +396,19 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
     synchronized (this) {
       oldTagMap = _tagMap;
       
-      if (tagMap.getSequence() <= oldTagMap.getSequence())
+      if (tagMap.getCommitHash().equals(oldTagMap.getCommitHash()))
         return false;
+      
+      else if (tagMap.compareTo(oldTagMap) < 0) {
+        updateRepositoryRoot(oldTagMap.getCommitHash(),
+                             oldTagMap.getSequence());
+        
+        return false;
+      }
         
       _tagMap = tagMap;
 
-      setRepositoryRootHash(tagMap.getCommitHash());
+      updateRepositoryRoot(tagMap.getCommitHash(), tagMap.getSequence());
     }
 
     if (log.isLoggable(Level.FINER))
@@ -386,6 +417,11 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
     notifyTagListeners(oldTagMap.getTagMap(), tagMap.getTagMap());
 
     return true;
+  }
+  
+  protected void updateRepositoryRoot(String sha1, long sequence)
+  {
+    setRepositoryRootHash(sha1);
   }
   
   private void notifyTagListeners(Map<String,RepositoryTagEntry> oldTagMap,

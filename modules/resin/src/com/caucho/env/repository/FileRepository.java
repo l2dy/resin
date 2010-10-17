@@ -39,7 +39,6 @@ import com.caucho.env.git.GitObjectStream;
 import com.caucho.env.git.GitService;
 import com.caucho.env.git.GitTree;
 import com.caucho.env.git.GitType;
-import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -72,7 +71,7 @@ public class FileRepository extends AbstractRepository
   @Override
   public void checkForUpdate()
   {
-    update(getRepositoryRootHash());
+    update(getRepositoryRootHash(), false);
   }
 
   //
@@ -127,7 +126,12 @@ public class FileRepository extends AbstractRepository
   @Override
   public String getRepositoryRootHash()
   {
-    return _git.getTag(getRepositoryTag());
+    String value = _git.getTag(getRepositoryTag());
+    
+    if (value != null && value.length() > 6)
+      return value;
+    else
+      return null;
   }
   
   /**
@@ -136,7 +140,8 @@ public class FileRepository extends AbstractRepository
   @Override
   public void setRepositoryRootHash(String sha1)
   {
-    _git.writeTag(getRepositoryTag(), sha1);
+    if (sha1 != null)
+      _git.writeTag(getRepositoryTag(), sha1);
   }
 
   /**

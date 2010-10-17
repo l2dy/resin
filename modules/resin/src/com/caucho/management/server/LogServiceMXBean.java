@@ -38,5 +38,10 @@ package com.caucho.management.server;
  */
 public interface LogServiceMXBean extends ManagedObjectMXBean
 {
-  public LogMessage []findMessages(long minTime, long maxTime);
+  public LogMessage []findMessages(String level, long minTime, long maxTime);
+  
+  public LogMessage []findMessagesByName(String name,
+                                         String level,
+                                         long minTime, 
+                                         long maxTime);
 }

@@ -19,7 +19,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
@@ -28,12 +29,51 @@
 
 package com.caucho.transaction;
 
+import com.caucho.management.server.AbstractManagedObject;
+import com.caucho.management.server.TransactionManagerMXBean;
+
 /**
- * A resource with a close method.
+ * Implementation of the transaction manager.
  */
-public interface CloseResource {
-  /**
-   * Closes the resource.
-   */
-  public void close();
+class TransactionManagerAdmin extends AbstractManagedObject 
+  implements TransactionManagerMXBean 
+{
+  private TransactionManagerImpl _tm;
+  
+  TransactionManagerAdmin(TransactionManagerImpl tm)
+  {
+    _tm = tm;
+    
+    registerSelf();
+  }
+
+  @Override
+  public String getName()
+  {
+    return null;
+  }
+  
+  @Override
+  public int getTransactionCount()
+  {
+    return _tm.getTransactionCount();
+  }
+  
+  @Override
+  public long getCommitCountTotal()
+  {
+    return _tm.getCommitCount();
+  }
+  
+  @Override
+  public long getCommitResourceFailCountTotal()
+  {
+    return _tm.getCommitResourceFailCount();
+  }
+
+  @Override
+  public long getRollbackCountTotal()
+  {
+    return _tm.getRollbackCount();
+  }
 }
