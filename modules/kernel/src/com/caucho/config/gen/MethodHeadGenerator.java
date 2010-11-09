@@ -29,6 +29,7 @@
 package com.caucho.config.gen;
 
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
 
@@ -49,7 +50,17 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
   {
     super(factory, method, next);
   }
-
+  
+  protected String getMethodNamePrefix()
+  {
+    return "";
+  }
+  
+  protected String getMethodName()
+  {
+    return getMethodNamePrefix() + getJavaMethod().getName();
+  }
+  
   protected boolean isOverride()
   {
     return true;
@@ -72,7 +83,7 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
   {
     generateMethodPrologue(out, prologueMap);
     
-    String prefix = "";
+    String prefix = getMethodNamePrefix();
     String suffix = "";
  
     int modifiers = getJavaMethod().getModifiers();
@@ -91,9 +102,8 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
     AspectGeneratorUtil.generateHeader(out, 
                                        isOverride(),
                                        accessModifier, 
-                                       prefix, 
+                                       getMethodName(),
                                        getJavaMethod(), 
-                                       suffix, 
                                        getThrowsExceptions());
 
     out.println("{");
@@ -104,7 +114,13 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
     out.popDepth();
     out.println("}");
   }
-
+  
+  @Override
+  public int hashCode()
+  {
+    return getJavaMethod().getName().hashCode();
+  }
+  
   @Override
   public boolean equals(Object o)
   {
@@ -114,7 +130,11 @@ public class MethodHeadGenerator<X> extends AbstractAspectGenerator<X> {
       return false;
 
     MethodHeadGenerator<?> bizMethod = (MethodHeadGenerator<?>) o;
+    
+    Method aMethod = getJavaMethod();
+    Method bMethod = bizMethod.getJavaMethod();
 
-    return AnnotatedTypeUtil.isMatch(getJavaMethod(), bizMethod.getJavaMethod());
+    return (AnnotatedTypeUtil.isMatch(aMethod, bMethod)
+            && aMethod.getDeclaringClass().equals(bMethod.getDeclaringClass()));
   }
 }

@@ -39,6 +39,7 @@ import javax.servlet.FilterChain;
 
 import com.caucho.config.ConfigException;
 import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployContainerApi;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.make.AlwaysModified;
@@ -209,6 +210,11 @@ public class HostContainer implements InvocationBuilder {
     return new HostExpandDeployGenerator(id, _hostDeploy, this);
   }
 
+  public DeployContainerApi<HostController> getHostDeployContainer()
+  {
+    return _hostDeploy;
+  }
+  
   /**
    * Adds a host deploy
    */
@@ -413,6 +419,9 @@ public class HostContainer implements InvocationBuilder {
 
     if (p > 0 && q < p)
       shortHost = rawHost.substring(0, p);
+    
+    if (shortHost.startsWith("["))
+      shortHost = Host.calculateCanonicalIPv6(shortHost);
     
     String fullHost = shortHost + ':' + rawPort;
 

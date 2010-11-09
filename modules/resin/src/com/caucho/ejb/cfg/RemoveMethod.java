@@ -31,14 +31,16 @@ package com.caucho.ejb.cfg;
 
 import java.lang.reflect.Method;
 
+import javax.annotation.PostConstruct;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 
 import com.caucho.config.gen.BeanGenerator;
+import com.caucho.config.reflect.AnnotatedMethodImpl;
 
 /**
  * Configuration for remove-method.
  */
-public class RemoveMethod {
+public class RemoveMethod<X> extends EjbMethodPattern<X> {
   private BeanMethod _beanMethod;
   private boolean _retainIfException;
 
@@ -66,7 +68,14 @@ public class RemoveMethod {
     _retainIfException = retainIfException;
   }
 
-  public boolean isMatch(Method method)
+  @PostConstruct
+  public void init()
+  {
+    setSignature(_beanMethod.getSignature());
+  }
+  
+  @Override
+  public boolean isMatch(AnnotatedMethod<?> method)
   {
     return _beanMethod.isMatch(method);
   }
@@ -74,20 +83,13 @@ public class RemoveMethod {
   /**
    * Configures the bean with the override values
    */
-  public <X> void configure(BeanGenerator<X> bean)
+  @Override
+  public void configure(AnnotatedMethod<?> method)
   {
-    // View<X> view = bean.getView();
-      // XXX: check for type
+    if (isMatch(method)) {
+      AnnotatedMethodImpl<?> methodImpl = (AnnotatedMethodImpl<?>) method;
       
-      /*
-      for (BusinessMethodGenerator<X,?> bizMethod : view.getMethods()) {
-        AnnotatedMethod<?> apiMethod = bizMethod.getApiMethod();
-
-        if (_beanMethod.isMatch(apiMethod)) {
-          bizMethod.setRemove(true);
-          bizMethod.setRemoveRetainIfException(_retainIfException);
-        }
-      }
-      */
+      methodImpl.addAnnotation(new RemoveLiteral());
+    }
   }
 }

@@ -204,18 +204,23 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public final Value getField(Env env, StringValue name)
   {
-    int hash = (name.hashCode() & 0x7fffffff) % _prime;
+    Value returnValue = getFieldExt(env, name);
+    if(returnValue == UnsetValue.UNSET)
+    {
+        // __get didn't work, lets look in the class itself
+        int hash = (name.hashCode() & 0x7fffffff) % _prime;
 
-    for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-      StringValue entryKey = entry._key;
+        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
+          StringValue entryKey = entry._key;
 
-      if (name == entryKey || name.equals(entryKey)) {
-        // php/09ks vs php/091m
-        return entry._value.toValue();
-      }
+          if (name == entryKey || name.equals(entryKey)) {
+            // php/09ks vs php/091m
+            returnValue = entry._value.toValue();
+          }
+        }
     }
 
-    return getFieldExt(env, name);
+    return returnValue;
   }
 
   /**
@@ -430,14 +435,10 @@ public class ObjectExtValue extends ObjectValue
 
         if (fieldSet != null) {
           _isFieldInit = true;
-          Value retVal = fieldSet.callMethod(env,
-                                             _quercusClass,
-                                             this,
-                                             name,
-                                             value);
+          Value retVal = _quercusClass.setField(env, this, name, value);
           _isFieldInit = false;
-
-          return retVal;
+          if(retVal != UnsetValue.UNSET)
+            return retVal;
         }
       }
 
@@ -563,29 +564,42 @@ public class ObjectExtValue extends ObjectValue
   @Override
   public void unsetField(StringValue name)
   {
-    int hash = (name.hashCode() & 0x7fffffff) % _prime;
 
-    for (Entry entry = _entries[hash];
-         entry != null;
-         entry = entry._next) {
-      if (name.equals(entry.getKey())) {
-        Entry prev = entry._prev;
-        Entry next = entry._next;
 
-        if (prev != null)
-          prev._next = next;
-        else
-          _entries[hash] = next;
+    Value returnValue = _quercusClass.unsetField(Env.getCurrent(),this,name);
+    if(returnValue == UnsetValue.UNSET || returnValue == NullValue.NULL)
+    {
+        // __unset didn't work, lets look in the class itself
+        int hash = (name.hashCode() & 0x7fffffff) % _prime;
 
-        if (next != null)
-          next._prev = prev;
+        for (Entry entry = _entries[hash];
+             entry != null;
+             entry = entry._next) {
+          if (name.equals(entry.getKey())) {
+            Entry prev = entry._prev;
+            Entry next = entry._next;
 
-        _size--;
+            if (prev != null)
+              prev._next = next;
+            else
+              _entries[hash] = next;
 
-        return;
-      }
+            if (next != null)
+              next._prev = prev;
+
+            _size--;
+
+            return;
+          }
+        }
     }
+
+    return;
+
   }
+
+
+
 
   /**
    * Removes the field array ref.
@@ -631,18 +645,30 @@ public class ObjectExtValue extends ObjectValue
 
       if (name == entryKey || name.equals(entryKey)) {
 
-        /*
+
         if (entry._visibility == FieldVisibility.PRIVATE) {
           QuercusClass cls = env.getCallingClass();
 
           // XXX: this really only checks access from outside of class scope
           // php/091m
           if (cls != _quercusClass) {
-                env.error(L.l("Can't access private field '{0}::${1}'",
+                env.notice(L.l("Can't access private field '{0}::${1}'",
                         _quercusClass.getName(), name));
+              return null;
           }
+        } else if (entry._visibility == FieldVisibility.PROTECTED)
+        {
+            QuercusClass cls = env.getCallingClass();
+
+            if (cls == null || (cls != _quercusClass && !cls.isA(_quercusClass.getName())))
+            {
+                env.notice(L.l("Can't access protected field '{0}::${1}'",
+                        _quercusClass.getName(), name
+                        ));
+                return null;
+            }
         }
-        */
+
 
         return entry;
       }
@@ -1392,6 +1418,40 @@ public class ObjectExtValue extends ObjectValue
   private static String toMethod(char []key, int keyLength)
   {
     return new String(key, 0, keyLength);
+  }
+
+
+  @Override
+  public boolean issetField( StringValue name) {
+
+    Value returnValue = _quercusClass.issetField(Env.getCurrent(),this,name);
+    if(returnValue == UnsetValue.UNSET)
+    {
+        // setter didn't work, lets look in the class itself
+        int hash = (name.hashCode() & 0x7fffffff) % _prime;
+
+        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
+          StringValue entryKey = entry._key;
+
+          if ((name == entryKey || name.equals(entryKey)) && entry._value != NullValue.NULL ) {
+            // php/09ks vs php/091m
+              return true;
+          }
+        }
+
+        if(this.isA("arrayaccess"))
+        {
+            // TODO: This should probably be in ArrayAccessDelegate
+            Env _env = Env.getCurrent();
+            Value v = this.getObject(_env).getArray().get(name);
+            if( v != null && v != NullValue.NULL && v != UnsetValue.UNSET)
+                return true;
+            return false;
+        }
+    }
+
+    return returnValue.toBoolean();
+
   }
 
   @Override

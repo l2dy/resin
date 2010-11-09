@@ -254,13 +254,14 @@ public class ServletConfigImpl
     }
   }
 
+  @Override
   public void setMultipartConfig(MultipartConfigElement multipartConfig)
   {
     if (multipartConfig == null)
       throw new IllegalArgumentException();
 
     if (! _webApp.isInitializing())
-      throw new IllegalStateException();
+      throw new IllegalStateException(L.l("setMultipartConfig must be called during initialization."));
 
     _multipartConfigElement = multipartConfig;
   }
@@ -268,8 +269,14 @@ public class ServletConfigImpl
   public MultipartConfigElement getMultipartConfig()
   {
     if (_multipartConfigElement == null) {
-      Class servletClass = getServletClass();
-
+      Class<?> servletClass = null;
+      
+      try {
+        servletClass = getServletClass();
+      } catch (Exception e) {
+        log.log(Level.FINER, e.toString(), e);
+      }
+      
       if (servletClass != null) {
         MultipartConfig config
           = (MultipartConfig) servletClass.getAnnotation(MultipartConfig.class);
@@ -352,7 +359,7 @@ public class ServletConfigImpl
   {
     return _initParams;
   }
-
+  
   public void setAsyncSupported(boolean asyncSupported)
   {
     if (_webApp != null && ! _webApp.isInitializing())
@@ -361,7 +368,8 @@ public class ServletConfigImpl
     _asyncSupported = asyncSupported;
   }
 
-  public boolean isAsyncSupported() {
+  public boolean isAsyncSupported()
+  {
     return _asyncSupported;
   }
 
@@ -427,8 +435,18 @@ public class ServletConfigImpl
         ((WebApp) _servletContext).createJsp().setLoadTldOnInit(true);
     }
 
-    InjectManager beanManager = InjectManager.create();
-    beanManager.addConfiguredBean(servletClassName);
+    InjectManager cdiManager = InjectManager.create();
+    cdiManager.addConfiguredBean(servletClassName);
+    
+    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    try {
+      _servletClass = Class.forName(servletClassName, false, loader);
+
+      if (_comp == null)
+        _comp = cdiManager.createInjectionTarget(_servletClass);
+    } catch (ClassNotFoundException e) {
+      log.log(Level.ALL, e.toString(), e);
+    }
   }
   
   private boolean isFacesServlet()
@@ -439,7 +457,7 @@ public class ServletConfigImpl
   @DisableConfig
   public void setServletClass(Class<? extends Servlet> servletClass)
   {
-    if (_servletClass != null)
+    if (_servletClass == null)
       throw new IllegalStateException();
 
     _servletClass = servletClass;
@@ -461,7 +479,7 @@ public class ServletConfigImpl
         Thread thread = Thread.currentThread();
         ClassLoader loader = thread.getContextClassLoader();
 
-        _servletClass = Class.forName(_servletClassName, false, loader);
+        _servletClass = Class.forName(calculateServletClassName(), false, loader);
       } catch (Exception e) {
         throw error(L.l("'{0}' is not a known servlet class.  Servlets belong in the classpath, for example WEB-INF/classes.",
                         _servletClassName),
@@ -470,6 +488,11 @@ public class ServletConfigImpl
     }
 
     return _servletClass;
+  }
+  
+  protected String calculateServletClassName()
+  {
+    return getServletClassName();
   }
 
   public void setServlet(Servlet servlet)
@@ -922,7 +945,7 @@ public class ServletConfigImpl
       if (_servletClass != null) {
       }
       else if (requireClass) {
-        throw error(L.l("'{0}' is not a known servlet.  Servlets belong in the classpath, often in WEB-INF/classes.", _servletClassName));
+        throw error(L.l("'{0}' is not a known servlet class.  Servlets belong in the classpath, for example WEB-INF/classes.", _servletClassName));
       }
       else {
         String location = _location != null ? _location : "";
@@ -1285,7 +1308,8 @@ public class ServletConfigImpl
     else if (servletClass != null) {
       InjectManager inject = InjectManager.create();
 
-      _comp = inject.createInjectionTarget(servletClass);
+      if (_comp == null)
+        _comp = inject.createInjectionTarget(servletClass);
 
       CreationalContextImpl env = new OwnerCreationalContext(null);
 
@@ -1434,6 +1458,12 @@ public class ServletConfigImpl
     log.warning(e1.toString());
 
     return e1;
+  }
+  
+  protected void copyFrom(ServletConfigImpl source)
+  {
+    _initParams.putAll(source._initParams);
+    _init = source._init;
   }
 
   /**

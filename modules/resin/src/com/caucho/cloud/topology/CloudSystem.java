@@ -56,7 +56,7 @@ public class CloudSystem
   }
 
   /**
-   * Returns the domain id.
+   * Returns the server id.
    */
   public String getId()
   {
@@ -192,7 +192,7 @@ public class CloudSystem
     
     return true;
   }
-
+  
   //
   // listeners
   //
@@ -221,9 +221,16 @@ public class CloudSystem
     _listeners.remove(listener);
   }
 
-  /**
-   * Adds a listener
-   */
+  //
+  // lifecycle
+  //
+  
+  public void start()
+  {
+    for (CloudCluster cluster : getClusterList()) {
+      cluster.start();
+    }
+  }
   
 
   @Override

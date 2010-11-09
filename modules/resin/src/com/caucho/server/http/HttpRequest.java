@@ -831,9 +831,6 @@ public class HttpRequest extends AbstractHttpRequest
       ReadStream is = getRawRead();
 
       if (! readRequest(is)) {
-        if (log.isLoggable(Level.FINE))
-          log.fine(dbgId() + "read timeout");
-
         clearRequest();
 
         return false;
@@ -933,9 +930,10 @@ public class HttpRequest extends AbstractHttpRequest
 
         readOffset = 0;
       }
+      
       ch = readBuffer[readOffset++];
     }
-
+    
     _method.setLength(offset);
 
     // skip whitespace
@@ -962,6 +960,12 @@ public class HttpRequest extends AbstractHttpRequest
           readOffset = 0;
         }
         ch = readBuffer[readOffset++];
+      }
+      
+      if (ch != '/') {
+        log.warning("Invalid Request (method=" + _method + " url ch=0x" + Integer.toHexString(ch) + ") (IP=" + getRemoteHost() + ")");
+        
+        throw new BadRequestException("Invalid Request(Remote IP=" + getRemoteHost() + ")");
       }
 
       if (readLength <= readOffset) {
@@ -1036,7 +1040,7 @@ public class HttpRequest extends AbstractHttpRequest
       }
       ch = readBuffer[readOffset++];
     }
-
+    
     _uriLength = uriLength;
 
     // skip whitespace
@@ -1236,7 +1240,7 @@ public class HttpRequest extends AbstractHttpRequest
 
     _rawInputStream.init(conn.getReadStream());
     getReadStream().setSource(_rawInputStream);
-
+    
     return context;
   }
 

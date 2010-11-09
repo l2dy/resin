@@ -288,6 +288,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
     // jsp/15ma
     _responseStream.killCaching();
+
     /*
     if (_currentWriter instanceof JspPrintWriter)
       ((JspPrintWriter) _currentWriter).clear();
@@ -414,10 +415,11 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @param entry the saved cache entry
    */
+  @Override
   public void setMatchCacheEntry(AbstractCacheEntry entry)
   {
     assert(_matchCacheEntry == null);
-
+    
     _matchCacheEntry = entry;
   }
 

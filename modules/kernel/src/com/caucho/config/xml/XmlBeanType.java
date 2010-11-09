@@ -106,7 +106,7 @@ public class XmlBeanType<T> extends ConfigType<T>
   @Override
   public Object create(Object parent, QName name)
   {
-    return new XmlBeanConfig<T>(name, _beanClass);
+    return new XmlBeanConfig<T>(name, _beanClass, null);
   }
 
   /**
@@ -294,7 +294,7 @@ public class XmlBeanType<T> extends ConfigType<T>
   @Override
   public void init(Object bean)
   {
-    XmlBeanConfig customBean = (XmlBeanConfig) bean;
+    XmlBeanConfig<?> customBean = (XmlBeanConfig<?>) bean;
 
     customBean.init();
   }

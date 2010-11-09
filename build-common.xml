@@ -104,6 +104,12 @@
     </condition>
     <property name="maven.m2" value="m2-snapshot"/>
     <property name="maven.root" value="${resin.dist}/${maven.m2}"/>
+
+    <!--nversion must be a nubmer, used with eclipse-plugin-->
+    <condition property="nversion" value="${version}">
+      <isset property="version"/>
+    </condition>
+    <property name="nversion" value="4.0.${snapshotdate}"/>
     
     <property name="version" value="4.0.s${snapshotdate}"/>
     <property name="dist.name" value="${shortproduct}-${version}"/>
@@ -1233,16 +1239,24 @@
           overwrite="true">
       <fileset dir="${dist}/${shortproduct}-${version}">
         <include name="lib/activation.jar"/>
-        <include name="lib/javaee-16.jar"/>
-        <include name="lib/javamail-141.jar"/>
         <!--
         <include name="lib/jaxstream-15.jar"/>
         -->
+        <include name="lib/eclipselink.jar"/>
+        <include name="lib/hibernate-validate-4.0.2.GA.jar.jar"/>
+        <include name="lib/javaee-16.jar"/>
+        <include name="lib/javamail-141.jar"/>
         <include name="lib/jaxrpc-15.jar"/>
-        <include name="lib/jsf-12.jar"/>
+        <include name="lib/jsf-api.jar"/>
+        <include name="lib/jsf-impl.jar"/>
         <include name="lib/pro.jar"/>
         <include name="lib/resin.jar"/>
+        <include name="lib/slf4j-api-1.6.1.jar"/>
+        <include name="lib/validation-api-1.0.0.GA.jar"/>
         <include name="lib/webutil.jar"/>
+        <include name="lib/webservices-api.jar"/>
+        <include name="lib/webservices-extra-api.jar"/>
+        <include name="lib/webservices.LICENSE"/>
       </fileset>
       
       <fileset dir="${resin.install}">

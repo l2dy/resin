@@ -31,6 +31,7 @@ package com.caucho.env.deploy;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
@@ -69,7 +70,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   private static final Logger log
     = Logger.getLogger(ExpandDeployController.class.getName());
   
-  private static final String APPLICATION_HASH_PATH
+  public static final String APPLICATION_HASH_PATH
     = "META-INF/resin.application-hash";
 
   private final String _autoDeployStage;
@@ -77,14 +78,18 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   private Path _rootDirectory;
   private Path _archivePath;
   
+  private DeployContainerApi<?> _container;
+  
   private String _rootHash;
 
+  private boolean _isAllowRepository = true;
   private Repository _repository;
   private RepositorySpi _repositorySpi;
 
   private FileSetType _expandCleanupFileSet;
   
   private DeployTagItem _deployItem;
+  private DeployListener _deployListener;
   
   private DependencyContainer _depend = new DependencyContainer();
   
@@ -98,12 +103,13 @@ abstract public class ExpandDeployController<I extends DeployInstance>
 
   protected ExpandDeployController(String id)
   {
-    this(id, null, null);
+    this(id, null, null, null);
   }
 
   protected ExpandDeployController(String id,
                                    ClassLoader loader,
-                                   Path rootDirectory)
+                                   Path rootDirectory,
+                                   DeployContainerApi<?> container)
   {
     super(id, loader);
 
@@ -111,6 +117,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       rootDirectory = Vfs.getPwd(getParentClassLoader());
 
     _rootDirectory = rootDirectory;
+    _container = container;
     
     _autoDeployStage = "server-" + ResinSystem.getCurrentId();
   }
@@ -145,6 +152,16 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   public void setArchivePath(Path path)
   {
     _archivePath = path;
+  }
+  
+  public void setAllowRepository(boolean isAllowRepository)
+  {
+    _isAllowRepository = isAllowRepository;
+  }
+  
+  public boolean isAllowRepository()
+  {
+    return _isAllowRepository;
   }
 
   /**
@@ -206,15 +223,23 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   {
     super.initEnd();
     
-    RepositoryService repositoryService = RepositoryService.create(); 
-    _repository = repositoryService.getRepository();
-    _repository.addListener(getId(), this);
-    _repositorySpi = repositoryService.getRepositorySpi();
-    
+    if (isAllowRepository()) {
+      RepositoryService repositoryService = RepositoryService.create(); 
+      _repository = repositoryService.getRepository();
+      _repository.addListener(getId(), this);
+      _repositorySpi = repositoryService.getRepositorySpi();
+    }
+      
     DeployControllerService deployService = DeployControllerService.create();
 
     deployService.addTag(getId());
     _deployItem = deployService.getTagItem(getId());
+    
+    if (_container != null) {
+      _deployListener = new DeployListener(_container, getId());
+    
+      _deployItem.addListener(_deployListener);
+    }
     
     _rootHash = readRootHash();
   }
@@ -345,6 +370,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     throws IOException
   {
     DynamicClassLoader loader = Environment.getDynamicClassLoader();
+
     if (loader == null)
       return;
 
@@ -452,7 +478,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       Path pwd = getRootDirectory();
 
       pwd.mkdirs();
-      
+
       removeExpandDirectory(pwd);
 
       if (log.isLoggable(Level.FINE)) {
@@ -657,6 +683,15 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     if (_deployItem != null)
       _deployItem.toStop();
   }
+  
+  @Override
+  protected void onDestroy()
+  {
+    super.onDestroy();
+    
+    if (_deployItem != null)
+      _deployItem.removeListener(_deployListener);
+  }
 
   /**
    * Returns the hash code.
@@ -681,5 +716,44 @@ abstract public class ExpandDeployController<I extends DeployInstance>
 
     // XXX: s/b getRootDirectory?
     return getId().equals(controller.getId());
+  }
+  
+  static class DeployListener implements DeployControllerListener {
+    private WeakReference<DeployContainerApi<?>> _container;
+    private String _tag;
+    
+    DeployListener(DeployContainerApi<?> container, String tag)
+    {
+      _container = new WeakReference<DeployContainerApi<?>>(container);
+      _tag = tag;
+      
+      // 
+    }
+
+    @Override
+    public void onStart()
+    {
+      DeployContainerApi<?> container = _container.get();
+      
+      if (container != null) {
+        DeployControllerApi<?> controller = container.findControllerById(_tag);
+        
+        if (controller != null)
+          controller.start();
+      }
+    }
+
+    @Override
+    public void onStop()
+    {
+      DeployContainerApi<?> container = _container.get();
+      
+      if (container != null) {
+        DeployControllerApi<?> controller = container.findControllerById(_tag);
+        
+        if (controller != null)
+          controller.stop();
+      }
+    }
   }
 }

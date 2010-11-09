@@ -41,7 +41,8 @@ abstract public class ValueGenerator implements ObjectProxy {
     return null;
   }
   
-  public Object createObject(Hashtable env)
+  @Override
+  public Object createObject(Hashtable<?,?> env)
   {
     return create();
   }

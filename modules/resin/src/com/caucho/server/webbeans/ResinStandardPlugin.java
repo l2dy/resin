@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.annotation.ManagedBean;
 import javax.ejb.MessageDriven;
 import javax.ejb.Singleton;
 import javax.ejb.Stateful;
@@ -53,6 +54,7 @@ import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.ejb.inject.EjbGeneratedBean;
 import com.caucho.ejb.manager.EjbManager;
+import com.caucho.ejb.manager.EjbModule;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.inject.Jndi;
 import com.caucho.inject.LazyExtension;
@@ -60,6 +62,7 @@ import com.caucho.inject.MBean;
 import com.caucho.inject.Module;
 import com.caucho.jms.JmsMessageListener;
 import com.caucho.jmx.Jmx;
+import com.caucho.loader.ModuleConfig;
 import com.caucho.remote.BamService;
 import com.caucho.server.admin.AdminService;
 import com.caucho.server.cluster.Server;
@@ -193,6 +196,10 @@ public class ResinStandardPlugin implements Extension {
       }
     }
     
+    if (annotated.isAnnotationPresent(ManagedBean.class)){
+      registerManagedBean(annotated, bean);
+    }
+
     if (annotated.isAnnotationPresent(MBean.class)) {
       MBean manage = annotated.getAnnotation(MBean.class);
       
@@ -214,8 +221,8 @@ public class ResinStandardPlugin implements Extension {
 
       HempBroker broker = HempBroker.getCurrent();
 
-      broker.addStartupActor(event.getBean(), service.name(), service
-          .threadMax());
+      broker.addStartupActor(event.getBean(), service.name(), 
+                             service.threadMax());
     }
 
     if (annotated.isAnnotationPresent(AdminService.class)) {
@@ -231,9 +238,32 @@ public class ResinStandardPlugin implements Extension {
       if (!server.isWatchdog()) {
         HempBroker broker = (HempBroker) server.getAdminBroker();
 
-        broker.addStartupActor(event.getBean(), service.name(), service
-            .threadMax());
+        broker.addStartupActor(event.getBean(), service.name(), 
+                               service.threadMax());
       }
+    }
+  }
+  
+  private void registerManagedBean(Annotated annotated,
+                                   Bean<?> bean)
+  {
+    ManagedBean manage = annotated.getAnnotation(ManagedBean.class);
+    String jndiName = manage.value();
+
+    if ("".equals(jndiName)) {
+      jndiName = bean.getBeanClass().getSimpleName();
+    }
+    
+    JndiBeanProxy<?> proxy = new JndiBeanProxy(_cdiManager, bean);
+    
+    if (log.isLoggable(Level.FINE))
+      log.fine("bind to JNDI '" + jndiName + "' for " + bean);
+               
+    try {
+      com.caucho.naming.Jndi.bindDeepShort("java:module/" + jndiName, proxy);
+      com.caucho.naming.Jndi.bindDeepShort(jndiName, proxy);
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
     }
   }
 

@@ -267,8 +267,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
       SystemException
   {
     if (resource == null) {
-      throw new IllegalArgumentException(L
-          .l("Resource must not be null in enlistResource"));
+      throw new IllegalArgumentException(L.l("Resource must not be null in enlistResource"));
     }
 
     if (_isSuspended) {
@@ -1071,32 +1070,38 @@ public class TransactionImpl implements Transaction, AlarmListener {
   private void callBeforeCompletion() throws RollbackException
   {
     _alarm.dequeue();
-    
-    // server/16h2
-    for (int i = 0; _synchronizations != null && i < _synchronizations.size(); i++) {
-      Synchronization synchronization = _synchronizations.get(i);
-      
-      if (log.isLoggable(Level.FINEST))
-        log.finest(this + " beforeCompletion " + synchronization);
-
-      try {
-        synchronization.beforeCompletion();
-      } catch (RuntimeException e) {
-        setRollbackOnly(e);
-
-        RollbackException newException = new RollbackException(e.toString());
-        newException.initCause(e);
-
-        throw newException;
-      } catch (Throwable e) {
-        log.log(Level.FINE, e.toString(), e);
-      }
-    }
 
     if (_interposedSynchronizations != null) {
-      for (Synchronization interposedSynchronization : _interposedSynchronizations) {
+      // env/06a2
+      for (int i = 0; i < _interposedSynchronizations.size(); i++) {
+        Synchronization sync = _interposedSynchronizations.get(i);
+        
         try {
-          interposedSynchronization.beforeCompletion();
+          sync.beforeCompletion();
+        } catch (RuntimeException e) {
+          setRollbackOnly(e);
+
+          RollbackException newException = new RollbackException(e.toString());
+          newException.initCause(e);
+
+          throw newException;
+        } catch (Throwable e) {
+          log.log(Level.FINE, e.toString(), e);
+        }
+      }
+    }
+    
+    // server/16h2
+    if (_synchronizations != null) {
+      // env/06a2
+      for (int i = 0; i < _synchronizations.size(); i++) {
+        Synchronization sync = _synchronizations.get(i);
+
+        if (log.isLoggable(Level.FINEST))
+          log.finest(this + " beforeCompletion " + sync);
+
+        try {
+          sync.beforeCompletion();
         } catch (RuntimeException e) {
           setRollbackOnly(e);
 
@@ -1144,6 +1149,8 @@ public class TransactionImpl implements Transaction, AlarmListener {
     _synchronizations = null;
 
     _userTransaction = null;
+    // env/0660
+    _timeout = _transactionManager.getTimeout();
 
     XidImpl xid = _xid;
     _xid = null;
@@ -1175,7 +1182,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
     int length = (interposedSynchronizations == null 
                   ? 0
                   : interposedSynchronizations.size());
-    for (int i = 0; i < length; i++) {
+    for (int i = length - 1; i >= 0; i--) {
       Synchronization sync
         = (Synchronization) interposedSynchronizations.get(i);
 
@@ -1190,7 +1197,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
     }
 
     length = synchronizations == null ? 0 : synchronizations.size();
-    for (int i = 0; i < length; i++) {
+    for (int i = length - 1; i >= 0; i--) {
       Synchronization sync = (Synchronization) synchronizations.get(i);
 
       try {
@@ -1268,6 +1275,7 @@ public class TransactionImpl implements Transaction, AlarmListener {
       mappedResources.clear();
 
     _xid = null;
+    _timeout = _transactionManager.getTimeout();
   }
 
   /**

@@ -28,6 +28,8 @@
 
 package com.caucho.ejb.cfg;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.ejb.Stateless;
@@ -46,6 +48,7 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
   private static final L10N L = new L10N(EjbSessionConfigProxy.class);
   
   private String _sessionType;
+  private AtomicBoolean _isConfigured = new AtomicBoolean();
   
   /**
    * Creates a new session bean configuration.
@@ -71,6 +74,9 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
   @Override
   public void configure()
   {
+    if (! _isConfigured.compareAndSet(false, true))
+      return;
+    
     EjbBean<?> ejbBean = getConfig().getBeanConfig(getEjbName());
     
     if (ejbBean == null) {
@@ -87,9 +93,8 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
       
       getConfig().setBeanConfig(getEjbName(), ejbBean);
     }
-    
+
     getBuilderProgram().configure(ejbBean);
-    
   }
   
   private <T> EjbBean<T> createEjbBean(Class<T> ejbClass)
@@ -102,24 +107,37 @@ public class EjbSessionConfigProxy extends EjbBeanConfigProxy {
     String name = getEjbName();
     String description = null;
     String mappedName = null;
+    String moduleName = getEJBModuleName();
+    
+    if (_sessionType == null) {
+      if (ejbClass.isAnnotationPresent(Singleton.class))
+        _sessionType = "Singleton";
+      else if (ejbClass.isAnnotationPresent(Stateless.class))
+        _sessionType = "Stateless";
+      else if (ejbClass.isAnnotationPresent(Stateful.class))
+        _sessionType = "Stateful";
+      else
+        throw new ConfigException(L.l("'{0}' needs a configured session-type",
+                                      ejbClass.getName()));
+    }
 
     if ("Stateless".equals(_sessionType)) {
       Stateless stateless = new StatelessLiteral(name, mappedName, description);
       annType.addAnnotation(stateless);
       
-      return new EjbStatelessBean<T>(getConfig(), rawAnnType, annType, stateless.name());
+      return new EjbStatelessBean<T>(getConfig(), rawAnnType, annType, moduleName);
     }
     else if ("Stateful".equals(_sessionType)) {
       Stateful stateful = new StatefulLiteral(name, mappedName, description);
       annType.addAnnotation(stateful);
       
-      return new EjbStatefulBean<T>(getConfig(), rawAnnType, annType, stateful.name());
+      return new EjbStatefulBean<T>(getConfig(), rawAnnType, annType, moduleName);
     }
     else if ("Singleton".equals(_sessionType)) {
       Singleton singleton = new SingletonLiteral(name, mappedName, description);
       annType.addAnnotation(singleton);
       
-      return new EjbSingletonBean<T>(getConfig(), rawAnnType, annType, singleton.name());
+      return new EjbSingletonBean<T>(getConfig(), rawAnnType, annType, moduleName);
     }
     
     throw new ConfigException(L.l("'{0}' is an unknown <session-type>",

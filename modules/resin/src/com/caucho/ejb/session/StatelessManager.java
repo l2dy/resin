@@ -50,6 +50,9 @@ import com.caucho.ejb.gen.StatelessGenerator;
 import com.caucho.ejb.inject.StatelessBeanImpl;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
+import com.caucho.ejb.server.EjbInjectionTarget;
+import com.caucho.ejb.server.SingletonInjectionTarget;
+import com.caucho.ejb.server.StatelessInjectionTarget;
 import com.caucho.util.L10N;
 
 /**
@@ -64,6 +67,9 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   private int _sessionIdleMax = 16;
   private int _sessionConcurrentMax = -1;
   private long _sessionConcurrentTimeout = -1;
+  
+  private ThreadLocal<StatelessPool<X,?>> _localSessionPool
+    = new ThreadLocal<StatelessPool<X,?>>();
 
   /**
    * Creates a new stateless server.
@@ -76,12 +82,14 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
    *          the session configuration from the ejb.xml
    */
   public StatelessManager(EjbManager ejbContainer, 
+                          String ejbName,
                           String moduleName,
                           AnnotatedType<X> rawAnnType,
                           AnnotatedType<X> annotatedType,
                           EjbLazyGenerator<X> ejbGenerator)
   {
-    super(ejbContainer, moduleName, rawAnnType, annotatedType, ejbGenerator);
+    super(ejbContainer, ejbName, moduleName, 
+          rawAnnType, annotatedType, ejbGenerator);
     
     introspect();
   }
@@ -138,6 +146,16 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   {
     return getSessionContext(api).createProxy(null);
   }
+  
+  public void setLocalStatelessPool(StatelessPool<X,?> pool)
+  {
+    _localSessionPool.set(pool);
+  }
+  
+  public StatelessPool<X,?> getLocalStatelessPool()
+  {
+    return _localSessionPool.get();
+  }
 
   @Override
   protected <T> Bean<T> createBean(ManagedBeanImpl<X> mBean,
@@ -180,10 +198,17 @@ public class StatelessManager<X> extends AbstractSessionManager<X> {
   /**
    * Called by the StatelessProxy on initialization.
    */
-  public <T> StatelessPool<X,T> createStatelessPool(StatelessContext<X,T> context,
+  public <T> StatelessPool<X,T> createStatelessPool(StatelessProxyFactory proxy,
+                                                    StatelessContext<X,T> context,
                                                     List<Interceptor<?>> interceptorBeans)
   {
-    return new StatelessPool<X,T>(this, context, interceptorBeans);
+    return new StatelessPool<X,T>(this, proxy, context, interceptorBeans);
+  }
+  
+  @Override
+  protected EjbInjectionTarget<X> createInjectionTarget()
+  {
+    return new StatelessInjectionTarget<X>(this, getAnnotatedType());
   }
 
   /**

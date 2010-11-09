@@ -29,6 +29,7 @@
 
 package com.caucho.ejb.session;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -44,6 +45,7 @@ import java.util.logging.Logger;
 import javax.annotation.security.DeclareRoles;
 import javax.annotation.security.RolesAllowed;
 import javax.ejb.SessionContext;
+import javax.ejb.TimerService;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
 import javax.enterprise.inject.spi.AnnotatedField;
@@ -96,12 +98,13 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
   private String[] _declaredRoles;
 
   public AbstractSessionManager(EjbManager manager,
+                                String ejbName,
                                 String moduleName,
                                 AnnotatedType<X> rawAnnType,
                                 AnnotatedType<X> annotatedType,
                                 EjbLazyGenerator<X> lazyGenerator)
   {
-    super(manager, moduleName, rawAnnType, annotatedType);
+    super(manager, ejbName, moduleName, rawAnnType, annotatedType);
     
     _lazyGenerator = lazyGenerator;
     
@@ -198,6 +201,8 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       super.init();
       
       _injectManager = InjectManager.create();
+      
+      registerInjection();
 
       for (AnnotatedType<? super X> localApi : _lazyGenerator.getLocalApi()) {
         createContext(localApi.getJavaClass());
@@ -280,8 +285,8 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
     InjectManager injectManager = context.getInjectManager();
     
     BeanBuilder<SessionContext> factory
-      = injectManager.createBeanFactory(SessionContext.class);
-  
+    = injectManager.createBeanFactory(SessionContext.class);
+
     context.setDeclaredRoles(_declaredRoles);
 
     // XXX: separate additions?
@@ -298,6 +303,18 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       Jndi.bindDeep("java:comp/" + beanName + "/sessionContext", context);
     } catch (Exception e) {
       log.log(Level.FINER, e.toString(), e);
+    }
+    
+    try {
+      TimerService timer = context.getTimerService();
+      
+      BeanBuilder<TimerService> timerBuilder
+        = injectManager.createBeanFactory(TimerService.class);
+      
+      if (injectManager.getBeans(TimerService.class).size() == 0)
+        injectManager.addBean(timerBuilder.singleton(timer));
+    } catch (Exception e) {
+      log.log(Level.ALL, e.toString(), e);
     }
     
     /*
@@ -527,13 +544,22 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
         AnnotatedMethodImpl<? super X> extMethod
           = new AnnotatedMethodImpl(apiMethod.getDeclaringType(),
                                     method,
-                                    apiMethod.getJavaMember());
+                                    apiMethod.getJavaMember(),
+                                    toArray(apiMethod.getAnnotations()));
 
         return extMethod;
       }
     }
     
     return null;
+  }
+  
+  private Annotation []toArray(Set<Annotation> annSet)
+  {
+    Annotation []ann = new Annotation[annSet.size()];
+    annSet.toArray(ann);
+    
+    return ann;
   }
   
   private <T> void registerLocalSession(InjectManager beanManager, 

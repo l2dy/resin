@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ejb.DependsOn;
 import javax.ejb.FinderException;
 import javax.ejb.Timer;
 import javax.ejb.TimerService;
@@ -90,7 +91,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   private Bean<X> _bean;
 
   private String _id;
-  private String _ejbName;
+  private final String _ejbName;
   // name for IIOP, Hessian, JNDI
   protected String _mappedName;
 
@@ -121,10 +122,13 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
    *          the owning server container
    */
   public AbstractEjbBeanManager(EjbManager ejbManager,
+                                String ejbName,
                                 String moduleName,
                                 AnnotatedType<X> rawAnnotatedType,
                                 AnnotatedType<X> annotatedType)
   {
+    _ejbName = ejbName;
+    
     _rawAnnotatedType = rawAnnotatedType;
     _annotatedType = annotatedType;
     _ejbManager = ejbManager;
@@ -144,12 +148,17 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     _loader.setAttribute("caucho.inject", false);
     _loader.setAttribute("ejb.manager", false);
     
-    _producer = new EjbInjectionTarget<X>(this, annotatedType);
+    _producer = createInjectionTarget();
     
     _moduleInjectManager = InjectManager.create();
     _ejbInjectManager = InjectManager.create(_loader);
     
     _ejbInjectManager.setJndiClassLoader(_moduleInjectManager.getClassLoader());
+  }
+  
+  protected EjbInjectionTarget<X> createInjectionTarget()
+  {
+    return new EjbInjectionTarget<X>(this, getAnnotatedType());
   }
 
   /**
@@ -210,14 +219,6 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   }
 
   /**
-   * Sets the ejb name.
-   */
-  public void setEJBName(String ejbName)
-  {
-    _ejbName = ejbName;
-  }
-
-  /**
    * Returns the ejb's name
    */
   public String getEJBName()
@@ -226,7 +227,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   }
 
   /**
-   * Returns's the module that defined this ejb.
+   * Returns the module that defined this ejb.
    */
   public String getModuleName()
   {
@@ -360,6 +361,36 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
   public String encodeId(Object primaryKey)
   {
     return String.valueOf(primaryKey);
+  }
+
+  /**
+   * @param bindList
+   * @return
+   */
+  public boolean isDependValid(ArrayList<AbstractEjbBeanManager<?>> bindList)
+  {
+    DependsOn dependsOn = getAnnotatedType().getAnnotation(DependsOn.class);
+    
+    if (dependsOn == null)
+      return true;
+    
+    for (String dep : dependsOn.value()) {
+      if (! isStarted(dep, bindList))
+        return false;
+    }
+    
+    return true;
+  }
+  
+  private boolean isStarted(String dep, 
+                            ArrayList<AbstractEjbBeanManager<?>> bindList)
+  {
+    for (AbstractEjbBeanManager<?> manager : bindList) {
+      if (dep.equals(manager.getEJBName()))
+        return true;
+    }
+    
+    return false;
   }
 
   /**
@@ -600,6 +631,12 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     for (ResourceGroupConfig resource : _resourceList) {
       resource.deploy();
     }
+  }
+
+  protected void registerInjection()
+  {
+    _producer.setEnvLoader(_loader);
+    _producer.registerInjection();
   }
 
   protected void bindInjection()

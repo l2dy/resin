@@ -155,7 +155,7 @@ abstract public class Query {
   /**
    * Returns any from items.
    */
-  public FromItem []getFromItems()
+  public final FromItem []getFromItems()
   {
     return _fromItems;
   }
@@ -462,7 +462,7 @@ abstract public class Query {
       costItems.add(item);
       
       long indexCost = calculateOrderIndexCost(costItems, andProduct);
-      
+
       if (indexCost < bestCost) {
         bestCost = indexCost;
         bestIndex = j;
@@ -503,6 +503,8 @@ abstract public class Query {
                                       ArrayList<Expr> andProduct)
   {
     long cost = Long.MAX_VALUE;
+    int count = 0;
+    
     for (int k = 0; k < andProduct.size(); k++) {
       Expr expr = andProduct.get(k);
 
@@ -512,11 +514,16 @@ abstract public class Query {
         return -1;
       }
 
-      if (subCost < cost)
+      if (subCost < cost) {
         cost = subCost;
+        count = 0;
+      }
+      else if (subCost == cost) {
+        count++;
+      }
     }
     
-    return cost;
+    return cost - count;
   }
 
   /**
@@ -526,16 +533,23 @@ abstract public class Query {
                                        ArrayList<Expr> andProduct)
   {
     long cost = Long.MAX_VALUE;
+    int count = 0;
+    
     for (int k = 0; k < andProduct.size(); k++) {
       Expr expr = andProduct.get(k);
 
       long subCost = expr.indexCost(costItems);
 
-      if (subCost < cost)
+      if (subCost < cost) {
         cost = subCost;
+        count = 0;
+      }
+      else if (subCost == cost) {
+        count++;
+      }
     }
     
-    return cost;
+    return cost - count;
   }
   
   private void orderFromItemsUpdateAnd(ArrayList<Expr> andProduct,
@@ -665,6 +679,15 @@ abstract public class Query {
     throws SQLException;
 
   /**
+   * Executes the query.
+   */
+  public SelectCursor executeCursor(QueryContext queryCtx, Transaction xa)
+    throws SQLException
+  {
+    throw new UnsupportedOperationException(toString());
+  }
+
+  /**
    * Starts the query.
    */
   protected boolean start(TableIterator []rows, int rowLength,
@@ -712,35 +735,31 @@ abstract public class Query {
    */
   protected boolean nextTuple(TableIterator []rows, int rowLength,
                               QueryContext queryContext, Transaction xa)
-    throws SQLException
+    throws IOException, SQLException
   {
-    try {
-      if (rowLength == 0)
-        return false;
+    if (rowLength == 0)
+      return false;
 
-      RowIterateExpr []indexExprs = _indexExprs;
-      Expr []whereExprs = _whereExprs;
+    RowIterateExpr []indexExprs = _indexExprs;
+    Expr []whereExprs = _whereExprs;
 
-      for (int i = 0; i < rowLength; i++) {
-        TableIterator tableIter = rows[i];
-        RowIterateExpr indexExpr = indexExprs[i];
+    for (int i = 0; i < rowLength; i++) {
+      TableIterator tableIter = rows[i];
+      RowIterateExpr indexExpr = indexExprs[i];
 
-        Expr whereExpr = whereExprs == null ? null : whereExprs[i];
+      Expr whereExpr = whereExprs == null ? null : whereExprs[i];
 
-        while (indexExpr.nextRow(queryContext, tableIter)) {
-          if (whereExpr == null || whereExpr.isSelect(queryContext)) {
-            if (i == 0 ||
-                _initRowArray[i - 1].initBlockRow(rows, queryContext)) {
-              return true;
-            }
+      while (indexExpr.nextRow(queryContext, tableIter)) {
+        if (whereExpr == null || whereExpr.isSelect(queryContext)) {
+          if (i == 0 ||
+              _initRowArray[i - 1].initBlockRow(rows, queryContext)) {
+            return true;
           }
         }
       }
-
-      return nextBlock(rowLength - 1, rows, rowLength, queryContext);
-    } catch (IOException e) {
-      throw new SQLExceptionWrapper(e);
     }
+
+    return nextBlock(rowLength - 1, rows, rowLength, queryContext);
   }
 
   /**

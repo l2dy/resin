@@ -30,14 +30,23 @@
 package com.caucho.ejb.gen;
 
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import javax.ejb.AfterBegin;
+import javax.ejb.AfterCompletion;
+import javax.ejb.BeforeCompletion;
 import javax.ejb.SessionBean;
 import javax.ejb.Stateful;
+import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.gen.AspectBeanFactory;
+import com.caucho.config.gen.CandiUtil;
+import com.caucho.config.gen.LifecycleAspectBeanFactory;
+import com.caucho.config.gen.XaCallback;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.session.StatefulHandle;
 import com.caucho.inject.Module;
@@ -49,24 +58,34 @@ import com.caucho.java.JavaWriter;
 @Module
 public class StatefulGenerator<X> extends SessionGenerator<X> {
   private final AspectBeanFactory<X> _aspectBeanFactory;
+  private final AspectBeanFactory<X> _lifecycleAspectFactory;
 
-  public StatefulGenerator(String ejbName, AnnotatedType<X> beanType,
-      ArrayList<AnnotatedType<? super X>> localApi, AnnotatedType<X> localBean,
-      ArrayList<AnnotatedType<? super X>> remoteApi)
+  public StatefulGenerator(String ejbName,
+                           AnnotatedType<X> beanType,
+                           ArrayList<AnnotatedType<? super X>> localApi, 
+                           AnnotatedType<X> localBean,
+                           ArrayList<AnnotatedType<? super X>> remoteApi)
   {
-    super(ejbName, beanType, localApi, localBean, remoteApi, Stateful.class
-        .getSimpleName());
+    super(ejbName, beanType, localApi, localBean, remoteApi, 
+          Stateful.class.getSimpleName());
 
     InjectManager manager = InjectManager.create();
 
     _aspectBeanFactory = new StatefulAspectBeanFactory<X>(manager,
         getBeanType());
+    _lifecycleAspectFactory = new LifecycleAspectBeanFactory<X>(_aspectBeanFactory, manager, getBeanType());
   }
 
   @Override
   protected AspectBeanFactory<X> getAspectBeanFactory()
   {
     return _aspectBeanFactory;
+  }
+
+  @Override
+  protected AspectBeanFactory<X> getLifecycleAspectFactory()
+  {
+    return _lifecycleAspectFactory;
   }
 
   @Override
@@ -170,14 +189,17 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     if (hasNoInterfaceView())
       out.println("  extends " + getBeanType().getJavaClass().getName());
 
-    out.print("  implements SessionProxyFactory<T>, com.caucho.config.gen.CandiEnhancedBean, java.io.Serializable");
+    out.print("  implements SessionProxyFactory<T>");
+    out.print(",\n  com.caucho.ejb.session.StatefulProxy");
+    out.print(",\n  com.caucho.config.gen.CandiEnhancedBean");
+    out.print(",\n  java.io.Serializable");
 
     for (AnnotatedType<? super X> api : getLocalApi()) {
-      out.print(", " + api.getJavaClass().getName());
+      out.print(",\n  " + api.getJavaClass().getName());
     }
 
     for (AnnotatedType<? super X> apiType : getRemoteApi()) {
-      out.print(", " + apiType.getJavaClass().getName());
+      out.print(",\n  " + apiType.getJavaClass().getName());
     }
 
     out.println();
@@ -186,6 +208,8 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
   @Override
   protected void generateClassContent(JavaWriter out) throws IOException
   {
+    out.println("private String _id;");
+    out.println("private transient long _lastAccessTime;");
     out.println("private transient StatefulManager _manager;");
     out.println("private transient StatefulContext _context;");
 
@@ -198,7 +222,9 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     generateSerialization(out);
   }
 
-  protected void generateContentImpl(JavaWriter out, HashMap<String, Object> map)
+  @Override
+  protected void generateContentImpl(JavaWriter out, 
+                                     HashMap<String, Object> map)
       throws IOException
   {
 
@@ -209,11 +235,14 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     generateBeanPrologue(out, map);
 
     generateBusinessMethods(out, map);
+    
+    generateXa(out, map);
 
     generateEpilogue(out, map);
     generateInject(out, map);
     generateDelegate(out, map);
     generatePostConstruct(out, map);
+    generateValidate(out, map);
     generateDestroy(out, map);
   }
 
@@ -222,6 +251,7 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
   {
     // generateProxyConstructor(out);
 
+    // proxy factory constructor
     out.println();
     out.print("public " + getClassName() + "(StatefulManager manager, ");
     out.println("StatefulContext context)");
@@ -236,6 +266,8 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
 
     out.popDepth();
     out.println("}");
+    
+    // proxy constructor
 
     out.println();
     out.println("private " + getClassName() + "(StatefulManager manager"
@@ -243,6 +275,8 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     out.println("{");
     out.pushDepth();
 
+    out.println("_id = manager.generateKey();");
+    out.println("_lastAccessTime = com.caucho.util.Alarm.getCurrentTime();");
     out.println("_manager = manager;");
     out.println("_context = context;");
 
@@ -258,6 +292,13 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
 
     out.popDepth();
     out.println("}");
+    
+    out.println();
+    out.println("@Override");
+    out.println("public String __caucho_getId()");
+    out.println("{");
+    out.println("  return _id;");
+    out.println("}");
   }
 
   private void generateProxyFactory(JavaWriter out) throws IOException
@@ -267,7 +308,32 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     out.println("public T __caucho_createProxy(CreationalContextImpl<T> env)");
     out.println("{");
     out.println("  return (T) new " + getClassName()
-        + "(_manager, _context, env);");
+                + "(_manager, _context, env);");
+    out.println("}");
+  }
+
+  public void generateValidate(JavaWriter out, HashMap<String, Object> map)
+      throws IOException
+  {
+    out.println();
+    out.println("public void __caucho_validate()");
+    out.println("{");
+    out.pushDepth();
+    
+    out.println("long now = com.caucho.util.Alarm.getCurrentTime();");
+    
+    out.println("if (_manager.getIdleTimeout() < now - _lastAccessTime) {");
+    out.println("  __caucho_destroy(null);");
+    out.println("}");
+    out.println();
+    out.println("if (_bean == null)");
+    out.println("  throw new javax.ejb.NoSuchEJBException(\"Stateful instance "
+                + getClassName() + " is no longer valid\");");
+    
+    out.println();
+    out.println("_lastAccessTime = now;");
+
+    out.popDepth();
     out.println("}");
   }
 
@@ -279,7 +345,20 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
 
     out.println();
     out.println("@Override");
-    out.println("public void __caucho_destroy() {}");
+    out.println("public void __caucho_destroy()");
+    out.println("{");
+    out.pushDepth();
+    
+    out.println("try {");
+    out.println("  __caucho_preDestroyImpl();");
+    out.println("} catch (RuntimeException e) {");
+    out.println("  throw e;");
+    out.println("} catch (Exception e) {");
+    out.println("  throw new RuntimeException(e);");
+    out.println("}");
+    
+    out.popDepth();
+    out.println("}");
   }
 
   @Override
@@ -289,6 +368,159 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
 
     out.println("_manager.destroy(_bean, env);");
     out.println("_bean = null;");
+  }
+
+  public void generateXa(JavaWriter out, HashMap<String, Object> map)
+      throws IOException
+  {
+    AnnotatedType<X> beanType = getBeanType();
+    
+    if (! beanType.isAnnotationPresent(XaCallback.class)) {
+      return;
+    }
+    
+    generateXaCallbackReflection(out);
+    
+    out.println("class __caucho_synchronization");
+    out.println("  implements javax.ejb.SessionSynchronization {");
+    out.pushDepth();
+    
+    out.println("Object _syncBean = _bean;");
+    
+    out.println("@Override");
+    out.println("public void afterBegin()");
+    out.println("  throws javax.ejb.EJBException, java.rmi.RemoteException");
+    out.println("{");
+    out.pushDepth();
+    
+    generateXaCallbackMethods(out, AfterBegin.class);
+    
+    out.popDepth();
+    out.println("}");
+    
+    out.println("@Override");
+    out.println("public void beforeCompletion()");
+    out.println("  throws javax.ejb.EJBException, java.rmi.RemoteException");
+    out.println("{");
+    out.pushDepth();
+    
+    generateXaCallbackMethods(out, BeforeCompletion.class);
+    
+    out.popDepth();
+    out.println("}");
+    
+    out.println("@Override");
+    out.println("public void afterCompletion(boolean isCommitted)");
+    out.println("  throws javax.ejb.EJBException, java.rmi.RemoteException");
+    out.println("{");
+    out.pushDepth();
+    
+    generateXaAfterCompletion(out, AfterCompletion.class);
+
+    out.popDepth();
+    out.println("}");
+
+    out.popDepth();
+    out.println("}");
+  }
+  
+  private void generateXaCallbackMethods(JavaWriter out,
+                                         Class<? extends Annotation> annType)
+    throws IOException
+  {
+    for (AnnotatedMethod<?> m : getBeanType().getMethods()) {
+      if (! m.isAnnotationPresent(annType))
+        continue;
+      
+      Method javaMethod = m.getJavaMember();
+      Class<?> declClass = javaMethod.getDeclaringClass();
+      
+      out.println("try {");
+      out.pushDepth();
+      
+      String name = ("__caucho_xa_" +  declClass.getSimpleName()
+                     + "_" + javaMethod.getName());
+      
+      out.println(name + ".invoke(_syncBean);");
+
+      out.popDepth();
+      out.println("} catch (RuntimeException e) {");
+      out.println("  throw e;");
+      out.println("} catch (java.lang.reflect.InvocationTargetException e) {");
+      out.println("  if (e.getCause() instanceof RuntimeException)");
+      out.println("    throw (RuntimeException) e.getCause();");
+      out.println("  else");
+      out.println("    throw new javax.ejb.EJBException(e);");
+      out.println("} catch (Exception e) {");
+      out.println("  throw new javax.ejb.EJBException(e);");
+      out.println("}");
+    }
+  }
+  
+  private void generateXaCallbackReflection(JavaWriter out)
+    throws IOException
+  {
+    for (AnnotatedMethod<?> m : getBeanType().getMethods()) {
+      if (! m.isAnnotationPresent(AfterBegin.class)
+          && ! m.isAnnotationPresent(BeforeCompletion.class)
+          && ! m.isAnnotationPresent(AfterCompletion.class)) {
+        continue;
+      }
+      
+      Method javaMethod = m.getJavaMember();
+      Class<?> declClass = javaMethod.getDeclaringClass();
+      
+      String name = ("__caucho_xa_" +  declClass.getSimpleName()
+                     + "_" + javaMethod.getName());
+   
+      out.print("static final java.lang.reflect.Method");
+      out.println("  " + name);
+      out.print("  = " + CandiUtil.class.getName() + ".findAccessibleMethod(");
+      out.print(declClass.getName() + ".class");
+      out.print(", \"" + javaMethod.getName() + "\"");
+      
+      for (Class<?> param : javaMethod.getParameterTypes()) {
+        out.print(", ");
+        out.printClass(param);
+        out.print(".class");
+      }
+      
+      out.println(");");
+    }
+  }
+  
+  private void generateXaAfterCompletion(JavaWriter out,
+                                         Class<? extends Annotation> annType)
+    throws IOException
+  {
+    for (AnnotatedMethod<?> m : getBeanType().getMethods()) {
+      if (! m.isAnnotationPresent(annType))
+        continue;
+      
+      
+      Method javaMethod = m.getJavaMember();
+      Class<?> declClass = javaMethod.getDeclaringClass();
+      
+      out.println("try {");
+      out.pushDepth();
+      
+      String name = ("__caucho_xa_" +  declClass.getSimpleName()
+                     + "_" + javaMethod.getName());
+      
+      out.println(name + ".invoke(_syncBean, isCommitted);");
+      
+      out.popDepth();
+      out.println("} catch (RuntimeException e) {");
+      out.println("  throw e;");
+      out.println("} catch (java.lang.reflect.InvocationTargetException e) {");
+      out.println("  if (e.getCause() instanceof RuntimeException)");
+      out.println("    throw (RuntimeException) e.getCause();");
+      out.println("  else");
+      out.println("    throw new javax.ejb.EJBException(e);");
+      out.println("} catch (Exception e) {");
+      out.println("  throw new javax.ejb.EJBException(e);");
+      out.println("}");
+    }
   }
 
   private void generateSerialization(JavaWriter out) throws IOException

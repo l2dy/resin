@@ -284,6 +284,7 @@ public class EjbProtocolManager {
 
         log.finest(server + " local binding to '" + jndiName + "' " + loader);
       }
+      
 
       Object localHome = null;
 
@@ -355,9 +356,8 @@ public class EjbProtocolManager {
     }
   }
 
-  private void bindPortableJndiApis(AbstractEjbBeanManager manager)
+  private <X> void bindPortableJndiApis(AbstractEjbBeanManager<X> manager)
   {
-    String jndiName = null;
     String appName = null;
 
     EnterpriseApplication app = EnterpriseApplication.getCurrent();
@@ -381,14 +381,13 @@ public class EjbProtocolManager {
         bindPortableJndi(appName, moduleName, suffix, proxy);
       }
 
-      ArrayList<AnnotatedType<?>> apiList = manager.getLocalApi();
+      ArrayList<AnnotatedType<? super X>> apiList = manager.getLocalApi();
 
       if (apiList.size() == 1) {
         String suffix = manager.getEJBName();
         Class<?> api = apiList.get(0).getJavaClass();
 
-        if (proxy == null)
-          proxy = new ServerLocalProxy(manager, api); 
+        proxy = new ServerLocalProxy(manager, api); 
 
         if (manager.getLocalBean() == null)
           bindPortableJndi(appName, moduleName, suffix, proxy);
@@ -400,8 +399,7 @@ public class EjbProtocolManager {
         for (AnnotatedType<?> api : apiList) {
           String suffix = manager.getEJBName() + '!' + api.getJavaClass().getName();
 
-          if (proxy == null)
-            proxy = new ServerLocalProxy(manager, api.getJavaClass()); 
+          proxy = new ServerLocalProxy(manager, api.getJavaClass()); 
 
           bindPortableJndi(appName, moduleName, suffix, proxy);
         }

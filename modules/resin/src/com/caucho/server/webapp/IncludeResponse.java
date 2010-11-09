@@ -52,7 +52,7 @@ import com.caucho.util.QDate;
 /**
  * Internal response for an include() or forward()
  */
-class IncludeResponse extends CauchoResponseWrapper
+public class IncludeResponse extends CauchoResponseWrapper
 {
   private static final L10N L = new L10N(IncludeResponse.class);
   
@@ -145,8 +145,21 @@ class IncludeResponse extends CauchoResponseWrapper
   //
 
   @Override
+  public void setStatus(int code)
+  {
+    _request.setAttribute("com.caucho.dispatch.response.statusCode", code);
+  }
+  
+  @Override
+  public void setStatus(int code, String msg)
+  {
+    setStatus(code);
+  }
+
+  @Override
   public void sendError(int code, String msg)
   {
+    setStatus(code);
   }
   
   @Override
@@ -343,17 +356,19 @@ class IncludeResponse extends CauchoResponseWrapper
     // XXX: _responseStream.setDisableAutoFlush(disable);
   }
 
+  @Override
   public void reset()
   {
     resetBuffer();
   }
 
+  @Override
   public void resetBuffer()
   {
+    // jsp/15ma vs server/2h71
+    // getResponse().resetBuffer();
+    
     _stream.clearBuffer();
-
-    // jsp/15ma
-    // killCaching();
   }
 
   /**
@@ -368,20 +383,25 @@ class IncludeResponse extends CauchoResponseWrapper
       throw new IllegalStateException(L.l("response cannot be reset() after committed"));
     
     _stream.clearBuffer();
+    
+    // killCaching()
   }
 
   public void clearBuffer()
   {
     _stream.clearBuffer();
+    // killCaching()
   }
 
   @Override
-  public void setForwardEnclosed(boolean isForwardEnclosed) {
+  public void setForwardEnclosed(boolean isForwardEnclosed)
+  {
     _isForwardEnclosed = isForwardEnclosed;
   }
 
   @Override
-  public boolean isForwardEnclosed() {
+  public boolean isForwardEnclosed()
+  {
     if (_isForwardEnclosed)
       return true;
     else if (getResponse() instanceof CauchoResponse)

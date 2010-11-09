@@ -106,7 +106,10 @@ public class CandiInvocationContext implements InvocationContext {
   public Object[] getParameters()
     throws IllegalStateException
   {
-    return _param;
+    if (_param != null)
+      return _param;
+    else
+      throw new IllegalStateException(L.l("No parameters are allowed in this context"));
   }
 
   @Override
@@ -169,6 +172,8 @@ public class CandiInvocationContext implements InvocationContext {
   public Object proceed()
     throws Exception
   {
+    boolean isTop = _index == 0;
+    
     try {
       Object result;
       
@@ -178,7 +183,7 @@ public class CandiInvocationContext implements InvocationContext {
         
         if (_chainObjects[_chainIndex[i]] == null)
           throw new NullPointerException(i + " index[i]=" + _chainIndex[i] + " " + _type + " " + _chainMethods[i]);
-
+        
         result = _chainMethods[i].intercept(_type,
                                             _chainObjects[_chainIndex[i]], 
                                             this);
@@ -202,6 +207,11 @@ public class CandiInvocationContext implements InvocationContext {
         throw (Exception) cause;
       else
         throw e;
+    } catch (RuntimeException e) {
+      throw e;
+    } finally {
+      if (isTop)
+        _contextDataLocal.set(null);
     }
   }
   

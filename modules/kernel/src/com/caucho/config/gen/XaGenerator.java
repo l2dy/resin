@@ -31,6 +31,8 @@ package com.caucho.config.gen;
 import java.io.IOException;
 import java.util.HashMap;
 
+import javax.ejb.MessageDriven;
+import javax.ejb.SessionSynchronization;
 import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.ejb.Stateless;
@@ -60,6 +62,9 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
     _transactionType = xa;
 
     _isContainerManaged = ! isBeanManaged;
+    Class<?> javaClass = factory.getBeanType().getJavaClass();
+    
+    _isSessionSynchronization = SessionSynchronization.class.isAssignableFrom(javaClass);
   }
 
   /**
@@ -96,7 +101,8 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
   {
     return (getBeanType().isAnnotationPresent(Stateless.class)
             || getBeanType().isAnnotationPresent(Stateful.class)
-            || getBeanType().isAnnotationPresent(Singleton.class));
+            || getBeanType().isAnnotationPresent(Singleton.class)
+            || getBeanType().isAnnotationPresent(MessageDriven.class));
   }
   //
   // method generation code
@@ -134,6 +140,12 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
       case MANDATORY: {
         out.println();
         out.println("_xa.beginMandatory();");
+        break;
+      }
+      
+      case SUPPORTS: {
+        out.println();
+        out.println("_xa.beginSupports();");
         break;
       }
 
@@ -189,7 +201,13 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
 
     if (_isContainerManaged && _isSessionSynchronization) {
       out.print("_xa.registerSynchronization(");
-      // XXX: getBusinessMethod().generateThis(out);
+      out.print(getBeanFactory().getBeanInstance());
+      out.println(");");
+    }
+    
+    if (_isContainerManaged && getBeanType().isAnnotationPresent(XaCallback.class)) {
+      out.print("_xa.registerSynchronization(");
+      out.print("new __caucho_synchronization()");
       out.println(");");
     }
 
@@ -236,20 +254,27 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
 
   @Override
   public void generateSystemException(JavaWriter out, Class<?> exn)
-      throws IOException
+    throws IOException
   {
-    out.println("isXAValid = true;");
+    boolean isError = Error.class.isAssignableFrom(exn);
+
     out.println("if (_xa.systemException(e)) {");
     out.pushDepth();
+  
+    if (isEjb()) {
+      if (! isError)
+        out.println("isXAValid = true;");
     
-    if (_isContainerManaged) {
-      if (isEjb()) {
+      if (_isContainerManaged) {
         switch (_transactionType) {
         case SUPPORTS:
           out.println("  _xa.rethrowEjbException(e, _xa.getTransaction() != null);");
           break;
           
         case REQUIRES_NEW:
+          out.println("_xa.rethrowEjbException(e, " + isError + ");");
+          break;
+          
         case NOT_SUPPORTED:
         case NEVER:
           out.println("_xa.rethrowEjbException(e, false);");
@@ -268,14 +293,14 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
           break;
         }
       }
-    }
-    else {
-      if (isEjb()) {
+      else {
         out.println("_xa.rethrowEjbException(e, false);");
       }
     }
     
     out.popDepth();
+    out.println("} else {");
+    out.println("  isXAValid = true;");
     out.println("}");
   }
 
@@ -328,6 +353,13 @@ public class XaGenerator<X> extends AbstractAspectGenerator<X> {
 
       case REQUIRES_NEW: {
         out.println("_xa.endRequiresNew(xa);");
+        
+        // XXX: ejb30/lite/tx/cm/stateful/annotated/localRequiresNewTest
+        // vs localSystemExceptionTest
+
+        out.println("if (! isXAValid)");
+        out.println("  _xa.markRollback();");
+
         break;
       }
       }

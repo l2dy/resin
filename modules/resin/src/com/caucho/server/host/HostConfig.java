@@ -88,6 +88,27 @@ public class HostConfig extends DeployConfig {
       if (! _hostAliases.contains(domainName))
         _hostAliases.add(domainName);
     }
+    
+    if (_hostName.startsWith("[")) {
+      int p = _hostName.indexOf("]:");
+      
+      if (p >= 0) {
+        String host = _hostName.substring(0, p);
+        
+        host = Host.calculateCanonicalIPv6(host);
+
+        String port = _hostName.substring(p);
+
+        addHostAliasImpl(host + port);
+      }
+      else {
+        String host = _hostName;
+        
+        host = Host.calculateCanonicalIPv6(host);
+        
+        addHostAliasImpl(host);
+      }
+    }
   }
   
   /**
@@ -158,7 +179,12 @@ public class HostConfig extends DeployConfig {
     throws ConfigException
   {
     String name = rawName.getValue().trim();
-
+    
+    addHostAliasImpl(name);
+  }
+  
+  protected void addHostAliasImpl(String name)
+  {
     if (name.indexOf("${") < 0) {
       for (int i = 0; i < name.length(); i++) {
         char ch = name.charAt(i);
@@ -172,6 +198,19 @@ public class HostConfig extends DeployConfig {
     
     if (name.equals("*"))
       name = "";
+    
+    if (name.startsWith("[")) {
+      int p = name.indexOf("]:");
+      
+      if (p >= 0) {
+        String port = name.substring(p + 1);
+        name = name.substring(0, p + 1);
+
+        name = Host.calculateCanonicalIPv6(name) + port;
+      }
+      else
+        name = Host.calculateCanonicalIPv6(name);
+    }
 
     if (! _hostAliases.contains(name))
       _hostAliases.add(name);

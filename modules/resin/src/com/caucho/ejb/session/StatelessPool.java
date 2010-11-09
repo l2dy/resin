@@ -59,14 +59,20 @@ public class StatelessPool<X,T> {
   
   private final FreeList<Item<X>> _freeList;
   
+  private final ThreadLocal<Item<X>> _lifecycleInstanceLocal
+    = new ThreadLocal<Item<X>>();
+  private final StatelessProxyFactory _proxy;
+  
   private final Semaphore _concurrentSemaphore;
   private final long _concurrentTimeout;
 
   StatelessPool(StatelessManager<X> manager,
+                StatelessProxyFactory proxy,
                 StatelessContext<X,T> context,
                 List<Interceptor<?>> interceptorBeans)
   {
     _manager = manager;
+    _proxy = proxy;
     _context = context;
     _interceptorBeans = interceptorBeans;
     
@@ -118,12 +124,11 @@ public class StatelessPool<X,T> {
     
       if (beanItem == null) {
         CreationalContextImpl<X> env = new OwnerCreationalContext<X>(_manager.getBean());
-        
         Object []bindings;
+
+        X instance = _context.newInstance(env);
         
         bindings = _manager.getInterceptorBindings(_interceptorBeans, env);
-        
-        X instance = _context.newInstance(env);
                
         if (instance instanceof SessionBean) {
           try {
@@ -134,10 +139,25 @@ public class StatelessPool<X,T> {
         }
         
         beanItem = new Item<X>(instance, bindings);
+        
+        Item<X> oldInstance = _lifecycleInstanceLocal.get();
+        try {
+          _lifecycleInstanceLocal.set(beanItem);
+          
+          _proxy.__caucho_postConstruct();
+        } catch (RuntimeException e) {
+          throw e;
+        } catch (Exception e) {
+          throw new RuntimeException(e);
+        } finally {
+          _lifecycleInstanceLocal.set(oldInstance);
+        }
         // _ejbProducer.newInstance();
       }
       
       isValid = true;
+      
+      _manager.setLocalStatelessPool(this);
     
       return beanItem;
     } finally {
@@ -145,12 +165,29 @@ public class StatelessPool<X,T> {
         semaphore.release();
     }
   }
+  
+  public X getLifecycleInstance()
+  {
+    Item<X> item = _lifecycleInstanceLocal.get();
+    
+    if (item != null)
+      return item.getValue();
+    else
+      return null;
+  }
+  
+  public Item<X> getLifecycleItem()
+  {
+    return _lifecycleInstanceLocal.get();
+  }
 
   public void free(Item<X> beanItem)
   {
     Semaphore semaphore = _concurrentSemaphore;
     if (semaphore != null)
       semaphore.release();
+    
+    _manager.setLocalStatelessPool(null);
     
     if (! _freeList.free(beanItem)) {
       destroyImpl(beanItem);
@@ -166,6 +203,8 @@ public class StatelessPool<X,T> {
     if (semaphore != null)
       semaphore.release();
     
+    _manager.setLocalStatelessPool(null);
+    
     destroyImpl(beanItem);
   }
   
@@ -177,6 +216,11 @@ public class StatelessPool<X,T> {
     Semaphore semaphore = _concurrentSemaphore;
     if (semaphore != null)
       semaphore.release();
+  }
+  
+  public Class<?> getLocalApi()
+  {
+    return _context.getApi();
   }
   
   private void destroyImpl(Item<X> beanItem)

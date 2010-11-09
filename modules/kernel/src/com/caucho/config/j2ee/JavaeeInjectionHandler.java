@@ -124,9 +124,11 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
 
       throw injectManager.unsatisfiedException(type, qualifiers);
     } catch (UnsatisfiedResolutionException e) {
-      throw new UnsatisfiedResolutionException(location + e, e);
+      throw new UnsatisfiedResolutionException(location + e.getMessage(), e);
+    } catch (AmbiguousResolutionException e) {
+      throw new AmbiguousResolutionException(location + e.getMessage(), e);
     } catch (InjectionException e) {
-      throw new InjectionException(location + e, e);
+      throw new InjectionException(location + e.getMessage(), e);
     }
   }
   
@@ -146,7 +148,7 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
     try {
       if (_manager.getJndiClassLoader() != null)
         thread.setContextClassLoader(_manager.getJndiClassLoader());
-
+      
       Jndi.bindDeep(name, gen);
     } catch (NamingException e) {
       throw ConfigException.create(e);
@@ -167,7 +169,7 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
     try {
       if (_manager.getJndiClassLoader() != null)
         thread.setContextClassLoader(_manager.getJndiClassLoader());
-
+      
       Jndi.bindDeep(name, gen);
     } catch (NamingException e) {
       throw ConfigException.create(e);
@@ -187,11 +189,19 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
     String name = ("java:comp/env/"
                    + method.getDeclaringClass().getName()
                    + "/" + methodName);
+    
+    Thread thread = Thread.currentThread();
+    ClassLoader loader = thread.getContextClassLoader();
 
     try {
+      if (_manager.getJndiClassLoader() != null)
+        thread.setContextClassLoader(_manager.getJndiClassLoader());
+      
       Jndi.bindDeep(name, gen);
     } catch (NamingException e) {
       throw ConfigException.create(e);
+    } finally {
+      thread.setContextClassLoader(loader);
     }
   }
 

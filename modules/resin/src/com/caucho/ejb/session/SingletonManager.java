@@ -35,6 +35,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -54,11 +55,14 @@ import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.config.inject.OwnerCreationalContext;
+import com.caucho.config.j2ee.EJBExceptionWrapper;
 import com.caucho.ejb.cfg.EjbLazyGenerator;
 import com.caucho.ejb.gen.SingletonGenerator;
 import com.caucho.ejb.inject.SessionBeanImpl;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
+import com.caucho.ejb.server.EjbInjectionTarget;
+import com.caucho.ejb.server.SingletonInjectionTarget;
 import com.caucho.util.L10N;
 
 /**
@@ -69,19 +73,23 @@ public class SingletonManager<X> extends AbstractSessionManager<X> {
   private static final Logger log =
     Logger.getLogger(SingletonManager.class.getName());
 
-  private X _instance;
+  private AtomicReference<X> _instanceRef = new AtomicReference<X>();
   
   private Object _decoratorClass;
   private List<Decorator<?>> _decoratorBeans;
 
+  private Object []_delegates;
+  private Object []_interceptors;
 
   public SingletonManager(EjbManager ejbContainer,
+                          String ejbName,
                           String moduleName,
                           AnnotatedType<X> rawAnnType,
                           AnnotatedType<X> annotatedType,
                           EjbLazyGenerator<X> lazyGenerator)
   {
-    super(ejbContainer, moduleName, rawAnnType, annotatedType, lazyGenerator);
+    super(ejbContainer, ejbName, moduleName, 
+          rawAnnType, annotatedType, lazyGenerator);
   }
 
   @Override
@@ -100,6 +108,12 @@ public class SingletonManager<X> extends AbstractSessionManager<X> {
   protected <T> SingletonContext<X,T> getSessionContext(Class<T> api)
   {
     return (SingletonContext<X,T>) super.getSessionContext(api);
+  }
+  
+  @Override
+  protected EjbInjectionTarget<X> createInjectionTarget()
+  {
+    return new SingletonInjectionTarget<X>(this, getAnnotatedType());
   }
 
   /**
@@ -154,33 +168,56 @@ public class SingletonManager<X> extends AbstractSessionManager<X> {
   @Override
   public X newInstance(CreationalContextImpl<X> env)
   {
-    if (_instance == null)
-      _instance = super.newInstance(env);
+    X instance = _instanceRef.get();
     
-    return _instance;
+    if (instance == null) {
+      instance = super.newInstance(env);
+      
+      if (instance == null)
+        throw new NullPointerException(toString());
+      
+      _instanceRef.compareAndSet(null, instance);
+      
+      instance = _instanceRef.get();
+    }
+    
+    return instance;
   }
 
   @Override
   protected void postStart()
   {
-    CreationalContextImpl<X> env = new OwnerCreationalContext<X>(getBean());
+    super.postStart();
     
-    newInstance(env);
+    CreationalContextImpl<X> env = new OwnerCreationalContext<X>(getBean());
+    getBean().create(env);
+    //newInstance(env);
   }
   
   public <T> T initProxy(T proxy, CreationalContextImpl<T> env)
   {
     if (proxy instanceof CandiEnhancedBean) {
-      try {
-        CandiEnhancedBean bean = (CandiEnhancedBean) proxy;
+      CandiEnhancedBean bean = (CandiEnhancedBean) proxy;
       
-        Object []delegates = createDelegates((CreationalContextImpl) env);
-        
-        bean.__caucho_inject(delegates, env);
+      try {
+        if (_delegates == null)
+          _delegates = createDelegates(env);
+
+        _interceptors = bean.__caucho_inject(_delegates, _interceptors, env);
       } catch (Exception e) {
         e.printStackTrace();
         
         log.log(Level.WARNING, e.toString(), e);
+      }
+      
+      try {
+        bean.__caucho_postConstruct();
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (InvocationTargetException e) {
+        throw new EJBExceptionWrapper(e.getCause());
+      } catch (Exception e) {
+        throw new EJBExceptionWrapper(e);
       }
     }
     
@@ -202,12 +239,13 @@ public class SingletonManager<X> extends AbstractSessionManager<X> {
       return null;
   }
   
-  public void destroy(Object instance, CreationalContextImpl env)
+  @Override
+  public void destroy(Object instance, CreationalContextImpl<?> env)
   {
   }
   
   /**
-   * Initialize an instance
+   * Destroy an instance
    */
   public void destroyInstance(X instance)
   {

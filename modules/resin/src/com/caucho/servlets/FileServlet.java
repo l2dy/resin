@@ -151,6 +151,7 @@ public class FileServlet extends GenericServlet {
       _characterEncoding = encoding;
   }
 
+  @Override
   public void service(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
@@ -166,15 +167,6 @@ public class FileServlet extends GenericServlet {
       req = (HttpServletRequest) request;
 
     res = (HttpServletResponse) response;
-
-    String method = req.getMethod();
-    if (! method.equalsIgnoreCase("GET")
-        && ! method.equalsIgnoreCase("HEAD")
-        && ! method.equalsIgnoreCase("POST")) {
-      res.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, 
-                    "Method not implemented");
-      return;
-    }
 
     boolean isInclude = false;
     String uri;
@@ -284,7 +276,7 @@ public class FileServlet extends GenericServlet {
       _pathCache.put(uri, cache);
     }
     else if (cache.isModified()) {
-      cache = new Cache(cache.getPath(), 
+      cache = new Cache(cache.getFilePath(), 
                         cache.getJarPath(), 
                         cache.getRelPath(),
                         cache.getMimeType());
@@ -317,6 +309,16 @@ public class FileServlet extends GenericServlet {
         throw new FileNotFoundException(uri);
       else
         res.sendError(HttpServletResponse.SC_NOT_FOUND);
+      return;
+    }
+
+    // server/4500, #4218
+    String method = req.getMethod();
+    if (! method.equalsIgnoreCase("GET")
+        && ! method.equalsIgnoreCase("HEAD")
+        && ! method.equalsIgnoreCase("POST")) {
+      res.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, 
+                    "Method not implemented");
       return;
     }
 
@@ -643,6 +645,11 @@ public class FileServlet extends GenericServlet {
     {
       return _pathResolved;
     }
+
+    Path getFilePath()
+    {
+      return _path;
+    }
     
     Path getJarPath()
     {
@@ -693,6 +700,10 @@ public class FileServlet extends GenericServlet {
     {
       long lastModified = _pathResolved.getLastModified();
       long length = _pathResolved.getLength();
+
+      // server/1t06
+      if (_path != _pathResolved && _path.canRead())
+        return true;
 
       return (lastModified != _lastModified || length != _length);
     }

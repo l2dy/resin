@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
+import javax.ejb.Remove;
 import javax.ejb.TransactionAttributeType;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 
@@ -46,12 +47,12 @@ import com.caucho.java.JavaWriter;
  */
 @Module
 public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
-  private boolean _isRemoveRetainIfException;
   private long _lockTimeout;
   private TimeUnit _lockTimeoutUnit;
 
   public StatefulMethodHeadGenerator(StatefulMethodHeadFactory<X> factory,
-      AnnotatedMethod<? super X> method, AspectGenerator<X> next)
+                                     AnnotatedMethod<? super X> method, 
+                                     AspectGenerator<X> next)
   {
     super(factory, method, next);
 
@@ -60,8 +61,10 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
   }
 
   public StatefulMethodHeadGenerator(StatefulMethodHeadFactory<X> factory,
-      AnnotatedMethod<? super X> method, AspectGenerator<X> next,
-      long lockTimeout, TimeUnit lockTimeoutUnit)
+                                     AnnotatedMethod<? super X> method,
+                                     AspectGenerator<X> next,
+                                     long lockTimeout, 
+                                     TimeUnit lockTimeoutUnit)
   {
     super(factory, method, next);
 
@@ -83,7 +86,8 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
    * Generates the class prologue.
    */
   @Override
-  public void generateMethodPrologue(JavaWriter out, HashMap<String, Object> map)
+  public void generateMethodPrologue(JavaWriter out, 
+                                     HashMap<String, Object> map)
       throws IOException
   {
     if (map.get("caucho.ejb.semaphore") == null) {
@@ -105,10 +109,13 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
 
     out.println(beanClassName + " bean = _bean;");
 
+    out.println("__caucho_validate();");
+    /*
     out.println();
     out.println("if (bean == null)");
     out.println("  throw new javax.ejb.NoSuchEJBException(\"Stateful instance "
         + getJavaClass().getSimpleName() + " is no longer valid\");");
+        */
 
     // Implicit semaphore on stateful beans.
     out.println();
@@ -149,8 +156,22 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
   public void generatePreCall(JavaWriter out) throws IOException
   {
     out.println("thread.setContextClassLoader(_manager.getClassLoader());");
+    out.println("_context.startLocal(this);");
 
     super.generatePreCall(out);
+  }
+  
+  @Override
+  public void generateCall(JavaWriter out)
+    throws IOException
+  {
+    super.generateCall(out);
+
+    /*
+    if (getMethod().isAnnotationPresent(Remove.class)) {
+      out.println("__caucho_destroy(null);");
+    }
+    */
   }
 
   /**
@@ -160,6 +181,7 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
   public void generatePostCall(JavaWriter out) throws IOException
   {
     out.println("isValid = true;");
+    super.generatePostCall(out);
   }
 
   /**
@@ -172,9 +194,12 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
     // ejb/5070
     super.generateApplicationException(out, exn);
 
-    out.println("isValid = true;");
+    // ejb/5064
+    if (getMethod().getAnnotation(Remove.class) == null) {
+      out.println("isValid = true;");
+    }
   }
-
+  
   @Override
   public void generateFinally(JavaWriter out) throws IOException
   {
@@ -182,23 +207,37 @@ public class StatefulMethodHeadGenerator<X> extends MethodHeadGenerator<X> {
     out.println();
     out.println("_semaphore.release();");
 
-    if (!_isRemoveRetainIfException) {
-      out.println("if (! isValid) {");
-      out.pushDepth();
+    out.println("_context.endLocal(null);");
+    out.println("boolean isValidFinally = false;");
+    out.println("try {");
+    out.pushDepth();
+    super.generateFinally(out);
+    out.println("isValidFinally = isValid;");
+    out.popDepth();
+    out.println("} finally {");
+    out.pushDepth();
+    
+    Remove remove = getMethod().getAnnotation(Remove.class);
 
-      out.println("_bean = null;");
-      out.println();
-      out.println("if (bean != null)");
-      out.print("  _manager.destroyInstance(");
-      out.print(getBeanFactory().getBeanInstance());
-      out.println(");");
-
-      out.popDepth();
+    if (remove != null) {
+      boolean isRetainIfException= remove.retainIfException();
+    
+      if (isRetainIfException) {
+        out.println("if (isValid)");
+        out.println("  __caucho_destroy(null);");
+      }
+      else {
+        out.println("  __caucho_destroy(null);");
+      }
+    }
+    else {
+      out.println("if (! isValidFinally) {");
+      out.println("  __caucho_destroy(null);");
       out.println("}");
     }
 
     out.println("thread.setContextClassLoader(oldLoader);");
-
-    super.generateFinally(out);
+    out.popDepth();
+    out.println("}");
   }
 }

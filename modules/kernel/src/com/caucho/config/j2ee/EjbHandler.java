@@ -64,7 +64,6 @@ public class EjbHandler extends JavaeeInjectionHandler {
   public ConfigProgram introspectField(AnnotatedField<?> field)
   {
     EJB ejb = field.getAnnotation(EJB.class);
-    
     return generateContext(field, ejb);
   }
   
@@ -180,6 +179,8 @@ public class EjbHandler extends JavaeeInjectionHandler {
 
     if (name != null && ! "".equals(name))
       bindJndi(name, gen, name);
+    
+    bindJndi(javaMethod, gen);
     
     return new MethodGeneratorProgram(javaMethod, gen);
   }

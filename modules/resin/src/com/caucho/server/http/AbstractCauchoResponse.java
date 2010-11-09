@@ -29,8 +29,16 @@
 
 package com.caucho.server.http;
 
+import java.io.IOException;
+
 
 abstract public class AbstractCauchoResponse implements CauchoResponse {
+  @Override
+  public void writeHeaders(int length)
+    throws IOException
+  {
+  }
+  
   @Override
   public String toString()
   {

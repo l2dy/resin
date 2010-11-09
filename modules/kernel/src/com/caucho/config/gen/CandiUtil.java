@@ -92,6 +92,10 @@ public class CandiUtil {
                                          InterceptionType type,
                                          Annotation ...bindings)
   {
+    // ioc/05ah
+    if (manager.isChildManager())
+      manager = manager.getParent();
+    
     ArrayList<Integer> indexList = new ArrayList<Integer>();
     
     List<Interceptor<?>> interceptors;
@@ -144,7 +148,8 @@ public class CandiUtil {
     if (! beans.contains(staticBean))
       beans.add(staticBean);
     
-    addStaticBean(staticBean.getParent(), indexList, beans, type);
+    if (staticBean.isAllowParent(type))
+      addStaticBean(staticBean.getParent(), indexList, beans, type);
 
     if (staticBean.intercepts(type)) {
       int index = beans.indexOf(staticBean);
@@ -203,8 +208,8 @@ public class CandiUtil {
   {
     Class<?> beanClass = bean.getBeanClass();
 
-    if (! Serializable.class.isAssignableFrom(beanClass)
-        && false) {
+    // ioc/05ai
+    if (! Serializable.class.isAssignableFrom(beanClass)) {
       ConfigException exn
       = new ConfigException(L.l("{0}: {1} is an invalid {2} because it is not serializable.",
                                 cl.getName(),
@@ -328,7 +333,19 @@ public class CandiUtil {
     
     return null;
   }
-
+  
+  public static Method findAccessibleMethod(Class<?> cl,
+                                            String methodName,
+                                            Class<?> ...paramTypes)
+  {
+    Method method = findMethod(cl, methodName, paramTypes);
+    
+    if (method != null)
+      method.setAccessible(true);
+    
+    return method;
+  }
+    
   public static Object []generateProxyDelegate(InjectManager manager,
                                                List<Decorator<?>> beans,
                                                Object delegateProxy,

@@ -29,13 +29,13 @@
 
 package com.caucho.ejb.message;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.ejb.MessageDrivenBean;
 import javax.ejb.MessageDrivenContext;
 import javax.enterprise.inject.spi.AnnotatedType;
 import javax.resource.spi.ActivationSpec;
@@ -52,8 +52,6 @@ import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.InjectionTargetBuilder;
 import com.caucho.config.inject.OwnerCreationalContext;
-import com.caucho.config.inject.InjectManager.ReferenceFactory;
-import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.ejb.cfg.EjbLazyGenerator;
 import com.caucho.ejb.gen.MessageGenerator;
@@ -88,12 +86,13 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
   private Method _ejbCreate;
 
   public MessageManager(EjbManager ejbContainer,
+                        String ejbName,
                         String moduleName,
                         AnnotatedType<X> rawAnnType,
                         AnnotatedType<X> annotatedType,
                         EjbLazyGenerator<X> lazyGenerator)
   {
-    super(ejbContainer, moduleName, rawAnnType, annotatedType);
+    super(ejbContainer, ejbName, moduleName, rawAnnType, annotatedType);
 
     InjectManager webBeans = InjectManager.create();
     
@@ -154,16 +153,8 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
       if (_ra == null)
         throw error(L.l("ResourceAdapter is missing from message-driven bean '{0}'.",
                         getEJBName()));
-
-      try {
-        Class<?> beanClass = _proxyImplClass;//getBeanSkelClass();
-
-        _ejbCreate = beanClass.getMethod("ejbCreate", new Class[0]);
-
-        // getProducer().bindInjection();
-      } catch (Exception e) {
-        log.log(Level.FINEST, e.toString(), e);
-      }
+      
+      bindContext();
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -194,7 +185,7 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
       
         _proxyImplClass = (Class<X>) javaGen.loadClass(fullClassName);
         
-        InjectManager cdiManager = InjectManager.create();
+        InjectManager cdiManager = InjectManager.create(getClassLoader());
         
         AnnotatedType annType = ReflectionAnnotatedFactory.introspectType(_proxyImplClass);
         
@@ -203,6 +194,19 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
                                               null);
         
         
+        try {
+          Class<?> beanClass = _proxyImplClass;//getBeanSkelClass();
+
+          if (beanClass == null)
+            beanClass = getAnnotatedType().getJavaClass();
+
+          if (beanClass != null)
+            _ejbCreate = beanClass.getMethod("ejbCreate", new Class[0]);
+
+          // getProducer().bindInjection();
+        } catch (Exception e) {
+          log.log(Level.FINEST, e.toString(), e);
+        }
       }
     } catch (Exception e) {
       throw ConfigException.create(e);
@@ -269,12 +273,13 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
   /**
    * Creates an endpoint with the associated XA resource.
    */
+  @Override
   public MessageEndpoint createEndpoint(XAResource xaResource)
     throws UnavailableException
   {
     try {
       Object listener = createMessageListener();
-
+      
       ((CauchoMessageEndpoint) listener).__caucho_setXAResource(xaResource);
       
       return (MessageEndpoint) listener;
@@ -315,12 +320,26 @@ public class MessageManager<X> extends AbstractEjbBeanManager<X>
       
       X listener = _builder.produce(env);
       _builder.inject(listener, env);
+      
+      if (listener instanceof MessageDrivenBean) {
+        MessageDrivenBean bean = (MessageDrivenBean) listener;
+        
+        bean.setMessageDrivenContext(_context);
+      }
 
       //initInstance(listener);
 
       if (_ejbCreate != null)
         _ejbCreate.invoke(listener);
-      
+
+      /*
+      if (listener instanceof CandiEnhancedBean) {
+        CandiEnhancedBean bean = (CandiEnhancedBean) listener;
+        
+        bean.__caucho_postConstruct();
+      }
+      */
+
       _builder.postConstruct(listener);
 
       return listener;

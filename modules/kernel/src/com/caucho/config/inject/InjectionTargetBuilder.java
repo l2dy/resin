@@ -72,6 +72,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.SerializeHandle;
 import com.caucho.config.bytecode.SerializationAdapter;
 import com.caucho.config.gen.CandiBeanGenerator;
+import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.inject.InjectManager.ReferenceFactory;
 import com.caucho.config.j2ee.PostConstructProgram;
 import com.caucho.config.j2ee.PreDestroyInject;
@@ -122,6 +123,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
     _annotatedType = beanType;
     _bean = bean;
+    
+    introspectInjectClass(_annotatedType);
   }
   
   public InjectionTargetBuilder(InjectManager cdiManager,
@@ -156,11 +159,9 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   @Override
   public Set<InjectionPoint> getInjectionPoints()
   {
-    synchronized (this) {
-      if (_producer == null) {
-        _producer = build();
-        validate(getBean());
-      }
+    if (_producer == null) {
+      _producer = build();
+      validate(getBean());
     }
     
     return _producer.getInjectionPoints();
@@ -307,6 +308,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
       
       if (_beanCtor != null)
         args = introspectArguments(_beanCtor, _beanCtor.getParameters());
+      
+      _cdiManager.bindGlobals();
 
       CandiProducer<X> producer
         = new CandiProducer<X>(_bean,
@@ -623,7 +626,6 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     
     // configureClassResources(injectList, type);
 
-    introspectInjectClass(type, injectProgramList);
     introspectInjectField(type, injectProgramList);
     introspectInjectMethod(type, injectProgramList);
     
@@ -632,8 +634,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     resourceManager.buildInject(rawType, injectProgramList);
   }
   
-  private void introspectInjectClass(AnnotatedType<X> type,
-                                     ArrayList<ConfigProgram> injectProgramList)
+  private void introspectInjectClass(AnnotatedType<X> type)
   {
     InjectManager cdiManager = getBeanManager();
     
@@ -644,7 +645,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
         = cdiManager.getInjectionPointHandler(annType);
       
       if (handler != null) {
-        injectProgramList.add(new ClassHandlerProgram(ann, handler));
+        cdiManager.addGlobalProgram(new ClassHandlerProgram(ann, handler));
       }
     }
     
@@ -659,7 +660,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
           = cdiManager.getInjectionPointHandler(annType);
       
         if (handler != null) {
-          injectProgramList.add(new ClassHandlerProgram(ann, handler));
+          cdiManager.addGlobalProgram(new ClassHandlerProgram(ann, handler));
         }
       }
     }
@@ -1045,13 +1046,11 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   }
   
   class ClassHandlerProgram extends ConfigProgram {
-    private final Annotation _ann;
     private final InjectionPointHandler _handler;
     private ConfigProgram _boundProgram;
     
     ClassHandlerProgram(Annotation ann, InjectionPointHandler handler)
     {
-      _ann = ann;
       _handler = handler;
     }
 

@@ -28,19 +28,15 @@
 
 package com.caucho.ejb.session;
 
-import java.util.logging.Logger;
-
 import javax.ejb.TimerService;
 
+import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.inject.CreationalContextImpl;
 
 /**
  * Abstract base class for an session context
  */
 public class SingletonContext<X,T> extends AbstractSessionContext<X,T> {
-  private static final Logger log
-    = Logger.getLogger(SingletonContext.class.getName());
-  
   private T _proxy;
   
   public SingletonContext(SingletonManager<X> manager,
@@ -61,18 +57,20 @@ public class SingletonContext<X,T> extends AbstractSessionContext<X,T> {
   @Override
   public T createProxy(CreationalContextImpl<T> env)
   {
-    synchronized (this) {
-      if (_proxy == null) {
-        _proxy = super.createProxy(env);
+    if (_proxy == null) {
+      T proxy = super.createProxy(env);
 
-        if (env != null)
-          env.push(_proxy);
+      if (env != null)
+        env.push(proxy);
 
-        getServer().initProxy(_proxy, env);
-      }
+      if (_proxy == null)
+        _proxy = proxy;
       
-      return _proxy;
+      // ejb/6032
+      getServer().initProxy(proxy, env);
     }
+    
+    return _proxy;
   }
 
   /**
@@ -83,5 +81,20 @@ public class SingletonContext<X,T> extends AbstractSessionContext<X,T> {
     throws IllegalStateException
   {
     throw new IllegalStateException("Singleton session beans cannot call SessionContext.getTimerService()");
+  }
+  
+  @Override
+  public void destroy() throws Exception
+  {
+    super.destroy();
+    
+    T proxy = _proxy;
+    _proxy = null;
+    
+    if (proxy instanceof CandiEnhancedBean) {
+      CandiEnhancedBean bean = (CandiEnhancedBean) proxy;
+
+      bean.__caucho_destroy(null);
+    }
   }
 }

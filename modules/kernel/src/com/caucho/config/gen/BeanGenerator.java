@@ -194,10 +194,10 @@ abstract public class BeanGenerator<X> extends GenClass
     out.println("public void __caucho_destroy(com.caucho.config.inject.CreationalContextImpl env)");
     out.println("{");
     out.pushDepth();
-
-    generateDestroyImpl(out);
     
     out.println("__caucho_preDestroy();");
+
+    generateDestroyImpl(out);
 
     out.popDepth();
     out.println("}");
@@ -273,13 +273,16 @@ abstract public class BeanGenerator<X> extends GenClass
     throws IOException
   {
     out.println();
-    out.println("public void __caucho_inject(Object []delegates"
+    out.println("public Object []__caucho_inject(Object []delegates"
+                + ", Object []interceptors"
                 + ", com.caucho.config.inject.CreationalContextImpl<?> parentEnv)");
     out.println("{");
     out.pushDepth();
 
     generateInjectContent(out, map);
 
+    out.println("return interceptors;");
+    
     out.popDepth();
     out.println("}");
   }
@@ -312,28 +315,66 @@ abstract public class BeanGenerator<X> extends GenClass
                                        HashMap<String,Object> map)
      throws IOException
   {
-    ArrayList<Method> postConstructMethods 
-      = getLifecycleMethods(PostConstruct.class);
- 
+    generatePostConstructImpl(out, map);
+  }
+  
+  protected void generatePostConstructImpl(JavaWriter out, 
+                                           HashMap<String,Object> map)
+       throws IOException
+  {
     out.println();
     out.println("public void __caucho_postConstruct()");
+    out.println("  throws Exception");
     out.println("{");
     out.pushDepth();
 
-    for (AspectGenerator<X> method : getMethods()) {
-      method.generatePostConstruct(out, map);
+    /*
+    for (AspectGenerator<?> method : getLifecycleAspects(PostConstruct.class)) {
+      // method.generatePostConstruct(out, map);
+      
     }
-     
-    getAspectBeanFactory().generatePostConstruct(out, map);
+    */
+
+    ArrayList<Method> postConstructMethods 
+      = getLifecycleAspects(PostConstruct.class);
+    /*
+    ArrayList<Method> postConstructMethods 
+      = getLifecycleMethods(PostConstruct.class);
+      */
+
+    Method postConstructMethod = null;
+    if (postConstructMethods.size() > 0) {
+      Method method = postConstructMethods.get(0);
+      postConstructMethod = method;
+
+      String declName = method.getDeclaringClass().getSimpleName();
+      String methodName = method.getName();
+      
+      out.println("__caucho_lifecycle_" + declName + "_" + methodName + "();");
+    }
+
+    int j = 1;
+    for (int i = 1; i < postConstructMethods.size(); i++) {
+      Method method = postConstructMethods.get(i);
+
+      // ejb/
+      if (postConstructMethod != null && method.equals(postConstructMethod))
+        continue;
+      
+      generateLifecycleMethod(out, j++, method, "postConstruct");
+    }
+      
+    // getAspectBeanFactory().generatePostConstruct(out, map);
 
     out.popDepth();
     out.println("}");
+    
+    postConstructMethods = getLifecycleMethods(PostConstruct.class);
     
     generateLifecycleMethodReflection(out, postConstructMethods, "postConstruct");
     
     out.println();
     out.println("private void __caucho_postConstructImpl()");
-    out.println("  throws Exception");
     out.println("{");
     out.pushDepth();
     
@@ -347,18 +388,30 @@ abstract public class BeanGenerator<X> extends GenClass
                                   HashMap<String,Object> map)
      throws IOException
   {
-    ArrayList<Method> preDestroyMethods = getLifecycleMethods(PreDestroy.class);
+    ArrayList<Method> preDestroyMethods = getLifecycleAspects(PreDestroy.class);
     
     out.println();
     out.println("public void __caucho_preDestroy()");
     out.println("{");
     out.pushDepth();
 
+    for (Method method : preDestroyMethods) {
+      String declName = method.getDeclaringClass().getSimpleName();
+      String methodName = method.getName();
+      
+      out.println("__caucho_lifecycle_" + declName + "_" + methodName + "();");
+    }
+ 
+      
+    // getAspectBeanFactory().generatePostConstruct(out, map);
+
+    /*
     for (AspectGenerator<X> method : getMethods()) {
       method.generatePreDestroy(out, map);
     }
      
     getAspectBeanFactory().generatePreDestroy(out, map);
+    */
 
     out.popDepth();
     out.println("}");
@@ -366,7 +419,7 @@ abstract public class BeanGenerator<X> extends GenClass
     generateLifecycleMethodReflection(out, preDestroyMethods, "preDestroy");
     
     out.println();
-    out.println("private void __caucho_preDestroyImplConstructImpl()");
+    out.println("private void __caucho_preDestroyImpl()");
     out.println("  throws Exception");
     out.println("{");
     out.pushDepth();
@@ -385,14 +438,15 @@ abstract public class BeanGenerator<X> extends GenClass
     for (int i = 0; i < methods.size(); i++) {
       Method method = methods.get(i);
       
+      String methodName = "__caucho_" + lifecycleType + "_" + i;
 
       out.println();
-      out.println("java.lang.reflect.Method __caucho_" + lifecycleType + "_" + i + " = ");
+      out.println("static final java.lang.reflect.Method " + methodName);
       
-      out.print("  ");
+      out.print("  = ");
       
       out.printClass(CandiUtil.class);
-      out.print(".findMethod(");
+      out.print(".findAccessibleMethod(");
       out.printClass(method.getDeclaringClass());
       out.print(".class, \"");
       out.print(method.getName());
@@ -406,25 +460,49 @@ abstract public class BeanGenerator<X> extends GenClass
     throws IOException
   {
     for (int i = 0; i < methods.size(); i++) {
-      out.println("try {");
-      out.pushDepth();
-      
-      out.print("__caucho_" + lifecycleType + "_" + i + ".invoke(");
-      out.print(getAspectBeanFactory().getBeanInstance());
-      out.println(");");
-      
-      out.popDepth();
-      out.println("} catch (java.lang.reflect.InvocationTargetException ex) {");
-      out.println("  if (ex.getCause() instanceof Exception)");
-      out.println("    throw (Exception) ex.getCause();");
-      out.println("  else");
-      out.println("    throw ex;");
-      out.println("}");
+      generateLifecycleMethod(out, i, methods.get(i), lifecycleType);
     }
+  }
+  
+  protected void generateLifecycleMethod(JavaWriter out,
+                                         int i,
+                                         Method method,
+                                         String lifecycleType)
+    throws IOException
+  {
+    out.println("try {");
+    out.pushDepth();
+
+    out.println("if (" + getLifecycleInstance() + " != null) {");
+    out.pushDepth();
+      
+    out.print("__caucho_" + lifecycleType + "_" + i + ".invoke(");
+    out.print(getLifecycleInstance());
+    out.println(");");
+      
+    out.popDepth();
+    out.println("}");
+      
+    out.popDepth();
+    out.println("} catch (RuntimeException ex) {");
+    out.println("  throw ex;");
+    out.println("} catch (java.lang.reflect.InvocationTargetException ex) {");
+    out.println("  if (ex.getCause() instanceof RuntimeException)");
+    out.println("    throw (RuntimeException) ex.getCause();");
+    out.println("  else");
+    out.println("    throw new RuntimeException(ex);");
+    out.println("} catch (Exception ex) {");
+    out.println("  throw new RuntimeException(ex);");
+    out.println("}");
+  }
+  
+  protected String getLifecycleInstance()
+  {
+    return getAspectBeanFactory().getBeanInstance();
   }
 
   
-  protected ArrayList<Method> 
+  protected ArrayList<Method>
   getLifecycleMethods(Class<? extends Annotation> annType)
   {
     ArrayList<Method> methods = new ArrayList<Method>();
@@ -442,6 +520,29 @@ abstract public class BeanGenerator<X> extends GenClass
     Collections.sort(methods, new PostConstructComparator());
     
     return methods;
+  }
+  
+  protected ArrayList<Method> 
+  getLifecycleAspects(Class<? extends Annotation> annType)
+  {
+    ArrayList<Method> aspects = new ArrayList<Method>();
+    
+    for (AspectGenerator<?> gen : getMethods()) {
+      AnnotatedMethod<?> method = gen.getMethod();
+      
+      if (! method.isAnnotationPresent(annType))
+        continue;
+      
+      if (method.getParameters().size() != 0)
+        continue;
+      
+      aspects.add(method.getJavaMember());
+    }
+    
+    
+    Collections.sort(aspects, new PostConstructComparator());
+    
+    return aspects;
   }
 
   protected void generateEpilogue(JavaWriter out, HashMap<String,Object> map)
@@ -479,6 +580,28 @@ abstract public class BeanGenerator<X> extends GenClass
     @Override
     public int compare(Method a, Method b)
     {
+      Class<?> classA = a.getDeclaringClass();
+      Class<?> classB = b.getDeclaringClass();
+      
+      if (classA == classB)
+        return a.getName().compareTo(b.getName());
+      else if (classA.isAssignableFrom(classB))
+        return -1;
+      else if (classB.isAssignableFrom(classA))
+        return 1;
+      else
+        return a.getName().compareTo(b.getName());
+    }
+  }
+  
+  static class PostConstructAspectComparator 
+    implements Comparator<AspectGenerator<?>> {
+    @Override
+    public int compare(AspectGenerator<?> genA, AspectGenerator<?> genB)
+    {
+      Method a = genA.getMethod().getJavaMember();
+      Method b = genB.getMethod().getJavaMember();
+      
       Class<?> classA = a.getDeclaringClass();
       Class<?> classB = b.getDeclaringClass();
       

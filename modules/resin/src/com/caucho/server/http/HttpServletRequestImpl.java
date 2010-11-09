@@ -412,8 +412,18 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     AbstractHttpRequest request = _request;
 
-    if (request != null)
+    if (request != null) {
+      WebApp webApp = request.getWebApp();
+      
+      if (webApp != null) {
+        Boolean isSecure = webApp.isRequestSecure();
+        
+        if (isSecure != null)
+          return isSecure;
+      }
+      
       return request.isSecure();
+    }
     else
       return false;
   }
@@ -531,6 +541,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     Object oldValue = attributes.remove(name);
 
     WebApp webApp = getWebApp();
+    
+    if (webApp == null)
+      return;
 
     for (ServletRequestAttributeListener listener
            : webApp.getRequestAttributeListeners()) {
@@ -1923,6 +1936,12 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     SocketLinkDuplexController controller = _request.startDuplex(duplex);
     duplex.setController(controller);
+    
+    try {
+      _response.getOutputStream().flush();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
 
     try {
       duplex.onStart();

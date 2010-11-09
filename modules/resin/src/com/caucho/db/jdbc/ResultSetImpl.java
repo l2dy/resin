@@ -457,4 +457,10 @@ public class ResultSetImpl extends AbstractResultSet {
     public boolean isWrapperFor(Class<?> iface) throws SQLException {
         throw new UnsupportedOperationException("Not supported yet.");
     }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + "[" + _stmt + "]"; 
+    }
 }

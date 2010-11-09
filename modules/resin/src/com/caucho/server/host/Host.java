@@ -67,7 +67,6 @@ import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
 import com.caucho.server.webapp.ErrorPage;
 import com.caucho.server.webapp.ErrorPageManager;
-import com.caucho.server.webapp.WebApp;
 import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.server.webapp.WebAppContainer;
 import com.caucho.server.webapp.WebAppExpandDeployGenerator;
@@ -111,6 +110,8 @@ public class Host
   // The secure host
   private String _secureHostName;
 
+  private Boolean _isSecure;
+  
   private boolean _isDefaultHost;
 
   // Alises
@@ -244,6 +245,16 @@ public class Host
   public void setSecureHostName(String secureHostName)
   {
     _secureHostName = secureHostName;
+  }
+  
+  public void setSetRequestSecure(boolean isSecure)
+  {
+    _isSecure = isSecure;
+  }
+  
+  public Boolean isRequestSecure()
+  {
+    return _isSecure;
   }
 
   /**
@@ -853,6 +864,23 @@ public class Host
       thread.setContextClassLoader(oldLoader);
 
       classLoader.destroy();
+    }
+  }
+
+  /**
+   * @param shortHost
+   * @return
+   */
+  public static String calculateCanonicalIPv6(String host)
+  {
+    try {
+      InetAddress addr = InetAddress.getByName(host);
+
+      return "[" + addr.getHostAddress() + "]";
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+      
+      return host;
     }
   }
 

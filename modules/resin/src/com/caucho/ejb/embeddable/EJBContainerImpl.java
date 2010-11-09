@@ -31,6 +31,8 @@ package com.caucho.ejb.embeddable;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -38,12 +40,15 @@ import javax.ejb.EJBException;
 import javax.ejb.embeddable.EJBContainer;
 import javax.naming.Context;
 
+import com.caucho.config.Config;
+import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.inject.Module;
 import com.caucho.loader.Environment;
+import com.caucho.loader.EnvironmentBean;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.naming.AbstractModel;
 import com.caucho.naming.ContextImpl;
@@ -51,6 +56,7 @@ import com.caucho.naming.InitialContextFactoryImpl;
 import com.caucho.server.e_app.EnterpriseApplication;
 import com.caucho.server.webbeans.ResinCdiProducer;
 import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 /**
  * Interface for the EJBClient.
@@ -59,6 +65,8 @@ import com.caucho.vfs.Path;
 public class EJBContainerImpl extends EJBContainer {
   private static final Logger log 
     = Logger.getLogger(EJBContainerImpl.class.getName());
+  
+  public static final String CONFIG_FILE = "caucho.ejb.embed.config.file";
 
   private Context _context;
   private ClassLoader _parentClassLoader;
@@ -66,17 +74,21 @@ public class EJBContainerImpl extends EJBContainer {
   private InjectManager _injectManager;
   private EnterpriseApplication _application;
   private ArrayList<Path> _moduleRoots;
+  private Map<?,?> _properties;
 
   public EJBContainerImpl()
     throws EJBException
   {
-    this(null);
+    this(null, new HashMap<String,String>());
   }
 
-  public EJBContainerImpl(String name)
+  public EJBContainerImpl(String name,
+                          Map<?,?> properties)
     throws EJBException
   {
     preInit(name);
+    
+    _properties = properties;
   }
 
   void addModule(Path path)
@@ -132,6 +144,8 @@ public class EJBContainerImpl extends EJBContainer {
 
     try {
       thread.setContextClassLoader(_classLoader);
+      
+      configure();
 
       if (_moduleRoots != null) {
         for (Path path : _moduleRoots)
@@ -154,6 +168,28 @@ public class EJBContainerImpl extends EJBContainer {
     }
   }
   
+  private void configure()
+  {
+    String configFile = (String) _properties.get(CONFIG_FILE);
+    
+    if (configFile == null)
+      configFile = System.getProperty(CONFIG_FILE);
+    
+    if (configFile == null)
+      return;
+    
+    Path path = Vfs.lookup(configFile);
+    
+    Config config = new Config();
+    EnvironmentConfig configItem = new EnvironmentConfig();
+
+    try {
+      config.configure(configItem, path);
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+  }
+  
   @Override
   public Context getContext()
   {
@@ -170,5 +206,13 @@ public class EJBContainerImpl extends EJBContainer {
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _application.getName() + "]";
+  }
+  
+  class EnvironmentConfig implements EnvironmentBean {
+    @Override
+    public ClassLoader getClassLoader()
+    {
+      return _classLoader;
+    }
   }
 }

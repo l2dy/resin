@@ -36,6 +36,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import javax.ejb.LocalBean;
 import javax.ejb.Schedule;
 import javax.ejb.Schedules;
@@ -94,7 +96,7 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
 
     _nonBusinessAspectBeanFactory 
       = new NonBusinessAspectBeanFactory<X>(getBeanType());
-   }
+ }
 
   public static String toFullClassName(String ejbName, String className,
                                        String beanType)
@@ -105,26 +107,18 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     
     sb.append("__");
     
-    // XXX: restore this to distinguish similar beans
-    /*
-    if (!Character.isJavaIdentifierStart(ejbName.charAt(0)))
-      sb.append('_');
+    if (! className.endsWith(ejbName)) {
+      for (int i = 0; i < ejbName.length(); i++) {
+        char ch = ejbName.charAt(i);
 
-    for (int i = 0; i < ejbName.length(); i++) {
-      char ch = ejbName.charAt(i);
-
-      if (ch == '/')
-        sb.append('.');
-      else if (Character.isJavaIdentifierPart(ch))
-        sb.append(ch);
-      else
-        sb.append('_');
+        if (ch == '/')
+          sb.append('_');
+        else if (Character.isJavaIdentifierPart(ch))
+          sb.append(ch);
+        else
+          sb.append('_');
+      }
     }
-
-    sb.append(".");
-    sb.append(className);
-    sb.append("__");
-    */
     
     sb.append(beanType);
     sb.append("Proxy");
@@ -208,11 +202,13 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
       }
     }
     
-    for (AnnotatedType<? super X> type : _localApi)
+    for (AnnotatedType<? super X> type : _localApi) {
       introspectType(type);
+    }
     
-    for (AnnotatedType<? super X> type : _remoteApi)
+    for (AnnotatedType<? super X> type : _remoteApi) {
       introspectType(type);
+    }
     
     introspectImpl();
     
@@ -226,8 +222,9 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   
   private void introspectType(AnnotatedType<? super X> type)
   {
-    for (AnnotatedMethod<? super X> method : type.getMethods())
+    for (AnnotatedMethod<? super X> method : type.getMethods()) {
       introspectMethod(method);
+    }
   }
   
   private void introspectMethod(AnnotatedMethod<? super X> method)
@@ -245,8 +242,7 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     
     if (baseMethod == null)
       throw new IllegalStateException(L.l("{0} does not have a matching base method in {1}",
-                                          method, getBeanType()));
-    
+                                          method));
     // XXX: merge annotations
     
     _annotatedMethods.add(baseMethod);
@@ -260,16 +256,31 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   private void introspectImpl()
   {
     for (AnnotatedMethod<? super X> method : getAnnotatedMethods()) {
+      // ejb/5015
       introspectMethodImpl(method);
-    }
-    
-    /*
-    for (AnnotatedMethod<? super X> method : getBeanType().getMethods()) {
-      if (method.isAnnotationPresent(PostConstruct.class)) {
+      /*
+      if (method.isAnnotationPresent(PostConstruct.class)
+          || method.isAnnotationPresent(PreDestroy.class)) {
+      }
+      else {
         introspectMethodImpl(method);
       }
+      */
     }
-    */
+    
+    for (AnnotatedMethod<? super X> method : getBeanType().getMethods()) {
+      Method javaMethod = method.getJavaMember();
+      
+      if (method.isAnnotationPresent(PostConstruct.class)
+          && javaMethod.getParameterTypes().length == 0) {
+        // ejb/1060 only one post construct
+        addPostConstructMethod(method);
+      }
+      else if (method.isAnnotationPresent(PreDestroy.class)
+               && javaMethod.getParameterTypes().length == 0) {
+        addPreDestroyMethod(method);
+      }
+    }
   }
 
   private void introspectMethodImpl(AnnotatedMethod<? super X> apiMethod)
@@ -309,8 +320,9 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     if (! isBusinessMethod(javaMethod) 
         && ! Modifier.isPublic(modifiers)
         && (javaMethod.isAnnotationPresent(Schedule.class)
-            || javaMethod.isAnnotationPresent(Schedules.class)))
+            || javaMethod.isAnnotationPresent(Schedules.class))) {
       addScheduledMethod(apiMethod);
+    }
   }
   
   protected void addBusinessMethod(AnnotatedMethod<? super X> method)
@@ -319,6 +331,43 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
       
     if (bizMethod != null && ! _businessMethods.contains(bizMethod)) {
       _businessMethods.add(bizMethod);
+    }
+  }
+  
+  protected void addPostConstructMethod(AnnotatedMethod<? super X> method)
+  {
+    if (getLifecycleAspectFactory() == null)
+      return;
+    
+    AspectGenerator<X> initMethod = getLifecycleAspectFactory().create(method);
+      
+    // ejb/5015
+    if (initMethod != null) {
+      _businessMethods.add(initMethod);
+    }
+    
+    /*
+    if (initMethod != null && ! _businessMethods.contains(initMethod)) {
+      _businessMethods.add(initMethod);
+    }
+    */
+  }
+  
+  protected void addPreDestroyMethod(AnnotatedMethod<? super X> method)
+  {
+    if (getLifecycleAspectFactory() == null)
+      return;
+    
+    AspectGenerator<X> initMethod = getLifecycleAspectFactory().create(method);
+      
+    // ejb/5015
+    /*
+    if (initMethod != null && ! _businessMethods.contains(initMethod)) {
+      _businessMethods.add(initMethod);
+    }
+    */
+    if (initMethod != null) {
+      _businessMethods.add(initMethod);
     }
   }
 
@@ -375,6 +424,14 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     generateDestroy(out, map);
   }
 
+  @Override
+  protected void generatePostConstruct(JavaWriter out, 
+                                       HashMap<String,Object> map)
+     throws IOException
+  {
+    generatePostConstructImpl(out, map);
+  }
+ 
   protected AspectBeanFactory<X> getScheduledAspectBeanFactory()
   {
     throw new UnsupportedOperationException();
@@ -382,6 +439,11 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
   
   abstract protected boolean isTimerSupported();
   abstract protected AspectBeanFactory<X> getAspectBeanFactory();
+  
+  protected AspectBeanFactory<X> getLifecycleAspectFactory()
+  {
+    return null;
+  }
   
   // abstract protected void generateBody(JavaWriter out) throws IOException;
   
