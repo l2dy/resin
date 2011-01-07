@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -67,6 +67,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
   private static final L10N L = new L10N(AbstractCacheManager.class);
   
+  private final ResinSystem _resinSystem;
+  
   private DataCacheBacking _dataBacking;
   private CacheClusterBacking _clusterBacking;
   
@@ -75,6 +77,7 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
   
   public AbstractCacheManager(ResinSystem resinSystem)
   {
+    _resinSystem = resinSystem;
     // new AdminPersistentStore(this);
     _dataBacking = new DataCacheBacking();
     _clusterBacking = new AbstractCacheClusterBacking();
@@ -138,30 +141,31 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
   /**
    * Gets a cache entry
-   */
   final public Object get(E entry,
                           CacheConfig config,
                           long now)
   {
-    return get(entry, config, now, false);
+    return get(entry, config, now);
   }
+   */
 
   /**
    * Gets a cache entry
    */
+  /*
   final public Object getLazy(E entry,
                               CacheConfig config,
                               long now)
   {
     return get(entry, config, now, true);
   }
+  */
 
-  private Object get(E entry,
-                     CacheConfig config,
-                     long now,
-                     boolean isLazy)
+  final public Object get(E entry,
+                          CacheConfig config,
+                          long now)
   {
-    MnodeValue mnodeValue = getMnodeValue(entry, config, now, isLazy);
+    MnodeValue mnodeValue = getMnodeValue(entry, config, now);//, isLazy);
 
     if (mnodeValue == null)
       return null;
@@ -184,7 +188,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
     if (value == null) {
       // Recovery from dropped or corrupted data
-      log.warning("Missing or corrupted data for " + mnodeValue);
+      log.warning("Missing or corrupted data in get for " 
+                  + mnodeValue + " " + entry);
       remove(entry, config);
     }
 
@@ -203,7 +208,7 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
   {
     long now = Alarm.getCurrentTime();
 
-    MnodeValue mnodeValue = getMnodeValue(entry, config, now, false);
+    MnodeValue mnodeValue = getMnodeValue(entry, config, now); // , false);
 
     if (mnodeValue == null)
       return false;
@@ -218,7 +223,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     boolean isData = readData(valueHash, config.getFlags(), os);
     
     if (! isData) {
-      log.warning("Missing or corrupted data for " + mnodeValue);
+      log.warning("Missing or corrupted data for getStream " + mnodeValue
+                  + " " + entry);
       // Recovery from dropped or corrupted data
       remove(entry, config);
     }
@@ -228,8 +234,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
   final public MnodeValue getMnodeValue(E entry,
                                         CacheConfig config,
-                                        long now,
-                                        boolean isLazy)
+                                        long now)
+                                        // boolean isLazy)
   {
     MnodeValue mnodeValue = loadMnodeValue(entry);
 
@@ -237,12 +243,13 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
       reloadValue(entry, config, now);
     else if (isLocalReadValid(mnodeValue, now)) {
     }
-    else if (! isLazy) {
+    else { // if (! isLazy) {
       reloadValue(entry, config, now);
-    }
+    }/*
     else {
       lazyValueUpdate(entry, config);
     }
+    */
 
     mnodeValue = entry.getMnodeValue();
 
@@ -341,7 +348,7 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     long now = Alarm.getCurrentTime();
 
     // server/60a0 - on server '4', need to read update from triad
-    MnodeValue mnodeValue = getMnodeValue(entry, config, now, false);
+    MnodeValue mnodeValue = getMnodeValue(entry, config, now); // , false);
 
     return put(entry, value, config, now, mnodeValue);
   }
@@ -775,9 +782,9 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
                                            localReadTimeout, leaseOwner);
   }
 
-  final protected HashKey writeData(HashKey oldValueHash,
-                                    Object value,
-                                    CacheSerializer serializer)
+  final public HashKey writeData(HashKey oldValueHash,
+                                 Object value,
+                                 CacheSerializer serializer)
   {
     TempOutputStream os = null;
 
@@ -808,6 +815,38 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
       }
 
       return valueHash;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    } finally {
+      if (os != null)
+        os.close();
+    }
+  }
+
+  /**
+   * Used by QA
+   */
+  @Override
+  final public byte[] calculateValueHash(Object value,
+                                          CacheConfig config)
+  {
+    CacheSerializer serializer = config.getValueSerializer();
+    TempOutputStream os = null;
+    
+    try {
+      os = new TempOutputStream();
+
+      Sha256OutputStream mOut = new Sha256OutputStream(os);
+      DeflaterOutputStream gzOut = new DeflaterOutputStream(mOut);
+
+      serializer.serialize(value, gzOut);
+
+      gzOut.finish();
+      mOut.close();
+
+      byte[] hash = mOut.getDigest();
+
+      return hash;
     } catch (Exception e) {
       throw new RuntimeException(e);
     } finally {
@@ -877,7 +916,13 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
       WriteStream out = Vfs.openWrite(os);
 
       if (! getDataBacking().loadData(valueKey, out)) {
-        requestClusterData(valueKey, flags);
+        if (! loadClusterData(valueKey, flags)) {
+          log.warning(this + " cannot load data for " + valueKey + " from triad");
+          
+          out.close();
+        
+          return null;
+        }
 
         if (! getDataBacking().loadData(valueKey, out)) {
           out.close();
@@ -926,12 +971,18 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
       if (getDataBacking().loadData(valueKey, out))
         return true;
 
-      requestClusterData(valueKey, flags);
+      if (! loadClusterData(valueKey, flags)) {
+        log.warning(this + " cannot load cluster value " + valueKey);
+
+        // XXX: error?  since we have the value key, it should exist
+
+        return false;
+      }
 
       if (getDataBacking().loadData(valueKey, out))
         return true;
 
-      log.warning(this + " unexpected load failure");
+      log.warning(this + " unexpected load failure in readValue " + valueKey);
 
       // XXX: error?  since we have the value key, it should exist
 
@@ -941,9 +992,13 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     }
   }
 
-  protected void requestClusterData(HashKey valueKey, int flags)
+  /**
+   * Load the cluster data from the triad.
+   */
+  protected boolean loadClusterData(HashKey valueKey, int flags)
   {
     // _cacheService.requestData(valueKey, flags);
+    return true;
   }
 
   /**
@@ -988,5 +1043,25 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
   public void close()
   {
     getDataBacking().close();
+  }
+  
+  //
+  // QA
+  //
+  
+  public MnodeStore getMnodeStore()
+  {
+    return _dataBacking.getMnodeStore();
+  }
+  
+  public DataStore getDataStore()
+  {
+    return _dataBacking.getDataStore();
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _resinSystem.getId() + "]";
   }
 }

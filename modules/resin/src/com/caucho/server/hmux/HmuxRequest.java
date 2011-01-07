@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -245,7 +245,6 @@ public class HmuxRequest extends AbstractHttpRequest
   private CharBuffer _cb2;
   private boolean _hasRequest;
 
-  private Server _server;
   private AbstractClusterRequest _clusterRequest;
   private HmuxDispatchRequest _dispatchRequest;
 
@@ -261,19 +260,12 @@ public class HmuxRequest extends AbstractHttpRequest
   {
     super(server, conn);
 
-    _server = server;
-
-    if (server == null)
-      throw new NullPointerException();
-    
     _errorManager = new ErrorPageManager(server);
     _hmuxProtocol = protocol;
 
     _rawWrite = conn.getWriteStream();
 
     // XXX: response.setIgnoreClientDisconnect(server.getIgnoreClientDisconnect());
-
-    // _server = Server.getCurrent();
 
     _dispatchRequest = new HmuxDispatchRequest(this);
 
@@ -304,7 +296,7 @@ public class HmuxRequest extends AbstractHttpRequest
     _filter = new ServletFilter();
     
     BamService bamService = BamService.getCurrent();
-    
+
     _hmtpRequest = new HmtpRequest(conn, bamService);
   }
 
@@ -335,7 +327,7 @@ public class HmuxRequest extends AbstractHttpRequest
     return super.isSuspend() || _isHmtpRequest;
   }
 
-
+  @Override
   public boolean handleRequest()
     throws IOException
   {
@@ -365,7 +357,7 @@ public class HmuxRequest extends AbstractHttpRequest
   {
     // XXX: should be moved to TcpConnection
     Thread thread = Thread.currentThread();
-    thread.setContextClassLoader(_server.getClassLoader());
+    thread.setContextClassLoader(getServer().getClassLoader());
 
     if (log.isLoggable(Level.FINE))
       log.fine(dbgId() + "start request");
@@ -373,7 +365,7 @@ public class HmuxRequest extends AbstractHttpRequest
     _filter.init(this, getRawRead(), getRawWrite());
 
     try {
-      HttpBufferStore httpBuffer = HttpBufferStore.allocate((Server) _server);
+      HttpBufferStore httpBuffer = HttpBufferStore.allocate(getServer());
       startRequest(httpBuffer);
 
       startInvocation();
@@ -469,7 +461,7 @@ public class HmuxRequest extends AbstractHttpRequest
 
       startInvocation();
 
-      if (_server.isPreview() && ! "resin.admin".equals(getHost())) {
+      if (getServer().isPreview() && ! "resin.admin".equals(getHost())) {
         return sendBusyResponse();
       }
 
@@ -532,7 +524,7 @@ public class HmuxRequest extends AbstractHttpRequest
 
       request.setAttribute("javax.servlet.request.X509Certificate",
                            new X509Certificate[]{cert});
-      request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
+      request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_USER_NAME,
                            ((X509Certificate) cert).getSubjectDN());
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
@@ -864,7 +856,7 @@ public class HmuxRequest extends AbstractHttpRequest
         is.readAll(cb, len);
         if (isLoggable)
           log.fine(dbgId() + (char) code + " " + cb);
-        getRequestFacade().setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
+        getRequestFacade().setAttribute(com.caucho.security.AbstractLogin.LOGIN_USER_NAME,
                                         new com.caucho.security.BasicPrincipal(cb.toString()));
         break;
 
@@ -890,7 +882,9 @@ public class HmuxRequest extends AbstractHttpRequest
         
         _isHmtpRequest = true;
         
-        return _hmtpRequest.handleRequest();
+        boolean result = _hmtpRequest.handleRequest();
+
+        return result;
       }
 
       case ' ': case '\n':
@@ -1568,11 +1562,13 @@ public class HmuxRequest extends AbstractHttpRequest
   {
     _isHmtpRequest = false;
     _hmtpRequest.onCloseConnection();
+    
+    super.onCloseConnection();
   }
 
   protected String getRequestId()
   {
-    String id = _server.getServerId();
+    String id = getServer().getServerId();
 
     if (id.equals(""))
       return "server-" + getConnection().getId();
@@ -1583,7 +1579,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   public final String dbgId()
   {
-    String id = _server.getServerId();
+    String id = getServer().getServerId();
 
     if (id.equals(""))
       return "Hmux[" + getConnection().getId() + "] ";

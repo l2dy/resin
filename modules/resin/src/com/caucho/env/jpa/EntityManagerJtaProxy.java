@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,7 @@ import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.metamodel.Metamodel;
+import javax.transaction.Status;
 import javax.transaction.Synchronization;
 import javax.transaction.Transaction;
 
@@ -48,6 +49,7 @@ import com.caucho.amber.AmberRuntimeException;
 import com.caucho.config.inject.HandleAware;
 import com.caucho.transaction.ManagedResource;
 import com.caucho.transaction.ManagedXAResource;
+import com.caucho.transaction.TransactionImpl;
 import com.caucho.transaction.UserTransactionImpl;
 import com.caucho.transaction.UserTransactionProxy;
 import com.caucho.util.FreeList;
@@ -81,6 +83,10 @@ public class EntityManagerJtaProxy
   {
     _persistenceUnit = pUnit;
     _ut = UserTransactionProxy.getCurrent();
+  }
+  
+  void init()
+  {
   }
 
   @Override
@@ -323,7 +329,7 @@ public class EntityManagerJtaProxy
   public void persist(Object entity)
   {
     EntityManager em = getCurrent();
-    
+
     if (em != null) {
       em.persist(entity);
       return;
@@ -858,8 +864,10 @@ public class EntityManagerJtaProxy
       EntityManagerItem item = _threadEntityManager.get();
       Transaction xa = _ut.getTransaction();
       
-      if (item != null && xa == item.getXa())
+      if (item != null
+          && xa == item.getXa()) {
         return item.getEntityManager();
+      }
 
       if (_emf == null) {
         _emf = _persistenceUnit.getEntityManagerFactoryDelegate();
@@ -867,7 +875,7 @@ public class EntityManagerJtaProxy
 
       EntityManager em;
       
-      if (xa != null) {
+      if (xa != null && xa.getStatus() == Status.STATUS_ACTIVE) {
         em = _emf.createEntityManager(_persistenceUnit.getProperties());
 
         item = new EntityManagerItem(item, em, xa);
@@ -912,9 +920,13 @@ public class EntityManagerJtaProxy
     EntityManager em = _idleEntityManagerPool.allocate();
     
     if (em == null) {
+      if (_emf == null) {
+        _emf = _persistenceUnit.getEntityManagerFactoryDelegate();
+      }
+      
       em = _emf.createEntityManager(_persistenceUnit.getProperties());
     }
-      
+    
     return em;
   }
   

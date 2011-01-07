@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.db.sql;
 
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 
 import java.sql.SQLException;
 import java.util.logging.Logger;
@@ -43,7 +43,7 @@ public class TempQuery extends Query {
   /**
    * Executes the query.
    */
-  public void execute(QueryContext queryCtx, Transaction xa)
+  public void execute(QueryContext queryCtx, DbTransaction xa)
     throws SQLException
   {
     throw new UnsupportedOperationException();

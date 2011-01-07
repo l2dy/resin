@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import java.sql.SQLException;
 import com.caucho.db.index.BTree;
 import com.caucho.db.table.Column;
 import com.caucho.db.table.TableIterator;
+import com.caucho.util.Hex;
 
 class IndexExpr extends RowIterateExpr {
   private IdExpr _columnExpr;

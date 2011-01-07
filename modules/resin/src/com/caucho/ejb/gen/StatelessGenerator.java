@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -290,11 +290,13 @@ public class StatelessGenerator<X> extends SessionGenerator<X> {
     out.print(", StatelessProxyFactory");
     
     for (AnnotatedType<? super X> api : getLocalApi()) {
-      out.print(", " + api.getJavaClass().getName());
+      out.print(", ");
+      out.printType(api.getBaseType());
     }
 
     for (AnnotatedType<? super X> apiType : getRemoteApi()) {
-      out.print(", " + apiType.getJavaClass().getName());
+      out.print(", ");
+      out.printType(apiType.getBaseType());
     }
     
     out.println();

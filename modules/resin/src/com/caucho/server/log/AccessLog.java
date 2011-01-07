@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -117,6 +117,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   /**
    * Sets the log path
    */
+  @Override
   public void setPath(Path path)
   {
     super.setPath(path);
@@ -348,6 +349,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   /**
    * Logs a request using the current format.
    */
+  @Override
   public void log(HttpServletRequest req,
                   HttpServletResponse res,
                   ServletContext application)
@@ -704,6 +706,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   /**
    * Flushes the log.
    */
+  @Override
   public void flush()
   {
     // server/0213, 021q
@@ -715,6 +718,7 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   /**
    * The alarm listener.
    */
+  @Override
   public void handleAlarm(Alarm alarm)
   {
     try {

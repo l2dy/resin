@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,10 +37,12 @@ import java.util.logging.Logger;
 
 import javax.xml.stream.XMLStreamException;
 
-import com.caucho.bam.ActorClient;
 import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.broker.AbstractBroker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.mailbox.Mailbox;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.inject.Module;
 import com.caucho.network.listen.SocketLinkDuplexController;
 import com.caucho.network.listen.SocketLinkDuplexListener;
@@ -51,8 +53,8 @@ import com.caucho.vfs.WriteStream;
  * Protocol handler from the TCP/XMPP stream forwarding to the broker
  */
 @Module
-public class XmppBrokerStream
-  implements SocketLinkDuplexListener, ActorStream
+public class XmppBrokerStream extends AbstractBroker
+  implements SocketLinkDuplexListener, Broker
 {
   private static final Logger log
     = Logger.getLogger(XmppBrokerStream.class.getName());
@@ -62,7 +64,7 @@ public class XmppBrokerStream
   private XmppContext _xmppContext;
   
   private Broker _broker;
-  private ActorClient _conn;
+  private ActorSender _conn;
   private ActorStream _toBroker;
 
   private ActorStream _toClient;
@@ -164,8 +166,8 @@ public class XmppBrokerStream
     
     _uid = uid + _broker.getJid();
     
-    _toBroker = _broker.getBrokerStream();
-    _jid = _broker.createClient(_toClient, uid, resource);
+    _toBroker = _broker;
+    // _jid = _broker.createClient(_toClient, uid, resource);
 
     return _jid;
   }
@@ -174,8 +176,8 @@ public class XmppBrokerStream
   {
     String password = null;
     
-    _toBroker = _broker.getBrokerStream();
-    _jid = _broker.createClient(_toClient, jid, resource);
+    _toBroker = _broker;
+    // _jid = _broker.createClient(_toClient, jid, resource);
      
     return _jid;
   }
@@ -228,26 +230,13 @@ public class XmppBrokerStream
    * The get handler must respond with either
    * a QueryResult or a QueryError 
    */
-  public void queryGet(long id,
-                              String to,
-                              String from,
-                              Serializable value)
+  @Override
+  public void query(long id,
+                    String to,
+                    String from,
+                    Serializable value)
   {
-    _toBroker.queryGet(id, to, _jid, value);
-  }
-  
-  /**
-   * Handles a set query.
-   *
-   * The set handler must respond with either
-   * a QueryResult or a QueryError 
-   */
-  public void querySet(long id,
-                              String to,
-                              String from,
-                              Serializable value)
-  {
-    _toBroker.querySet(id, to, _jid, value);
+    _toBroker.query(id, to, _jid, value);
   }
   
   /**
@@ -255,10 +244,11 @@ public class XmppBrokerStream
    *
    * The result id will match a pending get or set.
    */
+  @Override
   public void queryResult(long id,
-                              String to,
-                              String from,
-                              Serializable value)
+                          String to,
+                          String from,
+                          Serializable value)
   {
     _toBroker.queryResult(id, to, _jid, value);
   }
@@ -268,11 +258,12 @@ public class XmppBrokerStream
    *
    * The result id will match a pending get or set.
    */
+  @Override
   public void queryError(long id,
-                             String to,
-                             String from,
-                             Serializable value,
-                             ActorError error)
+                         String to,
+                         String from,
+                         Serializable value,
+                         ActorError error)
   {
     _toBroker.queryError(id, to, _jid, value, error);
   }
@@ -306,5 +297,25 @@ public class XmppBrokerStream
   {
     // TODO Auto-generated method stub
     
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.bam.broker.Broker#getBrokerMailbox()
+   */
+  @Override
+  public Mailbox getBrokerMailbox()
+  {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.bam.broker.Broker#getMailbox(java.lang.String)
+   */
+  @Override
+  public Mailbox getMailbox(String jid)
+  {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

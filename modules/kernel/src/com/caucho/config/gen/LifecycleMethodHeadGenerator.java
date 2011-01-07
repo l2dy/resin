@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 
-import javax.ejb.TransactionAttributeType;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 
 import com.caucho.inject.Module;

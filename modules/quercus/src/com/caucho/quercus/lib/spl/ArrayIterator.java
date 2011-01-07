@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -187,9 +187,11 @@ public class ArrayIterator
       rewind();
   }
 
+  @Override
   public void rewind()
   {
-    _iterator = _value.getIterator(_env);
+    // php/4as8
+    _iterator = _value.getBaseIterator(_env);
     
     if (_iterator.hasNext())
       _current = _iterator.next();
@@ -228,6 +230,7 @@ public class ArrayIterator
       ArrayModule.uksort(_env, (ArrayValue) _value, func, sortFlag);
   }
 
+  @Override
   public boolean valid()
   {
     if (_iterator == null)

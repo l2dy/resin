@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -102,6 +102,13 @@ public class QuercusTimer
   public void shutdown()
   {
     _isRunnable = false;
+    
+    LockSupport.unpark(_timerThread);
+    
+    try {
+      Thread.sleep(1);
+    } catch (Exception e) {
+    }
   }
   
   class TimerThread extends Thread {

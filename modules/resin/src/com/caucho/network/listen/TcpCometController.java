@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,17 +36,23 @@ import com.caucho.util.Alarm;
  * Public API to control a comet connection.
  */
 @Module
-public class TcpCometController extends AsyncController {
+class TcpCometController extends AsyncController {
   private TcpSocketLink _conn;
 
-  private CometHandler _cometHandler;
+  private SocketLinkCometListener _cometHandler;
 
+  private boolean _isWakeRequested;
+  
+  private boolean _isCompleteRequested;
   private boolean _isTimeout;
 
-  TcpCometController(TcpSocketLink conn,
-                     CometHandler cometHandler)
+  TcpCometController(TcpSocketLink conn)
   {
     _conn = conn;
+  }
+  
+  void initHandler(SocketLinkCometListener cometHandler)
+  {
     _cometHandler = cometHandler;
   }
 
@@ -77,14 +83,10 @@ public class TcpCometController extends AsyncController {
   /**
    * Complete the connection
    */
+  @Override
   public final void complete()
   {
-    TcpSocketLink conn = _conn;
-
-    if (conn != null)
-      conn.toCometComplete();
-
-    // _cometHandler.onComplete();
+    _isCompleteRequested = true;
 
     wake();
   }
@@ -92,6 +94,7 @@ public class TcpCometController extends AsyncController {
   /**
    * Wakes the connection.
    */
+  @Override
   public final boolean wake()
   {
     TcpSocketLink conn = _conn;
@@ -100,6 +103,16 @@ public class TcpCometController extends AsyncController {
       return conn.wake();
     else
       return false;
+  }
+
+  boolean isWakeRequested()
+  {
+    return _isWakeRequested;
+  }
+
+  void setWakeRequested(boolean isWake)
+  {
+    _isWakeRequested = isWake;
   }
 
   /**
@@ -117,11 +130,17 @@ public class TcpCometController extends AsyncController {
   {
     _cometHandler.onTimeout();
 
-    _conn.toCometComplete();
+    _isTimeout = true;
 
     wake();
   }
 
+  void setTimeout()
+  {
+    _isTimeout = true;
+    _isCompleteRequested = true;
+  }
+  
   /**
    * Return true if timed out
    */
@@ -138,6 +157,16 @@ public class TcpCometController extends AsyncController {
     return _conn != null;
   }
 
+  final void setCompleteRequested()
+  {
+    _isCompleteRequested = true;
+  }
+  
+  final boolean isCompleteRequested()
+  {
+    return _isCompleteRequested;
+  }
+
   /**
    * Returns true for an active comet connection.
    */
@@ -145,7 +174,7 @@ public class TcpCometController extends AsyncController {
   {
     TcpSocketLink conn = _conn;
 
-    return conn != null && ! conn.isCometComplete();
+    return conn != null && ! _isCompleteRequested;
   }
 
   /**
@@ -155,21 +184,29 @@ public class TcpCometController extends AsyncController {
   {
     TcpSocketLink conn = _conn;
 
-    return conn == null || conn.isCometComplete();
+    return conn == null || _isCompleteRequested;
+  }
+
+  /**
+   * 
+   */
+  public void toResume()
+  {
+    // TODO Auto-generated method stub
+    
   }
 
   @Override
-  public void closeImpl()
+  public void onClose()
   {
-    // complete();
-
-    TcpSocketLink conn = _conn;
-    _conn = null;
-
-    if (conn != null)
-      conn.closeController(this);
+    try {
+      _cometHandler.onComplete();
+    } finally {
+      _conn = null;
+    }
   }
 
+  @Override
   public String toString()
   {
     TcpSocketLink conn = _conn;
@@ -192,6 +229,9 @@ public class TcpCometController extends AsyncController {
 
     if (tcpConn != null && tcpConn.isCometComplete())
       sb.append(",complete");
+
+    if (_isTimeout)
+      sb.append(",timeout");
 
     if (tcpConn != null && tcpConn.isCometSuspend())
       sb.append(",suspended");

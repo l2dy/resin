@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -197,7 +197,6 @@ public class WelcomeFile extends AbstractDispatchRule
   private Match matchWelcomeUri(String welcomeUri)
   {
     try {
-      
       InputStream is;
       is = _webApp.getResourceAsStream(welcomeUri);
 
@@ -207,7 +206,8 @@ public class WelcomeFile extends AbstractDispatchRule
       if (is != null)
         return Match.FILE;
     } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      log.fine("welcome-file lookup failed: " + welcomeUri);
+      log.log(Level.ALL, e.toString(), e);
     }
       
     String servletClassName

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -269,6 +269,7 @@ public class EventManager
   public void fireExtensionEvent(Object event, 
                                  Annotation... qualifiers)
   {
+    _cdiManager.getExtensionManager().updateExtensions();
     fireLocalEvent(_extObserverMap, event, qualifiers);
   }
 
@@ -276,6 +277,7 @@ public class EventManager
   public void fireExtensionEvent(Object event, BaseType eventType, 
                                  Annotation... qualifiers)
   {
+    _cdiManager.getExtensionManager().updateExtensions();
     fireLocalEvent(_extObserverMap, event, eventType, qualifiers);
   }
 
@@ -284,7 +286,6 @@ public class EventManager
   {
     // ioc/0062 - class with type-param handled specially
     BaseType eventType = _cdiManager.createTargetBaseType(event.getClass());
-
     fireLocalEvent(localMap, event, eventType, bindings);
   }
   
@@ -295,7 +296,6 @@ public class EventManager
     Set<ObserverMethod<?>> observerList = new LinkedHashSet<ObserverMethod<?>>();
 
     fillLocalObserverList(localMap, observerList, eventType, qualifiers);
-
     for (ObserverMethod<?> method : observerList) {
       ((ObserverMethod) method).notify(event);
     }
@@ -310,7 +310,7 @@ public class EventManager
       Class<?> rawClass = type.getRawClass();
 
       ObserverMap map = localMap.get(rawClass);
-      
+
       if (map != null) {
         // ioc/0b5c, ioc/0b82
         map.resolveObservers((Set) list, eventType, qualifiers);

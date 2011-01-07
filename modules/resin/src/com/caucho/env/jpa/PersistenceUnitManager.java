@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -337,7 +337,7 @@ public class PersistenceUnitManager implements PersistenceUnitInfo {
   {
     return _entityManagerJtaProxy;
   }
-  
+ 
   /**
    * Starts the persistence unit.
    */
@@ -361,6 +361,8 @@ public class PersistenceUnitManager implements PersistenceUnitInfo {
     }
     
     createDelegate();
+    
+    _entityManagerJtaProxy.init();
   }
   
   private void addDefaultProperty(String name, String value)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -260,6 +260,15 @@ public class NullGenerator<X> implements AspectGenerator<X> {
    */
   @Override
   public void generateFinally(JavaWriter out)
+    throws IOException
+  {
+  }
+
+  /**
+   * Generates finally code for the method
+   */
+  @Override
+  public void generatePostFinally(JavaWriter out)
     throws IOException
   {
   }

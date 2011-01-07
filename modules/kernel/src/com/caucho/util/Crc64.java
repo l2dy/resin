@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -137,8 +137,6 @@ public class Crc64 {
       long v = i;
 
       for (int j = 0; j < 8; j++) {
-        boolean flag = (v & 1) != 0;
-
         long newV = v >>> 1;
 
         if ((v & 0x100000000L) != 0)

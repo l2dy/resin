@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -239,12 +239,11 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     
     AnnotatedMethod<? super X> baseMethod
       = findMethod(getBeanType().getMethods(), method);
-    
+
     if (baseMethod == null)
       throw new IllegalStateException(L.l("{0} does not have a matching base method in {1}",
                                           method));
     // XXX: merge annotations
-    
     _annotatedMethods.add(baseMethod);
   }
 
@@ -258,14 +257,6 @@ abstract public class SessionGenerator<X> extends BeanGenerator<X> {
     for (AnnotatedMethod<? super X> method : getAnnotatedMethods()) {
       // ejb/5015
       introspectMethodImpl(method);
-      /*
-      if (method.isAnnotationPresent(PostConstruct.class)
-          || method.isAnnotationPresent(PreDestroy.class)) {
-      }
-      else {
-        introspectMethodImpl(method);
-      }
-      */
     }
     
     for (AnnotatedMethod<? super X> method : getBeanType().getMethods()) {

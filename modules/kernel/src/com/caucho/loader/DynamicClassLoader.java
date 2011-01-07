@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -62,6 +62,7 @@ import com.caucho.make.MakeContainer;
 import com.caucho.management.server.DynamicClassLoaderMXBean;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.ByteBuffer;
+import com.caucho.util.Crc64;
 import com.caucho.util.L10N;
 import com.caucho.util.TimedCache;
 import com.caucho.vfs.Dependency;
@@ -194,7 +195,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
         addPermissions(loader.getPermissions());
 
-        // loader.addListener(this);
+        // loader.addNotificationListener(this);
 
         _dependencies.add(loader);
         _dependencies.setCheckInterval(loader.getDependencyCheckInterval());
@@ -952,6 +953,21 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     return _classFileTransformerList;
   }
 
+  public String getHash()
+  {
+    return String.valueOf(Crc64.generate(getClassPath()));
+  }
+  
+  public static final String getHash(ClassLoader loader)
+  {
+    if (! (loader instanceof DynamicClassLoader))
+      return loader.getClass().getName();
+    
+    DynamicClassLoader dynLoader = (DynamicClassLoader) loader;
+    
+    return dynLoader.getHash();
+  }
+  
   /**
    * Fill data for the class path.  fillClassPath() will add all
    * .jar and .zip files in the directory list.

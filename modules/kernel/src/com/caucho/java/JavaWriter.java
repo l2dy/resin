@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,12 +29,18 @@
 
 package com.caucho.java;
 
+import java.io.IOException;
+import java.io.Writer;
+import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.GenericDeclaration;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
+import java.lang.reflect.TypeVariable;
+import java.lang.reflect.WildcardType;
+
 import com.caucho.bytecode.JClass;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.WriteStream;
-
-import java.io.IOException;
-import java.io.Writer;
 
 /**
  * Writing class for generated Java code.
@@ -42,10 +48,10 @@ import java.io.Writer;
 public class JavaWriter extends Writer {
   // Write stream for generating the code
   private WriteStream _os;
-  
+
   // Indentation depth
   private int _indentDepth;
-  
+
   // True at the start of a line
   private boolean _startLine = true;
 
@@ -60,7 +66,7 @@ public class JavaWriter extends Writer {
   // Generates a unique string.
   private int _uniqueId;
 
-  public JavaWriter(WriteStream os)
+  public JavaWriter(WriteStream os) 
   {
     _os = os;
   }
@@ -99,12 +105,13 @@ public class JavaWriter extends Writer {
 
   /**
    * Sets the source filename and line.
-   *
-   * @param filename the filename of the source file.
-   * @param line the line of the source file.
+   * 
+   * @param filename
+   *          the filename of the source file.
+   * @param line
+   *          the line of the source file.
    */
-  public void setLocation(String filename, int line)
-    throws IOException
+  public void setLocation(String filename, int line) throws IOException
   {
     if (_lineMap != null && filename != null && line >= 0) {
       _lineMap.add(filename, line, _destLine, _isPreferLast);
@@ -130,8 +137,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a Java escaped string
    */
-  public void printJavaString(String s)
-    throws IOException
+  public void printJavaString(String s) throws IOException
   {
     for (int i = 0; i < s.length(); i++) {
       char ch = s.charAt(i);
@@ -158,8 +164,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a Java escaped string
    */
-  public void printJavaChar(char ch)
-    throws IOException
+  public void printJavaChar(char ch) throws IOException
   {
     switch (ch) {
     case '\\':
@@ -185,7 +190,7 @@ public class JavaWriter extends Writer {
   public static String escapeJavaString(String s)
   {
     StringBuilder sb = new StringBuilder();
-    
+
     for (int i = 0; i < s.length(); i++) {
       char ch = s.charAt(i);
 
@@ -213,8 +218,7 @@ public class JavaWriter extends Writer {
   /**
    * Pushes an indentation depth.
    */
-  public void pushDepth()
-    throws IOException
+  public void pushDepth() throws IOException
   {
     _indentDepth += 2;
   }
@@ -222,8 +226,7 @@ public class JavaWriter extends Writer {
   /**
    * Pops an indentation depth.
    */
-  public void popDepth()
-    throws IOException
+  public void popDepth() throws IOException
   {
     _indentDepth -= 2;
   }
@@ -231,8 +234,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a string
    */
-  public void print(String s)
-    throws IOException
+  public void print(String s) throws IOException
   {
     if (_startLine)
       printIndent();
@@ -240,27 +242,26 @@ public class JavaWriter extends Writer {
     if (s == null) {
       _lastCr = false;
       _os.print("null");
-      
+
       return;
     }
-    
+
     int len = s.length();
     for (int i = 0; i < len; i++) {
       int ch = s.charAt(i);
 
-      if (ch == '\n' && ! _lastCr)
+      if (ch == '\n' && !_lastCr)
         _destLine++;
       else if (ch == '\r')
         _destLine++;
 
       _lastCr = ch == '\r';
-      
+
       _os.print((char) ch);
     }
   }
 
-  public void write(char []buffer, int offset, int length)
-    throws IOException
+  public void write(char[] buffer, int offset, int length) throws IOException
   {
     print(new String(buffer, offset, length));
   }
@@ -268,32 +269,29 @@ public class JavaWriter extends Writer {
   /**
    * Prints a character.
    */
-  public void print(char ch)
-    throws IOException
+  public void print(char ch) throws IOException
   {
     if (_startLine)
       printIndent();
 
     if (ch == '\r') {
       _destLine++;
-    }
-    else if (ch == '\n' && ! _lastCr)
+    } else if (ch == '\n' && !_lastCr)
       _destLine++;
 
     _lastCr = ch == '\r';
-    
+
     _os.print(ch);
   }
 
   /**
    * Prints a boolean.
    */
-  public void print(boolean b)
-    throws IOException
+  public void print(boolean b) throws IOException
   {
     if (_startLine)
       printIndent();
-    
+
     _os.print(b);
     _lastCr = false;
   }
@@ -301,12 +299,11 @@ public class JavaWriter extends Writer {
   /**
    * Prints an integer.
    */
-  public void print(int i)
-    throws IOException
+  public void print(int i) throws IOException
   {
     if (_startLine)
       printIndent();
-    
+
     _os.print(i);
     _lastCr = false;
   }
@@ -314,12 +311,11 @@ public class JavaWriter extends Writer {
   /**
    * Prints an long
    */
-  public void print(long l)
-    throws IOException
+  public void print(long l) throws IOException
   {
     if (_startLine)
       printIndent();
-    
+
     _os.print(l);
     _lastCr = false;
   }
@@ -327,12 +323,11 @@ public class JavaWriter extends Writer {
   /**
    * Prints an object.
    */
-  public void print(Object o)
-    throws IOException
+  public void print(Object o) throws IOException
   {
     if (_startLine)
       printIndent();
-    
+
     _os.print(o);
     _lastCr = false;
   }
@@ -340,8 +335,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a string with a new line
    */
-  public void println(String s)
-    throws IOException
+  public void println(String s) throws IOException
   {
     print(s);
     println();
@@ -350,8 +344,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a boolean with a new line
    */
-  public void println(boolean v)
-    throws IOException
+  public void println(boolean v) throws IOException
   {
     print(v);
     println();
@@ -360,8 +353,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints a character.
    */
-  public void println(char ch)
-    throws IOException
+  public void println(char ch) throws IOException
   {
     print(ch);
     println();
@@ -370,8 +362,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints an integer with a new line
    */
-  public void println(int v)
-    throws IOException
+  public void println(int v) throws IOException
   {
     print(v);
     println();
@@ -380,8 +371,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints an long with a new line
    */
-  public void println(long v)
-    throws IOException
+  public void println(long v) throws IOException
   {
     print(v);
     println();
@@ -390,8 +380,7 @@ public class JavaWriter extends Writer {
   /**
    * Prints an object with a new line
    */
-  public void println(Object v)
-    throws IOException
+  public void println(Object v) throws IOException
   {
     print(v);
     println();
@@ -400,38 +389,263 @@ public class JavaWriter extends Writer {
   /**
    * Prints a newline
    */
-  public void println()
-    throws IOException
+  public void println() throws IOException
   {
     _os.println();
-    if (! _lastCr)
+    if (!_lastCr)
       _destLine++;
     _lastCr = false;
     _startLine = true;
   }
-  
+
   /**
    * Prints the Java represention of the class
    */
-  public void printClass(Class cl)
-    throws IOException
+  public void printClass(Class<?> cl) throws IOException
   {
-    if (! cl.isArray())
+    if (!cl.isArray())
       print(cl.getName().replace('$', '.'));
     else {
       printClass(cl.getComponentType());
       print("[]");
     }
   }
-  
+
+  /**
+   * Prints the Java representation of the type
+   */
+  @SuppressWarnings("unchecked")
+  public void printType(Type type)
+    throws IOException
+  {
+    if (type instanceof Class<?>) {
+      printTypeClass((Class<?>) type);
+    } 
+    else if (type instanceof ParameterizedType) {
+      ParameterizedType parameterizedType = (ParameterizedType) type;
+      
+      printParameterizedType(parameterizedType);
+    }
+    else if (type instanceof WildcardType) {
+      WildcardType wildcardType = (WildcardType) type;
+      
+      printWildcardType(wildcardType);
+    }
+    else if (type instanceof TypeVariable<?>) {
+      TypeVariable<? extends GenericDeclaration> typeVariable = (TypeVariable<? extends GenericDeclaration>) type;
+      
+      printTypeVariable(typeVariable);
+    }
+    else if (type instanceof GenericArrayType) {
+      GenericArrayType genericArrayType = (GenericArrayType) type;
+
+      printType(genericArrayType.getGenericComponentType());
+      print("[]");
+    }
+    else {
+      throw new UnsupportedOperationException(type.getClass().getName() + " "
+          + String.valueOf(type));
+    }
+  }
+
+  private void printTypeClass(Class<?> cl)
+    throws IOException
+  {
+    printClass(cl);
+    
+    if (true)
+      return;
+
+    // ioc/1238
+    Type []param = cl.getTypeParameters();
+
+    if (param == null || param.length == 0)
+      return;
+
+    print("<");
+    
+    for (int i = 0; i < param.length; i++) {
+      if (i != 0)
+        print(",");
+      
+      print("java.lang.Object");
+    }
+    print(">");
+  }
+
+  /**
+   * Prints a parameterized type declaration:
+   * 
+   * <pre>
+   * T&lt;X>
+   * </pre>
+   */
+  private void printParameterizedType(ParameterizedType parameterizedType)
+    throws IOException
+  {
+    Type rawType = parameterizedType.getRawType();
+
+    if (rawType instanceof Class<?>)
+      printClass((Class<?>) rawType);
+    else
+      printType(rawType);
+
+    print("<");
+
+    Type[] typeParameters = parameterizedType.getActualTypeArguments();
+
+    for (int i = 0; i < typeParameters.length; i++) {
+      if (i != 0) {
+        print(", ");
+      }
+
+      printType(typeParameters[i]);
+    }
+
+    print(">");
+  }
+
+  private void printTypeVariable(TypeVariable<?> typeVariable)
+    throws IOException
+  {
+    print(typeVariable.getName());
+    
+    if (true)
+      return;
+
+    Type[] bounds = typeVariable.getBounds();
+
+    if ((bounds != null) && (bounds.length > 0)) {
+      print(" extends ");
+
+      for (int i = 0; i < bounds.length; i++) {
+        if (i != 0) {
+          print(" & ");
+        }
+
+        printType(bounds[i]);
+      }
+    }
+
+    GenericDeclaration genericDeclaration
+    = typeVariable.getGenericDeclaration();
+
+    Type[] typeParameters = null;
+
+    typeParameters = genericDeclaration.getTypeParameters();
+
+    if ((typeParameters != null) && (typeParameters.length > 0)) {
+      print("<");
+
+      for (int i = 0; i < typeParameters.length; i++) {
+        if (i != 0) {
+          print(", ");
+        }
+
+        printType(typeParameters[i]);
+      }
+
+      print(">");
+    }
+  }
+
+  public void printVarType(TypeVariable<?> typeVariable)
+    throws IOException
+  {
+    print(typeVariable.getName());
+
+    GenericDeclaration genericDeclaration
+      = typeVariable.getGenericDeclaration();
+
+    Type[] typeParameters = null;
+
+    typeParameters = genericDeclaration.getTypeParameters();
+
+    if ((typeParameters != null) && (typeParameters.length > 0)) {
+      print("<");
+
+      for (int i = 0; i < typeParameters.length; i++) {
+        if (i != 0) {
+          print(", ");
+        }
+
+        printType(typeParameters[i]);
+      }
+
+      print(">");
+    }
+
+    Type[] bounds = typeVariable.getBounds();
+
+    if (bounds != null) {
+      boolean isFirst = true;
+      
+      for (int i = 0; i < bounds.length; i++) {
+        /*if (bounds[i].equals(Object.class))
+          continue;
+          */
+        
+        if (isFirst)
+          print(" extends ");
+        else
+          print(" & ");
+
+        isFirst = false;
+        
+        printType(bounds[i]);
+      }
+    }
+  }
+
+  private void printWildcardType(WildcardType wildcardType)
+    throws IOException
+  {
+    print("?");
+
+    Type[] upperBounds = wildcardType.getUpperBounds();
+
+    if (upperBounds == null || upperBounds.length == 0) {
+    }
+    else if (upperBounds.length == 1 && upperBounds[0].equals(Object.class)) {
+      // skip printing "extends Object"
+    }
+    else {
+      print(" extends ");
+
+      for (int i = 0; i < upperBounds.length; i++) {
+        if (i != 0) {
+          print(" & ");
+        }
+
+        printType(upperBounds[i]);
+      }
+    }
+
+    Type[] lowerBounds = wildcardType.getLowerBounds();
+
+    if (lowerBounds != null && lowerBounds.length > 0) {
+      print(" super ");
+
+      for (int i = 0; i < lowerBounds.length; i++) {
+        if (i != 0) {
+          print(" & ");
+        }
+
+        printType(lowerBounds[i]);
+      }
+    }
+    
+  }
   /**
    * Converts a java primitive type to a Java object.
-   *
-   * @param value the java expression to be converted
-   * @param javaType the type of the converted expression.
+   * 
+   * @param value
+   *          the java expression to be converted
+   * @param javaType
+   *          the type of the converted expression.
    */
-  public void printJavaTypeToObject(String value, Class javaType)
-    throws IOException
+  public void printJavaTypeToObject(String value, Class<?> javaType)
+      throws IOException
   {
     if (Object.class.isAssignableFrom(javaType))
       print(value);
@@ -454,15 +668,17 @@ public class JavaWriter extends Writer {
     else
       print(value);
   }
-  
+
   /**
    * Converts a java primitive type to a Java object.
-   *
-   * @param value the java expression to be converted
-   * @param javaType the type of the converted expression.
+   * 
+   * @param value
+   *          the java expression to be converted
+   * @param javaType
+   *          the type of the converted expression.
    */
   public void printJavaTypeToObject(String value, JClass javaType)
-    throws IOException
+      throws IOException
   {
     if (javaType.getName().equals("boolean"))
       print("new Boolean(" + value + ")");
@@ -487,11 +703,10 @@ public class JavaWriter extends Writer {
   /**
    * Prints the indentation at the beginning of a line.
    */
-  public void printIndent()
-    throws IOException
+  public void printIndent() throws IOException
   {
     _startLine = false;
-    
+
     for (int i = 0; i < _indentDepth; i++)
       _os.print(' ');
 
@@ -501,8 +716,7 @@ public class JavaWriter extends Writer {
   /**
    * Generates the smap file.
    */
-  public void generateSmap()
-    throws IOException
+  public void generateSmap() throws IOException
   {
     if (_lineMap != null) {
       Path dstPath = getWriteStream().getPath();
@@ -510,7 +724,7 @@ public class JavaWriter extends Writer {
 
       WriteStream out = smap.openWrite();
       try {
-        String srcName = _lineMap.getLastSourceFilename();
+        // String srcName = _lineMap.getLastSourceFilename();
 
         LineMapWriter writer = new LineMapWriter(out);
 
@@ -530,11 +744,9 @@ public class JavaWriter extends Writer {
   public String errorMessage(String message)
   {
     /*
-    if (_srcFilename == null)
-      return message;
-    else
-      return _srcFilename + ':' + _srcLine + ": " + message;
-    */
+     * if (_srcFilename == null) return message; else return _srcFilename + ':'
+     * + _srcLine + ": " + message;
+     */
     return message;
   }
 

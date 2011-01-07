@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,15 +29,16 @@
 
 package com.caucho.bam;
 
+
 /**
  * HMPP wrapper
  */
+@SuppressWarnings("serial")
 public class ErrorPacketException extends ActorException {
   private ActorError _error;
   
   public ErrorPacketException()
   {
-    Thread.dumpStack();
   }
 
   public ErrorPacketException(String msg)
@@ -83,6 +84,10 @@ public class ErrorPacketException extends ActorException {
   @Override
   public ActorError createActorError()
   {
-    return _error;
+    if (_error != null)
+      return _error;
+    else {
+      return super.createActorError();
+    }
   }
 }

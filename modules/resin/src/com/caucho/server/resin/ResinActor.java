@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,9 +36,8 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.QueryGet;
-import com.caucho.bam.QuerySet;
-import com.caucho.bam.SimpleActor;
+import com.caucho.bam.Query;
+import com.caucho.bam.actor.SimpleActor;
 import com.caucho.boot.PidQuery;
 import com.caucho.boot.WatchdogStopQuery;
 import com.caucho.env.shutdown.ExitCode;
@@ -79,7 +78,7 @@ public class ResinActor extends SimpleActor
    */
   public void sendWarning(String msg)
   {
-    getLinkStream().message("watchdog", getJid(), new WarningMessage(msg));
+    getBroker().message("watchdog", getJid(), new WarningMessage(msg));
   }
   
   //
@@ -89,7 +88,7 @@ public class ResinActor extends SimpleActor
   /**
    * Query for the process pid.
    */
-  @QueryGet
+  @Query
   public void queryPid(long id,
                        String to,
                        String from,
@@ -105,7 +104,7 @@ public class ResinActor extends SimpleActor
       String runtimeName = (String) server.getAttribute(objName, "Name");
       
       if (runtimeName == null) {
-        getLinkStream().queryError(id, from, to, query, 
+        getBroker().queryError(id, from, to, query, 
                                    new ActorError("null runtime name"));
         return;
       }
@@ -115,20 +114,20 @@ public class ResinActor extends SimpleActor
       if (p > 0) {
         int pid = Integer.parseInt(runtimeName.substring(0, p));
       
-        getLinkStream().queryResult(id, from, to, new PidQuery(pid));
+        getBroker().queryResult(id, from, to, new PidQuery(pid));
         return;
       }
       
-      getLinkStream().queryError(id, from, to, query,
+      getBroker().queryError(id, from, to, query,
                                  new ActorError("malformed name=" + runtimeName));
    
     } catch (Exception e) {
-      getLinkStream().queryError(id, from, to, query,
+      getBroker().queryError(id, from, to, query,
                                  ActorError.create(e));
     }
    }
 
-  @QuerySet
+  @Query
   public void stop(long id,
                    String to,
                    String from,
@@ -138,7 +137,7 @@ public class ResinActor extends SimpleActor
     
     String msg = L.l("Resin shutdown from watchdog stop '" + from + "'");
 
-    getLinkStream().queryResult(id, from, to, query);
+    getBroker().queryResult(id, from, to, query);
     
     ShutdownService.shutdownActive(ExitCode.OK, msg);
   }

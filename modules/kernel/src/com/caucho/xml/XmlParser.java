@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -196,6 +196,7 @@ public class XmlParser extends AbstractParser {
    *
    * @return The parsed document.
    */
+  @Override
   Document parseInt(ReadStream is)
     throws IOException, SAXException
   {
@@ -242,7 +243,6 @@ public class XmlParser extends AbstractParser {
       _owner = new QDocument();
     if (_defaultEncoding != null)
       _owner.setAttribute("encoding", _defaultEncoding);
-    _owner.addDepend(is.getPath());
     
     _activeNode = DOC_NAME;
     
@@ -271,6 +271,11 @@ public class XmlParser extends AbstractParser {
 
     QDocument owner = _owner;
     _owner = null;
+
+    // ioc/23l0
+    Path path = is.getPath();
+    is.close();
+    owner.addDepend(path);
       
     return owner;
   }

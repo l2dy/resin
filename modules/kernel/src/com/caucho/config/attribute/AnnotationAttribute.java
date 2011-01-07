@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -62,6 +62,22 @@ public class AnnotationAttribute<T> extends Attribute {
   public ConfigType<T> getConfigType()
   {
     return _type;
+  }
+
+  /**
+   * True if it allows inline beans
+   */
+  @Override
+  public boolean isInlineType(ConfigType<?> type)
+  {
+    if (type == null)
+      return false;
+    else if (type.isReplace())
+      return true;
+    else if (_type.isInlineType(type))
+      return true;
+    else
+      return _type.getType().isAssignableFrom(type.getType());
   }
 
   /**

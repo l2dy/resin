@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,12 +34,14 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -72,7 +74,6 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.SerializeHandle;
 import com.caucho.config.bytecode.SerializationAdapter;
 import com.caucho.config.gen.CandiBeanGenerator;
-import com.caucho.config.gen.CandiEnhancedBean;
 import com.caucho.config.inject.InjectManager.ReferenceFactory;
 import com.caucho.config.j2ee.PostConstructProgram;
 import com.caucho.config.j2ee.PreDestroyInject;
@@ -81,6 +82,7 @@ import com.caucho.config.program.BeanArg;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ResourceProgramManager;
 import com.caucho.config.reflect.AnnotatedConstructorImpl;
+import com.caucho.config.reflect.BaseType;
 import com.caucho.config.reflect.ReflectionAnnotatedFactory;
 import com.caucho.inject.Module;
 import com.caucho.util.L10N;
@@ -102,6 +104,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   private Bean<X> _bean;
 
   private final AnnotatedType<X> _annotatedType;
+  
+  private Class<X> _rawClass;
 
   private AnnotatedConstructor<X> _beanCtor;
   
@@ -123,6 +127,13 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
     _annotatedType = beanType;
     _bean = bean;
+    
+    Type type = _annotatedType.getBaseType();
+    
+    // ioc/2601
+    BaseType baseType = getBeanManager().createSourceBaseType(type);
+    
+    _rawClass= (Class<X>) baseType.getRawClass();
     
     introspectInjectClass(_annotatedType);
   }
@@ -255,7 +266,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
       introspect();
       
-      Class<X> cl = (Class<X>) _annotatedType.getBaseType();
+      Class<X> cl = _rawClass;
+      
 
       if (_beanCtor == null) {
         // XXX:
@@ -296,7 +308,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
         }
       }
 
-      ConfigProgram []injectProgram = introspectInject(_annotatedType);
+      ConfigProgram []injectProgram = introspectInject();
       ConfigProgram []initProgram = introspectPostConstruct(_annotatedType);
 
       ArrayList<ConfigProgram> destroyList = new ArrayList<ConfigProgram>();
@@ -598,13 +610,13 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     return qualifiers;
   }
 
-  private ConfigProgram []introspectInject(AnnotatedType<X> type)
+  private ConfigProgram []introspectInject()
   {
     ArrayList<ConfigProgram> injectProgramList = new ArrayList<ConfigProgram>();
     
     _injectionPointSet = new HashSet<InjectionPoint>();
     
-    introspectInject(type, injectProgramList);
+    introspectInject(injectProgramList);
     
     ConfigProgram []injectProgram = new ConfigProgram[injectProgramList.size()];
     injectProgramList.toArray(injectProgram);
@@ -614,10 +626,11 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     return injectProgram;
   }
   
-  private void introspectInject(AnnotatedType<X> type,
-                                ArrayList<ConfigProgram> injectProgramList)
+  private void introspectInject(ArrayList<ConfigProgram> injectProgramList)
   {
-    Class<?> rawType = (Class<?>) type.getBaseType();
+    AnnotatedType<X> type = _annotatedType;
+    
+    Class<?> rawType = _rawClass;
 
     if (rawType == null || Object.class.equals(rawType))
       return;
@@ -628,11 +641,25 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
     introspectInjectField(type, injectProgramList);
     introspectInjectMethod(type, injectProgramList);
+    // introspectInject(type, injectProgramList, rawType);
     
     ResourceProgramManager resourceManager = _cdiManager.getResourceManager();
     
     resourceManager.buildInject(rawType, injectProgramList);
   }
+  
+  /*
+  private void introspectInject(AnnotatedType<X> type,
+                                ArrayList<ConfigProgram> injectProgramList,
+                                Class<?> rawType)
+  {
+    if (rawType == null || Object.class.equals(rawType))
+      return;
+    
+    introspectInject(type, injectProgramList, rawType.getSuperclass());
+    
+  }
+  */
   
   private void introspectInjectClass(AnnotatedType<X> type)
   {
@@ -672,6 +699,11 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     for (AnnotatedField<?> field : type.getFields()) {
       if (field.getAnnotations().size() == 0)
         continue;
+      
+      /*
+      if (! field.getDeclaringType().getJavaClass().equals(cl))
+        continue;
+        */
 
       if (field.isAnnotationPresent(Inject.class)) {
         // boolean isOptional = isQualifierOptional(field);
@@ -695,7 +727,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
       }
       else {
         InjectionPointHandler handler
-        = getBeanManager().getInjectionPointHandler(field);
+          = getBeanManager().getInjectionPointHandler(field);
 
         if (handler != null) {
           ConfigProgram program = new FieldHandlerProgram(field, handler);
@@ -709,10 +741,15 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   private void introspectInjectMethod(AnnotatedType<X> type,
                                       ArrayList<ConfigProgram> injectProgramList)
   {
-
     for (AnnotatedMethod method : type.getMethods()) {
+
       if (method.getAnnotations().size() == 0)
         continue;
+
+      /*
+      if (! method.getDeclaringType().getJavaClass().equals(cl))
+        continue;
+        */
 
       if (method.isAnnotationPresent(Inject.class)) {
         // boolean isOptional = isQualifierOptional(field);
@@ -858,12 +895,17 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     private final Field _field;
     private final InjectionPoint _ip;
     private final InjectManager.ReferenceFactory<?> _fieldFactory;
+    
+    private AtomicBoolean _isStaticSet;
 
     FieldInjectProgram(Field field, InjectionPoint ip)
     {
       _field = field;
       _field.setAccessible(true);
       _ip = ip;
+
+      if (Modifier.isStatic(field.getModifiers()))
+        _isStaticSet = _cdiManager.getStaticMemberBoolean(field);
       
       InjectManager beanManager = getBeanManager();
 
@@ -899,6 +941,18 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     {
       return _field.getName();
     }
+
+    /**
+     * Sorting priority: fields are second
+     */
+    @Override
+    public int getPriority()
+    {
+      if (_isStaticSet != null)
+        return -2;
+      else
+        return 0;
+    }
     
     private String getLocation(Field field)
     {
@@ -910,6 +964,9 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     public <T> void inject(T instance, CreationalContext<T> cxt)
     {
       try {
+        if (_isStaticSet != null && _isStaticSet.getAndSet(true))
+          return;
+        
         CreationalContextImpl<?> env;
         
         if (cxt instanceof CreationalContextImpl<?>)
@@ -948,13 +1005,18 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     private final InjectionPoint []_args;
     private ReferenceFactory<?> []_factoryArgs;
 
+    private AtomicBoolean _isStaticSet;
+    
     MethodInjectProgram(Method method, 
                         InjectionPoint []args)
     {
       _method = method;
       _method.setAccessible(true);
       _args = args;
-      
+
+      if (Modifier.isStatic(method.getModifiers()))
+        _isStaticSet = _cdiManager.getStaticMemberBoolean(method);
+            
       _factoryArgs = new ReferenceFactory[args.length];
     }
 
@@ -964,7 +1026,10 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     @Override
     public int getPriority()
     {
-      return 1;
+      if (_isStaticSet != null)
+        return -1;
+      else
+        return 1;
     }
     
     @Override
@@ -983,6 +1048,9 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     public <T> void inject(T instance, CreationalContext<T> cxt)
     {
       try {
+        if (_isStaticSet != null && _isStaticSet.getAndSet(true))
+          return;
+        
         CreationalContextImpl<T> env;
         
         if (cxt instanceof CreationalContextImpl<?>)

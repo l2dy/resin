@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -810,6 +810,6 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _request + "]";
+    return getClass().getSimpleName() + "[" + getPageURI() + "," + _request + "]";
   }
 }

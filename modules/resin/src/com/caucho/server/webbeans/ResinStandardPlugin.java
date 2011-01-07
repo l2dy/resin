@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -220,7 +220,6 @@ public class ResinStandardPlugin implements Extension {
       BamService service = annotated.getAnnotation(BamService.class);
 
       HempBroker broker = HempBroker.getCurrent();
-
       broker.addStartupActor(event.getBean(), service.name(), 
                              service.threadMax());
     }

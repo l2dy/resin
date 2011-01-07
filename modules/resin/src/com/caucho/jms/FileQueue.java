@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,8 @@
 
 package com.caucho.jms;
 
+import java.io.Serializable;
+
 import com.caucho.config.Configurable;
 import com.caucho.config.Service;
 import com.caucho.jms.file.FileQueueImpl;
@@ -53,7 +55,7 @@ import com.caucho.jms.file.FileQueueImpl;
 
 @Service
 @Configurable  
-public class FileQueue extends FileQueueImpl
+public class FileQueue<X extends Serializable> extends FileQueueImpl<X>
 {
   public FileQueue()
   {

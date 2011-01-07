@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,17 +29,17 @@
 
 package com.caucho.jmtp;
 
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorException;
-import com.caucho.hmtp.HmtpPacketType;
-import com.caucho.json.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.logging.*;
+import com.caucho.bam.ActorError;
+import com.caucho.bam.stream.ActorStream;
+import com.caucho.hmtp.HmtpPacketType;
+import com.caucho.json.JsonInput;
 
 /**
  * JmtpReader stream handles client packets received from the server.
@@ -78,19 +78,6 @@ public class JmtpReader {
   {
     if (actorStream == null)
       throw new IllegalStateException("HmtpReader.readPacket requires a valid ActorStream for callbacks");
-
-    int tag;
-
-    try {
-      if (! startPacket()) {
-        close();
-        return false;
-      }
-    } catch (IOException e) {
-      log.fine(this + " exception while reading JMTP packet\n  " + e);
-
-      log.log(Level.FINER, e.toString(), e);
-    }
 
     JsonInput in = _in;
 
@@ -141,34 +128,18 @@ public class JmtpReader {
         break;
       }
 
-    case QUERY_GET:
+    case QUERY:
       {
         long id = in.readLong();
         Serializable value = (Serializable) in.readObject();
         in.endPacket();
 
         if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " queryGet " + value
+          log.finer(this + " query " + value
                     + " {id:" + id + ", to:" + to + ", from:" + from + "}");
         }
 
-        actorStream.queryGet(id, to, from, value);
-
-        break;
-      }
-
-    case QUERY_SET:
-      {
-        long id = in.readLong();
-        Serializable value = (Serializable) in.readObject();
-        in.endPacket();
-
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " querySet " + value
-                    + " {id:" + id + ", to:" + to + ", from:" + from + "}");
-        }
-
-        actorStream.querySet(id, to, from, value);
+        actorStream.query(id, to, from, value);
 
         break;
       }
@@ -223,7 +194,7 @@ public class JmtpReader {
 
     int ch;
 
-    while ((ch = is.read()) >= 0 && Character.isWhitespace(ch) && ch != 0xff) {
+    while ((ch = is.read()) >= 0 && Character.isWhitespace(ch)) {
     }
 
     if (ch < 0 || ch == 0xff)
@@ -233,8 +204,7 @@ public class JmtpReader {
     sb.append((char) ch);
 
     while ((ch = is.read()) >= 0
-           && ! Character.isWhitespace(ch)
-           && ch != 0xff) {
+           && ! Character.isWhitespace(ch)) {
       sb.append((char) ch);
     }
 
@@ -303,8 +273,7 @@ public class JmtpReader {
     _typeMap.put("message", HmtpPacketType.MESSAGE);
     _typeMap.put("message_error", HmtpPacketType.MESSAGE_ERROR);
 
-    _typeMap.put("get", HmtpPacketType.QUERY_GET);
-    _typeMap.put("set", HmtpPacketType.QUERY_SET);
+    _typeMap.put("query", HmtpPacketType.QUERY);
     _typeMap.put("result", HmtpPacketType.QUERY_RESULT);
     _typeMap.put("query_error", HmtpPacketType.QUERY_ERROR);
   }

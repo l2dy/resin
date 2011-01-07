@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.remote;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Reader;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -41,22 +42,29 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
+import com.caucho.bam.broker.PassthroughBroker;
+import com.caucho.bam.mailbox.Mailbox;
+import com.caucho.bam.mailbox.MultiworkerMailbox;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.config.Admin;
 import com.caucho.hemp.broker.HempBroker;
-import com.caucho.hemp.broker.HempMemoryQueue;
+import com.caucho.hemp.servlet.ClientStubManager;
 import com.caucho.hemp.servlet.ServerAuthManager;
 import com.caucho.hemp.servlet.ServerLinkActor;
+import com.caucho.hemp.servlet.ServerProxyBroker;
 import com.caucho.hmtp.HmtpReader;
+import com.caucho.hmtp.HmtpWebSocketContextWriter;
 import com.caucho.hmtp.HmtpWriter;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.http.HttpServletRequestImpl;
 import com.caucho.server.http.HttpServletResponseImpl;
-import com.caucho.servlet.WebSocketContext;
-import com.caucho.servlet.WebSocketListener;
 import com.caucho.util.L10N;
+import com.caucho.websocket.AbstractWebSocketListener;
+import com.caucho.websocket.WebSocketContext;
+import com.caucho.websocket.WebSocketListener;
 
 /**
  * Main protocol handler for the HTTP version of BAM.
@@ -73,7 +81,7 @@ public class HmtpServlet extends GenericServlet {
   private @Inject Instance<Authenticator> _authInstance;
   private @Inject @Admin Instance<Authenticator> _adminInstance;
 
-  private Broker _broker;
+  private ManagedBroker _broker;
   private Authenticator _auth;
   private ServerAuthManager _authManager;
 
@@ -159,14 +167,19 @@ public class HmtpServlet extends GenericServlet {
     webSocket.setTimeout(30 * 60 * 1000L);
   }
   
-  class WebSocketHandler implements WebSocketListener {
+  protected ManagedBroker getBroker()
+  {
+    return _broker;
+  }
+  
+  class WebSocketHandler extends AbstractWebSocketListener {
     private String _ipAddress;
     
     private HmtpReader _in;
-    private HmtpWriter _out;
+    private HmtpWebSocketContextWriter _out;
     
-    private ActorStream _linkStream;
-    private ActorStream _brokerStream;
+    private Broker _linkStream;
+    private Broker _broker;
     
     private ServerLinkActor _linkService;
 
@@ -178,35 +191,50 @@ public class HmtpServlet extends GenericServlet {
     @Override
     public void onStart(WebSocketContext context) throws IOException
     {
-      _in = new HmtpReader(context.getInputStream());
-      _out = new HmtpWriter(context.getOutputStream());
-      _linkStream = new HempMemoryQueue(_out, _broker.getBrokerStream(), 1);
+      _in = new HmtpReader();
+      _out = new HmtpWebSocketContextWriter(context);
       
-      _linkService = new ServerLinkActor(_linkStream, _broker, _authManager,
-                                           _ipAddress, false);
-      _brokerStream = _linkService.getBrokerStream();
+      ManagedBroker broker = getBroker();
+      Mailbox toLinkMailbox = new MultiworkerMailbox(_out.getJid(), _out, broker, 1);
+      
+      _linkStream = new PassthroughBroker(toLinkMailbox);
+      ClientStubManager clientManager = new ClientStubManager(broker, toLinkMailbox);
+      _linkService = new ServerLinkActor(_linkStream, clientManager, _authManager, _ipAddress);
+      _broker = new ServerProxyBroker(broker, clientManager,
+                                      _linkService.getActorStream());
     }
 
     @Override
     public void onComplete(WebSocketContext context) throws IOException
     {
-      _brokerStream.close();
-      _linkService.close();
+      /*
+      if (_linkService != null)
+        _linkService.close();
+        */
     }
 
     @Override
-    public void onRead(WebSocketContext context) throws IOException
+    public void onReadBinary(WebSocketContext context,
+                             InputStream is)
+      throws IOException
     {
-      InputStream is = context.getInputStream();
-      
-      while (_in.readPacket(_brokerStream)
-            && is.available() > 0) {
-      }
+      _in.readPacket(is, _broker);
     }
 
     @Override
     public void onTimeout(WebSocketContext context) throws IOException
     {
+    }
+
+    /* (non-Javadoc)
+     * @see com.caucho.servlet.WebSocketListener#onReadText(com.caucho.servlet.WebSocketContext, java.io.Reader)
+     */
+    @Override
+    public void onReadText(WebSocketContext context, Reader is)
+        throws IOException
+    {
+      // TODO Auto-generated method stub
+      
     }
   }
 }

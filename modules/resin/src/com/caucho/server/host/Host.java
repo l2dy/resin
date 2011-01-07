@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,7 +35,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
-import com.caucho.bam.Broker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.cloud.network.NetworkListenService;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.config.ConfigException;
@@ -54,7 +55,7 @@ import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.make.AlwaysModified;
 import com.caucho.management.server.HostMXBean;
-import com.caucho.network.listen.SocketLinkListener;
+import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.rewrite.DispatchRule;
 import com.caucho.rewrite.RewriteFilter;
 import com.caucho.server.cluster.Server;
@@ -310,7 +311,7 @@ public class Host
       NetworkListenService listenService 
         = resinSystem.getService(NetworkListenService.class);
 
-      for (SocketLinkListener port : listenService.getListeners()) {
+      for (TcpSocketLinkListener port : listenService.getListeners()) {
         if ("http".equals(port.getProtocolName())) {
           String address = port.getAddress();
 
@@ -321,7 +322,7 @@ public class Host
         }
       }
 
-      for (SocketLinkListener port : listenService.getListeners()) {
+      for (TcpSocketLinkListener port : listenService.getListeners()) {
         if ("https".equals(port.getProtocolName())) {
           String address = port.getAddress();
           if (address == null || address.equals(""))
@@ -711,12 +712,12 @@ public class Host
         brokerManager.addBroker(alias, _bamBroker);
     }
 
-    InjectManager webBeans = InjectManager.getCurrent();
+    InjectManager cdiManager = InjectManager.getCurrent();
 
-    webBeans.addBean(webBeans.createBeanFactory(Broker.class)
-                     .name("bamBroker").singleton(_bamBroker));
+    cdiManager.addBean(cdiManager.createBeanFactory(ManagedBroker.class)
+                       .name("bamBroker").singleton(_bamBroker));
 
-    webBeans.addExtension(_bamBroker);
+    // webBeans.addExtension(_bamBroker);
 
     // XXX: webBeans.addRegistrationListener(new BamRegisterListener());
   }

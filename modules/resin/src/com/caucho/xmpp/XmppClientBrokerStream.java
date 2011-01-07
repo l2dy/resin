@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,8 @@ import com.caucho.xmpp.im.Text;
 import com.caucho.xmpp.im.ImPresence;
 import com.caucho.xmpp.im.ImMessage;
 import com.caucho.bam.*;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.vfs.*;
 import com.caucho.xml.stream.*;
 import java.io.Serializable;
@@ -62,8 +64,8 @@ class XmppClientBrokerStream extends XmppWriter
     throw new UnsupportedOperationException();
   }
 
-  @Override
-  public ActorStream getLinkStream()
+  // @Override
+  public Broker getBroker()
   {
     return this;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -217,7 +217,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public boolean isHeartbeatActive()
   {
-    return _server.isActive();
+    return _server.isHeartbeatActive();
   }
   
   @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,8 +31,9 @@ package com.caucho.xmpp;
 
 import java.io.Serializable;
 
-import com.caucho.bam.AbstractActorStream;
-import com.caucho.bam.ActorStream;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.stream.AbstractActorStream;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.xmpp.im.ImBindQuery;
 
 /**
@@ -53,12 +54,11 @@ public class XmppBindCallback extends AbstractActorStream
   }
 
   @Override
-  public ActorStream getLinkStream()
+  public Broker getBroker()
   {
     return _xmppBroker;
   }
 
-  @Override
   public void querySet(long id,
                           String to, String from,
                           Serializable value)

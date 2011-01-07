@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,7 +34,7 @@ import com.caucho.db.Database;
 import com.caucho.db.sql.Query;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectCursor;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.util.L10N;
 
 
@@ -69,12 +69,12 @@ public class CursorStatementImpl extends StatementImpl {
                                           QueryContext queryContext)
     throws SQLException
   {
-    Transaction xa = getConnectionImpl().getTransaction();
+    DbTransaction xa = getConnectionImpl().getTransaction();
+    
+    queryContext.setNonLocking();
     
     SelectCursor result = query.executeCursor(queryContext, xa);
     
-    queryContext.unlock();
-
     return new CursorResultSetImpl(this, queryContext, result);
   }
 }

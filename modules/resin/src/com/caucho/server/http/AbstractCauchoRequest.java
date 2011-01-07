@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -352,7 +352,8 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     if (! login.isPasswordBased())
       throw new ServletException(L.l("Authentication mechanism '{0}' does not support password authentication", login));
 
-    removeAttribute(Login.LOGIN_USER);
+    removeAttribute(Login.LOGIN_USER_NAME);
+    removeAttribute(Login.LOGIN_USER_PRINCIPAL);
     removeAttribute(Login.LOGIN_PASSWORD);
 
     Principal principal = login.getUserPrincipal(this);
@@ -360,14 +361,14 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     if (principal != null)
       throw new ServletException(L.l("UserPrincipal object has already been established"));
 
-    setAttribute(Login.LOGIN_USER, username);
+    setAttribute(Login.LOGIN_USER_NAME, username);
     setAttribute(Login.LOGIN_PASSWORD, password);
 
     try {
       login.login(this, getResponse(), false);
     }
     finally {
-      removeAttribute(Login.LOGIN_USER);
+      removeAttribute(Login.LOGIN_USER_NAME);
       removeAttribute(Login.LOGIN_PASSWORD);
     }
 
@@ -407,15 +408,13 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       if (login != null) {
         Principal user = login.login(this, getResponse(), isFail);
 
-        return user != null;
-        /*
-        if (user == null)
+        if (user != null) {
+          setAttribute(Login.LOGIN_USER_PRINCIPAL, user);
+          
+          return true;
+        }
+        else
           return false;
-
-        setAttribute(AbstractLogin.LOGIN_NAME, user);
-
-        return true;
-        */
       }
       else if (isFail) {
         if (log.isLoggable(Level.FINE))
@@ -470,8 +469,11 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
     Principal principal = login.login(this, response, true);
 
-    if (principal != null)
+    if (principal != null) {
+      setAttribute(Login.LOGIN_USER_PRINCIPAL, principal);
+    
       return true;
+    }
 
     return false;
   }
@@ -484,7 +486,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     requestLogin();
 
     Principal user;
-    user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
+    user = (Principal) getAttribute(AbstractLogin.LOGIN_USER_NAME);
 
     if (user != null)
       return user;
@@ -550,7 +552,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
     if (user == null) {
       if (log.isLoggable(Level.FINE))
-        log.fine(this + " no user for isUserInRole");
+        log.fine(this + " isUserInRole request has no getUserPrincipal value");
 
       return false;
     }
@@ -616,6 +618,6 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[]";
+    return getClass().getSimpleName() + "[" + getRequestURL() + "]";
   }
 }

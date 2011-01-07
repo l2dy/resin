@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -436,7 +436,7 @@ public class JavaClassGenerator {
       }
       else {
         // XXX: because of automatic instantiation, might cause trouble
-        loader = getClassLoader();      
+        loader = getClassLoader();
 
         if (loader == null) {
           loader = SimpleLoader.create(getParentLoader(),

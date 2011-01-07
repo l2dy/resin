@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,14 +31,18 @@ package com.caucho.bam;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 
 /**
  * ActorError encapsulates error responses
  *
  * The errors are defined in RFC-3920, XMPP
  */
+@SuppressWarnings("serial")
 public class ActorError implements Serializable {
-  private static final long serialVersionUID = -2645943317009708218L;
+  private static final Logger log = Logger.getLogger(ActorError.class.getName()); 
 
   /**
    * Retry after providing credentials
@@ -293,6 +297,9 @@ public class ActorError implements Serializable {
    */
   public static ActorError create(Throwable e)
   {
+    if (log.isLoggable(Level.FINER))
+      log.log(Level.FINER, e.toString(), e);
+    
     if (e instanceof ActorException)
       return ((ActorException) e).createActorError();
     else {
@@ -453,6 +460,8 @@ public class ActorError implements Serializable {
     _errorMap.put(REMOTE_CONNECTION_FAILED,
                   ErrorGroup.REMOTE_CONNECTION_FAILED);
     _errorMap.put(SERVICE_UNAVAILABLE,
+                  ErrorGroup.SERVICE_UNAVAILABLE);
+    _errorMap.put(ITEM_NOT_FOUND,
                   ErrorGroup.SERVICE_UNAVAILABLE);
   }
 }

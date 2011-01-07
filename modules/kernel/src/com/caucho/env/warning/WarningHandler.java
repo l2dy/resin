@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,5 +34,5 @@ package com.caucho.env.warning;
  */
 public interface WarningHandler 
 {
-  public void warning(String msg);
+  public void warning(Object source, String msg);
 }

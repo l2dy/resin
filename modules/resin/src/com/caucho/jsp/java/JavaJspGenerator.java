@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -587,14 +587,19 @@ public class JavaJspGenerator extends JspGenerator {
               message.append("\n");
             message.append(messages[j].getMessage());
           }
-          
-          InputStream is = getPageData().getInputStream();
-          StringBuilder sb = new StringBuilder();
-          int ch;
-          while ((ch = is.read()) >= 0)
-            sb.append((char) ch);
 
-          throw _rootNode.error(message.toString() + "\n\n" + sb);
+          // TCK: needs to be commented out for TCK
+          if (log.isLoggable(Level.FINE)) {
+            InputStream is = getPageData().getInputStream();
+            StringBuilder sb = new StringBuilder();
+            int ch;
+            while ((ch = is.read()) >= 0)
+              sb.append((char) ch);
+
+            throw _rootNode.error(message.toString() + "\n\n" + sb);
+          }
+          else 
+            throw _rootNode.error(message.toString());
         }
       }
     }

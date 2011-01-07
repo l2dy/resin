@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,8 +37,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.Broker;
-import com.caucho.bam.SimpleActor;
+import com.caucho.bam.actor.SimpleActor;
+import com.caucho.bam.broker.Broker;
 import com.caucho.config.ConfigException;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.ResinQuercus;
@@ -156,7 +156,7 @@ public class BamPhpActor extends SimpleActor {
       _children.put(jid, child);
     }
 
-    _broker.addActor(child.getActorStream());
+    // _broker.addMailbox(child.getActorStream());
   }
 
   private void setId(Env env, long id)
@@ -205,7 +205,7 @@ public class BamPhpActor extends SimpleActor {
   }
 
   @Override
-  public void queryGet(long id, String to, String from, Serializable value)
+  public void query(long id, String to, String from, Serializable value)
   {
     BamEventType eventType = BamEventType.QUERY_GET;
 
@@ -252,25 +252,6 @@ public class BamPhpActor extends SimpleActor {
     featureNames.addAll(_featureNames);
   }
   */
-
-  @Override
-  public void querySet(long id, String to, String from, Serializable value)
-  {
-    Env env = createEnv(_page, BamEventType.QUERY_SET, to, from, value);
-    boolean understood = false;
-
-    try {
-      setId(env, id);
-
-      _page.executeTop(env);
-
-      understood = 
-        env.getGlobalValue("_quercus_bam_function_return").toBoolean();
-    }
-    finally {
-      env.close();
-    }
-  }
 
   @Override
   public void queryResult(long id, String to, String from, Serializable value)

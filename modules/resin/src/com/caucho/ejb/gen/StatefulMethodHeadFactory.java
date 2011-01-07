@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -60,6 +60,14 @@ public class StatefulMethodHeadFactory<X> extends MethodHeadFactory<X> {
                                    boolean isEnhanced)
   {
     AnnotatedType<?> declaringType = method.getDeclaringType();
+
+    /*
+    if (method.isAnnotationPresent(AfterBegin.class)
+        || method.isAnnotationPresent(BeforeCompletion.class)
+        || method.isAnnotationPresent(AfterCompletion.class)) {
+      return null;
+    }
+    */
 
     AccessTimeout accessTimeout
       = method.getAnnotation(AccessTimeout.class);

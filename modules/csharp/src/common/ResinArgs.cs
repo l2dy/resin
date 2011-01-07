@@ -33,7 +33,7 @@ namespace Caucho
 {
   public class ResinArgs
   {
-    public static String USAGE = @"usage: {0} [flags] gui | console | status | start | stop | restart | kill | shutdown
+    public static String USAGE = @"usage: {0} [flags] gui | console | status | start | stop | restart | kill | shutdown | deploy | copy | list | start-webapp | stop-webapp | restart-webapp |  undeploy
 
     COMMANDS:
       gui - start Resin with a Graphic UI
@@ -44,6 +44,14 @@ namespace Caucho
       restart - restart a Resin server
       kill - force a kill of a Resin server
       shutdown - shutdown the watchdog
+      help [command] - displays help on the command
+      deploy - deploys an application to remote server
+      copy - copies an application to a new context
+      list - displays deployed applications
+      start-webapp - starts application context
+      restart-webapp - restarts application context
+      stop-webapp - stops application context
+      undeploy - undeploys an application on remote server
 
     OPTIONS:
       -h                                     : this help
@@ -64,6 +72,16 @@ namespace Caucho
       -preview                               : run as a preview server
       -debug-port <port>                     : configure a debug port
       -jmx-port <port>                       : configure an unauthenticated jmx port
+
+    OPTIONS (deploy, list, undeploy)
+      -user                                  : specifies user
+      -password                              : specifies password
+      -name                                  : name of the context
+      -stage                                 : specifies stage
+    
+    Examples:
+      deploying some.war to /foo context: resin.exe deploy -user admin -password secret -name foo some.war
+      undeploying an app from /foo context: resin.exe undeploy -user admin -password secret foo   
 ";
     public bool IsVerbose { get; private set; }
     public bool IsNoJit { get; private set; }
@@ -75,6 +93,7 @@ namespace Caucho
     //used with -install / -remove.
     //value of true indicates that the process is started
     //from resin.exe with elevated privileges
+    public String WinUser { get; private set; }
     public String User { get; private set; }
     public String Password { get; private set; }
     public String JavaExe { get; private set; }
@@ -88,6 +107,7 @@ namespace Caucho
     public String DisplayName { get; private set; }
     public String Command { get; private set; }
     public String ResinDataDir { get; private set; }
+    public String Name { get; private set; }
     public String ServiceName { get; private set; }
     public String Exe { get; private set; }
     public String Server { get; private set; }
@@ -98,6 +118,7 @@ namespace Caucho
     public String DebugPort { get; private set; }
     public String WatchDogPort { get; private set; }
     public bool IsPreview { get; private set; }
+    public bool IsAdminCommand { get; private set; }
 
     public ResinArgs(String cmd)
     {
@@ -165,7 +186,7 @@ namespace Caucho
       StringBuilder resinArgs = new StringBuilder();
 
       Command = "gui";
-     
+
       int argsIdx = 1;
       while (argsIdx < arguments.Count) {
         if ("-verbose".Equals(arguments[argsIdx])) {
@@ -197,9 +218,10 @@ namespace Caucho
           argsIdx++;
         } else if ("-user".Equals(arguments[argsIdx])) {
           User = arguments[argsIdx + 1];
+          WinUser = arguments[argsIdx + 1];
 
-          if (!User.StartsWith(".\\") && User.IndexOf('\\') < 0)
-            User = ".\\" + User;
+          if (!WinUser.StartsWith(".\\") && WinUser.IndexOf('\\') < 0)
+            WinUser = ".\\" + WinUser;
 
           argsIdx += 2;
         } else if ("-password".Equals(arguments[argsIdx])) {
@@ -207,6 +229,7 @@ namespace Caucho
 
           argsIdx += 2;
         } else if ("-name".Equals(arguments[argsIdx])) {
+          Name = arguments[argsIdx + 1];
           ServiceName = arguments[argsIdx + 1];
 
           argsIdx += 2;
@@ -303,7 +326,6 @@ namespace Caucho
 
           argsIdx++;
         } else if ("-console".Equals(arguments[argsIdx])) {
-          //make -console be a command
           Command = "console";
 
           argsIdx++;
@@ -378,6 +400,18 @@ namespace Caucho
                    "kill".Equals(arguments[argsIdx]) ||
                    "shutdown".Equals(arguments[argsIdx])) {
           Command = arguments[argsIdx];
+
+          argsIdx++;
+        } else if ("deploy".Equals(arguments[argsIdx]) ||
+                   "copy".Equals(arguments[argsIdx]) ||
+                   "list".Equals(arguments[argsIdx]) ||
+                   "restart-webapp".Equals(arguments[argsIdx]) ||
+                   "start-webapp".Equals(arguments[argsIdx]) ||
+                   "stop-webapp".Equals(arguments[argsIdx]) ||
+                   "undeploy".Equals(arguments[argsIdx])) {
+          Command = arguments[argsIdx];
+
+          IsAdminCommand = true;
 
           argsIdx++;
         } else {

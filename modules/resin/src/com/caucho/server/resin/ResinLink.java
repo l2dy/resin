@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 
 package com.caucho.server.resin;
 
-import com.caucho.hmtp.HmtpLink;
+import com.caucho.hmtp.HmtpLinkWorker;
 
 import java.io.*;
 import java.util.logging.*;
@@ -37,7 +37,7 @@ import java.util.logging.*;
 /**
  * HMTP client protocol
  */
-public class ResinLink extends HmtpLink implements Runnable {
+public class ResinLink extends HmtpLinkWorker implements Runnable {
   private static final Logger log
     = Logger.getLogger(ResinLink.class.getName());
 
@@ -47,6 +47,7 @@ public class ResinLink extends HmtpLink implements Runnable {
   protected OutputStream _os;
 
   public ResinLink(ResinActor resinActor, InputStream is, OutputStream os)
+    throws IOException
   {
     super(resinActor, is, os);
     

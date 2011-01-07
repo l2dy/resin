@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -55,7 +55,7 @@ public class ArrayType<T,X> extends ConfigType<T>
   {
     _componentType = componentType;
     _componentClass = componentClass;
-
+    
     Class<?> type = null;
     try {
       type = Array.newInstance(componentClass, 0).getClass();
@@ -86,14 +86,41 @@ public class ArrayType<T,X> extends ConfigType<T>
     return _type;
   }
 
+  @Override
+  public boolean isInlineType(ConfigType<?> type)
+  {
+    return _componentType.getType().isAssignableFrom(type.getType());
+  }
   /**
    * Creates a new instance
    */
   @Override
   public Object create(Object parent, QName name)
   {
-    return new ArrayList<X>();
+    // ioc/2184, ioc/2160
+    // return new ArrayList<X>();
+    
+    // return new ArrayList<X>();
+    
+    Object value = getComponentType().create(parent, name);
+    
+    if (value != null) {
+      return value;
+    }
+    else
+      return new ArrayList<X>();
   }
+  
+  /**
+   * Returns the config type of the child bean.
+   */
+  /*
+  public ConfigType<?> getType(Object childBean)
+  {
+    // ioc/2184, ioc/2160, ioc/04f7
+    return this;
+  }
+  */
 
   /**
    * Returns the attribute based on the given name.
@@ -102,7 +129,6 @@ public class ArrayType<T,X> extends ConfigType<T>
   public Attribute getAttribute(QName name)
   {
     // XXX: type
-    
     return TypeFactory.getFactory().getListAttribute(name);
   }
 

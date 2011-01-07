@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,7 +32,6 @@ package com.caucho.env.deploy;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.jar.Attributes;
@@ -45,6 +44,7 @@ import com.caucho.env.repository.CommitBuilder;
 import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.env.repository.RepositorySpi;
+import com.caucho.env.repository.RepositoryTagEntry;
 import com.caucho.env.repository.RepositoryTagListener;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.loader.DynamicClassLoader;
@@ -52,7 +52,6 @@ import com.caucho.loader.Environment;
 import com.caucho.make.DependencyContainer;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
-import com.caucho.util.QDate;
 import com.caucho.vfs.Depend;
 import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
@@ -92,6 +91,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   private DeployListener _deployListener;
   
   private DependencyContainer _depend = new DependencyContainer();
+  private long _dependencyCheckInterval = _depend.getCheckInterval();
   
   private Dependency _versionDependency;
 
@@ -215,6 +215,12 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     return _autoDeployStage;
   }
   
+  public void setDependencyCheckInterval(long period)
+  {
+    _dependencyCheckInterval = period;
+    _depend.setCheckInterval(period);
+  }
+  
   /**
    * Final calls for init.
    */
@@ -224,13 +230,13 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     super.initEnd();
     
     if (isAllowRepository()) {
-      RepositoryService repositoryService = RepositoryService.create(); 
+      RepositoryService repositoryService = RepositoryService.getCurrent();
       _repository = repositoryService.getRepository();
       _repository.addListener(getId(), this);
       _repositorySpi = repositoryService.getRepositorySpi();
     }
       
-    DeployControllerService deployService = DeployControllerService.create();
+    DeployControllerService deployService = DeployControllerService.getCurrent();
 
     deployService.addTag(getId());
     _deployItem = deployService.getTagItem(getId());
@@ -238,7 +244,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     if (_container != null) {
       _deployListener = new DeployListener(_container, getId());
     
-      _deployItem.addListener(_deployListener);
+      _deployItem.addNotificationListener(_deployListener);
     }
     
     _rootHash = readRootHash();
@@ -425,10 +431,6 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       return true;
     
     String hash = Long.toHexString(archivePath.getCrc64());
-    
-    if (log.isLoggable(Level.FINE)){
-      log.fine(this + " adding archive to repository from " + archivePath);
-    }
 
     try {
       CommitBuilder commit = new CommitBuilder();
@@ -436,9 +438,21 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       commit.type(getIdType());
       commit.tagKey(getIdKey());
       
+      String commitId = commit.getId();
+      
+      RepositoryTagEntry tagEntry = _repositorySpi.getTagMap().get(commitId);
+      
+      if (tagEntry != null 
+          && hash.equals(tagEntry.getAttributeMap().get("archive-digest"))) {
+        return true;
+      }
+
       commit.attribute("archive-digest", hash);
       commit.message(".war added to repository from "
                      + archivePath.getNativePath());
+      
+      if (log.isLoggable(Level.FINE))
+        log.fine(this + " adding archive to repository from " + archivePath);
       
       _repository.commitArchive(commit, archivePath);
       
@@ -577,10 +591,11 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   protected void addDependencies()
   {
     _depend = new DependencyContainer();
+    _depend.setCheckInterval(_dependencyCheckInterval);
     
     if (getArchivePath() != null)
       _depend.add(new Depend(getArchivePath()));
-
+    
     String value = _repositorySpi.getTagContentHash(getId());
     _depend.add(new RepositoryDependency(getId(), value));
     
@@ -663,7 +678,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     super.onActive();
     
     if (_deployItem != null && ! "error".equals(_deployItem.getState()))
-      _deployItem.toStart();
+      _deployItem.onStart();
   }
   
   @Override
@@ -690,7 +705,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     super.onDestroy();
     
     if (_deployItem != null)
-      _deployItem.removeListener(_deployListener);
+      _deployItem.removeNotificationListener(_deployListener);
   }
 
   /**
@@ -718,7 +733,8 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     return getId().equals(controller.getId());
   }
   
-  static class DeployListener implements DeployControllerListener {
+  static class DeployListener implements DeployNotificationListener
+  {
     private WeakReference<DeployContainerApi<?>> _container;
     private String _tag;
     

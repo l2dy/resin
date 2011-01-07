@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -346,7 +346,7 @@ class ResinArgs
         if (socket == null) {
           System.err.println("Can't connect to parent process through socket " + socketport);
           System.err.println("Resin needs to connect to its parent.");
-          System.exit(0);
+          System.exit(1);
         }
 
         /*

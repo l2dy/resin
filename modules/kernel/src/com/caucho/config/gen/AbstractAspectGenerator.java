@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -40,6 +41,8 @@ import javax.ejb.ApplicationException;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
 
+import com.caucho.config.reflect.BaseTypeAnnotated;
+import com.caucho.config.reflect.VarType;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 
@@ -96,6 +99,22 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
     return _method;
   }
   
+  protected Set<VarType<?>> getTypeVariables()
+  {
+    AnnotatedMethod<? super X> method = getMethod();
+    
+    if (method instanceof BaseTypeAnnotated) {
+      BaseTypeAnnotated annType = (BaseTypeAnnotated) getMethod();
+    
+      Set<VarType<?>> varSet = annType.getTypeVariables();
+    
+      return varSet;
+    }
+    else {
+      return new HashSet<VarType<?>>();
+    }
+  }
+  
   /**
    * Returns the JavaMethod for this aspect.
    */
@@ -146,10 +165,10 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
     out.println("try {");
     out.pushDepth();
 
-    Method method = getJavaMethod();
+    AnnotatedMethod<?> method = getMethod();
     
-    if (! void.class.equals(method.getReturnType())) {
-      out.printClass(method.getReturnType());
+    if (! void.class.equals(method.getBaseType())) {
+      out.printType(method.getBaseType());
       out.println(" result;");
     }
 
@@ -159,7 +178,7 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
 
     generatePostCall(out);
 
-    if (! void.class.equals(method.getReturnType()))
+    if (! void.class.equals(method.getBaseType()))
       out.println("return result;");
 
     out.popDepth();
@@ -173,6 +192,8 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
 
     out.popDepth();
     out.println("}");
+    
+    generatePostFinally(out);
   }
   
 
@@ -463,6 +484,13 @@ abstract public class AbstractAspectGenerator<X> implements AspectGenerator<X> {
     throws IOException
   {
     _next.generateFinally(out);
+  }
+  
+  @Override
+  public void generatePostFinally(JavaWriter out)
+    throws IOException
+  {
+    _next.generatePostFinally(out);
   }
 
   protected <Z extends Annotation> Z getAnnotation(Class<Z> annotationType,

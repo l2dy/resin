@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,8 +40,8 @@ import com.caucho.inject.Module;
 public class GenericParamType extends ParamType
 {
   public GenericParamType(Class<?> type,
-                   BaseType []param,
-                   HashMap<String,BaseType> paramMap)
+                          BaseType []param,
+                          HashMap<String,BaseType> paramMap)
   {
     super(type, param, paramMap);
   }

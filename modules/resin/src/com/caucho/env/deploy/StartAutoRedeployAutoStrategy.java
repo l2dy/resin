@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -186,7 +186,7 @@ public class StartAutoRedeployAutoStrategy
   void alarm(DeployController<I> controller)
   {
     LifecycleState state = controller.getState();
-    
+
     if (state.isStopped()) {
       // server/1d12
     }

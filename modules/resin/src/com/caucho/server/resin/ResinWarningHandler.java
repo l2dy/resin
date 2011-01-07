@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,7 +47,7 @@ public class ResinWarningHandler implements WarningHandler
    * Sends a warning message to the watchdog.
    */
   @Override
-  public void warning(String msg)
+  public void warning(Object source, String msg)
   {
     _resinActor.sendWarning(msg);
   }

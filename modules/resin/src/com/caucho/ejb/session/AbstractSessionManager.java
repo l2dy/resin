@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -48,6 +48,7 @@ import javax.ejb.SessionContext;
 import javax.ejb.TimerService;
 import javax.enterprise.inject.Disposes;
 import javax.enterprise.inject.Produces;
+import javax.enterprise.inject.Specializes;
 import javax.enterprise.inject.spi.AnnotatedField;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedParameter;
@@ -55,7 +56,6 @@ import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.enterprise.inject.spi.SessionBeanType;
-import javax.inject.Named;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.gen.BeanGenerator;
@@ -74,6 +74,7 @@ import com.caucho.ejb.inject.SessionRegistrationBean;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractEjbBeanManager;
 import com.caucho.java.gen.JavaClassGenerator;
+import com.caucho.loader.DynamicClassLoader;
 import com.caucho.naming.Jndi;
 import com.caucho.util.L10N;
 
@@ -331,12 +332,13 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
     
     Class<?> ejbClass = getAnnotatedType().getJavaClass();
   
-    if (Modifier.isPublic(ejbClass.getModifiers())) {
-      proxyImplClass = javaGen.loadClass(skeletonName);
-    }
-    else {
+    if (! isPublic(ejbClass)
+        && (ejbClass.getClassLoader() instanceof DynamicClassLoader)) {
       // ejb/1103
       proxyImplClass = javaGen.loadClassParentLoader(skeletonName, ejbClass);
+    }
+    else {
+      proxyImplClass = javaGen.loadClass(skeletonName);
     }
     
     try {
@@ -354,6 +356,24 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
     // contextImplClass.getDeclaredConstructors();
     
     return proxyImplClass;
+  }
+  
+  private boolean isPublic(Class<?> cl)
+  {
+    if (! Modifier.isPublic(cl.getModifiers()))
+      return false;
+    
+    Class<?> superClass = cl.getSuperclass();
+    if (superClass != null && ! Modifier.isPublic(superClass.getModifiers()))
+      return false;
+    
+    // ejb/5092 - CDI TCK
+    for (Class<?> ifClass : cl.getInterfaces()) {
+      if (! Modifier.isPublic(ifClass.getModifiers()))
+        return false;
+    }
+    
+    return true;
   }
   
   @Override
@@ -445,6 +465,8 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       
     apiList.add(Object.class);
     
+    // ioc/024p
+    /*
     if (remoteApiList != null) {
       for (AnnotatedType<? super X> api : remoteApiList) {
         if (baseApi == null)
@@ -455,6 +477,7 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
         apiList.addAll(sourceApi.getTypeClosure(moduleBeanManager));
       }
     }
+    */
     
     if (baseApi == null)
       throw new NullPointerException();
@@ -505,9 +528,10 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
       
       if (extMethod != null)
         extAnnType.addMethod(extMethod);
-      else if (method.isAnnotationPresent(Produces.class)) {
+      else if (method.isAnnotationPresent(Produces.class)
+               && ! baseType.isAnnotationPresent(Specializes.class)) {
         // TCK: conflict
-        // ioc/07fa
+        // ioc/07fa, ioc/07a4
         throw new ConfigException(L.l("{0}.{1} is an invalid @Produces EJB method because the method is not in a @Local interface.",
                                       method.getDeclaringType().getJavaClass().getName(),
                                       method.getJavaMember().getName()));
@@ -572,7 +596,7 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
     SessionRegistrationBean<X,T> regBean
       = new SessionRegistrationBean<X,T>(beanManager, context, _bean, beanName);
       
-    beanManager.addBean(regBean);
+    beanManager.addBeanImpl(regBean, regBean.getAnnotated());
   }
 
   protected Bean<X> getBean()

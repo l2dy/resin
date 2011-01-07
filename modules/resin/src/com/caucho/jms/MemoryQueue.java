@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -58,7 +58,7 @@ import com.caucho.jms.memory.MemoryQueueImpl;
 @Startup
 @Singleton
 @Configurable  
-public class MemoryQueue extends MemoryQueueImpl<Object>
+public class MemoryQueue<X> extends MemoryQueueImpl<X>
 {
   /**
    * Standard Injection constructor

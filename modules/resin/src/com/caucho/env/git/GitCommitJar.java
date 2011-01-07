@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,13 +35,15 @@ import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 
 import com.caucho.java.WorkDir;
+import com.caucho.util.IoUtil;
+import com.caucho.vfs.JarPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.WriteStream;
+import com.caucho.vfs.Jar.ZipStreamImpl;
 
 /**
  * Tree structure from a jar
@@ -52,7 +54,7 @@ public class GitCommitJar {
   
   private GitCommitTree _commit = new GitCommitTree();
 
-  private Path _jar;
+  private JarPath _jar;
   
   private Path _tempJar;
 
@@ -100,16 +102,16 @@ public class GitCommitJar {
     }
   }
 
-  private void init(Path jar)
+  private void init(Path path)
     throws IOException
   {
-    _jar = jar;
+    _jar = JarPath.create(path);
 
     HashMap<String,Long> lengthMap = new HashMap<String,Long>();
 
-    fillLengthMap(lengthMap, jar);
+    fillLengthMap(lengthMap, path);
 
-    ReadStream is = jar.openRead();
+    ReadStream is = path.openRead();
 
     fillCommit(lengthMap, is);
 
@@ -119,8 +121,10 @@ public class GitCommitJar {
   private void fillCommit(HashMap<String,Long> lengthMap, InputStream is)
     throws IOException
   {
+    ZipInputStream zin = null;
+    
     try {
-      ZipInputStream zin = new ZipInputStream(is);
+      zin = new ZipInputStream(is);
 
       ZipEntry entry;
       
@@ -139,6 +143,7 @@ public class GitCommitJar {
         _commit.addFile(path, 0664, zin, length);
       }
     } finally {
+      IoUtil.close(zin);
       is.close();
     }
   }
@@ -162,8 +167,10 @@ public class GitCommitJar {
     throws IOException
   {
     ReadStream is = jar.openRead();
+    ZipInputStream zin = null;
+    
     try {
-      ZipInputStream zin = new ZipInputStream(is);
+      zin = new ZipInputStream(is);
 
       ZipEntry entry;
       
@@ -185,7 +192,9 @@ public class GitCommitJar {
         lengthMap.put(path, length);
       }
     } finally {
-      is.close();
+      IoUtil.close(zin);
+      
+      IoUtil.close(is);
     }
   }
 
@@ -213,21 +222,26 @@ public class GitCommitJar {
       return tree.openFile();
     }
     else {
-      ZipFile file = new ZipFile(_jar.getNativePath());
-
+      ZipStreamImpl zipIs = _jar.getJar().openReadImpl(path);
+      
+      ReadStream is = new ReadStream(zipIs);
+      
       try {
-        ZipEntry entry = file.getEntry(path);
-        InputStream is = file.getInputStream(entry);
-
-        try {
-          return GitCommitTree.writeBlob(is, entry.getSize());
-        } finally {
-          is.close();
-        }
+        return GitCommitTree.writeBlob(is, zipIs.getZipEntry().getSize());
       } finally {
-        file.close();
+        is.close();
+        
+        zipIs.close();
       }
     }
+  }
+  
+  private String canonicalPathName(String pathName)
+  {
+    if (pathName.startsWith("/"))
+      return pathName.substring(1);
+    else
+      return pathName;
   }
 
   public void close()

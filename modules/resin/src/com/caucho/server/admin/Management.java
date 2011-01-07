@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,7 +31,8 @@ package com.caucho.server.admin;
 
 import javax.annotation.PostConstruct;
 
-import com.caucho.bam.Broker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.config.AdminLiteral;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
@@ -134,10 +135,10 @@ public class Management
   /**
    * Returns the admin broker
    */
-  public Broker getAdminBroker()
+  public ManagedBroker getAdminBroker()
   {
     if (_server != null)
-      return _server.getBroker();
+      return _server.getAdminBroker();
     else
       return null;
   }

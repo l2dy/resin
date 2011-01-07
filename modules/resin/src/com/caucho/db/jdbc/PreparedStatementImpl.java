@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,7 +47,7 @@ import java.util.Calendar;
 
 import com.caucho.db.sql.Query;
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 
 /**
  * The JDBC statement implementation.
@@ -340,7 +340,7 @@ public class PreparedStatementImpl extends StatementImpl
   {
     _count++;
 
-    Transaction xa = null;
+    DbTransaction xa = null;
 
     try {
       if (_count != 1)

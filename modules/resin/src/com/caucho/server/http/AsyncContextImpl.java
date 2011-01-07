@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,7 +30,8 @@
 package com.caucho.server.http;
 
 import java.io.IOException;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -45,40 +46,48 @@ import javax.servlet.http.HttpServletRequest;
 
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.network.listen.AsyncController;
-import com.caucho.network.listen.CometHandler;
 import com.caucho.network.listen.SocketLink;
-import com.caucho.server.dispatch.Invocation;
-import com.caucho.server.webapp.AsyncRequest;
-import com.caucho.server.webapp.RequestDispatcherImpl;
+import com.caucho.network.listen.SocketLinkCometListener;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.servlet.comet.CometController;
 import com.caucho.util.L10N;
 
 /**
  * Public API to control a comet connection.
  */
 public class AsyncContextImpl
-  implements AsyncContext, CometHandler {
+  implements AsyncContext, SocketLinkCometListener {
   private static final L10N L = new L10N(ConnectionCometController.class);
   private static final Logger log = Logger
       .getLogger(ConnectionCometController.class.getName());
 
+  private SocketLink _tcpConnection;
   private AsyncController _cometController;
 
-  private final ServletRequest _request;
-  private final ServletResponse _response;
+  private ServletRequest _request;
+  private ServletResponse _response;
   
   private boolean _isOriginal;
 
-  private AsyncListenerNode _listenerNode;
+  private ArrayList<AsyncListenerNode> _listeners;
+  private AtomicBoolean _isComplete = new AtomicBoolean();
 
   private WebApp _dispatchWebApp;
   private String _dispatchPath;
+  
+  public AsyncContextImpl(AbstractHttpRequest httpConn)
+  {
+    _tcpConnection = httpConn.getConnection();
+    _cometController = _tcpConnection.toComet(this);
+  }
+  
+  public void restart()
+  {
+    _cometController = _tcpConnection.toComet(this);
+  }
 
-  public AsyncContextImpl(AbstractHttpRequest httpConn,
-                          ServletRequest request,
-                          ServletResponse response,
-                          boolean isOriginal)
+  public void init(ServletRequest request,
+                   ServletResponse response,
+                   boolean isOriginal)
   {
     _request = request;
     _response = response;
@@ -101,14 +110,14 @@ public class AsyncContextImpl
     else
       _dispatchPath = servletPath + pathInfo;
     
-    _cometController = httpConn.getConnection().toComet(this);
-    
     /* XXX: tck
     if (_cometController == null)
       throw new NullPointerException();
       */
 
     _isOriginal = isOriginal;
+    
+    onStart(req, response);
   }
 
   /**
@@ -189,8 +198,10 @@ public class AsyncContextImpl
                           ServletRequest request,
                           ServletResponse response)
   {
-    _listenerNode
-      = new AsyncListenerNode(listener, request, response, _listenerNode);
+    if (_listeners == null)
+      _listeners = new ArrayList<AsyncListenerNode>();
+    
+    _listeners.add(new AsyncListenerNode(listener, request, response, null));
   }
 
   @Override
@@ -251,14 +262,24 @@ public class AsyncContextImpl
   {
     AsyncController cometController = _cometController;
     
-    if (cometController == null)
-      return;
+    boolean isSuspend = _tcpConnection.isCometSuspend();
 
-    try {
+    if (cometController != null) {
       cometController.complete();
+    }
+
+    // TCK: 
+    // XXX: should be on completing thread.
+    if (! isSuspend) {
+      onComplete();
+    }
+
+    /*
+    try {
     } finally {
       _cometController = null;
     }
+    */
   }
   
   //
@@ -266,18 +287,17 @@ public class AsyncContextImpl
   //
   
   /**
-   * CometHandler callback when the connection times out.
+   * CometHandler callback when the connection starts.
    */
-  public void onStart(ServletContext webApp,
-                      ServletRequest request,
+  public void onStart(ServletRequest request,
                       ServletResponse response)
   {
-    AsyncEvent event = new AsyncEvent(this, request, response);
-    Thread.dumpStack();
+    if (_listeners == null)
+      return;
     
-    for (AsyncListenerNode node = _listenerNode;
-         node != null;
-         node = node.getNext()) {
+    AsyncEvent event = new AsyncEvent(this, request, response);
+    
+    for (AsyncListenerNode node : _listeners) {
       try {
         node.onStart(event);
       } catch (IOException e) {
@@ -292,11 +312,12 @@ public class AsyncContextImpl
   @Override
   public void onTimeout()
   {
+    if (_listeners == null)
+      return;
+    
     AsyncEvent event = new AsyncEvent(this, _request, _response);
     
-    for (AsyncListenerNode node = _listenerNode;
-         node != null;
-         node = node.getNext()) {
+    for (AsyncListenerNode node : _listeners) {
       try {
         node.onTimeout(event);
       } catch (IOException e) {
@@ -310,11 +331,12 @@ public class AsyncContextImpl
    */
   public void onError()
   {
+    if (_listeners == null)
+      return;
+    
     AsyncEvent event = new AsyncEvent(this, _request, _response);
     
-    for (AsyncListenerNode node = _listenerNode;
-         node != null;
-         node = node.getNext()) {
+    for (AsyncListenerNode node : _listeners) {
       try {
         node.onError(event);
       } catch (IOException e) {
@@ -326,11 +348,15 @@ public class AsyncContextImpl
   @Override
   public void onComplete()
   {
+    if (_isComplete.getAndSet(true))
+      return;
+    
+    if (_listeners == null)
+      return;
+    
     AsyncEvent event = new AsyncEvent(this, _request, _response);
     
-    for (AsyncListenerNode node = _listenerNode;
-         node != null;
-         node = node.getNext()) {
+    for (AsyncListenerNode node : _listeners) {
       try {
         node.onComplete(event);
       } catch (IOException e) {

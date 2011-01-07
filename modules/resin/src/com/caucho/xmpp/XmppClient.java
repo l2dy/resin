@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,8 +43,9 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
-import com.caucho.bam.AbstractActorStream;
-import com.caucho.bam.ActorStream;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.stream.AbstractActorStream;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.util.Base64;
 import com.caucho.util.L10N;
@@ -579,7 +580,7 @@ public class XmppClient {
     }
     
     @Override
-    public ActorStream getLinkStream()
+    public Broker getBroker()
     {
       throw new UnsupportedOperationException();
     }

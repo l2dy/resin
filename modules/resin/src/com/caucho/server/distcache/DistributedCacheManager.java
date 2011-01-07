@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -82,6 +82,14 @@ abstract public class DistributedCacheManager
    */
   abstract public boolean remove(HashKey hashKey);
 
+  /**
+   * For QA
+   */
+  public byte[] calculateValueHash(Object value, CacheConfig config)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
   /**
    * Closes the manager
    */
@@ -170,4 +178,5 @@ abstract public class DistributedCacheManager
     {
     }
   }
+
 }

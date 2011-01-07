@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,7 @@
 
 package com.caucho.cloud.loadbalance;
 
-import com.caucho.env.service.AbstractResinService;
-import com.caucho.env.service.ResinSystem;
+import com.caucho.env.service.*;
 
 /**
  * LoadBalanceService distributes requests across a group of clients.
@@ -47,9 +46,17 @@ public class LoadBalanceService extends AbstractResinService
     _factory = factory;
   }
   
-  /**
-   * Returns the current network service.
-   */
+  public static LoadBalanceService
+    createAndAddService(LoadBalanceFactory factory)
+  {
+    ResinSystem system = preCreate(LoadBalanceService.class);
+    
+    LoadBalanceService service = new LoadBalanceService(factory);
+    system.addService(LoadBalanceService.class, service);
+    
+    return service;
+  }
+  
   public static LoadBalanceService getCurrent()
   {
     return ResinSystem.getCurrentService(LoadBalanceService.class);
@@ -67,7 +74,6 @@ public class LoadBalanceService extends AbstractResinService
   @Override
   public String toString()
   {
-    return (getClass().getSimpleName()
-            + "[" + "]");
+    return (getClass().getSimpleName() + "[]");
   }
 }

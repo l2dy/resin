@@ -12,7 +12,7 @@
   <property name="eclipse.home" value="${user.home}/eclipse"/>
 
   <target name="compile" 
-          depends="init, hessian, javaee, jaxstream, jcache, portlet, script, resin-kernel, quercus, resin, ecmascript, inject, webutil, conf, ext, j2ee-management, j2ee-deploy">
+          depends="init, hessian, javaee, jaxstream, jcache, portlet, script, resin-kernel, quercus, resin, ecmascript, cdi, webutil, conf, ext, j2ee-management, j2ee-deploy">
   </target>
 
   <!--
@@ -24,51 +24,6 @@
       <param name="artifact.name" value="ant"/>
       <param name="artifact.jar" value="resin-ant.jar"/>
     </antcall>
-  </target>
-
-  <target name="eclipse" depends="init, resin, resin-kernel, hessian">
-    <property name="eclipse.basedir" location="${artifacts}/eclipse"/>
-    <property name="eclipse.build" location="${eclipse.basedir}/build"/>
-  
-    <mkdir dir="${eclipse.build}"/>
-  
-    <antcall target="artifact" inheritRefs="true">
-      <param name="artifact.name" value="eclipse"/>
-      <param name="artifact.jar" value="resin-eclipse.jar"/>
-      <param name="artifact.dist" value="${eclipse.build}"/>
-    </antcall>
-    
-    <copy todir="${eclipse.build}"
-          preservelastmodified="true"
-          overwrite="true">
-      <fileset dir="${eclipse.basedir}">
-        <include name="META-INF/*"/>
-        <include name="plugin.properties"/>
-        <include name="plugin.xml"/>
-        <include name="buildfiles/*.xml"/>
-        <include name="icons/**/*.png"/>
-        <include name="servers/*.serverdef"/>
-        <include name="conf/**"/>
-        <include name="src/**"/>
-        <exclude name="src/manifest"/>
-      </fileset>
-    </copy>
-
-    <copy file="${lib}/resin.jar" todir="${eclipse.build}/lib"/>
-    <copy file="${lib}/resin-kernel.jar" todir="${eclipse.build}/lib"/>
-    <copy file="${lib}/hessian.jar" todir="${eclipse.build}/lib"/>
-
-    <property name="eclipse.dist" location="${eclipse.basedir}/dist"/>
-
-    <mkdir dir="${eclipse.dist}"/>
-
-    <jar jarfile="${eclipse.dist}/com.caucho.resin.eclipse_${version}.jar"
-         manifest="${eclipse.basedir}/META-INF/MANIFEST.MF">
-      <fileset dir="${eclipse.build}">
-        <exclude name=".cvsignore"/>
-        <exclude name=".svnignore"/>
-      </fileset>
-    </jar>
   </target>
 
   <target name="netbeans" depends="init">
@@ -153,82 +108,6 @@
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="xwork2"/>
     </antcall>
-  </target>
-
-  <target name="eclipse2" depends="init">
-    <!--
-      xxx: assumes resin.jar and javaee-16.jar are in eclipse-plugin/lib
-      xxx: ^ fix it!
-    -->
-
-    <property name="eclipse.rep"
-              value="${basedir}/artifacts/eclipse-site/repository"/>
-
-    <delete dir="${eclipse.rep}" failonerror="false"/>
-    <delete dir="${basedir}/artifacts/eclipse-site/features"
-            failonerror="false"/>
-    <delete dir="${basedir}/artifacts/eclipse-site/plugins"
-            failonerror="false"/>
-    <delete failonerror="false">
-      <fileset dir="${basedir}/artifacts/eclipse-site/" includes="*.jar"/>
-    </delete>
-
-    <copy file="${basedir}/artifacts/eclipse-feature/feature.xml.in"
-          tofile="${basedir}/artifacts/eclipse-feature/feature.xml"
-          preservelastmodified="true"
-          overwrite="true">
-      <filterset>
-        <filter token="resin.version" value="${nversion}"/>
-      </filterset>
-    </copy>
-
-    <copy file="${basedir}/artifacts/eclipse-plugin/META-INF/MANIFEST.MF.in"
-          tofile="${basedir}/artifacts/eclipse-plugin/META-INF/MANIFEST.MF"
-          preservelastmodified="true"
-          overwrite="true">
-      <filterset>
-        <filter token="resin.version" value="${nversion}"/>
-      </filterset>
-    </copy>
-
-    <copy
-        file="${basedir}/artifacts/eclipse-site/site.xml.in"
-        tofile="${basedir}/artifacts/eclipse-site/site.xml"
-        preservelastmodified="true"
-        overwrite="true">
-      <filterset>
-        <filter token="resin.version" value="${nversion}"/>
-      </filterset>
-    </copy>
-
-    <java jar="${eclipse.home}/plugins/org.eclipse.equinox.launcher_1.1.0.v20100507.jar"
-          fork='true'>
-      <jvmarg line="-Dresin.version=${nversion}"/>
-      <arg line="-application org.eclipse.ant.core.antRunner"/>
-      <arg line="-buildfile ${basedir}/artifacts/eclipse-feature/custom-build.xml clean build.update.jar"/>
-    </java>
-
-    <mkdir dir="${basedir}/artifacts/eclipse-site/features"/>
-    <mkdir dir="${basedir}/artifacts/eclipse-site/plugins"/>
-
-    <copy file="${basedir}/artifacts/eclipse-feature/com.caucho.resin.eclipse_${nversion}.jar"
-          tofile="${basedir}/artifacts/eclipse-site/features/com.caucho.resin.eclipse_${nversion}.jar"/>
-
-    <copy file="${basedir}/artifacts/eclipse-plugin/com.caucho.resin.eclipse_${nversion}.jar"
-          tofile="${basedir}/artifacts/eclipse-site/plugins/com.caucho.resin.eclipse_${nversion}.jar"/>
-
-    <java jar="${eclipse.home}/plugins/org.eclipse.equinox.launcher_1.1.0.v20100507.jar"
-          fork='true'>
-      <arg line="-application org.eclipse.equinox.p2.publisher.UpdateSitePublisher"/>
-      <arg line="-source ${basedir}/artifacts/eclipse-site"/>
-      <arg line="-metadataRepository file:///${basedir}/artifacts/eclipse-site"/>
-      <arg line="-artifactRepository file:///${eclipse.rep}"/>
-      <arg line="-compress"/>
-      <arg line="-publishArtifacts"/>
-    </java>
-
-    <copy file="${basedir}/artifacts/eclipse-site/content.jar"
-          tofile="${eclipse.rep}/content.jar"/>
   </target>
 
   <target name="compat" depends="init">
@@ -463,7 +342,7 @@
     </antcall>
   </target>
   
-  <target name="resin-kernel" depends="init, inject, servlet16, version">
+  <target name="resin-kernel" depends="init, cdi, servlet16, version">
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="kernel"/>
       <param name="module.dist" value="${lib}"/>
@@ -532,11 +411,11 @@
     </antcall>
   </target>
 
-  <target name="inject" depends="init">
+  <target name="cdi" depends="init">
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="webbeans"/>
       <param name="module.dist" value="${lib}"/>
-      <param name="module.jar" value="inject-16.jar"/>
+      <param name="module.jar" value="cdi-16.jar"/>
     </antcall>
     
     <antcall target="module" inheritRefs="true">
@@ -580,7 +459,7 @@
     </copy>
   </target>
 
-  <target name="javaee" depends="ejb, jca, jms, jpa, servlet16, jcache, jstl, jta, inject">
+  <target name="javaee" depends="ejb, jca, jms, jpa, servlet16, jcache, jstl, jta, cdi">
     <!--
        - javaee-16.jar
       -->
@@ -1171,8 +1050,8 @@
     <copy tofile="${dist}/${quercus.dist.name}/WEB-INF/lib/javaee-16.jar"
           file="${resin.dist}/${dist.name}/lib/javaee-16.jar"/>
 
-    <copy tofile="${dist}/${quercus.dist.name}/WEB-INF/lib/inject-16.jar"
-          file="${resin.lib}/inject-16.jar"/>
+    <copy tofile="${dist}/${quercus.dist.name}/WEB-INF/lib/cdi-16.jar"
+          file="${resin.lib}/cdi-16.jar"/>
 
     <copy tofile="${dist}/${quercus.dist.name}/WEB-INF/lib/javamail-141.jar"
           file="${resin.lib}/javamail-141.jar"/>
@@ -1195,7 +1074,8 @@
     <jar destfile="${dist}/quercus-${version}.war">
       <fileset dir="${dist}/${quercus.dist.name}">
         <include name="WEB-INF/lib/resin.jar"/>
-        <include name="WEB-INF/lib/inject-16.jar"/>
+	<include name="WEB-INF/lib/javaee-16.jar"/>
+        <include name="WEB-INF/lib/cdi-16.jar"/>
         <include name="WEB-INF/lib/javamail-141.jar"/>
         <include name="WEB-INF/licenses"/>
         <include name="WEB-INF/web.xml"/>

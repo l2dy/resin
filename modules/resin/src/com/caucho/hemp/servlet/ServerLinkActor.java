@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,88 +34,62 @@ import java.util.logging.Logger;
 
 import com.caucho.bam.ActorError;
 import com.caucho.bam.ActorException;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
-import com.caucho.bam.QueryGet;
-import com.caucho.bam.QuerySet;
-import com.caucho.bam.SimpleActor;
+import com.caucho.bam.Query;
+import com.caucho.bam.actor.SimpleActor;
+import com.caucho.bam.broker.Broker;
 import com.caucho.hmtp.AuthQuery;
 import com.caucho.hmtp.AuthResult;
 import com.caucho.hmtp.NonceQuery;
 
 /**
- * The LinkService is low-level link
+ * ServerLinkActor handles link messages, i.e. to=null, which is primarily
+ * authentication.
  */
 
-public class ServerLinkActor extends SimpleActor {
+public class ServerLinkActor extends SimpleActor
+{
   private static final Logger log
     = Logger.getLogger(ServerLinkActor.class.getName());
   
-  private final Broker _broker;
-  private final ServerLinkStream _serverLinkStream;
-  private final ServerPassStream _serverPassStream;
-  private final ActorStream _brokerStream;
+  private final ClientStubManager _clientManager;
+  
   private final ServerAuthManager _authManager;
   private final String _ipAddress;
   
-  /**
-   * Creates the LinkService for low-level link messages
-   */
-  public ServerLinkActor(ActorStream linkStream,
-                         Broker broker,
+  private String _clientJid;
+  
+  public ServerLinkActor(Broker toLinkBroker,
+                         ClientStubManager clientManager,
                          ServerAuthManager authManager,
-                         String ipAddress,
-                         boolean isUnidir)
+                         String ipAddress)
   {
-    if (linkStream == null)
-      throw new NullPointerException();
+    super(null, toLinkBroker);
     
-    if (broker == null)
-      throw new NullPointerException();
-    
-    setLinkStream(linkStream);
-    
-    _broker = broker;
+    _clientManager = clientManager;
     _authManager = authManager;
     _ipAddress = ipAddress;
-   
-    if (isUnidir) {
-      _serverPassStream = new ServerPassStream(linkStream, this);
-      _brokerStream = _serverPassStream;
-      _serverLinkStream = null;
-    }
-    else {
-      _serverPassStream = null;
-      _serverLinkStream = new ServerLinkStream(linkStream, this);
-      _brokerStream = _serverLinkStream;
-    }
-  }
-  
-  public ActorStream getBrokerStream()
-  {
-    return _brokerStream;
   }
 
   //
   // message handling
   //
 
-  @QueryGet
+  @Query
   public void getNonce(long id, String to, String from,
                        NonceQuery query)
   {
     NonceQuery result = _authManager.generateNonce(query);
 
-    getLinkStream().queryResult(id, from, to, result);
+    getBroker().queryResult(id, from, to, result);
   }
 
-  @QuerySet
+  @Query
   public void authLogin(long id, String to, String from, LoginQuery query)
   {
     login(id, to, from, query.getAuth(), query.getAddress());
   }
 
-  @QuerySet
+  @Query
   public void authLogin(long id, String to, String from, AuthQuery query)
   {
     login(id, to, from, query, _ipAddress);
@@ -132,14 +106,14 @@ public class ServerLinkActor extends SimpleActor {
     } catch (ActorException e) {
       log.log(Level.FINE, e.toString(), e);
     
-      getLinkStream().queryError(id, from, to, query,
+      getBroker().queryError(id, from, to, query,
                                  e.createActorError());
 
       return;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
     
-      getLinkStream().queryError(id, from, to, query,
+      getBroker().queryError(id, from, to, query,
                                  new ActorError(ActorError.TYPE_AUTH,
                                                 ActorError.NOT_AUTHORIZED,
                                                 e.getMessage()));
@@ -148,23 +122,17 @@ public class ServerLinkActor extends SimpleActor {
       log.log(Level.FINER, e.toString(), e);
     }
 
-    if (_serverLinkStream != null)
-      _serverLinkStream.setBrokerStream(_broker.getBrokerStream());
-    if (_serverPassStream != null)
-      _serverPassStream.setBrokerStream(_broker.getBrokerStream());
-
-    String jid
-      = _broker.createClient(getLinkStream(), uid, query.getResource());
-
-    if (_serverLinkStream != null)
-      _serverLinkStream.setJid(jid);
-    if (_serverPassStream != null)
-      _serverPassStream.setJid(jid);
+    _clientManager.login(uid, query.getResource());
     
     notifyValidLogin(from);
     
-    AuthResult result = new AuthResult(jid);
-    getLinkStream().queryResult(id, from, to, result);
+    AuthResult result = new AuthResult(_clientManager.getJid());
+    getBroker().queryResult(id, from, to, result);
+  }
+  
+  protected void onClose()
+  {
+    _clientManager.logout();
   }
   
   protected void notifyValidLogin(String jid)

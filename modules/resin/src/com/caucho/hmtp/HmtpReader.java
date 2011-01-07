@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,10 +36,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.hessian.io.Hessian2Input;
 import com.caucho.hessian.io.Hessian2StreamingInput;
-import com.caucho.hessian.io.HessianDebugInputStream;
 
 /**
  * HmtpReader stream handles client packets received from the server.
@@ -52,13 +51,20 @@ public class HmtpReader {
   
   private InputStream _is;
   private Hessian2StreamingInput _in;
+  private Hessian2Input _hIn;
+  
+  private int _jidCacheIndex;
+  private String []_jidCacheRing = new String[256];
 
   public HmtpReader()
   {
+    _hIn = new Hessian2Input();
   }
 
   public HmtpReader(InputStream is)
   {
+    this();
+    
     init(is);
   }
   
@@ -69,6 +75,9 @@ public class HmtpReader {
 
   public void init(InputStream is)
   {
+    _hIn.reset();
+    
+    /*
     _is = is;
     
     if (log.isLoggable(Level.FINEST)) {
@@ -78,7 +87,10 @@ public class HmtpReader {
       hIs.startStreaming();
       is = hIs;
     }
+    
+    private Hessian2Input _hIn = new Hessian2Input();
     _in = new Hessian2StreamingInput(is);
+    */
   }
 
   /**
@@ -94,44 +106,28 @@ public class HmtpReader {
    * Reads the next HMTP packet from the stream, returning false on
    * end of file.
    */
-  public boolean readPacket(ActorStream actorStream)
+  public boolean readPacket(InputStream is,
+                            ActorStream actorStream)
     throws IOException
   {
     if (actorStream == null)
       throw new IllegalStateException("HmtpReader.readPacket requires a valid ActorStream for callbacks");
 
-    Hessian2StreamingInput in = _in;
-
-    if (in == null)
-      return false;
-
-    Hessian2Input hIn = null;
-
-    try {
-      hIn = in.startPacket();
-    } catch (IOException e) {
-      log.fine(this + " exception while reading HMTP packet\n  " + e);
-
-      log.log(Level.FINER, e.toString(), e);
-    }
-
-    if (hIn == null) {
-      close();
-      return false;
-    }
+    Hessian2Input hIn = _hIn;
+    
+    hIn.init(is);
 
     int type = hIn.readInt();
-    String to = hIn.readString();
-    String from = hIn.readString();
+    String to = readJid(hIn);
+    String from = readJid(hIn);
     
     switch (HmtpPacketType.TYPES[type]) {
     case MESSAGE:
       {
         Serializable value = (Serializable) hIn.readObject();
-        in.endPacket();
 
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " message " + value
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(this + " message " + value
                     + " {to:" + to + ", from:" + from + "}");
         }
 
@@ -144,10 +140,9 @@ public class HmtpReader {
       {
         Serializable value = (Serializable) hIn.readObject();
         ActorError error = (ActorError) hIn.readObject();
-        in.endPacket();
 
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " messageError " + error + " " + value
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(this + " messageError " + error + " " + value
                     + " {to:" + to + ", from:" + from + "}");
         }
 
@@ -156,34 +151,17 @@ public class HmtpReader {
         break;
       }
 
-    case QUERY_GET:
+    case QUERY:
       {
         long id = hIn.readLong();
         Serializable value = (Serializable) hIn.readObject();
-        in.endPacket();
 
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " queryGet " + value
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(this + " query " + value
                     + " {id:" + id + ", to:" + to + ", from:" + from + "}");
         }
 
-        actorStream.queryGet(id, to, from, value);
-
-        break;
-      }
-
-    case QUERY_SET:
-      {
-        long id = hIn.readLong();
-        Serializable value = (Serializable) hIn.readObject();
-        in.endPacket();
-
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " querySet " + value
-                    + " {id:" + id + ", to:" + to + ", from:" + from + "}");
-        }
-
-        actorStream.querySet(id, to, from, value);
+        actorStream.query(id, to, from, value);
 
         break;
       }
@@ -192,10 +170,9 @@ public class HmtpReader {
       {
         long id = hIn.readLong();
         Serializable value = (Serializable) hIn.readObject();
-        in.endPacket();
 
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " queryResult " + value
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(this + " queryResult " + value
                     + " {id:" + id + ", to:" + to + ", from:" + from + "}");
         }
 
@@ -209,10 +186,9 @@ public class HmtpReader {
         long id = hIn.readLong();
         Serializable value = (Serializable) hIn.readObject();
         ActorError error = (ActorError) hIn.readObject();
-        in.endPacket();
 
-        if (log.isLoggable(Level.FINER)) {
-          log.finer(this + " queryError " + error + " " + value
+        if (log.isLoggable(Level.FINEST)) {
+          log.finest(this + " queryError " + error + " " + value
                     + " {id:" + id + ", to:" + to + ", from:" + from + "}");
         }
 
@@ -226,6 +202,30 @@ public class HmtpReader {
     }
 
     return true;
+  }
+  
+  private String readJid(Hessian2Input hIn)
+    throws IOException
+  {
+    Object value = hIn.readObject();
+    
+    if (value == null)
+      return null;
+    else if (value instanceof String) {
+      String jid = (String) value;
+      _jidCacheRing[_jidCacheIndex] = jid;
+      
+      _jidCacheIndex = (_jidCacheIndex + 1) % _jidCacheRing.length;
+      
+      return jid;
+    }
+    else if (value instanceof Integer) {
+      int index = (Integer) value;
+      
+      return _jidCacheRing[index];
+    }
+    else
+      throw new IllegalStateException(String.valueOf(value));
   }
 
   public void close()

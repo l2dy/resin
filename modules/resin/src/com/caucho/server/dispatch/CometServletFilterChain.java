@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -170,8 +170,12 @@ public class CometServletFilterChain implements FilterChain {
         return;
         */
       
+      AsyncContext oldContext = _context;
+      
       _context = _request.startAsync();
-      _context.addListener(this);
+
+      if (oldContext != null)
+        _context.addListener(this);
       
       _isWake.set(false);
     }

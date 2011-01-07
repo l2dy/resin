@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,8 +51,11 @@ public class EjbSingletonBean<X> extends EjbSessionBean<X> {
   /**
    * Creates a new session bean configuration.
    */
-  public EjbSingletonBean(EjbConfig ejbConfig, AnnotatedType<X> rawAnnType,
-      AnnotatedType<X> annType, String moduleName) {
+  public EjbSingletonBean(EjbConfig ejbConfig, 
+                          AnnotatedType<X> rawAnnType,
+                          AnnotatedType<X> annType,
+                          String moduleName)
+  {
     super(ejbConfig, rawAnnType, annType, moduleName);
   }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,17 +29,14 @@
 
 package com.caucho.boot;
 
-import java.util.ArrayList;
-
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
-import com.caucho.network.listen.SocketLinkListener;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
-public class DeployCommand extends AbstractBootCommand {
+public class DeployCommand extends AbstractRepositoryCommand {
   private static final L10N L = new L10N(DeployCommand.class);
   
   @Override
@@ -48,7 +45,7 @@ public class DeployCommand extends AbstractBootCommand {
   {
     WebAppDeployClient deployClient = getDeployClient(args, client);
     
-    String war = findWar(args);
+    String war = args.getDefaultArg();
     
     if (war == null) {
       throw new ConfigException(L.l("Cannot find .war argument in command line"));
@@ -58,8 +55,8 @@ public class DeployCommand extends AbstractBootCommand {
       throw new ConfigException(L.l("Deploy expects to be used with a *.war file at {0}",
                                     war));
     }
-     
-     String name = args.getArg("-name");
+
+    String name = args.getArg("-name");
     
     String host = args.getArg("-host");
     
@@ -102,69 +99,36 @@ public class DeployCommand extends AbstractBootCommand {
     commit.message(message);
     
     commit.attribute("user", System.getProperty("user.name"));
-    
+
+    String version = args.getArg("-version");
+    if (version != null)
+      fillInVersion(commit, version);
+
     deployClient.commitArchive(commit, path);
-    
+
     deployClient.close();
     
     System.out.println("Deployed " + commit.getId() + " as " + war + " to "
                        + deployClient.getUrl());
   }
-  
-  private String findWar(WatchdogArgs args)
+
+  @Override
+  public void usage()
   {
-    ArrayList<String> tailArgs = args.getTailArgs();
-    
-    for (int i = 0; i < tailArgs.size(); i++) {
-      String arg = tailArgs.get(i);
-      
-      if (arg.startsWith("-")) {
-        i++;
-        continue;
-      }
-      
-      return arg;
-    }
-    
-    return null;
-  }
-  
-  private WebAppDeployClient getDeployClient(WatchdogArgs args,
-                                             WatchdogClient client)
-  {
-    String address = client.getConfig().getAddress();
-    
-    int port = findPort(client);
-    
-    if (port == 0) {
-      throw new ConfigException(L.l("HTTP listener {0}:{1} was not found",
-                                    address, port));
-    }
-    
-    String user = args.getArg("-user");
-    String password = args.getArg("-password");
-    
-    /*
-    if (user == null) {
-      user = "";
-      password = client.getResinSystemAuthKey();
-    }
-    */
-    
-    return new WebAppDeployClient(address, port, user, password);
-  }
-  
-  private int findPort(WatchdogClient client)
-  {
-    for (SocketLinkListener listener : client.getConfig().getPorts()) {
-      if (listener instanceof OpenPort) {
-        OpenPort openPort = (OpenPort) listener;
-        
-        if ("http".equals(openPort.getProtocolName()))
-          return openPort.getPort();
-      }
-    }
-    
-    return 0;
+    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] deploy -user <user> -password <password> [options] <war-file>"));
+    System.err.println(L.l(""));
+    System.err.println(L.l("description:"));
+    System.err.println(L.l("   deploys application specified in a <war-file> to resin server"));
+    System.err.println(L.l(""));
+    System.err.println(L.l("options:"));
+    System.err.println(L.l("   -address <address>    : ip or host name of the server"));
+    System.err.println(L.l("   -port <port>          : server http port"));
+    System.err.println(L.l("   -user <user>          : user name used for authentication to the server"));
+    System.err.println(L.l("   -password <password>  : password used for authentication to the server"));
+    System.err.println(L.l("   -host <host>          : virtual host to make application available on"));
+    System.err.println(L.l("   -name <name>          : name of the context to deploy to, defaults to war-file name"));
+    System.err.println(L.l("   -stage <stage>        : stage to deploy application to, defaults to production"));
+    System.err.println(L.l("   -version <version>    : version of application formatted as <major.minor.micro.qualifier>"));
+    System.err.println(L.l("   -m <message>          : commit message"));
   }
 }

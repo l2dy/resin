@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,10 +30,10 @@
 package com.caucho.env.warning;
 
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.env.service.AbstractResinService;
-import com.caucho.env.service.ResinSystem;
+import com.caucho.env.service.*;
 import com.caucho.util.L10N;
 
 /**
@@ -42,92 +42,147 @@ import com.caucho.util.L10N;
  */
 public class WarningService extends AbstractResinService
 {
-  private static final L10N L = new L10N(WarningService.class);
-  
   public static final int START_PRIORITY = 1;
-  
-  private static final Logger log
-    = Logger.getLogger(WarningService.class.getName());
-  
-  private final CopyOnWriteArrayList<WarningHandler> _handlerList
-    = new CopyOnWriteArrayList<WarningHandler>();
 
-  /**
-   * Creates a new resin server.
-   */
+  private static final Logger log = 
+    Logger.getLogger(WarningService.class.getName());
+  private static final L10N L = new L10N(WarningService.class);
+
+  private final CopyOnWriteArrayList<WarningHandler> _priorityHandlers = 
+    new CopyOnWriteArrayList<WarningHandler>();
+  
+  private final CopyOnWriteArrayList<WarningHandler> _handlers = 
+    new CopyOnWriteArrayList<WarningHandler>();
+
   public WarningService()
   {
   }
   
-  /**
-   * Returns the warning service.
-   */
+  public static WarningService createAndAddService()
+  {
+    ResinSystem system = preCreate(WarningService.class);
+    
+    WarningService service = new WarningService();
+    system.addService(WarningService.class, service);
+    
+    return service;
+  }
+  
   public static WarningService getCurrent()
   {
     return ResinSystem.getCurrentService(WarningService.class);
   }
   
   /**
-   * Returns the warning service.
+   * Send a warning message to any registered handlers. A high priority warning
+   * only goes to all handlers, high priority first. High priority handlers do
+   * not receive non-high priority warnings.
+   * 
+   * @param source source of the message, usually you
+   * @param msg test to print or send as an alert
+   * @param isHighPriority set true to send to high priority warning handlers
    */
-  public static WarningService create()
+  public void sendWarning(Object source, String msg)
   {
-    return create(ResinSystem.getCurrent());
-  }
-
-  /**
-   * Returns the warning service.
-   */
-  public static WarningService create(ResinSystem resinSystem)
-  {
-    if (resinSystem == null) {
-      throw new IllegalStateException(L.l("{0} requires an active {1}",
-                                          WarningService.class.getSimpleName(),
-                                          ResinSystem.class.getSimpleName()));
-    }
-
-    WarningService service = resinSystem.getService(WarningService.class);
-
-    if (service == null) {
-      service = new WarningService();
-      
-      resinSystem.addServiceIfAbsent(service);
-      
-      service = resinSystem.getService(WarningService.class);
-    }
+    String s = "WarningService: " + msg;
     
-    return service;
+    // if warning is high-priority then send to high priority handlers first
+    System.err.println(s);
+      
+    for (WarningHandler handler : _priorityHandlers)
+      handler.warning(source, msg);
+    
+    // now send to the all handlers regardless of if its high priority
+    for (WarningHandler handler : _handlers)
+      handler.warning(source, msg);
+
+    log.warning(s);
   }
   
   /**
-   * Sends a warning
+   * Send a warning message to any registered handlers. A high priority warning
+   * only goes to all handlers, high priority first. High priority handlers do
+   * not receive non-high priority warnings.
+   * 
+   * @param source source of the message, usually you
+   * @param msg test to print or send as an alert
+   * @param isHighPriority set true to send to high priority warning handlers
    */
-  public void warning(String msg)
+  public void sendWarning(Object source, Throwable e)
   {
-    log.warning("WarningService: " + msg);
-    System.err.println("WarningService: " + msg);
+    e.printStackTrace();
     
-    for (WarningHandler handler : _handlerList) {
-      handler.warning(msg);
-    }
+    String msg = e.toString();
+    
+    String s = "WarningService: " + e;
+    
+    // if warning is high-priority then send to high priority handlers first
+    System.err.println(s);
+      
+    for (WarningHandler handler : _priorityHandlers)
+      handler.warning(source, msg);
+    
+    // now send to the all handlers regardless of if its high priority
+    for (WarningHandler handler : _handlers)
+      handler.warning(source, msg);
+
+    log.warning(s);
   }
-  
+
   /**
    * Sends a warning to the current service.
    */
-  public static void sendCurrentWarning(String msg)
+  public static void sendCurrentWarning(Object source, String msg)
   {
     WarningService warning = getCurrent();
     
     if (warning != null)
-      warning.warning(msg);
+      warning.sendWarning(source, msg);
+    else {
+      System.err.println(msg);
+      log.warning(msg);
+    }
+  }
+
+  /**
+   * Sends a warning to the current service.
+   */
+  public static void sendCurrentWarning(Object source, Throwable e)
+  {
+    WarningService warning = getCurrent();
+    
+    if (warning != null)
+      warning.sendWarning(source, e);
+    else {
+      e.printStackTrace();
+      log.log(Level.WARNING, e.toString(), e);
+    }
   }
   
+  /**
+   * Add a warning event handler.  High priority handlers ONLY get high 
+   * priority warnings, and they are notified first.  Other handlers gets all
+   * warnings after high priority handlers are notified.
+   * @param handler an object that implements WarningHandler
+   * @param isHighPriority high priority handlers only get high priority warnings.
+   */
   public void addHandler(WarningHandler handler)
   {
-    _handlerList.add(handler);
+    _handlers.add(handler);
   }
   
+  /**
+   * Add a warning event handler.  High priority handlers ONLY get high 
+   * priority warnings, and they are notified first.  Other handlers gets all
+   * warnings after high priority handlers are notified.
+   * @param handler an object that implements WarningHandler
+   * @param isHighPriority high priority handlers only get high priority warnings.
+   */
+  public void addPriorityHandler(WarningHandler handler)
+  {
+    _priorityHandlers.add(handler);
+  }
+
   @Override
   public int getStartPriority()
   {

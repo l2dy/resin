@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import com.caucho.env.service.AbstractResinService;
 
+//TODO: service cleanup
 public class MeterService extends AbstractResinService {
   private static MeterService _manager = new MeterService();
 

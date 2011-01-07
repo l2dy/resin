@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -184,14 +184,14 @@ public class TcpDuplexController extends AsyncController {
   
   public void close()
   {
-    closeImpl();
+    onClose();
   }
 
   /**
    * Closes the connection.
    */
   @Override
-  public void closeImpl()
+  public void onClose()
   {
     ReadStream is = _is;
     _is = null;
@@ -210,7 +210,7 @@ public class TcpDuplexController extends AsyncController {
     } catch (Exception e) {
     }
 
-    super.closeImpl();
+    super.onClose();
   }
 
   @Override

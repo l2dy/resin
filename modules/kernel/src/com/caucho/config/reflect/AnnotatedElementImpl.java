@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,11 +32,12 @@ package com.caucho.config.reflect;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Set;
 
 import javax.enterprise.inject.spi.Annotated;
+import javax.enterprise.inject.spi.AnnotatedType;
 
 import com.caucho.config.inject.InjectManager;
 import com.caucho.inject.Module;
@@ -45,18 +46,18 @@ import com.caucho.inject.Module;
  * Abstract introspected view of a Bean
  */
 @Module
-public class AnnotatedElementImpl implements Annotated
+public class AnnotatedElementImpl implements Annotated, BaseTypeAnnotated
 {
   private static final AnnotationSet NULL_ANN_SET
     = new AnnotationSet();
   
-  private Type _type;
+  private BaseType _type;
 
   private Set<Type> _typeSet;
 
   private AnnotationSet _annSet;
 
-  public AnnotatedElementImpl(Type type,
+  public AnnotatedElementImpl(BaseType type,
                               Annotated annotated,
                               Annotation []annList)
   {
@@ -82,24 +83,113 @@ public class AnnotatedElementImpl implements Annotated
 
   public AnnotatedElementImpl(Annotated annotated)
   {
-    this(annotated.getBaseType(), annotated, null);
+    this(createBaseType(annotated), annotated, null);
+  }
+
+  public AnnotatedElementImpl(Class<?> cl, 
+                              Annotated annotated,
+                              Annotation []annotationList)
+  {
+    this(createBaseType(cl), annotated, annotationList);
+  }
+  
+  protected static BaseType createBaseType(Annotated ann)
+  {
+    if (ann instanceof BaseTypeAnnotated)
+      return ((BaseTypeAnnotated) ann).getBaseTypeImpl();
+    else
+      return createBaseType(ann.getBaseType());
+  }
+  
+  protected static BaseType createBaseType(AnnotatedType<?> declaringType)
+  {
+    if (declaringType instanceof BaseTypeAnnotated)
+      return ((BaseTypeAnnotated) declaringType).getBaseTypeImpl();
+    else
+      return createBaseType(declaringType.getBaseType());
+  }
+  
+  protected static BaseType createBaseType(AnnotatedType<?> declaringType,
+                                           Type type)
+  {
+    // ioc/0242
+    BaseType baseType = createBaseType(declaringType, type, 
+                                       BaseType.ClassFill.PLAIN);
+    
+    return baseType;
+  }
+  
+  protected static BaseType createBaseType(AnnotatedType<?> declaringType,
+                                           Type type,
+                                           BaseType.ClassFill classFill)
+    {
+      if (declaringType instanceof BaseTypeAnnotated) {
+        BaseTypeAnnotated baseTypeAnn = (BaseTypeAnnotated) declaringType;
+        
+        BaseType declBaseType = baseTypeAnn.getBaseTypeImpl();
+      
+        return declBaseType.create(type, 
+                                   baseTypeAnn.getBaseTypeParamMap(), 
+                                   classFill);
+    }
+    /*
+    else if (declaringType instanceof ReflectionAnnotatedType<?>) {
+      declBaseType = ((ReflectionAnnotatedType<?>) declaringType).getBaseTypeImpl();
+      
+      return declBaseType.create(type, declBaseType.getParamMap(), true);
+    }
+    */
+    
+    return createBaseType(type);
+  }
+
+  protected static BaseType createBaseType(Type type)
+  {
+    InjectManager cdiManager = InjectManager.getCurrent();
+    
+    return cdiManager.createSourceBaseType(type);
   }
 
   @Override
   public Type getBaseType()
   {
+    return _type.toType();
+  }
+  
+  @Override
+  public BaseType getBaseTypeImpl()
+  {
     return _type;
+  }
+  
+  @Override
+  public HashMap<String,BaseType> getBaseTypeParamMap()
+  {
+    return getBaseTypeImpl().getParamMap();
+  }
+  
+  @Override
+  public Set<VarType<?>> getTypeVariables()
+  {
+    HashSet<VarType<?>> typeVariables = new HashSet<VarType<?>>();
+    
+    fillTypeVariables(typeVariables);
+    
+    return typeVariables;
+  }
+
+  protected void fillTypeVariables(Set<VarType<?>> typeVariables)
+  {
+    getBaseTypeImpl().fillSyntheticTypes(typeVariables);
   }
 
   @Override
   public Set<Type> getTypeClosure()
   {
     if (_typeSet == null) {
-      InjectManager manager = InjectManager.getCurrent();
+      InjectManager cdiManager = InjectManager.getCurrent();
       
-      BaseType type = manager.createSourceBaseType(_type);
-      
-      _typeSet = type.getTypeClosure(manager);
+      _typeSet = _type.getTypeClosure(cdiManager);
     }
 
     return _typeSet;

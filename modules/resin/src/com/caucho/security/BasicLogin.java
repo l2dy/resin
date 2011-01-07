@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -90,9 +90,9 @@ public class BasicLogin extends AbstractLogin {
   @Override
   protected Principal getUserPrincipalImpl(HttpServletRequest request)
   {
-    final String authorization = request.getHeader("authorization");
+    String authorization = request.getHeader("authorization");
 
-    String userName = (String) request.getAttribute(LOGIN_USER);
+    String userName = (String) request.getAttribute(LOGIN_USER_NAME);
     char []password = null;
 
     if (authorization != null) {
@@ -109,7 +109,7 @@ public class BasicLogin extends AbstractLogin {
       userName = decoded.substring(0, index);
       password = decoded.substring(index + 1).toCharArray();
     } else if (userName != null) {
-      final String value = (String) request.getAttribute(LOGIN_PASSWORD);
+      String value = (String) request.getAttribute(LOGIN_PASSWORD);
 
       if (value != null)
         password = value.toCharArray();

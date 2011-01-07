@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -72,6 +72,7 @@ import com.caucho.config.inject.AnnotatedOverrideMap;
 import com.caucho.config.inject.AnyLiteral;
 import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.reflect.AnnotatedTypeImpl;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.config.reflect.BaseType;
 import com.caucho.inject.Module;
@@ -150,7 +151,7 @@ public class InterceptorFactory<X>
   
   public boolean isStateful()
   {
-    return _isStateful;
+    return _isStateful || getBeanType().isAnnotationPresent(Stateful.class);
   }
   
   public boolean isSelfInterceptor()
@@ -227,8 +228,9 @@ public class InterceptorFactory<X>
       annType = PreDestroy.class;
     }
     
-    // ejb/0cb3
+    // ejb/0cb3, ejb/1060
     ClassInterceptors typeInterceptors = getTypeInterceptors(beanType);
+    //ClassInterceptors typeInterceptors = getTypeInterceptors(method.getDeclaringType());
     
     if (! isExcludeDefaultInterceptors) {
       methodInterceptors = addInterceptors(methodInterceptors,
@@ -686,6 +688,9 @@ public class InterceptorFactory<X>
   private ArrayList<Class<?>> 
   introspectClassInterceptors(AnnotatedType<?> beanType)
   {
+    if (beanType == null)
+      return null;
+    
     ArrayList<Class<?>> classInterceptors = null;
     
     if (beanType.isAnnotationPresent(ExcludeClassInterceptors.class)) {
@@ -702,6 +707,7 @@ public class InterceptorFactory<X>
           classInterceptors.add(iClass);
       }
     }
+    
     return classInterceptors;
   }
   
@@ -816,7 +822,7 @@ public class InterceptorFactory<X>
     if (decorators.size() == 0)
       return;
     
-    if (isPassivating()) {
+    if (isPassivating() || isStateful()) {
       // ioc/0i5e
       CandiUtil.validatePassivatingDecorators(getBeanType().getJavaClass(), decorators);
     }

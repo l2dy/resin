@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -604,17 +604,6 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
         Alarm alarm;
 
         if ((alarm = _heap.extractAlarm(getCurrentTime())) != null) {
-          // throttle alarm invocations by 5ms so quick alarms don't need
-          // extra threads
-          /*
-        if (_concurrentAlarmThrottle < _runningAlarmCount.get()) {
-          try {
-            Thread.sleep(5);
-          } catch (Throwable e) {
-          }
-        }
-           */
-
           _runningAlarmCount.incrementAndGet();
 
           long now;

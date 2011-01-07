@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,6 @@
 
 package com.caucho.hemp.broker;
 
-import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -42,13 +41,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.Extension;
 
-import com.caucho.bam.Actor;
-import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
-import com.caucho.bam.BrokerListener;
+import com.caucho.bam.actor.Actor;
+import com.caucho.bam.broker.AbstractManagedBroker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.mailbox.Mailbox;
+import com.caucho.bam.mailbox.MultiworkerMailbox;
+import com.caucho.bam.mailbox.PassthroughMailbox;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
@@ -62,8 +62,7 @@ import com.caucho.util.L10N;
 /**
  * Broker
  */
-public class HempBroker
-  implements Broker, ActorStream, Extension
+public class HempBroker extends AbstractManagedBroker
 {
   private static final Logger log
     = Logger.getLogger(HempBroker.class.getName());
@@ -80,23 +79,25 @@ public class HempBroker
 
   // actors and clients
   private final
-    ConcurrentHashMap<String,WeakReference<ActorStream>> _actorStreamMap
-    = new ConcurrentHashMap<String,WeakReference<ActorStream>>();
+    ConcurrentHashMap<String,WeakReference<Mailbox>> _actorStreamMap
+    = new ConcurrentHashMap<String,WeakReference<Mailbox>>();
 
   // permanent registered actors
-  private final HashMap<String,ActorStream> _actorMap
-    = new HashMap<String,ActorStream>();
+  private final HashMap<String,Mailbox> _actorMap
+    = new HashMap<String,Mailbox>();
 
-  private final Map<String,WeakReference<ActorStream>> _actorCache
-    = Collections.synchronizedMap(new HashMap<String,WeakReference<ActorStream>>());
+  private final Map<String,WeakReference<Mailbox>> _actorCache
+    = Collections.synchronizedMap(new HashMap<String,WeakReference<Mailbox>>());
 
   private String _domain = "localhost";
   private String _managerJid = "localhost";
 
   private ArrayList<String> _aliasList = new ArrayList<String>();
 
+  /*
   private BrokerListener []_actorManagerList
     = new BrokerListener[0];
+    */
 
   private volatile boolean _isClosed;
 
@@ -148,11 +149,13 @@ public class HempBroker
   /**
    * Returns the stream to the broker
    */
+  /*
   @Override
-  public ActorStream getBrokerStream()
+  public ActorStream getBrokerMailbox()
   {
     return this;
   }
+  */
 
   //
   // configuration
@@ -161,6 +164,7 @@ public class HempBroker
   /**
    * Adds a broker implementation, e.g. the IM broker.
    */
+  /*
   public void addBrokerListener(BrokerListener actorManager)
   {
     BrokerListener []actorManagerList
@@ -171,6 +175,7 @@ public class HempBroker
     actorManagerList[actorManagerList.length - 1] = actorManager;
     _actorManagerList = actorManagerList;
   }
+  */
 
   //
   // API
@@ -179,19 +184,21 @@ public class HempBroker
   /**
    * Creates a session
    */
+  /*
   public String createClient(ActorStream clientStream,
                              String uid,
                              String resourceId)
   {
     String jid = generateJid(uid, resourceId);
 
-    _actorStreamMap.put(jid, new WeakReference<ActorStream>(clientStream));
+    _actorStreamMap.put(jid, new WeakReference<Mailbox>(clientStream));
 
     if (log.isLoggable(Level.FINE))
       log.fine(clientStream + " " + jid + " created");
 
     return jid;
   }
+  */
 
   protected String generateJid(String uid, String resource)
   {
@@ -219,40 +226,41 @@ public class HempBroker
    * Registers a actor
    */
   @Override
-  public void addActor(ActorStream actor)
+  public void addMailbox(Mailbox mailbox)
   {
-    String jid = actor.getJid();
+    String jid = mailbox.getJid();
 
     synchronized (_actorMap) {
-      ActorStream oldActor = _actorMap.get(jid);
+      Mailbox oldMailbox = _actorMap.get(jid);
 
-      if (oldActor != null)
+      if (oldMailbox != null)
         throw new IllegalStateException(L.l("duplicated jid='{0}' is not allowed",
                                             jid));
 
-      _actorMap.put(jid, actor);
+      _actorMap.put(jid, mailbox);
     }
 
     synchronized (_actorStreamMap) {
-      WeakReference<ActorStream> oldRef = _actorStreamMap.get(jid);
+      WeakReference<Mailbox> oldRef = _actorStreamMap.get(jid);
 
       if (oldRef != null && oldRef.get() != null)
         throw new IllegalStateException(L.l("duplicated jid='{0}' is not allowed",
                                             jid));
 
-      _actorStreamMap.put(jid, new WeakReference<ActorStream>(actor));
+      _actorStreamMap.put(jid, new WeakReference<Mailbox>(mailbox));
     }
 
-    if (log.isLoggable(Level.FINE))
-      log.fine(this + " addActor jid=" + jid + " " + actor);
+    if (log.isLoggable(Level.FINEST))
+      log.finest(this + " addMailbox jid=" + jid + " " + mailbox);
  }
 
   /**
    * Removes a actor
    */
-  public void removeActor(ActorStream actor)
+  @Override
+  public void removeMailbox(Mailbox mailbox)
   {
-    String jid = actor.getJid();
+    String jid = mailbox.getJid();
 
     synchronized (_actorMap) {
       _actorMap.remove(jid);
@@ -263,7 +271,7 @@ public class HempBroker
     }
 
     if (log.isLoggable(Level.FINE))
-      log.fine(this + " removeActor jid=" + jid + " " + actor);
+      log.fine(this + " removeActor jid=" + jid + " " + mailbox);
   }
 
   /**
@@ -290,155 +298,19 @@ public class HempBroker
     return _domain;
   }
 
-  /**
-   * Sends a message
-   */
-  public void message(String to, String from, Serializable value)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null)
-      stream.message(to, from, value);
-    else {
-      log.fine(this + " sendMessage to=" + to + " from=" + from
-               + " is an unknown actor stream.");
-    }
-  }
-
-  /**
-   * Sends a message
-   */
-  public void messageError(String to,
-                               String from,
-                               Serializable value,
-                               ActorError error)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null)
-      stream.messageError(to, from, value, error);
-    else {
-      log.fine(this + " sendMessageError to=" + to + " from=" + from
-               + " error=" + error + " is an unknown actor stream.");
-    }
-  }
-
-  /**
-   * Query an entity
-   */
-  public void queryGet(long id, String to, String from,
-                              Serializable payload)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null) {
-      try {
-        stream.queryGet(id, to, from, payload);
-      } catch (Exception e) {
-        log.log(Level.FINER, e.toString(), e);
-
-        ActorError error = ActorError.create(e);
-
-        queryError(id, from, to, payload, error);
-      }
-
-      return;
-    }
-
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(this + " queryGet to unknown stream to='" + to
-               + "' from=" + from);
-    }
-
-    String msg = L.l("'{0}' is an unknown actor for queryGet", to);
-
-    ActorError error = new ActorError(ActorError.TYPE_CANCEL,
-                                    ActorError.SERVICE_UNAVAILABLE,
-                                    msg);
-
-    queryError(id, from, to, payload, error);
-  }
-
-  /**
-   * Query an entity
-   */
   @Override
-  public void querySet(long id,
-                       String to,
-                       String from,
-                       Serializable payload)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null) {
-      try {
-        stream.querySet(id, to, from, payload);
-      } catch (Exception e) {
-        log.log(Level.FINER, e.toString(), e);
-
-        ActorError error = ActorError.create(e);
-
-        queryError(id, from, to, payload, error);
-      }
-
-      return;
-    }
-
-    if (log.isLoggable(Level.FINE)) {
-      log.fine(this + " querySet to unknown stream '" + to
-               + "' from=" + from);
-    }
-
-    String msg = L.l("'{0}' is an unknown actor for querySet", to);
-
-    ActorError error = new ActorError(ActorError.TYPE_CANCEL,
-                                      ActorError.SERVICE_UNAVAILABLE,
-                                      msg);
-  }
-
-  /**
-   * Query an entity
-   */
-  public void queryResult(long id, String to, String from, Serializable value)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null)
-      stream.queryResult(id, to, from, value);
-    else
-      throw new RuntimeException(L.l("{0}: {1} is an unknown actor stream.",
-                                     this, to));
-  }
-
-  /**
-   * Query an entity
-   */
-  public void queryError(long id,
-                         String to,
-                         String from,
-                         Serializable payload,
-                         ActorError error)
-  {
-    ActorStream stream = findActorStream(to);
-
-    if (stream != null)
-      stream.queryError(id, to, from, payload, error);
-    else
-      throw new RuntimeException(L.l("{0} is an unknown actor stream.", to));
-  }
-
-  protected ActorStream findActorStream(String jid)
+  public Mailbox getMailbox(String jid)
   {
     if (jid == null)
       return null;
 
-    WeakReference<ActorStream> ref = _actorStreamMap.get(jid);
+    WeakReference<Mailbox> ref = _actorStreamMap.get(jid);
 
     if (ref != null) {
-      ActorStream stream = ref.get();
+      Mailbox mailbox = ref.get();
 
-      if (stream != null)
-        return stream;
+      if (mailbox != null)
+        return mailbox;
     }
 
     if (jid.endsWith("@")) {
@@ -456,7 +328,7 @@ public class HempBroker
       actorStream = actor.getActorStream();
 
       if (actorStream != null) {
-        return putActorStream(jid, actorStream);
+        return putActorStream(jid, new MultiworkerMailbox(jid, actorStream, this, 1));
       }
     }
     else {
@@ -474,18 +346,18 @@ public class HempBroker
     return null;
   }
 
-  private ActorStream putActorStream(String jid, ActorStream actorStream)
+  private Mailbox putActorStream(String jid, Mailbox actorStream)
   {
     if (actorStream == null)
       return null;
 
     synchronized (_actorStreamMap) {
-      WeakReference<ActorStream> ref = _actorStreamMap.get(jid);
+      WeakReference<Mailbox> ref = _actorStreamMap.get(jid);
 
       if (ref != null)
         return ref.get();
 
-      _actorStreamMap.put(jid, new WeakReference<ActorStream>(actorStream));
+      _actorStreamMap.put(jid, new WeakReference<Mailbox>(actorStream));
 
       return actorStream;
     }
@@ -543,13 +415,13 @@ public class HempBroker
       */
   }
 
-  protected ActorStream findDomain(String domain)
+  protected Mailbox findDomain(String domain)
   {
     if (domain == null)
       return null;
 
     if ("local".equals(domain))
-      return getBrokerStream();
+      return getBrokerMailbox();
 
     Broker broker = null;
     
@@ -559,7 +431,7 @@ public class HempBroker
     if (broker == this)
       return null;
 
-    ActorStream stream = null;
+    Mailbox stream = null;
 
     if (_domainManager != null)
       stream = _domainManager.findDomain(domain);
@@ -569,12 +441,12 @@ public class HempBroker
 
   protected boolean startActorFromManager(String jid)
   {
+    /*
     for (BrokerListener manager : _actorManagerList) {
-      /*
       if (manager.startActor(jid))
         return true;
-        */
     }
+        */
 
     return false;
   }
@@ -609,7 +481,7 @@ public class HempBroker
   }
 
   //
-  // webbeans callbacks
+  // CDI callbacks
   //
 
   public void addStartupActor(Bean bean,
@@ -630,7 +502,7 @@ public class HempBroker
 
     Actor actor = (Actor) beanManager.getReference(bean);
 
-    actor.setLinkStream(this);
+    actor.setBroker(this);
 
     String jid = name;
 
@@ -649,16 +521,21 @@ public class HempBroker
 
     Actor bamActor = actor;
 
+    Mailbox mailbox;
+    
     // queue
     if (threadMax > 0) {
       ActorStream actorStream = bamActor.getActorStream();
-      actorStream = new HempMemoryQueue(actorStream, this, threadMax);
-      bamActor.setActorStream(actorStream);
+      mailbox = new MultiworkerMailbox(jid, actorStream, this, threadMax);
+      // bamActor.setActorStream(actorStream);
+    }
+    else {
+      mailbox = new PassthroughMailbox(jid, bamActor.getActorStream(), this);
     }
 
-    addActor(bamActor.getActorStream());
+    addMailbox(mailbox);
 
-    Environment.addCloseListener(new ActorClose(bamActor));
+    Environment.addCloseListener(new ActorClose(mailbox));
   }
 
   private void startActor(Bean bean, AdminService bamService)
@@ -667,7 +544,7 @@ public class HempBroker
 
     Actor actor = (Actor) beanManager.getReference(bean);
 
-    actor.setLinkStream(this);
+    actor.setBroker(this);
 
     String jid = bamService.name();
 
@@ -682,17 +559,17 @@ public class HempBroker
     int threadMax = bamService.threadMax();
 
     Actor bamActor = actor;
-
+    Mailbox mailbox = null;
     // queue
     if (threadMax > 0) {
       ActorStream actorStream = bamActor.getActorStream();
-      actorStream = new HempMemoryQueue(actorStream, this, threadMax);
-      bamActor.setActorStream(actorStream);
+      mailbox = new MultiworkerMailbox(jid, actorStream, this, threadMax);
+      bamActor.setMailbox(mailbox);
     }
 
-    addActor(bamActor.getActorStream());
+    addMailbox(mailbox);
 
-    Environment.addCloseListener(new ActorClose(bamActor));
+    Environment.addCloseListener(new ActorClose(mailbox));
   }
 
   public void close()
@@ -806,16 +683,16 @@ public class HempBroker
   }
 
   public class ActorClose {
-    private Actor _actor;
+    private Mailbox _actor;
 
-    ActorClose(Actor actor)
+    ActorClose(Mailbox actor)
     {
       _actor = actor;
     }
 
     public void close()
     {
-      removeActor(_actor.getActorStream());
+      removeMailbox(_actor);
     }
   }
 }

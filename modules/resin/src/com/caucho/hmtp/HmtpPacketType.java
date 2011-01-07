@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,8 +37,7 @@ public enum HmtpPacketType {
   MESSAGE,
   MESSAGE_ERROR,
 
-  QUERY_GET,
-  QUERY_SET,
+  QUERY,
   QUERY_RESULT,
   QUERY_ERROR;
   

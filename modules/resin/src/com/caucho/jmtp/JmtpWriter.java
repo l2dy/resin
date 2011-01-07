@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,22 +29,22 @@
 
 package com.caucho.jmtp;
 
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.ProtocolException;
-import com.caucho.bam.ActorError;
-import com.caucho.json.*;
-import com.caucho.util.*;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.logging.*;
+import com.caucho.bam.ActorError;
+import com.caucho.bam.ProtocolException;
+import com.caucho.bam.broker.AbstractBroker;
+import com.caucho.json.JsonOutput;
+import com.caucho.util.Utf8;
 
 /**
  * JmtpWriteStream writes JMTP packets to an OutputStream.
  */
-public class JmtpWriter implements ActorStream
+public class JmtpWriter extends AbstractBroker
 {
   private static final Logger log
     = Logger.getLogger(JmtpWriter.class.getName());
@@ -392,7 +392,7 @@ public class JmtpWriter implements ActorStream
       return;
     }
 
-    Class cl = value.getClass();
+    Class<?> cl = value.getClass();
 
     if (cl == String.class) {
       writeString(os, "String\n");

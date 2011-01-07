@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -84,8 +84,10 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
         && (map.get("caucho.ejb.lock") == null)) {
       map.put("caucho.ejb.lock", "done");
 
+      // TCK: fairness flag must be true for the tck
       out.println();
-      out.println("private transient final java.util.concurrent.locks.ReentrantReadWriteLock _readWriteLock = new java.util.concurrent.locks.ReentrantReadWriteLock();");
+      out.println("private transient final java.util.concurrent.locks.ReentrantReadWriteLock _readWriteLock");
+      out.println(" = new java.util.concurrent.locks.ReentrantReadWriteLock(true);");
     }
 
     super.generateMethodPrologue(out, map);
@@ -97,17 +99,7 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
   @Override
   public void generatePreTry(JavaWriter out) throws IOException
   {
-    super.generatePreTry(out);
-    
     out.println("boolean isLocked = false;");
-  }
-
-    /**
-     * Generates the method interception code.
-     */
-    @Override
-    public void generatePreCall(JavaWriter out) throws IOException
-    {
     if (_isContainerManaged && (_lockType != null)) {
       out.println();
 
@@ -121,7 +113,7 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
         } else {
             // XXX: This should probably be put behind the lock utility as well,
                 // mostly to maintain code symmetry.
-                out.println("_readWriteLock.readLock().lock();");
+          out.println("_readWriteLock.readLock().lock();");
         }
         break;
 
@@ -137,20 +129,30 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
         }
         break;
       }
+      
+      out.println();
+      out.println("try {");
+      out.pushDepth();
     }
     
     out.println("isLocked = true;");
 
-    super.generatePreCall(out);
+    super.generatePreTry(out);
   }
 
   /**
    * Generates the method interception code.
    */
   @Override
-  public void generateFinally(JavaWriter out) throws IOException
+  public void generatePostFinally(JavaWriter out) throws IOException
   {
+    super.generatePostFinally(out);
+    
     if (_isContainerManaged && (_lockType != null)) {
+      out.popDepth();
+      out.println("} finally {");
+      out.pushDepth();
+      
       switch (_lockType) {
       case READ:
         out.println();
@@ -164,8 +166,9 @@ public class LockGenerator<X> extends AbstractAspectGenerator<X> {
         out.println("  _readWriteLock.writeLock().unlock();");
         break;
       }
+      
+      out.popDepth();
+      out.println("}");
     }
-    
-    super.generateFinally(out);
   }
 }

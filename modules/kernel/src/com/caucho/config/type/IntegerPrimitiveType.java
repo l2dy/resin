@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,7 +35,7 @@ import com.caucho.util.*;
 /**
  * Represents an int type.
  */
-public final class IntegerPrimitiveType extends ConfigType
+public final class IntegerPrimitiveType extends ConfigType<Integer>
 {
   private static final L10N L = new L10N(IntegerPrimitiveType.class);
   
@@ -53,7 +53,7 @@ public final class IntegerPrimitiveType extends ConfigType
   /**
    * Returns the Java type.
    */
-  public Class getType()
+  public Class<Integer> getType()
   {
     return int.class;
   }

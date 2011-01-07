@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,7 +39,7 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
-import com.caucho.bam.Broker;
+import com.caucho.bam.broker.Broker;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.network.listen.AbstractProtocolConnection;

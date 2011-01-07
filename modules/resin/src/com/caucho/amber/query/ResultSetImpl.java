@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -122,7 +122,7 @@ public class ResultSetImpl implements ResultSet {
   /**
    * Sets the query.
    */
-  public void setQuery(SelectQuery query)
+  public void setQuery(AmberSelectQuery query)
   {
     _fromList = query.getFromList();
     _resultList = query.getResultList();

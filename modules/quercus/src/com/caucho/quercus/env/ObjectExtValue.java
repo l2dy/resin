@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -243,6 +243,10 @@ public class ObjectExtValue extends ObjectValue
    */
   protected Value getFieldExt(Env env, StringValue name)
   {
+      Entry e = this.getEntry(env, name);
+      if(e != null && e._value != NullValue.NULL && e._value != UnsetValue.UNSET)
+        return e._value;
+
     return _quercusClass.getField(env, this, name);
   }
 
@@ -740,7 +744,16 @@ public class ObjectExtValue extends ObjectValue
     if (delegate != null)
       return delegate.getIterator(env, this);
     else
-      return new KeyValueIterator(_entries);
+      return getBaseIterator(env);
+  }
+
+  /**
+   * Returns an iterator for the key => value pairs.
+   */
+  @Override
+  public Iterator<Map.Entry<Value, Value>> getBaseIterator(Env env)
+  {
+    return new KeyValueIterator(_entries);
   }
 
   /**

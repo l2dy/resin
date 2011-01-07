@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -299,8 +299,6 @@ public class Config {
       thread.setContextClassLoader(_classLoader);
 
       XmlConfigContext builder = createBuilder();
-
-      InjectManager cdiManager = InjectManager.create();
 
       setProperty("__FILE__", FileVar.__FILE__);
       setProperty("__DIR__", DirVar.__DIR__);

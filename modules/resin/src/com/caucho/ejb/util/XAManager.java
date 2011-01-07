@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -93,9 +93,9 @@ public class XAManager {
       Transaction xa = tm.getTransaction();
 
       if (xa != null && sync != null) {
-        sync.afterBegin();
-
         xa.registerSynchronization(new SynchronizationAdapter(sync));
+        
+        sync.afterBegin();
       }
     } catch (RuntimeException e) {
       throw e;

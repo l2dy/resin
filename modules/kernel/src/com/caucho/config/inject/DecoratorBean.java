@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -300,6 +300,7 @@ public class DecoratorBean<T> implements Decorator<T>
         if (baseType.getRawClass().equals(Serializable.class))
           continue;
         
+        // ioc/0i5g, ioc/0i3r
         if (baseType.isAssignableFrom(delegateType)) {
           _typeSet.add(type);
         }
@@ -308,6 +309,10 @@ public class DecoratorBean<T> implements Decorator<T>
           // only types declared directly are errors
           throw new ConfigException(L.l("{0}: '{1}' is an Decorator type not implemented by the delegate {2}",
                                         _type, baseType, delegateType));
+        }
+        else {
+          // ioc/0i3r
+          _typeSet.add(type);
         }
       }
     }

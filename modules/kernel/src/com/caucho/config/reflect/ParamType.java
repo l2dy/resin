@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -62,6 +62,13 @@ public class ParamType extends BaseType implements ParameterizedType
     for (int i = 0; i < param.length; i++) {
       _actualArguments[i] = param[i].toType();
     }
+    
+    /*
+    if (type.equals(Set.class)) {
+      // System.out.println("PTYPE: " + this + " " + type + " " + paramMap);
+      // Thread.dumpStack();
+    }
+    */
   }
   
   @Override
@@ -177,6 +184,11 @@ public class ParamType extends BaseType implements ParameterizedType
     if (! getRawClass().isAssignableFrom(type.getRawClass()))
       return false;
     
+    if (! getRawClass().equals(type.getRawClass())) {
+      // ioc/0pb0
+      return false;
+    }
+    
     BaseType []paramA = getParameters();
     BaseType []paramB = type.getParameters();
 
@@ -271,7 +283,7 @@ public class ParamType extends BaseType implements ParameterizedType
   {
     StringBuilder sb = new StringBuilder();
 
-    sb.append(getRawClass());
+    sb.append(getRawClass().toString());
     sb.append("<");
 
     for (int i = 0; i < _param.length; i++) {

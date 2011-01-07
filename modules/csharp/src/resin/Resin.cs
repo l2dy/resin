@@ -30,7 +30,7 @@ using System.Reflection;
 using System.Collections;
 using System.Text;
 using System.IO;
-using Microsoft.Win32;
+using Microsoft.Win32; 
 using System.Diagnostics;
 using System.Windows.Forms;
 using System.ServiceProcess;
@@ -188,10 +188,23 @@ namespace Caucho
       else if (ResinArgs.DynamicServer != null)
         arguments.Append("-dynamic-server ").Append(ResinArgs.DynamicServer).Append(' ');
 
-      arguments.Append(ResinArgs.ResinArguments).Append(' ');
+      if (ResinArgs.IsAdminCommand) {
+        arguments.Append(command).Append(' ');
+        if (ResinArgs.WinUser != null)
+          arguments.Append("-user ").Append(ResinArgs.User).Append(' ');
+        if (ResinArgs.Password != null)
+          arguments.Append("-password ").Append(ResinArgs.Password).Append(' ');
+           
+        if (ResinArgs.Name != null)
+          arguments.Append("-name ").Append(ResinArgs.Name).Append(' ');
 
-      if (command != null)
+        arguments.Append(ResinArgs.ResinArguments);
+      } else if (command == null) {
+        arguments.Append(ResinArgs.ResinArguments).Append(' ');
+      } else {
+        arguments.Append(ResinArgs.ResinArguments).Append(' ');
         arguments.Append(command);
+      }
 
       startInfo.Arguments = arguments.ToString();
 

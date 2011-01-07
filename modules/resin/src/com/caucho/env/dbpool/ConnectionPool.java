@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,7 @@
 
 package com.caucho.env.dbpool;
 
-import java.util.ArrayList;
-import java.util.Date;
+import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
@@ -50,6 +49,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
 import com.caucho.env.meter.ActiveTimeMeter;
 import com.caucho.env.meter.MeterService;
+import com.caucho.env.warning.WarningService;
 import com.caucho.inject.Module;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.AbstractManagedObject;
@@ -57,11 +57,7 @@ import com.caucho.management.server.ConnectionPoolMXBean;
 import com.caucho.transaction.ManagedXAResource;
 import com.caucho.transaction.UserTransactionImpl;
 import com.caucho.transaction.UserTransactionProxy;
-import com.caucho.util.Alarm;
-import com.caucho.util.AlarmListener;
-import com.caucho.util.L10N;
-import com.caucho.util.ThreadDump;
-import com.caucho.util.WeakAlarm;
+import com.caucho.util.*;
 
 /**
  * Implementation of the connection manager.
@@ -89,7 +85,7 @@ public class ConnectionPool extends AbstractManagedObject
   private int _maxOverflowConnections = 1024;
 
   // the maximum number of connections in the process of creation
-  private int _maxCreateConnections = 5;
+  private int _maxCreateConnections = 20;
 
   // max idle size
   private int _maxIdleCount = 1024;
@@ -830,18 +826,16 @@ public class ConnectionPool extends AbstractManagedObject
     if (! _lifecycle.isActive())
       throw new IllegalStateException(L.l("Can't allocate connection because the connection pool is closed."));
 
-    String message = (this + " pool overflow"
+    String message = (this + " pool throttled create timeout"
         + " (pool-size=" + _connectionPool.size()
         + ", max-connections=" + _maxConnections
         + ", create-count=" + _createCount.get()
         + ", max-create-connections=" + _maxCreateConnections
         + ")");
 
-    ConnectionPoolHealthCheck.currentWarning(message);
-
+    // XXX: This isn't a warning, it's a health nexus message.
+    WarningService.sendCurrentWarning(this, message);
     log.warning(message);
-
-    ThreadDump.dumpThreads();
 
     if (startCreateOverflow()) {
       try {
@@ -850,6 +844,17 @@ public class ConnectionPool extends AbstractManagedObject
         finishCreateConnection();
       }
     }
+
+    message = (this + " pool overflow failed to create"
+        + " (pool-size=" + _connectionPool.size()
+        + ", max-connections=" + _maxConnections
+        + ", create-count=" + _createCount.get()
+        + ", max-create-connections=" + _maxCreateConnections
+        + ")");
+
+    log.warning(message);
+
+    ThreadDump.dumpThreads();
 
     throw new ResourceException(L.l("Can't create overflow connection connection-max={0}",
                                     _maxConnections));
@@ -1058,10 +1063,9 @@ public class ConnectionPool extends AbstractManagedObject
                          _maxCreateConnections,
                          _maxOverflowConnections);
 
-    ConnectionPoolHealthCheck.currentWarning(message);
-
+    // XXX: not exactly a warning, it's a health check system.
+    WarningService.sendCurrentWarning(this, message);
     log.warning(message);
-
     
     throw new ResourceException(message);
  }
@@ -1072,6 +1076,9 @@ public class ConnectionPool extends AbstractManagedObject
     
     try {
       synchronized (_availableLock) {
+        // return false only if the timeout occurs before the wait
+        boolean isAfterWait = false;
+        
         while (! isIdleAvailable() && ! isCreateAvailable()) {
           try {
             long now = Alarm.getCurrentTimeActual();
@@ -1079,10 +1086,12 @@ public class ConnectionPool extends AbstractManagedObject
             long delta = expireTime - now;
 
             if (delta <= 0)
-              return false;
-        
+              return isAfterWait;
+            
             Thread.interrupted();
             _availableLock.wait(delta);
+            
+            isAfterWait = true;
           } catch (InterruptedException e) {
             log.log(Level.FINER, e.toString(), e);
           }

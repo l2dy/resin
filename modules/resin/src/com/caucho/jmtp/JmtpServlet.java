@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,21 +29,28 @@
 
 package com.caucho.jmtp;
 
-import com.caucho.bam.Actor;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorException;
-import com.caucho.config.ConfigException;
-import com.caucho.json.*;
-import com.caucho.servlet.*;
-import com.caucho.util.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Reader;
+import java.util.logging.Logger;
 
-import java.io.*;
-import java.net.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.util.logging.*;
-import javax.servlet.*;
+import javax.servlet.GenericServlet;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+
+import com.caucho.bam.actor.Actor;
+import com.caucho.bam.broker.AbstractBroker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.mailbox.Mailbox;
+import com.caucho.bam.stream.AbstractActorStream;
+import com.caucho.bam.stream.ActorStream;
+import com.caucho.config.ConfigException;
+import com.caucho.util.L10N;
+import com.caucho.websocket.AbstractWebSocketListener;
+import com.caucho.websocket.WebSocketContext;
+import com.caucho.websocket.WebSocketServletRequest;
 
 /**
  * JmtpReader stream handles client packets received from the server.
@@ -54,9 +61,9 @@ public class JmtpServlet extends GenericServlet {
   private static final Logger log
     = Logger.getLogger(JmtpServlet.class.getName());
 
-  private Class _actorClass;
+  private Class<?> _actorClass;
 
-  public void setActorClass(Class actorClass)
+  public void setActorClass(Class<?> actorClass)
   {
     _actorClass = actorClass;
   }
@@ -71,7 +78,7 @@ public class JmtpServlet extends GenericServlet {
                       ServletResponse response)
     throws IOException, ServletException
   {
-    JanusServletRequest wsRequest = (JanusServletRequest) request;
+    WebSocketServletRequest wsRequest = (WebSocketServletRequest) request;
 
     Actor actor;
 
@@ -86,7 +93,7 @@ public class JmtpServlet extends GenericServlet {
     wsRequest.startWebSocket(listener);
   }
 
-  static class Listener implements JanusListener {
+  static class Listener extends AbstractWebSocketListener {
     private Actor _actor;
     private ActorStream _actorStream;
 
@@ -95,39 +102,81 @@ public class JmtpServlet extends GenericServlet {
 
     private JmtpReader _jmtpReader;
     private JmtpWriter _jmtpWriter;
+    
+    private JmtpMailbox _jmtpMailbox;
+    private JmtpBroker _jmtpBroker;
 
     Listener(Actor actor)
     {
       _actor = actor;
+      
+      if (_actor == null)
+        throw new NullPointerException();
     }
 
-    public void onStart(JanusContext context)
+    @Override
+    public void onStart(WebSocketContext context)
       throws IOException
     {
-      _is = context.openMessageInputStream();
-      _os = context.openMessageOutputStream();
-
-      _jmtpReader = new JmtpReader(_is);
-      _jmtpWriter = new JmtpWriter(_os);
-
-      _actor.setLinkStream(_jmtpWriter);
+      _jmtpMailbox = new JmtpMailbox(this);
+      
+      _actor.setBroker(new JmtpBroker(this));
       _actorStream = _actor.getActorStream();
     }
 
-    public void onMessage(JanusContext context)
+    @Override
+    public void onReadBinary(WebSocketContext context, InputStream is)
       throws IOException
     {
-      _jmtpReader.readPacket(_actorStream);
+      JmtpReader reader = new JmtpReader(is);
+      
+      reader.readPacket(_actorStream);
     }
 
-    public void onComplete(JanusContext context)
-      throws IOException
+    public void onReadText(WebSocketContext context,
+                           Reader is)
+    throws IOException
     {
-    }
+      /*
+      JmtpReader reader = new JmtpReader(is);
 
-    public void onTimeout(JanusContext context)
-      throws IOException
-    {
+      reader.readPacket(_actorStream);
+       */
     }
+  }
+  
+  private static class JmtpBroker extends AbstractBroker {
+    private Listener _listener;
+    
+    JmtpBroker(Listener listener)
+    {
+      _listener = listener;
+    }
+    
+    public Mailbox getMailbox(String jid)
+    {
+      return _listener._jmtpMailbox;
+    }
+  }
+  
+  private static class JmtpMailbox extends AbstractActorStream implements Mailbox {
+    private Listener _listener;
+    
+    JmtpMailbox(Listener listener)
+    {
+      _listener = listener;
+    }
+    
+    public Broker getBroker()
+    {
+      return _listener._jmtpBroker;
+    }
+    
+    @Override
+    public ActorStream getActorStream()
+    {
+      return null;
+    }
+    
   }
 }

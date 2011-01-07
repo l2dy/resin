@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -204,13 +204,15 @@ public class SingletonManager<X> extends AbstractSessionManager<X> {
           _delegates = createDelegates(env);
 
         _interceptors = bean.__caucho_inject(_delegates, _interceptors, env);
-      } catch (Exception e) {
-        e.printStackTrace();
         
+        /*
+      } catch (Exception e) {
         log.log(Level.WARNING, e.toString(), e);
       }
       
       try {
+      */
+        
         bean.__caucho_postConstruct();
       } catch (RuntimeException e) {
         throw e;

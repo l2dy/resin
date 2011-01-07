@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -620,7 +620,7 @@ public class HttpRequest extends AbstractHttpRequest
       if (certs != null && certs.length > 0) {
         request.setAttribute("javax.servlet.request.X509Certificate",
                              certs); //spec mandates array
-        request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_NAME,
+        request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_USER_NAME,
                              certs[0].getSubjectDN());
       }
     } catch (Exception e) {
@@ -1133,7 +1133,7 @@ public class HttpRequest extends AbstractHttpRequest
     CharSegment []headerKeys = _headerKeys;
     CharSegment []headerValues = _headerValues;
 
-    boolean debug = log.isLoggable(Level.FINE);
+    boolean isLogFine = log.isLoggable(Level.FINE);
 
     while (true) {
       int ch;
@@ -1209,7 +1209,7 @@ public class HttpRequest extends AbstractHttpRequest
       int valueLength = headerOffset - valueOffset;
       headerValues[headerSize].init(headerBuffer, valueOffset, valueLength);
 
-      if (debug) {
+      if (isLogFine) {
         log.fine(dbgId() +
                  headerKeys[headerSize] + ": " + headerValues[headerSize]);
       }
@@ -1242,11 +1242,6 @@ public class HttpRequest extends AbstractHttpRequest
     getReadStream().setSource(_rawInputStream);
     
     return context;
-  }
-
-  @Override
-  public final void onCloseConnection()
-  {
   }
 
   /**

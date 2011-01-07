@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -170,14 +170,16 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
       out.println("  extends " + getBeanType().getJavaClass().getName());
     
     out.print("  implements SessionProxyFactory<T>");
-    out.print(", " + CandiEnhancedBean.class.getName());
+    out.print(",\n    " + CandiEnhancedBean.class.getName());
 
     for (AnnotatedType<? super X> apiType : getLocalApi()) {
-      out.print(", " + apiType.getJavaClass().getName());
+      out.print(",\n    ");
+      out.printType(apiType.getBaseType());
     }
 
     for (AnnotatedType<? super X> apiType : getRemoteApi()) {
-      out.print(", " + apiType.getJavaClass().getName());
+      out.print(",\n    ");
+      out.printType(apiType.getBaseType());
     }
     
     out.println();
@@ -217,7 +219,7 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     String beanClassName = getBeanType().getJavaClass().getName();
     
     out.println("_bean = (" + beanClassName + ") _manager.newInstance(parentEnv);");
-    
+
     super.generateInjectContent(out, map);
   }
 
@@ -229,7 +231,6 @@ public class SingletonGenerator<X> extends SessionGenerator<X> {
     out.println(", SingletonContext context)");
     out.println("{");
     out.pushDepth();
-
     out.println("_manager = manager;");
     out.popDepth();
     out.println("}");

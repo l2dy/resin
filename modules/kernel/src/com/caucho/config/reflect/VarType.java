@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package com.caucho.config.reflect;
 import java.lang.reflect.GenericDeclaration;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
+import java.util.Set;
 
 import com.caucho.inject.Module;
 
@@ -60,7 +61,7 @@ public class VarType<D extends GenericDeclaration> extends BaseType
   @Override
   public D getGenericDeclaration()
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    return (D) new GenericDeclarationImpl();
   }
 
   @Override
@@ -140,6 +141,12 @@ public class VarType<D extends GenericDeclaration> extends BaseType
   }
 
   @Override
+  public void fillSyntheticTypes(Set<VarType<?>> varTypeList)
+  {
+    varTypeList.add(this);
+  }
+
+  @Override
   public int hashCode()
   {
     return 17 + 37 * _name.hashCode();
@@ -172,5 +179,14 @@ public class VarType<D extends GenericDeclaration> extends BaseType
     }
     
     return sb.toString();
+  }
+  
+  static class GenericDeclarationImpl implements GenericDeclaration {
+    @Override
+    public TypeVariable<?>[] getTypeParameters()
+    {
+      return null;
+    }
+    
   }
 }

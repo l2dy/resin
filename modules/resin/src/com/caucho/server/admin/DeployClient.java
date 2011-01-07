@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,12 +36,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.caucho.bam.ActorClient;
 import com.caucho.bam.ActorError;
-import com.caucho.bam.Broker;
-import com.caucho.bam.QueryCallback;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.ServiceUnavailableException;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.query.QueryCallback;
 import com.caucho.cloud.deploy.CopyTagQuery;
 import com.caucho.cloud.deploy.RemoveTagQuery;
 import com.caucho.cloud.deploy.SetTagQuery;
@@ -74,7 +74,7 @@ public class DeployClient implements Repository
   private static final long DEPLOY_TIMEOUT = 600 * 1000L;
 
   private Broker _broker;
-  private ActorClient _bamClient;
+  private ActorSender _bamClient;
   private String _deployJid;
   
   private String _url;
@@ -249,7 +249,7 @@ public class DeployClient implements Repository
     CopyTagQuery query
       = new CopyTagQuery(targetId, sourceId, target.getAttributes());
 
-    return (Boolean) querySet(query);
+    return (Boolean) query(query);
   }
 
   /**
@@ -267,7 +267,7 @@ public class DeployClient implements Repository
 
     RemoveTagQuery query = new RemoveTagQuery(tag, commit.getAttributes());
 
-    return (Boolean) querySet(query);
+    return (Boolean) query(query);
   }
   
   /**
@@ -277,7 +277,7 @@ public class DeployClient implements Repository
   {
     TagStateQuery query = new TagStateQuery(tag);
     
-    query = (TagStateQuery) queryGet(query);
+    query = (TagStateQuery) query(query);
     
     if (query != null)
       return query.getState();
@@ -292,7 +292,7 @@ public class DeployClient implements Repository
   {
     TagStateQuery query = new TagStateQuery(tag);
     
-    query = (TagStateQuery) queryGet(query);
+    query = (TagStateQuery) query(query);
     
     if (query != null)
       return query.getThrowable();
@@ -341,14 +341,14 @@ public class DeployClient implements Repository
 
     DeploySendQuery query = new DeploySendQuery(sha1, source);
 
-    querySet(query);
+    query(query);
   }
 
   public String []getCommitList(String []commitList)
   {
     DeployCommitListQuery query = new DeployCommitListQuery(commitList);
     
-    DeployCommitListQuery result = (DeployCommitListQuery) queryGet(query);
+    DeployCommitListQuery result = (DeployCommitListQuery) query(query);
 
     return result.getCommitList();
   }
@@ -363,7 +363,7 @@ public class DeployClient implements Repository
   {
     DeployAddFileQuery query = new DeployAddFileQuery(tag, name, sha1);
 
-    return (String) querySet(query);
+    return (String) query(query);
   }
 
   private boolean putTag(String tag,
@@ -386,7 +386,7 @@ public class DeployClient implements Repository
     SetTagQuery query
       = new SetTagQuery(tag, contentHash, attributeCopy);
 
-    querySet(query);
+    query(query);
     
     return true;
   }
@@ -406,14 +406,27 @@ public class DeployClient implements Repository
     SetTagQuery query
       = new SetTagQuery(tag, contentHash, attributeCopy);
 
-    return (String) querySet(query);
+    return (String) query(query);
   }
   
   public TagResult []queryTags(String pattern)
   {
     QueryTagsQuery query = new QueryTagsQuery(pattern);
 
-    return (TagResult []) queryGet(query);
+    return (TagResult []) query(query);
+  }
+
+  /**
+   * Starts a controller based on a deployment tag: wars/foo.com/my-war
+   *
+   * @param tag the encoded controller name
+   *
+   */
+  public Boolean restart(String tag)
+  {
+    ControllerRestartQuery query = new ControllerRestartQuery(tag);
+
+    return (Boolean) query(query);
   }
 
   /**
@@ -427,7 +440,7 @@ public class DeployClient implements Repository
   {
     ControllerStartQuery query = new ControllerStartQuery(tag);
 
-    return (Boolean) querySet(query);
+    return (Boolean) query(query);
   }
 
   /**
@@ -441,7 +454,7 @@ public class DeployClient implements Repository
   {
     ControllerStopQuery query = new ControllerStopQuery(tag);
 
-    return (Boolean) querySet(query);
+    return (Boolean) query(query);
   }
 
   /**
@@ -455,7 +468,7 @@ public class DeployClient implements Repository
   {
     ControllerDeployQuery query = new ControllerDeployQuery(tag);
 
-    return (Boolean) querySet(query);
+    return (Boolean) query(query);
   }
 
   /**
@@ -475,7 +488,7 @@ public class DeployClient implements Repository
   {
     StatusQuery query = new StatusQuery(tag);
 
-    return (StatusQuery) queryGet(query);
+    return (StatusQuery) query(query);
   }
 
   /**
@@ -485,7 +498,7 @@ public class DeployClient implements Repository
   {
     ListHostsQuery query = new ListHostsQuery();
 
-    return (HostQuery []) queryGet(query);
+    return (HostQuery []) query(query);
   }
 
   /**
@@ -493,7 +506,7 @@ public class DeployClient implements Repository
    **/
   public WebAppQuery []listWebApps(String host)
   {
-    return (WebAppQuery []) queryGet(new ListWebAppsQuery(host));
+    return (WebAppQuery []) query(new ListWebAppsQuery(host));
   }
 
   /**
@@ -501,13 +514,13 @@ public class DeployClient implements Repository
    **/
   public TagQuery []listTags(String host)
   {
-    return (TagQuery []) queryGet(new ListTagsQuery(host));
+    return (TagQuery []) query(new ListTagsQuery(host));
   }
 
-  protected Serializable queryGet(Serializable query)
+  protected Serializable query(Serializable query)
   {
     try {
-      return (Serializable) _bamClient.queryGet(_deployJid, query);
+      return (Serializable) _bamClient.query(_deployJid, query);
     } catch (ServiceUnavailableException e) {
       throw new ServiceUnavailableException("Deploy service is not available, possibly because the resin.xml is missing a <resin:DeployService> tag\n  " + e.getMessage(),
                                             e);
@@ -517,11 +530,6 @@ public class DeployClient implements Repository
   public void close()
   {
     _bamClient.close();
-  }
-
-  protected Serializable querySet(Serializable query)
-  {
-    return (Serializable) _bamClient.querySet(_deployJid, query);
   }
 
   @Override
@@ -534,7 +542,7 @@ public class DeployClient implements Repository
   }
 
   /* (non-Javadoc)
-   * @see com.caucho.env.repository.Repository#addListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
+   * @see com.caucho.env.repository.Repository#addNotificationListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
    */
   @Override
   public void addListener(String tagName, RepositoryTagListener listener)
@@ -564,7 +572,7 @@ public class DeployClient implements Repository
   }
 
   /* (non-Javadoc)
-   * @see com.caucho.env.repository.Repository#removeListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
+   * @see com.caucho.env.repository.Repository#removeNotificationListener(java.lang.String, com.caucho.env.repository.RepositoryTagListener)
    */
   @Override
   public void removeListener(String tagName, RepositoryTagListener listener)
@@ -649,7 +657,7 @@ public class DeployClient implements Repository
 
         DeploySendQuery query = new DeploySendQuery(sha1, source);
 
-        _bamClient.querySet(_deployJid, query, this);
+        _bamClient.query(_deployJid, query, this);
         
         isValid = true;
       } finally {

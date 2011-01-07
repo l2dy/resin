@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,10 +49,10 @@ import com.caucho.config.ConfigException;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.thread.ThreadPool;
-import com.caucho.hmtp.HmtpLink;
+import com.caucho.hmtp.HmtpLinkWorker;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.log.RotateStream;
-import com.caucho.network.listen.SocketLinkListener;
+import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -114,7 +114,7 @@ class WatchdogChildProcess
   Serializable queryGet(Serializable payload)
   {
     if (_watchdogActor != null)
-      return _watchdogActor.queryGet(payload);
+      return _watchdogActor.query(payload);
     else
       return null;
   }
@@ -365,7 +365,7 @@ class WatchdogChildProcess
 
     _watchdogActor = new WatchdogActor(this);
 
-    HmtpLink link = new HmtpLink(_watchdogActor, watchdogIs, watchdogOs);
+    HmtpLinkWorker link = new HmtpLinkWorker(_watchdogActor, watchdogIs, watchdogOs);
 
     try {
       ThreadPool.getCurrent().schedule(link);
@@ -416,7 +416,7 @@ class WatchdogChildProcess
 
       try {
         if (_watchdog.getUserName() != null) {
-          for (SocketLinkListener port : _watchdog.getPorts()) {
+          for (TcpSocketLinkListener port : _watchdog.getPorts()) {
             QServerSocket ss = port.bindForWatchdog();
 
             if (ss == null)

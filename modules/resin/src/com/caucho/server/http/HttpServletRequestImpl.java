@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,10 +30,10 @@
 package com.caucho.server.http;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.ByteArrayInputStream;
+import java.nio.charset.Charset;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
@@ -45,7 +45,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.nio.charset.Charset;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.DispatcherType;
@@ -60,22 +59,19 @@ import javax.servlet.ServletRequestAttributeListener;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 
 import com.caucho.config.scope.ScopeRemoveListener;
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.network.listen.SocketLinkDuplexController;
-import com.caucho.network.listen.SocketLinkDuplexListener;
 import com.caucho.security.AbstractLogin;
 import com.caucho.security.Login;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.servlet.WebSocketContext;
-import com.caucho.servlet.WebSocketListener;
-import com.caucho.servlet.WebSocketServletRequest;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CharSegment;
 import com.caucho.util.HashMapImpl;
@@ -87,6 +83,9 @@ import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
+import com.caucho.websocket.WebSocketContext;
+import com.caucho.websocket.WebSocketListener;
+import com.caucho.websocket.WebSocketServletRequest;
 
 /**
  * User facade for http requests.
@@ -140,7 +139,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   private boolean _isSyntheticCacheHeader;
 
   // comet
-  private long _asyncTimeout = 10000;
+  private long _asyncTimeout;
   private AsyncContextImpl _asyncContext;
 
   private ArrayList<Path> _closeOnExit;
@@ -1390,7 +1389,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
    */
   public String getAuthType()
   {
-    Object login = getAttribute(AbstractLogin.LOGIN_NAME);
+    Object login = getAttribute(AbstractLogin.LOGIN_USER_NAME);
 
     if (login instanceof X509Certificate)
       return HttpServletRequest.CLIENT_CERT_AUTH;
@@ -1553,7 +1552,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       return null;
     */
 
-    Principal user = (Principal) getAttribute(AbstractLogin.LOGIN_NAME);
+    Principal user = (Principal) getAttribute(AbstractLogin.LOGIN_USER_NAME);
 
     if (user == null && create)
       user = getUserPrincipal();
@@ -1777,10 +1776,13 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
   public void finishInvocation()
   {
+    // server/11d4
+    /*
     AsyncContextImpl asyncContext = _asyncContext;
 
     if (asyncContext != null)
       asyncContext.onComplete();
+      */
 
     _request.finishInvocation();
   }
@@ -1849,10 +1851,16 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     boolean isOriginal = (request == this && response == _response);
 
-    _asyncContext = new AsyncContextImpl(_request, request, response, isOriginal);
-
-    if (_asyncTimeout > 0)
-      _asyncContext.setTimeout(_asyncTimeout);
+    if (_asyncContext == null) {
+      _asyncContext = new AsyncContextImpl(_request);
+      
+      if (_asyncTimeout > 0)
+        _asyncContext.setTimeout(_asyncTimeout);
+    }
+    else
+      _asyncContext.restart();
+    
+    _asyncContext.init(request, response, isOriginal);
 
     return _asyncContext;
   }
@@ -1875,32 +1883,96 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   // WebSocket
   //
 
+  @Override
   public WebSocketContext startWebSocket(WebSocketListener listener)
+    throws IOException
   {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " upgrade HTTP to WebSocket " + listener);
+    
+    String method = getMethod();
+    
+    if (! "WEBSOCKET".equals(method)) {
+      getResponse().sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+      
+      throw new IllegalStateException(L.l("HTTP Method must be 'WEBSOCKET', because the WebSocket protocol requires an Upgrade: WebSocket header.\n  remote-IP: {0}",
+                                          getRemoteAddr()));
+    }
 
     String connection = getHeader("Connection");
     String upgrade = getHeader("Upgrade");
 
     if (! "WebSocket".equals(upgrade)) {
-      throw new IllegalStateException(L.l("HTTP Upgrade header '{0}' must be 'WebSocket', because the WebSocket protocol requires an Upgrade: WebSocket header.",
-                                          upgrade));
+      getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+      throw new IllegalStateException(L.l("HTTP Upgrade header '{0}' must be 'WebSocket', because the WebSocket protocol requires an Upgrade: WebSocket header.\n  remote-IP: {1}",
+                                          upgrade,
+                                          getRemoteAddr()));
     }
 
     if (! "Upgrade".equalsIgnoreCase(connection)) {
-      throw new IllegalStateException(L.l("HTTP Connection header '{0}' must be 'Upgrade', because the WebSocket protocol requires a Connection: Upgrade header.",
-                                          connection));
+      getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+      throw new IllegalStateException(L.l("HTTP Connection header '{0}' must be 'Upgrade', because the WebSocket protocol requires a Connection: Upgrade header.\n  remote-IP: {1}",
+                                          connection,
+                                          getRemoteAddr()));
     }
 
     String origin = getHeader("Origin");
 
     if (origin == null) {
-      throw new IllegalStateException(L.l("HTTP Origin header is required, because the WebSocket protocol requires an Origin header."));
+      getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+      throw new IllegalStateException(L.l("HTTP Origin header is required, because the WebSocket protocol requires an Origin header.\n  remote-IP: {0}",
+                                          getRemoteAddr()));
     }
+    
+    String protocolExtensions = getHeader("Sec-WebSocket-Protocol");
+    boolean isMasked = true;
+    
+    if (protocolExtensions != null
+        && protocolExtensions.indexOf("unmasked") >= 0) {
+      isMasked = false;
+    }
+    
+    byte []cnonce = null;
+    
+    if (isMasked) {
+      String cNonceString = getHeader("Sec-WebSocket-Nonce");
 
+      if (cNonceString == null) {
+        getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+        throw new IllegalStateException(L.l("Sec-WebSocket-Nonce header is missing, but it is required by the WebSocket protocol.\n  remote-IP: {0}",
+                                            getRemoteAddr()));
+      }
+    
+      cnonce = parseWebSocketNonce(cNonceString);
+    
+      if (cnonce == null) {
+        getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+        throw new IllegalStateException(L.l("Sec-WebSocket-Nonce must have an 8 byte hex nonce, but '{0}' received.\n  remote-IP: {1}",
+                                            cNonceString,
+                                            getRemoteAddr()));
+      }
+    
+      if (cnonce.length != 8) {
+        getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+      
+        throw new IllegalStateException(L.l("Sec-WebSocket-Nonce must have an 8 byte nonce, but '{0}' received.\n  remote-IP: {1}",
+                                            cNonceString,
+                                            getRemoteAddr()));
+      }
+    }
+    
+    // String login = getHeader("Sec-WebSocket-Login");
+    
     _response.setStatus(101, "Web Socket Protocol Handshake");
     _response.setHeader("Upgrade", "WebSocket");
+    
+    if (! isMasked)
+      _response.setHeader("WebSocket-Protocol", "unmasked");
 
     _response.setContentLength(0);
 
@@ -1931,31 +2003,126 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     if (protocol != null)
       _response.setHeader("WebSocket-Protocol", protocol);
 
-    WebSocketContextImpl duplex
-      = new WebSocketContextImpl(this, _response, listener);
-
-    SocketLinkDuplexController controller = _request.startDuplex(duplex);
-    duplex.setController(controller);
+    WebSocketContextImpl webSocket
+      = new WebSocketContextImpl(this, _response, listener,
+                                 cnonce);
     
+    SocketLinkDuplexController controller = _request.startDuplex(webSocket);
+    webSocket.setController(controller);
+    
+    boolean isValid = false;
     try {
       _response.getOutputStream().flush();
+      
+      if (isMasked)
+        webSocket.sendHello();
+      
+      /*
+      if (login != null)
+        webSocket.sendAuthChallenge();
+        */
+      
+      webSocket.flush();
+
+      webSocket.onStart();
+    
+      if (isMasked)
+        webSocket.readHello();
+      
+      /*
+      if (login != null) {
+        webSocket.readAuthResponse();
+      }
+      */
+      
+      isValid = true;
+    } catch (RuntimeException e) {
+      throw e;
     } catch (Exception e) {
       throw new RuntimeException(e);
+    } finally {
+      webSocket.onHandshakeComplete(isValid);
     }
 
-    try {
-      duplex.onStart();
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+    return webSocket;
+  }
+  
+  /*
+  private String hashWebSocket(byte []nonce, String key)
+  {
+    int len = nonce.length;
+    
+    if (key.length() < len)
+      len = key.length();
+    
+    char []buffer = new char[2 * len];
+    
+    for (int i = 0; i < len; i++) {
+      int a = nonce[i];
+      int b = key.charAt(i);
+      
+      int value = a ^ b;
+      
+      buffer[2 * i]     = toHex(value >> 4);
+      buffer[2 * i + 1] = toHex(value);
     }
-
-    return duplex;
+    
+    return new String(buffer);
+  }
+  
+  private char toHex(int value)
+  {
+    value = value & 0xf;
+    
+    if (value < 10)
+      return (char) ('0' + value);
+    else
+      return (char) ('a' + value - 10);
+  }
+  */
+  
+  private byte[]parseWebSocketNonce(String nonceString)
+  {
+    int len = nonceString.length() / 2;
+    
+    if (len < 1)
+      throw new IllegalStateException(L.l("Cnonce is too small"));
+    
+    byte []nonce = new byte[len];
+    
+    for (int i = 0; i < len; i++) {
+      char d1 = nonceString.charAt(2 * i);
+      char d2 = nonceString.charAt(2 * i + 1);
+      
+      nonce[i] = (byte) (16 * decodeHex(d1) + decodeHex(d2));
+    }
+    
+    for (int j = len; j < nonce.length; j++) {
+      nonce[j] = nonce[j % len]; 
+    }
+    
+    return nonce;
+  }
+  
+  private int decodeHex(char ch)
+  {
+    if ('0' <= ch && ch <= '9')
+      return ch - '0';
+    else if ('a' <= ch && ch <= 'f')
+      return ch - 'a' + 10;
+    else if ('A' <= ch && ch <= 'F')
+      return ch - 'A' + 10;
+    else
+      return 0;
   }
 
   int getAvailable()
     throws IOException
   {
-    return _request.getAvailable();
+    if (_request != null)
+      return _request.getAvailable();
+    else
+      return -1;
   }
 
   public DispatcherType getDispatcherType()
@@ -1967,7 +2134,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   protected void finishRequest()
     throws IOException
   {
-    AsyncContextImpl comet = _asyncContext;
+    AsyncContextImpl async = _asyncContext;
     _asyncContext = null;
 
     /* server/1ld5
@@ -1975,6 +2142,10 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       comet.onComplete();
     }
     */
+    
+    if (async != null) {
+      async.onComplete();
+    }
 
     super.finishRequest();
 
@@ -2234,97 +2405,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       }
 
       return _value;
-    }
-  }
-
-  static class WebSocketContextImpl
-    implements WebSocketContext, SocketLinkDuplexListener
-  {
-    private final HttpServletRequestImpl _request;
-    private final WebSocketListener _listener;
-
-    private SocketLinkDuplexController _controller;
-
-    WebSocketContextImpl(HttpServletRequestImpl request,
-                         HttpServletResponseImpl response,
-                         WebSocketListener listener)
-    {
-      _request = request;
-      _listener = listener;
-    }
-
-    public void setController(SocketLinkDuplexController controller)
-    {
-      _controller = controller;
-    }
-
-    public void setTimeout(long timeout)
-    {
-      _controller.setIdleTimeMax(timeout);
-    }
-
-    public long getTimeout()
-    {
-      return _controller.getIdleTimeMax();
-    }
-
-    public InputStream getInputStream()
-      throws IOException
-    {
-      return _controller.getReadStream();
-    }
-
-    public OutputStream getOutputStream()
-      throws IOException
-    {
-      return _controller.getWriteStream();
-    }
-
-    public void complete()
-    {
-      _controller.complete();
-    }
-
-    void onStart()
-      throws IOException
-    {
-      _listener.onStart(this);
-    }
-
-    public void onRead(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      do {
-        _listener.onRead(this);
-      } while (_request.getAvailable() > 0);
-    }
-
-    public void onComplete(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      _listener.onComplete(this);
-    }
-
-    public void onTimeout(SocketLinkDuplexController duplex)
-      throws IOException
-    {
-      _listener.onTimeout(this);
-    }
-
-    @Override
-    public String toString()
-    {
-      return getClass().getSimpleName() + "[" + _listener + "]";
-    }
-
-    /* (non-Javadoc)
-     * @see com.caucho.network.listen.SocketLinkDuplexListener#onStart(com.caucho.network.listen.SocketLinkDuplexController)
-     */
-    @Override
-    public void onStart(SocketLinkDuplexController context) throws IOException
-    {
-      // TODO Auto-generated method stub
-      
     }
   }
 }

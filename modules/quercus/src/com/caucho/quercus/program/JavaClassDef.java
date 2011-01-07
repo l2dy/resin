@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1138,6 +1138,12 @@ public class JavaClassDef extends ClassDef {
             _funArrayDelegate = new FunctionArrayDelegate();
           
           _funArrayDelegate.setArrayPut(new JavaMethod(moduleContext, method));
+        } else if ("__count".equals(methodName)) {
+          FunctionCountDelegate delegate = new FunctionCountDelegate();
+          
+          delegate.setCount(new JavaMethod(moduleContext, method));
+          
+          _countDelegate = delegate;
         } else if ("__getField".equals(methodName)) {
           __fieldGet = new JavaMethod(moduleContext, method);
         } else if ("__setField".equals(methodName)) {
@@ -1252,7 +1258,7 @@ public class JavaClassDef extends ClassDef {
         else
           _constJavaMap.put(field.getName().intern(), obj);
       } catch (Throwable e) {
-        log.log(Level.FINER, e.toString(), e);
+        log.log(Level.FINEST, e.toString(), e);
       }
     }
 

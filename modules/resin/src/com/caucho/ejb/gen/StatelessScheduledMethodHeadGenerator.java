@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -82,7 +82,8 @@ public class StatelessScheduledMethodHeadGenerator<X>
                                        isOverride(),
                                        accessModifier, 
                                        methodName,
-                                       getJavaMethod(), 
+                                       getMethod(), 
+                                       getTypeVariables(),
                                        getThrowsExceptions());
 
     out.println("{");

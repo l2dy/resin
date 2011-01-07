@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,7 +32,7 @@ package com.caucho.db.table;
 import com.caucho.db.block.BlockStore;
 import com.caucho.db.index.BTree;
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
 
@@ -59,7 +59,7 @@ public class UniqueSingleColumnConstraint extends Constraint {
    */
   @Override
   public void validate(TableIterator []sourceRows,
-                       QueryContext queryContext, Transaction xa)
+                       QueryContext queryContext, DbTransaction xa)
     throws SQLException
   {
     Column column = _uniqueColumn;
@@ -114,7 +114,7 @@ public class UniqueSingleColumnConstraint extends Constraint {
    * validate the constraint.
    */
   private void validateIndex(TableIterator []sourceRows,
-                             QueryContext context, Transaction xa)
+                             QueryContext context, DbTransaction xa)
     throws SQLException
   {
     try {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,9 +39,9 @@ import com.caucho.management.server.TcpConnectionInfo;
 public class SocketLinkAdmin extends AbstractManagedObject
   implements PortMXBean
 {
-  private SocketLinkListener _port;
+  private TcpSocketLinkListener _port;
 
-  public SocketLinkAdmin(SocketLinkListener port)
+  public SocketLinkAdmin(TcpSocketLinkListener port)
   {
     _port = port;
   }

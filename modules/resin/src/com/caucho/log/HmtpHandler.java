@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,8 +36,9 @@ import java.util.logging.LogRecord;
 
 import javax.annotation.PostConstruct;
 
-import com.caucho.bam.ActorClient;
-import com.caucho.bam.SimpleActorClient;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.stream.NullActorStream;
 import com.caucho.config.ConfigException;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.util.L10N;
@@ -49,7 +50,7 @@ public class HmtpHandler extends Handler {
   private static final L10N L = new L10N(HmtpHandler.class);
 
   private String _to;
-  private ActorClient _conn;
+  private ActorSender _conn;
 
   public HmtpHandler()
   {
@@ -75,7 +76,9 @@ public class HmtpHandler extends Handler {
 
     HempBroker broker = HempBroker.getCurrent();
     
-    _conn = new SimpleActorClient(broker, "log@localhost", null);
+    NullActorStream stream = new NullActorStream("log@localhost", broker);
+    
+    _conn = new SimpleActorSender(stream, broker, "log@localhost", null);
   }
 
   /**

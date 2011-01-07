@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 package com.caucho.db.table;
 
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.inject.Module;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
@@ -58,7 +58,7 @@ public class UniqueConstraint extends Constraint {
    */
   @Override
   public void validate(TableIterator []sourceRows,
-                       QueryContext queryContext, Transaction xa)
+                       QueryContext queryContext, DbTransaction xa)
     throws SQLException
   {
     TableIterator sourceRow = sourceRows[0];

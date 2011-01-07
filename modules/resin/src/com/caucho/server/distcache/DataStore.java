@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,9 @@
 
 package com.caucho.server.distcache;
 
+import static java.sql.ResultSet.CONCUR_UPDATABLE;
+import static java.sql.ResultSet.TYPE_FORWARD_ONLY;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.sql.Connection;
@@ -44,6 +47,7 @@ import javax.sql.DataSource;
 import com.caucho.db.index.SqlIndexAlreadyExistsException;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.ConcurrentArrayList;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
 import com.caucho.util.Hex;
@@ -56,7 +60,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * Manages the backing for the file database objects
  */
-public class DataStore implements AlarmListener {
+public class DataStore {
   private static final Logger log
     = Logger.getLogger(DataStore.class.getName());
 
@@ -74,12 +78,16 @@ public class DataStore implements AlarmListener {
   private final String _insertQuery;
   private final String _loadQuery;
   private final String _dataAvailableQuery;
-  private final String _selectAllLimitQuery;
   private final String _updateExpiresQuery;
+  private final String _updateAllExpiresQuery;
+  private final String _selectOrphanQuery;
   private final String _deleteTimeoutQuery;
   private final String _validateQuery;
 
   private final String _countQuery;
+  
+  private final ConcurrentArrayList<MnodeOrphanListener> _orphanListeners
+    = new ConcurrentArrayList<MnodeOrphanListener>(MnodeOrphanListener.class);
 
   private Alarm _alarm;
 
@@ -112,8 +120,21 @@ public class DataStore implements AlarmListener {
                            + " SET expire_time=?"
                            + " WHERE id=?");
 
-    _selectAllLimitQuery = ("SELECT value, resin_oid FROM " + _mnodeTableName
-                            + " WHERE resin_oid > ?");
+    /*
+    _updateAllExpiresQuery = ("SELECT d.expire_time, d.resin_oid, m.value"
+                              + " FROM " + _mnodeTableName + " AS m,"
+                              + "  " + _tableName + " AS d"
+                              + " WHERE m.value = d.id");
+                              */
+    _updateAllExpiresQuery = ("SELECT d.expire_time, d.resin_oid, m.value"
+                              + " FROM " + _mnodeTableName + " AS m"
+                              + " LEFT JOIN " + _tableName + " AS d"
+                              + " ON(m.value = d.id)");
+
+    _selectOrphanQuery = ("SELECT m.value, d.id"
+                              + " FROM " + _mnodeTableName + " AS m"
+                              + " LEFT JOIN " + _tableName + " AS d"
+                              + " ON(m.value=d.id)");
 
     _deleteTimeoutQuery = ("DELETE FROM " + _tableName
                            + " WHERE expire_time < ?");
@@ -136,7 +157,7 @@ public class DataStore implements AlarmListener {
 
     initDatabase();
 
-    _alarm = new Alarm(this);
+    _alarm = new Alarm(new ExpireAlarm());
     // _alarm.queue(_expireTimeout);
 
     _alarm.queue(0);
@@ -185,6 +206,16 @@ public class DataStore implements AlarmListener {
     } finally {
       conn.close();
     }
+  }
+  
+  public void addOrphanListener(MnodeOrphanListener listener)
+  {
+    _orphanListeners.add(listener);
+  }
+  
+  public void removeOrphanListener(MnodeOrphanListener listener)
+  {
+    _orphanListeners.remove(listener);
   }
 
   /**
@@ -435,6 +466,8 @@ public class DataStore implements AlarmListener {
     long now = Alarm.getCurrentTime();
 
     updateExpire(now);
+    
+    // selectOrphans();
 
     DataConnection conn = null;
 
@@ -470,59 +503,78 @@ public class DataStore implements AlarmListener {
     try {
       conn = getConnection();
 
-      long resinOid = 0;
-      PreparedStatement pstmt = conn.prepareSelectAllLimitExpires();
-      PreparedStatement pstmtUpdate = conn.prepareUpdateExpires();
+      PreparedStatement pstmt = conn.prepareUpdateAllExpires();
 
       long expires = now + _expireTimeout;
-      int totalCount = 0;
-      int fetchSize = 64 * 1024;
-      int subCount;
 
-      // System.out.println("UPDATE_EXPIRE:" + _expireTimeout);
-      do {
-        pstmt.setLong(1, resinOid);
-        pstmt.setFetchSize(fetchSize);
+      ResultSet rs = pstmt.executeQuery();
 
-        ResultSet rs = pstmt.executeQuery();
-
-        subCount = 0;
-
+      try {
         while (rs.next()) {
-          subCount++;
-
-          byte []key = rs.getBytes(1);
-          resinOid = rs.getLong(2);
-
-          // key is null if the entry is deleted
-          /*
-          if (key == null && ! Alarm.isTest())
-            System.out.println(this + " NULL: " + totalCount + " " + Hex.toHex(key));
-          */
-
-          if (key != null) {
+          long oid = rs.getLong(2);
+          
+          if (oid > 0)
+            rs.updateLong(1, expires);
+          else {
             try {
-              pstmtUpdate.setLong(1, expires);
-              pstmtUpdate.setBytes(2, key);
-              int count = pstmtUpdate.executeUpdate();
-
-              if (count <= 0 && ! Alarm.isTest()) {
-                System.out.println(this + " no-update COUNT: " + count + " " + Hex.toHex(key));
-              }
-            } catch (SQLException e) {
+              notifyOrphan(rs.getBytes(3));
+            } catch (Exception e) {
               e.printStackTrace();
-              log.log(Level.FINER, e.toString(), e);
+              log.log(Level.WARNING, e.toString(), e);
             }
           }
         }
-        totalCount += subCount;
-        //System.out.println(this + " SUB-TOTAL:" + subCount);
-      } while (subCount == fetchSize);
-
-      // System.out.println(this + " TOTAL:" + totalCount);
-      // XXX:
-      // log.fine("TOTAL: " + totalCount);
+      } finally {
+        rs.close();
+      }
     } catch (SQLException e) {
+      e.printStackTrace();
+      log.log(Level.FINE, e.toString(), e);
+    } catch (Throwable e) {
+      e.printStackTrace();
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      conn.close();
+    }
+  }
+  
+  private void notifyOrphan(byte []valueHash)
+  {
+    if (valueHash == null)
+      return;
+    
+    for (MnodeOrphanListener listener : _orphanListeners) {
+      listener.onOrphanValue(new HashKey(valueHash));
+    }
+  }
+
+  /**
+   * Update used expire times.
+   */
+  private void selectOrphans()
+  {
+    System.out.println("ORPHANS:");
+    DataConnection conn = null;
+
+    try {
+      conn = getConnection();
+
+      PreparedStatement pstmt = conn.prepareSelectOrphan();
+
+      ResultSet rs = pstmt.executeQuery();
+
+      try {
+        while (rs.next()) {
+          byte []data = rs.getBytes(1);
+          System.out.println("D: " + Hex.toHex(data));
+        }
+      } finally {
+        rs.close();
+      }
+    } catch (SQLException e) {
+      e.printStackTrace();
+      log.log(Level.FINE, e.toString(), e);
+    } catch (Throwable e) {
       e.printStackTrace();
       log.log(Level.FINE, e.toString(), e);
     } finally {
@@ -585,17 +637,6 @@ public class DataStore implements AlarmListener {
     return -1;
   }
 
-  public void handleAlarm(Alarm alarm)
-  {
-    if (_dataSource != null) {
-      try {
-        removeExpiredData();
-      } finally {
-        alarm.queue(_expireTimeout / 2);
-      }
-    }
-  }
-
   public void destroy()
   {
     _dataSource = null;
@@ -625,6 +666,19 @@ public class DataStore implements AlarmListener {
   public String toString()
   {
     return getClass().getSimpleName() +  "[" + _tableName + "]";
+  }
+
+  class ExpireAlarm implements AlarmListener {
+    public void handleAlarm(Alarm alarm)
+    {
+      if (_dataSource != null) {
+        try {
+          removeExpiredData();
+        } finally {
+          alarm.queue(_expireTimeout / 2);
+        }
+      }
+    }
   }
 
   class DataInputStream extends InputStream {
@@ -677,7 +731,8 @@ public class DataStore implements AlarmListener {
     private PreparedStatement _loadStatement;
     private PreparedStatement _dataAvailableStatement;
     private PreparedStatement _insertStatement;
-    private PreparedStatement _selectAllLimitStatement;
+    private PreparedStatement _updateAllExpiresStatement;
+    private PreparedStatement _selectOrphanStatement;
     private PreparedStatement _updateExpiresStatement;
     private PreparedStatement _deleteTimeoutStatement;
     private PreparedStatement _validateStatement;
@@ -716,13 +771,24 @@ public class DataStore implements AlarmListener {
       return _insertStatement;
     }
 
-    PreparedStatement prepareSelectAllLimitExpires()
+    PreparedStatement prepareUpdateAllExpires()
       throws SQLException
     {
-      if (_selectAllLimitStatement == null)
-        _selectAllLimitStatement = _conn.prepareStatement(_selectAllLimitQuery);
+      if (_updateAllExpiresStatement == null)
+        _updateAllExpiresStatement = _conn.prepareStatement(_updateAllExpiresQuery,
+                                                            TYPE_FORWARD_ONLY,
+                                                            CONCUR_UPDATABLE);
 
-      return _selectAllLimitStatement;
+      return _updateAllExpiresStatement;
+    }
+
+    PreparedStatement prepareSelectOrphan()
+      throws SQLException
+    {
+      if (_selectOrphanStatement == null)
+        _selectOrphanStatement = _conn.prepareStatement(_selectOrphanQuery);
+
+      return _selectOrphanStatement;
     }
 
     PreparedStatement prepareUpdateExpires()

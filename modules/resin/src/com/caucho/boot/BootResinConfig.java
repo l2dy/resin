@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,7 +38,6 @@ import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.loader.EnvironmentBean;
-import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -133,8 +132,12 @@ public class BootResinConfig implements EnvironmentBean
   
   public void setResinSystemAuthKey(String digest)
   {
-    SecurityService.create().setSignatureSecret(digest);
     _resinSystemKey = digest;
+    
+    SecurityService security = SecurityService.getCurrent();
+    
+    if (security != null)
+      security.setSignatureSecret(digest);
   }
   
   public String getResinSystemAuthKey()

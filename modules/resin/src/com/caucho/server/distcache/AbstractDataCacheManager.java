@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -45,11 +45,13 @@ abstract public class AbstractDataCacheManager<E extends DistCacheEntry>
 
   abstract protected E createCacheEntry(Object key, HashKey hashKey);
 
+  /*
   @Override
   protected void requestClusterData(HashKey valueKey, int flags)
   {
     // _cacheService.requestData(valueKey, flags);
   }
+  */
 
   @Override
   public void start()

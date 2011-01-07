@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,7 +33,7 @@ package com.caucho.quercus.lib.curl;
  * Represents a GET Http request.
  */
 public class HttpGetRequest
-  extends HttpRequest
+  extends CurlHttpRequest
 {
   public HttpGetRequest(CurlResource curlResource)
   {

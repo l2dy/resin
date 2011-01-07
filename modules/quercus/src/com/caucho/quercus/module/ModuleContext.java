@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -649,7 +649,6 @@ public class ModuleContext
   private void introspectPhpModuleClass(Class<?> cl)
     throws IllegalAccessException, InstantiationException, ConfigException
   {
-    log.info("CLAXX: " + cl);
     synchronized (_moduleInfoMap) {
       if (_moduleInfoMap.get(cl.getName()) != null)
         return;

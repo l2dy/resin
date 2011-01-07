@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -66,6 +66,9 @@ public class CandiUtil {
   private static final Logger log = Logger.getLogger(CandiUtil.class.getName());
 
   public static final Object []NULL_OBJECT_ARRAY = new Object[0];
+  
+  private static final Method _dummyPostConstruct;
+  private static final Method _dummyPreDestroy;
 
   private CandiUtil()
   {
@@ -443,5 +446,32 @@ public class CandiUtil {
     }
 
     return index;
+  }
+  
+  public static Method getDummyPostConstruct()
+  {
+    return _dummyPostConstruct;
+  }
+  
+  public static void dummyPostConstruct()
+  {
+  }
+  
+  public static Method getDummyPreDestroy()
+  {
+    return _dummyPreDestroy;
+  }
+  
+  public static void dummyPreDestroy()
+  {
+  }
+  
+  static {
+    try {
+      _dummyPostConstruct = CandiUtil.class.getMethod("dummyPostConstruct");
+      _dummyPreDestroy = CandiUtil.class.getMethod("dummyPreDestroy");
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
   }
 }

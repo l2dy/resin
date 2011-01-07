@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -247,12 +247,6 @@ public abstract class AbstractSocketLink
   {
     return false;
   }
-  
-  @Override
-  public boolean isCometComplete()
-  {
-    return false;
-  }
 
   /**
    * Returns true for a duplex connection
@@ -263,17 +257,11 @@ public abstract class AbstractSocketLink
     return false;
   }
 
-  @Override
-  public boolean wake()
-  {
-    return false;
-  }
-
   /**
    * Starts a comet request
    */
   @Override
-  public AsyncController toComet(CometHandler cometHandler)
+  public AsyncController toComet(SocketLinkCometListener cometHandler)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }

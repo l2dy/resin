@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,7 +46,7 @@ import com.caucho.vfs.Dependency;
  * DeployController controls the lifecycle of the DeployInstance.
  */
 abstract public class DeployController<I extends DeployInstance>
-  implements DeployControllerApi<I>, Dependency
+  implements DeployControllerApi<I>, Dependency, DeployActionHandler
 {
   private static final Logger log
     = Logger.getLogger(DeployController.class.getName());
@@ -72,6 +72,8 @@ abstract public class DeployController<I extends DeployInstance>
   protected final Lifecycle _lifecycle;
 
   private DeployControllerAlarm<DeployController<I>> _alarm;
+
+  private DeployTagItem _deployTagItem;
   
   private long _waitForActiveTimeout = 10000L;
   private long _redeployCheckInterval = REDEPLOY_CHECK_INTERVAL;
@@ -305,6 +307,13 @@ abstract public class DeployController<I extends DeployInstance>
           _strategy = StartAutoRedeployAutoStrategy.create();
       }
       }
+
+      DeployControllerService deployService = 
+        DeployControllerService.getCurrent();
+      
+      _deployTagItem = deployService.addTag(getId());
+
+      _deployTagItem.addActionHandler(this);
 
       initEnd();
 
@@ -615,13 +624,13 @@ abstract public class DeployController<I extends DeployInstance>
 
       deployInstance.start();
 
+      _deployTagItem.onStart();
+
       isActive = true;
 
       _startTime = Alarm.getCurrentTime();
     } catch (ConfigException e) {
       log.log(Level.FINEST, e.toString(), e);
-      
-      _lifecycle.toError();
 
       onError(e);
 
@@ -634,8 +643,6 @@ abstract public class DeployController<I extends DeployInstance>
       }
     } catch (Throwable e) {
       log.log(Level.FINEST, e.toString(), e);
-      
-      _lifecycle.toError();
       
       onError(e);
 
@@ -696,6 +703,8 @@ abstract public class DeployController<I extends DeployInstance>
       
       isStopping = _lifecycle.toStopping();
 
+      _lifecycle.toStop();
+      
       if (! isStopping)
         return;
 
@@ -709,8 +718,6 @@ abstract public class DeployController<I extends DeployInstance>
       }
     } finally  {
       if (isStopping) {
-        _lifecycle.toStop();
-        
         onStop();
       }
       
@@ -771,6 +778,28 @@ abstract public class DeployController<I extends DeployInstance>
     
   }
 
+
+  //
+  // DeployActionHandler
+  //
+
+  @Override
+  public void toStart()
+  {
+    start();
+  }
+
+  @Override public void toStop()
+  {
+    stop();
+  }
+
+  @Override 
+  public void toRestart()
+  {
+    restart();
+  }
+
   @Override
   public final void alarm()
   {
@@ -800,6 +829,8 @@ abstract public class DeployController<I extends DeployInstance>
     if (alarm != null) {
       alarm.close();
     }
+
+    _deployTagItem.removeActionHandler(this);
     
     onDestroy();
     

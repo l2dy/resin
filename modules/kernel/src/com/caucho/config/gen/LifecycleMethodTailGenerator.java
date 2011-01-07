@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -91,6 +91,9 @@ public class LifecycleMethodTailGenerator<X> extends MethodTailGenerator<X>
     out.println("} catch (RuntimeException e) {");
     out.println("  throw e;");
     out.println("} catch (java.lang.reflect.InvocationTargetException e) {");
+    out.println("  if (e.getCause() instanceof RuntimeException)");
+    out.println("    throw (RuntimeException) e.getCause();");
+    out.println("  else");
     out.println("  throw new RuntimeException(e.getCause());");
     out.println("} catch (Exception e) {");
     out.println("  throw new RuntimeException(e);");

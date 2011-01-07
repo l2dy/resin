@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,7 +41,7 @@ import com.caucho.amber.expr.ArgExpr;
 import com.caucho.amber.expr.LoadEntityExpr;
 import com.caucho.amber.query.AbstractQuery;
 import com.caucho.amber.query.ResultSetImpl;
-import com.caucho.amber.query.SelectQuery;
+import com.caucho.amber.query.AmberSelectQuery;
 import com.caucho.amber.query.UserQuery;
 import com.caucho.amber.type.CalendarType;
 import com.caucho.amber.type.EntityType;
@@ -131,7 +131,7 @@ public class QueryImpl implements Query {
 
       if (isSelectQuery()) {
         if (! isNativeQuery()) {
-          SelectQuery selectQuery = (SelectQuery) _query;
+          AmberSelectQuery selectQuery = (AmberSelectQuery) _query;
           constructorClass = selectQuery.getConstructorClass();
         }
       }
@@ -737,7 +737,7 @@ public class QueryImpl implements Query {
    */
   private boolean isSelectQuery()
   {
-    if (_query instanceof SelectQuery)
+    if (_query instanceof AmberSelectQuery)
       return true;
 
     if (isNativeQuery()) {
@@ -889,7 +889,7 @@ public class QueryImpl implements Query {
       // _currIndex += ((ResultSetImpl) rs).getNumberOfLoadingColumns();
 
       ArrayList<AmberExpr> resultList
-        = ((SelectQuery) _query).getResultList();
+        = ((AmberSelectQuery) _query).getResultList();
 
       AmberExpr expr = resultList.get(oldIndex-1);
 

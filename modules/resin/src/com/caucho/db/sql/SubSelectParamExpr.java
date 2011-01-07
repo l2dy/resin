@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -180,6 +180,32 @@ public class SubSelectParamExpr extends Expr {
     throws SQLException
   {
     return context.getDate(_index + 1);
+  }
+
+  /**
+   * Evaluates the expression to a buffer
+   *
+   * @param rows the current database tuple
+   *
+   * @return the date value
+   */
+  @Override
+  public int evalToBuffer(QueryContext context,
+                          byte []buffer,
+                          int offset)
+    throws SQLException
+  {
+    byte []value = context.getBytes(_index + 1);
+    
+    System.out.println("V: " + value);
+ 
+    if (value != null) {
+      System.arraycopy(value, 0, buffer, offset, value.length);
+      
+      return value.length;
+    }
+    else
+      return 0;
   }
 
   public String toString()

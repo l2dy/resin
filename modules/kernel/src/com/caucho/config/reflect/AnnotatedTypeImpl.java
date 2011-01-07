@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,11 +32,9 @@ package com.caucho.config.reflect;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Inherited;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
-import java.util.LinkedHashSet;
+import java.util.HashMap;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.logging.Level;
@@ -60,7 +58,11 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
     = Logger.getLogger(AnnotatedTypeImpl.class.getName());
 
   private Class<X> _javaClass;
-
+  
+  private HashMap<String,BaseType> _paramMap = new HashMap<String,BaseType>();
+  
+  private AnnotatedTypeImpl<?> _parentType;
+  
   private Set<AnnotatedConstructor<X>> _constructorSet
     = new CopyOnWriteArraySet<AnnotatedConstructor<X>>();
 
@@ -72,14 +74,17 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
 
   public AnnotatedTypeImpl(Class<X> javaClass)
   {
-    this(javaClass, javaClass);
+    this(createBaseType(javaClass), javaClass);
   }
 
-  public AnnotatedTypeImpl(Type type, Class<X> javaClass)
+  public AnnotatedTypeImpl(BaseType type, Class<X> javaClass)
   {
     super(type, null, javaClass.getDeclaredAnnotations());
 
     _javaClass = javaClass;
+    
+    if (getBaseTypeImpl().getParamMap() != null)
+      _paramMap.putAll(getBaseTypeImpl().getParamMap());
     
     introspect(javaClass);
   }
@@ -89,6 +94,33 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
     super(annType);
     
     _javaClass = annType.getJavaClass();
+    
+    if (getBaseTypeImpl().getParamMap() != null)
+      _paramMap.putAll(getBaseTypeImpl().getParamMap());
+  
+    _constructorSet.addAll(annType.getConstructors());
+    _fieldSet.addAll(annType.getFields());
+    
+    for (AnnotatedMethod<? super X> annMethod : annType.getMethods()) {
+      if (annMethod.getDeclaringType() == annType)
+        _methodSet.add(new AnnotatedMethodImpl(this, annMethod, 
+                                               annMethod.getJavaMember()));
+      else
+        _methodSet.add(annMethod);
+    }
+  }
+  
+  public AnnotatedTypeImpl(AnnotatedType<X> annType,
+                           AnnotatedTypeImpl<?> parentType)
+  {
+    super(annType);
+    
+    _javaClass = annType.getJavaClass();
+    
+    if (getBaseTypeImpl().getParamMap() != null)
+      _paramMap.putAll(getBaseTypeImpl().getParamMap());
+    
+    _parentType = parentType;
   
     _constructorSet.addAll(annType.getConstructors());
     _fieldSet.addAll(annType.getFields());
@@ -109,6 +141,15 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
     else
       return new AnnotatedTypeImpl<X>(annType);
   }
+  
+  public static <X> AnnotatedTypeImpl<X> create(AnnotatedType<X> annType,
+                                                AnnotatedTypeImpl<?> parentType)
+  {
+    if (annType instanceof AnnotatedTypeImpl<?>)
+      return (AnnotatedTypeImpl<X>) annType;
+    else
+      return new AnnotatedTypeImpl<X>(annType, parentType);
+  }
 
   /**
    * Returns the concrete Java class
@@ -117,6 +158,17 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
   public Class<X> getJavaClass()
   {
     return _javaClass;
+  }
+  
+  @Override
+  public HashMap<String,BaseType> getBaseTypeParamMap()
+  {
+    return _paramMap;
+  }
+  
+  public AnnotatedTypeImpl<?> getParentType()
+  {
+    return _parentType;
   }
 
   /**
@@ -239,11 +291,5 @@ public class AnnotatedTypeImpl<X> extends AnnotatedElementImpl
     }
 
     introspectInheritedAnnotations(cl.getSuperclass(), isScope);
-  }
-
-  @Override
-  public String toString()
-  {
-    return getClass().getSimpleName() + "[" + _javaClass + "]";
   }
 }

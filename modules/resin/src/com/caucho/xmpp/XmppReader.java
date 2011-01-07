@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,7 +41,7 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.vfs.ReadStream;
 import com.caucho.xmpp.im.ImMessage;
 import com.caucho.xmpp.im.ImPresence;
@@ -407,14 +407,16 @@ public class XmppReader
       long bamId = _xmppContext.addId(id);
 
       if (_handler != null)
-        _handler.queryGet(bamId, to, from, query);
+        _handler.query(bamId, to, from, query);
     }
+    /*
     else if ("set".equals(type)) {
       long bamId = _xmppContext.addId(id);
 
       if (_handler != null)
         _handler.querySet(bamId, to, from, query);
     }
+    */
     else if ("result".equals(type)) {
       long bamId = Long.parseLong(id);
 

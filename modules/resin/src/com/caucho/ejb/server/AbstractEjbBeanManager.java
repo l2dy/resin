@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -147,6 +147,7 @@ abstract public class AbstractEjbBeanManager<X> implements EnvironmentBean {
     // XXX: 4.0.7 this is complicated by decorator vs context injection
     _loader.setAttribute("caucho.inject", false);
     _loader.setAttribute("ejb.manager", false);
+    _loader.setId("ejb:" + ejbName);
     
     _producer = createInjectionTarget();
     

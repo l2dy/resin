@@ -321,9 +321,13 @@ public class ResinBoot {
     
     BootCommand command = _commandMap.get(_args.getStartMode());
     
-    if (command != null) {
-      command.doCommand(_args, _client);
+    if (command != null && _args.isHelp()) {
+      command.usage();
       
+      return false;
+    } else if (command != null) {
+      command.doCommand(_args, _client);
+
       return false;
     }
     
@@ -357,19 +361,14 @@ public class ResinBoot {
       }
       
       System.exit(0);
+    } catch (ConfigException e) {
+      System.out.println(e.getMessage());
+
+      System.exit(2);
     } catch (Exception e) {
       e.printStackTrace();
 
-      if (e instanceof ConfigException) {
-        System.out.println(e.getMessage());
-
-        System.exit(2);
-      }
-      else {
-        e.printStackTrace();
-
-        System.exit(3);
-      }
+      System.exit(3);
     }
   }
 
@@ -390,6 +389,13 @@ public class ResinBoot {
   }
   
   static {
+    _commandMap.put(StartMode.COPY, new CopyCommand());
     _commandMap.put(StartMode.DEPLOY, new DeployCommand());
+    _commandMap.put(StartMode.JSPC, new JspcCommand());
+    _commandMap.put(StartMode.LIST, new ListCommand());
+    _commandMap.put(StartMode.RESTART_WEBAPP, new RestartWebAppCommand());
+    _commandMap.put(StartMode.START_WEBAPP, new StartWebAppCommand());
+    _commandMap.put(StartMode.STOP_WEBAPP, new StopWebAppCommand());
+    _commandMap.put(StartMode.UNDEPLOY, new UnDeployCommand());
   }
 }

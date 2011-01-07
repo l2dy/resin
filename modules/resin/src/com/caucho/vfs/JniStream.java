@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -72,6 +72,8 @@ public class JniStream extends StreamImpl {
       
       throw _readException;
     }
+    else if (length == 0 && result == 0)
+      return 0;
     else
       return -1;
   }

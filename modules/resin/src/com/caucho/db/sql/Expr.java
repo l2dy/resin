@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -507,6 +507,7 @@ abstract public class Expr {
         return offset;
       }
 
+      /*
     case BINARY:
       {
         byte []bytes = evalBytes(context);
@@ -519,6 +520,12 @@ abstract public class Expr {
         else
           return 0;
       }
+      */
+      
+    case BINARY:
+    {
+      return evalToBuffer(context, buffer, off);
+    }
 
     default:
       throw new UnsupportedOperationException(getClass().getName() + " unknown column: " + columnType);

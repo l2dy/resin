@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,7 +39,6 @@ import java.net.SocketTimeoutException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.env.service.AbstractResinService;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownService;
@@ -51,7 +50,7 @@ import com.caucho.vfs.ReadStream;
 /**
  * The wait-for-exit service waits for Resin to exit.
  */
-class ResinWaitForExitService extends AbstractResinService
+class ResinWaitForExitService
 {
   private static final Logger log 
     = Logger.getLogger(ResinWaitForExitService.class.getSimpleName());
@@ -98,7 +97,7 @@ class ResinWaitForExitService extends AbstractResinService
                                           this,
                                           ShutdownService.class.getSimpleName()));
     }
-
+    
     /*
      * If the server has a parent process watching over us, close
      * gracefully when the parent dies.
@@ -106,27 +105,30 @@ class ResinWaitForExitService extends AbstractResinService
     while (! _resin.isClosing()) {
       try {
         Thread.sleep(10);
-
+        
         if (! checkMemory(runtime)) {
-          shutdown.startFailSafeShutdown("Resin shutdown from out of memory");
+          shutdown.shutdown(ExitCode.MEMORY, "Resin shutdown from out of memory");
           // dumpHeapOnExit();
           return;
         }
-
+        
         if (! checkFileDescriptor()) {
-          shutdown.startFailSafeShutdown("Resin shutdown from out of file descriptors");
+          shutdown.shutdown(ExitCode.MEMORY, 
+                            "Resin shutdown from out of file descriptors");
           //dumpHeapOnExit();
           return;
         }
-
+        
         if (_waitIn != null) {
           if (_waitIn.read() >= 0) {
             socketExceptionCount = 0;
           }
-          else
-            log.warning(L.l("Stopping due to watchdog or user."));
-
-          return;
+          else {
+            shutdown.shutdown(ExitCode.WATCHDOG_EXIT,
+                              "Stopping due to watchdog or user.");
+            
+            return;
+          }
         }
         else {
           synchronized (this) {
@@ -143,9 +145,9 @@ class ResinWaitForExitService extends AbstractResinService
         // The Solaris JVM will throw SocketException periodically
         // instead of interrupted exception, so those exceptions need to
         // be ignored.
-
+        
         // However, the Windows JVMs will throw connection reset by peer
-        // instead of returning an end of file in the read.  So those
+        // instead of returning an end of file in the read. So those
         // need to be trapped to close the socket.
         if (socketExceptionCount++ == 0) {
           log.log(Level.FINE, e.toString(), e);
@@ -158,7 +160,7 @@ class ResinWaitForExitService extends AbstractResinService
         ShutdownService.shutdownActive(ExitCode.MEMORY, msg);
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
-
+        
         return;
       }
     }
@@ -251,10 +253,9 @@ class ResinWaitForExitService extends AbstractResinService
     try {
       thread.setContextClassLoader(_resinSystem.getClassLoader());
       
+      WarningService warning = WarningService.getCurrent();
+
       _resinActor = new ResinActor(_resin);
-      
-      WarningService warning = WarningService.create();
-      
       warning.addHandler(new ResinWarningHandler(_resinActor));
 
       if (_pingSocket != null) {

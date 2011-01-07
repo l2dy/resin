@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -144,6 +144,7 @@ public class WebAppFilterChain implements CauchoFilterChain {
    * @param response the servlet response
    * @since Servlet 2.3
    */
+  @Override
   public void doFilter(ServletRequest request,
                        ServletResponse response)
     throws ServletException, IOException
@@ -214,18 +215,6 @@ public class WebAppFilterChain implements CauchoFilterChain {
           log.log(Level.WARNING, e.toString(), e);
         }
       }
-
-      /*
-      try {
-        if (_accessLog != null) {
-          _accessLog.log((HttpServletRequest) request,
-                         (HttpServletResponse) response,
-                         _webApp);
-        }
-      } catch (Throwable e) {
-        log.log(Level.FINE, e.toString(), e);
-      }
-      */
 
       thread.setContextClassLoader(oldLoader);
     }

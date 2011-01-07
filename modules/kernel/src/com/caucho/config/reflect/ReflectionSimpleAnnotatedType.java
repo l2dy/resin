@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -61,7 +61,7 @@ public class ReflectionSimpleAnnotatedType<X>
   
   public ReflectionSimpleAnnotatedType(InjectManager manager, BaseType type)
   {
-    super(type.toType(),
+    super(type,
           type.getTypeClosure(manager),
           type.getRawClass().getAnnotations());
     

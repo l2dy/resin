@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,7 +31,6 @@ package com.caucho.hemp.broker;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.cfg.AbstractBeanConfig;
-import com.caucho.remote.BamService;
 import com.caucho.util.L10N;
 
 /**
@@ -47,14 +46,6 @@ public class BamServiceConfig extends AbstractBeanConfig
     setScope("singleton");
   }
 
-  /*
-  @Override
-  public Class getBeanConfigClass()
-  {
-    return Actor.class;
-  }
-  */
-
   public void setThreadMax(int threadMax)
   {
   }
@@ -67,72 +58,9 @@ public class BamServiceConfig extends AbstractBeanConfig
 
     final String name = getName();
 
-    add(new BamService() {
-        public Class annotationType() { return BamService.class; }
-        public int threadMax() { return 5; }
-        public String name() { return name; }
-      });
+    add(new BamServiceLiteral(name));
+    
+    deploy();
   }
-
-  /*
-  @PostConstruct
-  public void init()
-  {
-    super.init();
-
-    // XXX: 3.2.0 temp
-    com.caucho.loader.Environment.addCloseListener(this);
-
-    start();
-  }
-  */
-
-  /*
-  @PreDestroy
-  public void destroy()
-  {
-    if (_service != null)
-      _broker.removeActor(_service);
-  }
-  */
-
-  /*
-  @Start
-  public void start()
-  {
-    if (_service != null)
-      return;
-
-    Actor service = (Actor) getObject();
-
-    // XXX: jms/3a14 - needs to be cleaned up
-    if (service instanceof SimpleActor) {
-      SimpleActor simpleService = (SimpleActor) service;
-
-      simpleService.setBrokerStream(_broker.getBrokerStream());
-    }
-
-    String name = getName();
-    if (name == null)
-      name = service.getClass().getSimpleName();
-
-    String jid = name;
-    if (jid.indexOf('@') < 0 && jid.indexOf('/') < 0)
-      jid = name + "@" + _broker.getJid();
-
-    service.setJid(jid);
-
-    // queue
-    if (_threadMax > 0) {
-      service = new MemoryQueueServiceFilter(service,
-                                             _broker,
-                                             _threadMax);
-    }
-
-    _service = service;
-
-    _broker.addActor(service);
-  }
-  */
 }
 

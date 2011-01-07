@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,7 +40,6 @@ import javax.servlet.ServletException;
 
 import com.caucho.config.inject.HandleAware;
 import com.caucho.server.security.PasswordDigest;
-import com.caucho.util.Base64;
 import com.caucho.util.L10N;
 
 /**
@@ -57,7 +56,8 @@ public class AbstractAuthenticator
 {
   private static final Logger log
     = Logger.getLogger(AbstractAuthenticator.class.getName());
-  static final L10N L = new L10N(AbstractAuthenticator.class);
+  
+  private static final SingleSignon NULL_SINGLE_SIGNON = new NullSingleSignon(); 
   
   protected String _passwordDigestAlgorithm = "MD5-base64";
   protected String _passwordDigestRealm = "resin";
@@ -260,22 +260,41 @@ public class AbstractAuthenticator
                                    PasswordCredentials cred,
                                    Object details)
   {
-    PasswordUser user = getPasswordUser(principal);
-
-    if (user == null || user.isDisabled())
-      return null;
-    
-    char []password = cred.getPassword();
+    return authenticate(principal, cred.getPassword());
+  }
+  
+  /**
+   * Password-based authenticator.
+   */
+  protected Principal authenticate(Principal principal,
+                                   char []password)
+  {
     char []digest = getPasswordDigest(principal.getName(), password);
     
     if (digest == null)
+      return null;
+    
+    Principal user = authenticateDigest(principal, digest);
+    
+    Arrays.fill(digest, 'a');
+    
+    return user;
+  }
+  
+  /**
+   * Password-based after the digest is calculated.
+   */
+  protected Principal authenticateDigest(Principal principal,
+                                         char []digest)
+  {
+    PasswordUser user = getPasswordUser(principal);
+
+    if (user == null || user.isDisabled())
       return null;
 
     if (! isMatch(digest, user.getPassword()) && ! user.isAnonymous()) {
       user = null;
     }
-    
-    Arrays.fill(digest, 'a');
 
     if (user != null)
       return user.getPrincipal();
@@ -516,10 +535,13 @@ public class AbstractAuthenticator
       _singleSignon = AbstractSingleSignon.getCurrent();
     
       if (_singleSignon == null)
-        _singleSignon = new NullSingleSignon();
+        _singleSignon = NULL_SINGLE_SIGNON;
     }
     
-    return _singleSignon;
+    if (_singleSignon != NULL_SINGLE_SIGNON)
+      return _singleSignon;
+    else
+      return null;
   }
 
   //

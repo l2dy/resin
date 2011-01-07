@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,7 +33,7 @@ import java.io.Serializable;
 import java.util.logging.Logger;
 
 import com.caucho.bam.Message;
-import com.caucho.bam.SimpleActor;
+import com.caucho.bam.actor.SimpleActor;
 import com.caucho.server.resin.WarningMessage;
 
 /**
@@ -53,17 +53,17 @@ public class WatchdogActor extends SimpleActor
     _child = watchdog;
   }
   
-  public Serializable queryGet(Serializable payload)
+  public Serializable query(Serializable payload)
   {
-    return getLinkClient().queryGet("resin@admin.resin.caucho", payload);
+    return getSender().query("resin@admin.resin.caucho", payload);
   }
 
   public void sendShutdown()
   {
-    getLinkStream().querySet(1,
-                             "resin@admin.resin.caucho",
-                             "watchdog@admin.resin.caucho",
-                             new WatchdogStopQuery(""));
+    getBroker().query(1,
+                          "resin@admin.resin.caucho",
+                          "watchdog@admin.resin.caucho",
+                          new WatchdogStopQuery(""));
   }
   
   @Message

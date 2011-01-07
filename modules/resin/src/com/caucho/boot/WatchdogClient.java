@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,8 +39,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.VersionFactory;
-import com.caucho.bam.ActorClient;
 import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.actor.ActorSender;
 import com.caucho.config.ConfigException;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.hmtp.HmtpClient;
@@ -69,7 +69,7 @@ class WatchdogClient
   private WatchdogConfig _config;
   private WatchdogChild _watchdog;
 
-  private ActorClient _conn;
+  private ActorSender _conn;
 
   private Boot _jniBoot;
 
@@ -194,11 +194,11 @@ class WatchdogClient
   public String statusWatchdog()
     throws IOException
   {
-    ActorClient conn = getConnection();
+    ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.queryGet(WATCHDOG_JID, new WatchdogStatusQuery());
+        conn.query(WATCHDOG_JID, new WatchdogStatusQuery());
 
       if (status.isSuccess())
         return status.getMessage();
@@ -238,13 +238,13 @@ class WatchdogClient
       throw new ConfigException(L.l("<group-name> requires compiled JNI.\n{0}", message));
     }
 
-    ActorClient conn = null;
+    ActorSender conn = null;
 
     try {
       conn = getConnection();
 
       ResultStatus status = (ResultStatus)
-        conn.querySet(WATCHDOG_JID, new WatchdogStartQuery(argv), BAM_TIMEOUT);
+        conn.query(WATCHDOG_JID, new WatchdogStartQuery(argv), BAM_TIMEOUT);
 
       if (status.isSuccess())
         return;
@@ -265,11 +265,11 @@ class WatchdogClient
 
   public void stopWatchdog()
   {
-    ActorClient conn = getConnection();
+    ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.querySet(WATCHDOG_JID, new WatchdogStopQuery(getId()), BAM_TIMEOUT);
+        conn.query(WATCHDOG_JID, new WatchdogStopQuery(getId()), BAM_TIMEOUT);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog stop failed because of '{1}'",
@@ -284,11 +284,11 @@ class WatchdogClient
   public void killWatchdog()
     throws IOException
   {
-    ActorClient conn = getConnection();
+    ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.querySet(WATCHDOG_JID, new WatchdogKillQuery(getId()), BAM_TIMEOUT);
+        conn.query(WATCHDOG_JID, new WatchdogKillQuery(getId()), BAM_TIMEOUT);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog kill failed because of '{1}'",
@@ -321,11 +321,11 @@ class WatchdogClient
   public boolean shutdown()
     throws IOException
   {
-    ActorClient conn = getConnection();
+    ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.querySet(WATCHDOG_JID, new WatchdogShutdownQuery(), BAM_TIMEOUT);
+        conn.query(WATCHDOG_JID, new WatchdogShutdownQuery(), BAM_TIMEOUT);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog shutdown failed because of '{1}'",
@@ -339,12 +339,14 @@ class WatchdogClient
     return true;
   }
 
-  private ActorClient getConnection()
+  private ActorSender getConnection()
   {
     if (_conn == null) {
-      HmtpClient client = new HmtpClient("http://" + getWatchdogAddress()
-                                         + ":" + getWatchdogPort()
-                                         + "/hmtp");
+      String url = ("http://" + getWatchdogAddress()
+                    + ":" + getWatchdogPort()
+                    + "/hmtp");
+      
+      HmtpClient client = new HmtpClient(url);
 
       client.setVirtualHost("admin.resin");
       

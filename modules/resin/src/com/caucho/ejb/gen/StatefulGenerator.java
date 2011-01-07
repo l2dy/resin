@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -71,9 +71,10 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
 
     InjectManager manager = InjectManager.create();
 
-    _aspectBeanFactory = new StatefulAspectBeanFactory<X>(manager,
-        getBeanType());
-    _lifecycleAspectFactory = new LifecycleAspectBeanFactory<X>(_aspectBeanFactory, manager, getBeanType());
+    _aspectBeanFactory
+      = new StatefulAspectBeanFactory<X>(manager, getBeanType());
+    _lifecycleAspectFactory
+      = new LifecycleAspectBeanFactory<X>(_aspectBeanFactory, manager, getBeanType());
   }
 
   @Override
@@ -195,11 +196,13 @@ public class StatefulGenerator<X> extends SessionGenerator<X> {
     out.print(",\n  java.io.Serializable");
 
     for (AnnotatedType<? super X> api : getLocalApi()) {
-      out.print(",\n  " + api.getJavaClass().getName());
+      out.print(",\n  ");
+      out.printType(api.getBaseType());
     }
 
     for (AnnotatedType<? super X> apiType : getRemoteApi()) {
-      out.print(",\n  " + apiType.getJavaClass().getName());
+      out.print(",\n  ");
+      out.printType(apiType.getBaseType());
     }
 
     out.println();

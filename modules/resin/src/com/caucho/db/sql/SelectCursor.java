@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -212,6 +212,12 @@ public class SelectCursor {
     throws SQLException
   {
     _exprs[i].updateDouble(_context, value);
+  }
+
+  public byte []getBytes(int i)
+    throws SQLException
+  {
+    return _exprs[i].evalBytes(_context);
   }
 
   public void updateRow()

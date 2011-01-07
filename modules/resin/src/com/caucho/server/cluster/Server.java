@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,10 +38,12 @@ import javax.annotation.PostConstruct;
 import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.VersionFactory;
-import com.caucho.bam.ActorClient;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
-import com.caucho.bam.SimpleActorClient;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
+import com.caucho.bam.stream.ActorStream;
+import com.caucho.bam.stream.NullActorStream;
 import com.caucho.cloud.bam.BamService;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterService;
@@ -253,7 +255,7 @@ public class Server
 
     _alarm = new Alarm(this);
     
-    _bamService = BamService.create(getBamAdminName());
+    _bamService = BamService.getCurrent();
 
     _authManager = new ServerAuthManager();
     // XXX:
@@ -390,23 +392,15 @@ public class Server
   /**
    * Returns the bam broker.
    */
-  public Broker getBamBroker()
+  public ManagedBroker getBamBroker()
   {
     return _bamService.getBroker();
   }
 
   /**
-   * Returns the stream to the public broker.
-   */
-  public ActorStream getBamStream()
-  {
-    return getBamBroker().getBrokerStream();
-  }
-
-  /**
    * Returns the bam broker.
    */
-  public Broker getAdminBroker()
+  public ManagedBroker getAdminBroker()
   {
     return getBamBroker();
   }
@@ -414,17 +408,16 @@ public class Server
   /**
    * Creates a bam client to the admin.
    */
-  public ActorClient createAdminClient(String uid)
+  public ActorSender createAdminClient(String uid)
   {
-    return new SimpleActorClient(getAdminBroker(), uid, null);
-  }
+    String jid = uid + "@" + getAdminBroker().getJid();
 
-  /**
-   * Returns the stream to the admin broker.
-   */
-  public ActorStream getAdminStream()
-  {
-    return getAdminBroker().getBrokerStream();
+    NullActorStream stream = new NullActorStream(jid, getAdminBroker());
+    
+    SimpleActorSender sender 
+      = new SimpleActorSender(stream, getAdminBroker(), jid, null);
+    
+    return sender;
   }
 
   /**

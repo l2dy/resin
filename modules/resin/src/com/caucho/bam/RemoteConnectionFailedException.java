@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,11 @@
 
 package com.caucho.bam;
 
+
 /**
  * HMPP wrapper
  */
+@SuppressWarnings("serial")
 public class RemoteConnectionFailedException
   extends ErrorPacketException
 {
@@ -42,6 +44,13 @@ public class RemoteConnectionFailedException
   public RemoteConnectionFailedException(String msg)
   {
     super(msg);
+  }
+
+  public RemoteConnectionFailedException(Throwable e)
+  {
+    super(e.toString(), e);
+    
+    Thread.dumpStack();
   }
 
   public RemoteConnectionFailedException(String msg, Throwable e)
@@ -62,5 +71,18 @@ public class RemoteConnectionFailedException
   public RemoteConnectionFailedException(ActorError error)
   {
     super(error);
+  }
+
+  @Override
+  public ActorError createActorError()
+  {
+    ActorError error = getActorError();
+
+    if (error != null)
+      return error;
+
+    return new ActorError(ActorError.TYPE_CANCEL,
+                          ActorError.REMOTE_CONNECTION_FAILED,
+                          getMessage());
   }
 }

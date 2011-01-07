@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,13 +34,19 @@ import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
+import com.caucho.bam.broker.PassthroughBroker;
+import com.caucho.bam.mailbox.Mailbox;
+import com.caucho.bam.mailbox.MultiworkerMailbox;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.cloud.bam.BamService;
-import com.caucho.hemp.broker.HempMemoryQueue;
+import com.caucho.hemp.servlet.ClientStubManager;
+import com.caucho.hemp.servlet.ServerProxyBroker;
+import com.caucho.hemp.servlet.ServerGatewayBroker;
 import com.caucho.hessian.io.HessianDebugInputStream;
-import com.caucho.hmtp.HmtpReader;
-import com.caucho.hmtp.HmtpWriter;
+import com.caucho.hmtp.HmtpWebSocketReader;
+import com.caucho.hmtp.HmtpWebSocketWriter;
 import com.caucho.network.listen.AbstractProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.util.L10N;
@@ -71,9 +77,12 @@ public class HmtpRequest extends AbstractProtocolConnection
   
   private boolean _isFirst;
 
-  private HmtpReader _hmtpReader;
-  private HmtpWriter _hmtpWriter;
-  private ActorStream _linkStream;
+  private HmtpWebSocketReader _hmtpReader;
+  private HmtpWebSocketWriter _hmtpWriter;
+
+  private ClientStubManager _clientManager;
+  private Broker _toLinkBroker;
+  private Broker _proxyBroker;
   
   private HmtpLinkActor _linkActor;
 
@@ -82,6 +91,12 @@ public class HmtpRequest extends AbstractProtocolConnection
   {
     _conn = conn;
     _bamService = bamService;
+    
+    if (conn == null)
+      throw new NullPointerException();
+    
+    if (bamService == null)
+      throw new NullPointerException();
 
     _rawRead = conn.getReadStream();
     _rawWrite = conn.getWriteStream();
@@ -140,44 +155,50 @@ public class HmtpRequest extends AbstractProtocolConnection
                                                   Integer.toHexString(ch)));
 
     int len = (is.read() << 8) + is.read();
-    boolean isAdmin = is.read() != 0;
+    int adminCode = is.read();
+    boolean isAdmin = adminCode != 0;
 
     InputStream rawIs = is;
-
+    
+    is.skip(len - 1);
+    
     if (log.isLoggable(Level.FINEST)) {
       HessianDebugInputStream dIs
         = new HessianDebugInputStream(is, log, Level.FINEST);
-      dIs.startStreaming();
+      // dIs.startStreaming();
       rawIs = dIs;
     }
 
-    if (_hmtpReader != null)
-      _hmtpReader.init(rawIs);
-    else {
-      _hmtpReader = new HmtpReader(rawIs);
-      _hmtpReader.setId(getRequestId());
-    }
+    _hmtpReader = new HmtpWebSocketReader(rawIs);
 
-    if (_hmtpWriter != null)
-      _hmtpWriter.init(_rawWrite);
-    else {
-      _hmtpWriter = new HmtpWriter(_rawWrite);
-      // _hmtpWriter.setId(getRequestId());
-      _hmtpWriter.setAutoFlush(true);
-    }
+    _hmtpWriter = new HmtpWebSocketWriter(_rawWrite);
+    // _hmtpWriter.setId(getRequestId());
+    // _hmtpWriter.setAutoFlush(true);
 
-    Broker broker = _bamService.getBroker();
-    ActorStream brokerStream = broker.getBrokerStream();
+    ManagedBroker broker = _bamService.getBroker();
 
     _hmtpWriter.setJid("hmtp-server-" + _conn.getId() + "-hmtp");
 
-    _linkStream = new HempMemoryQueue(_hmtpWriter, brokerStream, 1);
+    Mailbox toLinkMailbox = new MultiworkerMailbox(_hmtpWriter.getJid(), _hmtpWriter, broker, 1);
+    _toLinkBroker = new PassthroughBroker(toLinkMailbox);
+    
+    _clientManager = new ClientStubManager(broker, toLinkMailbox);
 
-    _linkActor = new HmtpLinkActor(_linkStream,
-                                   broker,
+    _linkActor = new HmtpLinkActor(_toLinkBroker,
+                                   _clientManager,
                                    _bamService.getLinkManager(),
-                                   _conn.getRemoteHost(),
-                                   isUnidir);
+                                   _conn.getRemoteHost());
+
+    if (isUnidir) {
+      _proxyBroker = new ServerGatewayBroker(broker,
+                                             _clientManager, 
+                                               _linkActor.getActorStream());
+    }
+    else {
+      _proxyBroker = new ServerProxyBroker(broker,
+                                           _clientManager, 
+                                           _linkActor.getActorStream());
+    }
 
     return dispatchHmtp();
   }
@@ -185,16 +206,16 @@ public class HmtpRequest extends AbstractProtocolConnection
   private boolean dispatchHmtp()
     throws IOException
   {
-    HmtpReader in = _hmtpReader;
+    HmtpWebSocketReader in = _hmtpReader;
 
     do {
-      ActorStream brokerStream = _linkActor.getBrokerStream();
+      Broker broker = _proxyBroker;
       
-      if (! in.readPacket(brokerStream)) {
+      if (! in.readPacket(broker)) {
         return false;
       }
     } while (in.isDataAvailable());
-    
+
     return true;
   }
 
@@ -207,17 +228,19 @@ public class HmtpRequest extends AbstractProtocolConnection
     HmtpLinkActor linkActor = _linkActor;
     _linkActor = null;
 
-    ActorStream linkStream = _linkStream;
-    _linkStream = null;
+    ActorStream linkStream = _toLinkBroker;
+    _toLinkBroker = null;
 
     if (linkActor != null) {
       linkActor.onCloseConnection();
     }
 
+    /*
     if (linkStream != null)
       linkStream.close();
+      */
 
-    HmtpWriter writer = _hmtpWriter;
+    HmtpWebSocketWriter writer = _hmtpWriter;
 
     if (writer != null)
       writer.close();

@@ -11,7 +11,38 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.13 - snapshot">
+<s2 title="4.0.14 - snapshot">
+<ul>
+<li>resin: CLI added deploy, undeploy, list, start-webapp, stop-webapp, restar-webapp commands (#4316, rep by Patrick Brigger)</li>
+<li>cache: use cursor to update data timeouts</li>
+<li>heartbeat: server connections need to depend on heartbeat only</li>
+<li>access-log: off-by-one issue with access log rollover causing missed 1D (rep by Steve Francis)</li>
+<li>thread: if Thread cannot be instantiated, restart Resin (rep by B Hafezi)</li>
+<li>quercus: SimpleXMLElement needs a __count function (#4318, rep by Homayoun Zariv)</li>
+<li>quercus: list($a) = each($this->foo) was not compiled properly (#4319, rep by Akara Sucharitakul)</li>
+<li>quercus: add array_replace, array_replace_recursive (#4312, rep by Homayoun Zariv)</li>
+<li>quercus: simplexml_load_file not working properly with http: (#4311, rep by Akara Sucharitakul)</li>
+<li>cdi: InjectManager.resolveAllBeans with incorrect synchronization (rep by Wesley Wu)</li>
+<li>security: FormLogin persistence/session issues (#4299, rep by Jamison Novak)</li>
+<li>jsp-el: parsing confusion with "0#${foo}" (#4190, rep by olaf2010)</li>
+<li>rewrite: host-level rewrite issues with access-log (#4198)</li>
+<li>distribution: slf4j.jar removed from resin/lib (#4271, rep by Nicolai Steven)</li>
+<li>servlet: setHeader("Content-Length", "12;") was throwing an exception (#4210, rep by mkjang)</li>
+<li>servlet: getOutputStream was not allowed after flushBuffer (#4289, rep by vbavin)</li>
+<li>db-pool: increased default DB create count to 20 (#4252, rep by Wesley Wu)</li>
+<li>hessian: change HessianServlet to extend HttpServlet (#4193, rep by voodude)</li>
+<li>cookie: change &lt;http-only> to apply only to the session cookie (#4217, rep by gzhu)</li>
+<li>thread: priority thread queue fixes (#4228, #4291, rep by Jamison Novak)</li>
+<li>thread: refactor ThreadLauncher to use AbstractTaskWorker</li>
+<li>cdi: error with @Produces method with generic result and @Named (#4265, rep by jharting)</li>
+<li>cdi: allow &lt;resin:FileQueue> to be assigned to BlockingQueue&lt;MyItem> (#4067, rep by Jeff Schnitzer)</li>
+<li>jsp: cross-context forward classloader/.tld not updating (#4284, rep by Brian Deng)</li>
+<li>ejb: generic interface issues MyBean implements Foo&lt;String> (#4266, rep by jharting)</li>
+<li>servlet: cross context forward classloader not properly updated (#4248, rep by jessicay)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.13 - Nov 10, 2010">
 <ul>
 <li>hessian: java.sql.Timestamp deserialization NPE (#4286, rep by Matt Poirier and Shawn Frederickson)</li>
 <li>servlet: url-mapping="" was not handled properly (#4283, rep by Peter Yuill)</li>

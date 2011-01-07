@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,6 +35,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.logging.Level;
@@ -51,6 +52,7 @@ import javax.enterprise.inject.spi.AnnotatedType;
 import javax.inject.Named;
 import javax.inject.Qualifier;
 import javax.inject.Scope;
+import javax.interceptor.Interceptors;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
@@ -70,6 +72,8 @@ public class ReflectionAnnotatedType<T>
 
   private Class<T> _javaClass;
   
+  private HashMap<String,BaseType> _paramMap = new HashMap<String,BaseType>();
+  
   private ReflectionAnnotatedType<?> _parentType;
 
   private Set<AnnotatedConstructor<T>> _constructorSet
@@ -84,7 +88,7 @@ public class ReflectionAnnotatedType<T>
   ReflectionAnnotatedType(InjectManager manager, 
                           BaseType type)
   {
-    super(type.getRawClass(),
+    super(type,
           type.getTypeClosure(manager),
           type.getRawClass().getDeclaredAnnotations());
 
@@ -94,6 +98,9 @@ public class ReflectionAnnotatedType<T>
     
     if (parentClass != null && ! parentClass.equals(Object.class))
       _parentType = ReflectionAnnotatedFactory.introspectType(parentClass);
+    
+    if (getBaseTypeImpl().getParamMap() != null)
+      _paramMap.putAll(getBaseTypeImpl().getParamMap());
     
     introspect(_javaClass);
   }
@@ -105,6 +112,17 @@ public class ReflectionAnnotatedType<T>
   public Class<T> getJavaClass()
   {
     return _javaClass;
+  }
+  
+  public ReflectionAnnotatedType<?> getParentType()
+  {
+    return _parentType;
+  }
+  
+  @Override
+  public HashMap<String,BaseType> getBaseTypeParamMap()
+  {
+    return _paramMap;
   }
 
   /**
@@ -225,7 +243,7 @@ public class ReflectionAnnotatedType<T>
           childMethod = AnnotatedTypeUtil.findMethod(_methodSet, method);
         }
         
-        if (childMethod == null) {
+        if (! isMethodOverride(method, childMethod)) {
           _methodSet.add(new AnnotatedMethodImpl<T>(this, null, method));
         }
         /*
@@ -261,6 +279,27 @@ public class ReflectionAnnotatedType<T>
       introspectParentMethods(_parentType);
     }
   }
+  
+  private boolean isMethodOverride(Method parentMethod,
+                                   AnnotatedMethod<?> childMethod)
+  {
+    if (childMethod == null)
+      return false;
+    
+    if (Modifier.isPrivate(parentMethod.getModifiers()))
+      return false;
+    
+    if (Modifier.isPublic(parentMethod.getModifiers())
+        || Modifier.isProtected(parentMethod.getModifiers())) {
+      return true;
+    }
+    
+    String parentPkg = parentMethod.getDeclaringClass().getPackage().getName();
+    String childPkg = childMethod.getJavaMember().getDeclaringClass().getPackage().getName();
+
+      // ioc/011b
+    return parentPkg.equals(childPkg);
+  }
 
   private void introspectParentMethods(AnnotatedType<?> parentType)
   {
@@ -277,7 +316,7 @@ public class ReflectionAnnotatedType<T>
         if (! Modifier.isPrivate(javaMethod.getModifiers()))
           childMethod = AnnotatedTypeUtil.findMethod(_methodSet, javaMethod);
             
-        if (childMethod == null) {
+        if (! isMethodOverride(javaMethod, childMethod)) {
           _methodSet.add((AnnotatedMethod<? super T>) annMethod);
         }
         /*
@@ -341,6 +380,7 @@ public class ReflectionAnnotatedType<T>
       if (cl == _javaClass)
         continue;
 
+      // ejb/1062
       if (! annType.isAnnotationPresent(Inherited.class)) {
         continue;
       }
@@ -451,11 +491,5 @@ public class ReflectionAnnotatedType<T>
     String name = annType.getName();
 
     return name.startsWith("javax.");
-  }
-
-  @Override
-  public String toString()
-  {
-    return getClass().getSimpleName() + "[" + _javaClass + "]";
   }
 }

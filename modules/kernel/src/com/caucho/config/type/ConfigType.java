@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,19 @@
 
 package com.caucho.config.type;
 
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.xml.XmlConfigContext;
-import com.caucho.config.*;
-import com.caucho.config.attribute.*;
-import com.caucho.el.*;
-import com.caucho.util.*;
-import com.caucho.xml.QName;
-
 import java.lang.reflect.Constructor;
-import javax.el.*;
+
+import javax.el.ELContext;
 
 import org.w3c.dom.Node;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.attribute.Attribute;
+import com.caucho.config.attribute.FlowAttribute;
+import com.caucho.config.xml.XmlConfigContext;
+import com.caucho.el.Expr;
+import com.caucho.util.L10N;
+import com.caucho.xml.QName;
 
 /**
  * Represents an introspected configuration type.
@@ -80,9 +81,17 @@ abstract public class ConfigType<T>
   /**
    * Creates a top-level instance of the type.
    */
-  public ConfigType createType(QName name)
+  public ConfigType<?> createType(QName name)
   {
     return null;
+  }
+  
+  /**
+   * Returns the config type of the child bean.
+   */
+  public ConfigType<?> getType(Object childBean)
+  {
+    return TypeFactory.getType(childBean);
   }
   
   /**
@@ -110,7 +119,7 @@ abstract public class ConfigType<T>
   /**
    * Returns the constructor with the given number of arguments
    */
-  public Constructor getConstructor(int count)
+  public Constructor<?> getConstructor(int count)
   {
     throw new ConfigException(L.l("'{0}' does not support <new> constructors",
                                   this));
@@ -282,7 +291,7 @@ abstract public class ConfigType<T>
   /**
    * Returns any add attributes to add arbitrary content
    */
-  public Attribute getAddAttribute(Class cl)
+  public Attribute getAddAttribute(Class<?> cl)
   {
     return null;
   }
@@ -311,14 +320,19 @@ abstract public class ConfigType<T>
   {
   }
 
+  public boolean isConstructableFromString()
+  {
+    return true;
+  }
+
+  public boolean isInlineType(ConfigType<?> type)
+  {
+    return false;
+  }
+
   @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + getTypeName() + "]";
-  }
-
-  public boolean isConstructableFromString()
-  {
-    return true;
   }
 }

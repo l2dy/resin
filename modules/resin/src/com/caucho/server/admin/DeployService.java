@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,38 +29,31 @@
 
 package com.caucho.server.admin;
 
+import javax.annotation.PostConstruct;
+
 import com.caucho.config.Service;
-import com.caucho.env.service.AbstractResinService;
-import com.caucho.env.service.ResinSystem;
+import com.caucho.loader.EnvironmentLocal;
 
 @Service
-public class DeployService extends AbstractResinService
+public class DeployService
 {
-  private DeployActor _deployActor;
-  
+  private static EnvironmentLocal<DeployActor> _localDeployActor
+    = new EnvironmentLocal<DeployActor>();
+
   public DeployService()
   {
-    _deployActor = new DeployActor();
-    
-    ResinSystem.getCurrent().addService(this);
+    if (_localDeployActor.get() == null)
+      _localDeployActor.set(new DeployActor());
   }
   
-  public static DeployService create()
+  public DeployActor getCurrentDeployActor()
   {
-    DeployService service = ResinSystem.getCurrentService(DeployService.class);
-    
-    if (service == null) {
-      service = new DeployService();
-      
-      service = ResinSystem.getCurrentService(DeployService.class);
-    }
-    
-    return service;
+    return _localDeployActor.get();
   }
-
-  @Override
-  public void start()
+  
+  @PostConstruct
+  public void init()
   {
-    _deployActor.init();
+    _localDeployActor.get().init();
   }
 }

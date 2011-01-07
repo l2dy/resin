@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.config.reflect;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.GenericDeclaration;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.TypeVariable;
@@ -55,28 +56,28 @@ abstract public class BaseType
   public static BaseType createForTarget(Type type, 
                                          HashMap<String,BaseType> paramMap)
   {
-    return create(type, paramMap, true);
+    return create(type, paramMap, ClassFill.TARGET);
   }
   
   public static BaseType createForSource(Type type, 
                                          HashMap<String,BaseType> paramMap)
   {
 //  return create(type, paramMap, false);
-    return create(type, paramMap, false);
+    return create(type, paramMap, ClassFill.SOURCE);
   }
   
   public static BaseType create(Type type, 
                                 HashMap<String,BaseType> paramMap,
-                                boolean isClassFillParamObject)
+                                ClassFill classFill)
   {
-    return create(type, paramMap, null, isClassFillParamObject);
+    return create(type, paramMap, null, classFill);
   }
     
   public static BaseType create(Type type, 
                                 HashMap<String,BaseType> paramMap,
                                 Type parentType,
-                                boolean isClassFillParamObject)
-    {
+                                ClassFill classFill)
+  {
     if (type instanceof Class<?>) {
       Class<?> cl = (Class<?>) type;
       
@@ -85,17 +86,33 @@ abstract public class BaseType
       if (typeParam == null || typeParam.length == 0)
         return ClassType.create(cl);
 
-      if (! isClassFillParamObject)
-        return createClass(cl);
+      if (classFill == ClassFill.PLAIN)
+        return ClassType.create(cl);
+      else if (classFill == ClassFill.SOURCE)
+        return createGenericClass(cl);
+      
+      // ioc/0p80 vs ioc/1238
+      /*
+      if (true)
+        return ClassType.create(cl);
+        */
       
       BaseType []args = new BaseType[typeParam.length];
 
       HashMap<String,BaseType> newParamMap = new HashMap<String,BaseType>();
 
       for (int i = 0; i < args.length; i++) {
+        BaseType value = null;
+        
+        if (paramMap != null)
+          value = paramMap.get(typeParam[i].getName());
+        
         // ioc/0246
-        args[i] = TargetObjectType.OBJECT_TYPE;
-
+        if (value != null)
+          args[i] = value;
+        else
+          args[i] = TargetObjectType.OBJECT_TYPE;
+        
         if (args[i] == null) {
           throw new NullPointerException("unsupported BaseType: " + type);
         }
@@ -115,7 +132,7 @@ abstract public class BaseType
       BaseType []args = new BaseType[typeArgs.length];
 
       for (int i = 0; i < args.length; i++) {
-        args[i] = create(typeArgs[i], paramMap, type, true);
+        args[i] = create(typeArgs[i], paramMap, type, ClassFill.TARGET);
 
         if (args[i] == null) {
           throw new NullPointerException("unsupported BaseType: " + type);
@@ -130,46 +147,23 @@ abstract public class BaseType
         newParamMap.put(typeVars[i].getName(), args[i]);
       }
 
-      return new ParamType(rawType, args, newParamMap);
+      ParamType paramType = new ParamType(rawType, args, newParamMap);
+      
+      return paramType;
     }
     else if (type instanceof GenericArrayType) {
       GenericArrayType aType = (GenericArrayType) type;
 
-      BaseType baseType = create(aType.getGenericComponentType(), paramMap, isClassFillParamObject);
+      BaseType baseType = create(aType.getGenericComponentType(), paramMap, 
+                                 classFill);
       Class<?> rawType = Array.newInstance(baseType.getRawClass(), 0).getClass();
       
       return new ArrayType(baseType, rawType);
     }
     else if (type instanceof TypeVariable<?>) {
       TypeVariable<?> aType = (TypeVariable<?>) type;
-
-      BaseType actualType = null;
-
-      if (paramMap != null)
-        actualType = (BaseType) paramMap.get(aType.getName());
-
-      if (actualType != null)
-        return actualType;
-
-      BaseType []baseBounds;
-
-      if (aType.getBounds() != null) {
-        Type []bounds = aType.getBounds();
-
-        baseBounds = new BaseType[bounds.length];
-
-        for (int i = 0; i < bounds.length; i++) {
-          // ejb/1243 - Enum
-          if (bounds[i] != parentType)
-            baseBounds[i] = create(bounds[i], paramMap, type, true);
-          else
-            baseBounds[i] = ObjectType.OBJECT_TYPE;
-        }
-      }
-      else
-        baseBounds = new BaseType[0];
       
-      return new VarType(aType.getName(), baseBounds);
+      return createVar(aType, paramMap, parentType, classFill);
     }
     else if (type instanceof WildcardType) {
       WildcardType aType = (WildcardType) type;
@@ -184,13 +178,84 @@ abstract public class BaseType
       throw new IllegalStateException("unsupported BaseType: " + type
                                       + " " + (type != null ? type.getClass() : null));
     }
+    
+  }
+  
+  private static BaseType createVar(Type type,
+                                    HashMap<String,BaseType> paramMap,
+                                    Type parentType,
+                                    ClassFill classFill)
+  {
+    TypeVariable aType = (TypeVariable) type;
+
+    BaseType actualType = null;
+
+    if (paramMap != null)
+      actualType = (BaseType) paramMap.get(aType.getName());
+
+    if (actualType != null)
+      return actualType;
+    
+    String varName;
+    
+    if (paramMap != null)
+      varName = createVarName(paramMap);
+    else
+      varName = aType.getName();
+    
+    BaseType []baseBounds;
+
+    if (aType.getBounds() != null) {
+      Type []bounds = aType.getBounds();
+
+      baseBounds = new BaseType[bounds.length];
+
+      for (int i = 0; i < bounds.length; i++) {
+        // ejb/1243 - Enum
+        if (bounds[i] != parentType)
+          baseBounds[i] = create(bounds[i], paramMap, type, ClassFill.TARGET);
+        else
+          baseBounds[i] = ObjectType.OBJECT_TYPE;
+      }
+    }
+    else
+      baseBounds = new BaseType[0];
+    
+    VarType<?> varType = new VarType(varName, baseBounds);
+    
+    if (paramMap != null)
+      paramMap.put(aType.getName(), varType);
+    
+    return varType;
+  }
+  
+  private static String createVarName(HashMap<String,BaseType> paramMap)
+  {
+    for (int i = 0; true; i++) {
+      String name = "T_" + i;
+      
+      if (! paramMap.containsKey(name))
+        return name;
+    }
+  }
+  
+  /**
+   * Create a class-based type, where any parameters are filled with the
+   * variables, not Object.
+   */
+  public static BaseType createClass(Class<?> type)
+  {
+    // ioc/1238
+    // ioc/07f2
+
+    return ClassType.create(type);
   }
 
   /**
    * Create a class-based type, where any parameters are filled with the
    * variables, not Object.
    */
-  public static BaseType createClass(Class<?> type)
+  public static BaseType createGenericClass(Class<?> type)
   {
     TypeVariable<?> []typeParam = type.getTypeParameters();
       
@@ -202,7 +267,7 @@ abstract public class BaseType
     HashMap<String,BaseType> newParamMap = new HashMap<String,BaseType>();
 
     for (int i = 0; i < args.length; i++) {
-      args[i] = create(typeParam[i], newParamMap, true);
+      args[i] = create(typeParam[i], newParamMap, ClassFill.TARGET);
 
       if (args[i] == null) {
         throw new NullPointerException("unsupported BaseType: " + type);
@@ -225,7 +290,7 @@ abstract public class BaseType
     BaseType []baseTypes = new BaseType[types.length];
 
     for (int i = 0; i < types.length; i++) {
-      baseTypes[i] = create(types[i], paramMap, true);
+      baseTypes[i] = create(types[i], paramMap, ClassFill.TARGET);
     }
 
     return baseTypes;
@@ -356,15 +421,25 @@ abstract public class BaseType
   {
     typeSet.add(toType());
   }
+  
+  public void fillSyntheticTypes(Set<VarType<?>> varTypeList)
+  {
+  }
 
   public String getSimpleName()
   {
     return getRawClass().getSimpleName();
   }
   
+  @Override
   public String toString()
   {
     return getRawClass().getName();
   }
-
+  
+  public enum ClassFill {
+    PLAIN,
+    SOURCE,
+    TARGET;
+  }
 }

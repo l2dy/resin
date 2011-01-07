@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -141,8 +141,13 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     if (_writer != null)
       throw new IllegalStateException(L.l("getOutputStream() can't be called after getWriter()."));
     
-    // jsp/0510
-    _responseStream.clear();
+    try {
+      // jsp/0510
+      _responseStream.clearBuffer();
+    } catch (Exception e) {
+      // server/1b32
+      log.log(Level.FINER, e.toString(), e);
+    }
 
     _outputStream = _response.getResponseOutputStream();
     _outputStream.init(_responseStream);
@@ -568,6 +573,10 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     // server/2h0g
     if (code != SC_OK && code != SC_NOT_MODIFIED)
       killCache();
+    
+    if (code == SC_BAD_REQUEST || code == SC_SWITCHING_PROTOCOLS) {
+      _request.killKeepalive();
+    }
 
     _status = code;
     _statusMessage = message;
@@ -1179,6 +1188,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    *
    * @param cookie the response cookie
    */
+  @Override
   public void addCookie(Cookie cookie)
   {
     _request.setHasCookie();
@@ -1273,6 +1283,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       // server/12zc (tck)
       cookie.setSecure(true);
    }
+    
+    if (manager.isCookieHttpOnly())
+      cookie.setHttpOnly(true);
 
     return cookie;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,94 +30,141 @@
 package com.caucho.hmtp;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.ActorException;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.RemoteConnectionFailedException;
-import com.caucho.bam.SimpleActorClient;
+import com.caucho.bam.actor.Actor;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.broker.Broker;
+import com.caucho.bam.client.LinkClient;
+import com.caucho.bam.query.QueryCallback;
+import com.caucho.bam.query.QueryManager;
+import com.caucho.bam.stream.NullActor;
 import com.caucho.cloud.security.SecurityService;
-import com.caucho.hemp.broker.HempMemoryQueue;
 import com.caucho.remote.websocket.WebSocketClient;
-import com.caucho.servlet.WebSocketContext;
-import com.caucho.servlet.WebSocketListener;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
+import com.caucho.websocket.WebSocketListener;
 
 /**
  * HMTP client protocol
  */
-public class HmtpClient extends SimpleActorClient {
+public class HmtpClient implements ActorSender {
   private static final L10N L = new L10N(HmtpClient.class);
   
   private static final Logger log
     = Logger.getLogger(HmtpClient.class.getName());
-
+  
   private String _url;
   private String _jid;
+  private String _virtualHost;
 
+  private Actor _actor;
+  
+  private HmtpLinkFactory _linkFactory;
+  private LinkClient _linkClient;
+  
   private WebSocketClient _webSocketClient;
+  
   private WebSocketListener _webSocketHandler;
-
+  
   private ActorException _connException;
 
+  private Broker _linkBroker;
+  
+  private boolean _isMasked;
+  
   private ClientAuthManager _authManager = new ClientAuthManager();
-
-  public HmtpClient(String url)
-  {
-    _url = url;
-    
-    _webSocketClient = new WebSocketClient(url);
-    _webSocketHandler = new HmtpWebSocketHandler();
-  }
-
-  public HmtpClient(String url, ActorStream actorStream)
+  
+  public HmtpClient(String url, Actor actor)
     throws IOException
   {
-    this(url);
+    _actor = actor;
+    _url = url;
     
-    setClientStream(actorStream);
+    init();
+  }
+  
+  public HmtpClient(String url)
+  {
+    _actor = new NullActor("HmtpClient@" + url);
+    _url = url;
+    
+    init();
   }
 
   public void setVirtualHost(String host)
   {
-    _webSocketClient.setVirtualHost(host);
+    _linkFactory.setVirtualHost(host);
   }
 
   public void setEncryptPassword(boolean isEncrypt)
   {
   }
+  
+  @Override
+  public Broker getBroker()
+  {
+    return _linkClient.getBroker();
+  }
+
+  public void connect()
+  {
+    _linkFactory.connect();
+  }
 
   public void connect(String user, String password)
   {
-    connectImpl();
-
+    _linkFactory.connect();
+    
     loginImpl(user, password);
   }
 
   public void connect(String user, Serializable credentials)
   {
-    connectImpl();
-
+    _linkFactory.connect();
+    
     loginImpl(user, credentials);
   }
 
+  private void init()
+  {
+    _linkFactory = new HmtpLinkFactory();
+    _linkFactory.setUrl(_url);
+    _linkFactory.setMasked(_isMasked);
+    
+    _linkClient = new LinkClient(_linkFactory, _actor);
+    
+    _actor.setBroker(_linkClient.getBroker());
+  }
+  
   protected void connectImpl()
   {
     try {
-      _webSocketClient.connect(_webSocketHandler);
+      _linkClient.start();
+      /*
+      if (_actor != null)
+        _webSocketHandler = new HmtpWebSocketListener(_actor);
+      else
+        _webSocketHandler = new HmtpWebSocketListener(new NullActorStream());
+        
+      _webSocketClient = new WebSocketClient(_url, _webSocketHandler);
+      
+      _webSocketClient.connect();
+        */
     } catch (ActorException e) {
       _connException = e;
 
       throw _connException;
+      /*
     } catch (IOException e) {
       _connException = new RemoteConnectionFailedException("Failed to connect to server at " + _url + "\n  " + e, 
                                                            e);
 
       throw _connException;
+      */
     }
   }
       
@@ -141,8 +188,7 @@ public class HmtpClient extends SimpleActorClient {
         String clientNonce = String.valueOf(Alarm.getCurrentTime());
         
         NonceQuery nonceQuery = new NonceQuery(uid, clientNonce);
-        NonceQuery nonceResult
-          = (NonceQuery) queryGet(null, nonceQuery);
+        NonceQuery nonceResult = (NonceQuery) query(null, nonceQuery);
         
         String serverNonce = nonceResult.getNonce();
         String serverSignature = nonceResult.getSignature();
@@ -150,21 +196,24 @@ public class HmtpClient extends SimpleActorClient {
         String testSignature = _authManager.sign(uid, clientNonce, password);
         
         if (! testSignature.equals(serverSignature) && "".equals(uid))
-          throw new ActorException(L.l("{0} server signature does not match",
+          throw new ActorException(L.l("{0} resin-system-auth-key does not match",
                                       this));
 
         String signature = _authManager.sign(uid, serverNonce, password);
 
-        SecurityService security = new SecurityService();
+        SecurityService security = SecurityService.getCurrent();
         
         if ("".equals(uid))
           credentials = new SignedCredentials(uid, serverNonce, signature);
-        else
+        else if (security != null)
           credentials = security.createCredentials(uid, password, serverNonce);
+        else {
+          security = new SecurityService();
+          credentials = security.createCredentials(uid, password, serverNonce);
+        }
       }
 
-      AuthResult result;
-      result = (AuthResult) querySet(null, new AuthQuery(uid, credentials));
+      AuthResult result = (AuthResult) query(null, new AuthQuery(uid, credentials));
 
       _jid = result.getJid();
 
@@ -224,53 +273,73 @@ public class HmtpClient extends SimpleActorClient {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " close");
 
-    super.close();
+    // super.close();
     
-    _webSocketClient.close();
+    HmtpLinkFactory linkFactory = _linkFactory;
+    _linkFactory = null;
+    
+    if (linkFactory != null)
+      linkFactory.close();
+
+    if (_webSocketClient != null)
+      _webSocketClient.close();
    }
+
+  /* (non-Javadoc)
+   * @see com.caucho.bam.actor.ActorSender#isClosed()
+   */
+  @Override
+  public boolean isClosed()
+  {
+    // TODO Auto-generated method stub
+    return false;
+  }
+
+  @Override
+  public long nextQueryId()
+  {
+    return _linkClient.getSender().nextQueryId();
+  }
+
+  @Override
+  public void message(String to, Serializable payload)
+  {
+    _linkClient.getSender().message(to, payload);
+  }
+
+  @Override
+  public Serializable query(String to, Serializable payload)
+  {
+    return _linkClient.getSender().query(to, payload);
+  }
+
+  @Override
+  public Serializable query(String to, Serializable payload, long timeout)
+  {
+    return _linkClient.getSender().query(to, payload, timeout);
+  }
+
+  @Override
+  public void query(String to, Serializable payload, QueryCallback callback)
+  {
+    _linkClient.getSender().query(to, payload, callback);
+  }
+  
+  @Override
+  public QueryManager getQueryManager()
+  {
+    return _linkClient.getSender().getQueryManager();
+  }
 
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _jid + "," + _url + "]";
+    return getClass().getSimpleName() + "[" + _url + "," + _actor + "]";
   }
 
   @Override
   protected void finalize()
   {
     close();
-  }
-  
-  class HmtpWebSocketHandler implements WebSocketListener {
-    private HmtpReader _in;
-    private HmtpWriter _out;
-    
-    @Override
-    public void onStart(WebSocketContext context) throws IOException
-    {
-      _out = new HmtpWriter(context.getOutputStream());
-      setLinkStream(new HempMemoryQueue(_out, getActorStream(), 1));
-      
-      _in = new HmtpReader(context.getInputStream());
-    }
-
-    @Override
-    public void onRead(WebSocketContext context) throws IOException
-    {
-      InputStream is = context.getInputStream();
-      
-      while (_in.readPacket(getActorStream()) && is.available() > 0) {
-      }
-    }
-
-    @Override
-    public void onComplete(WebSocketContext context) throws IOException
-    {
-    }
-
-    @Override
-    public void onTimeout(WebSocketContext context) throws IOException
-    {
-    }    
   }
 }

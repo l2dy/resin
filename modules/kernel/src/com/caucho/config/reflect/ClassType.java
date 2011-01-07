@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -127,7 +127,11 @@ public class ClassType extends BaseType
         if (bound.isObject())
           continue;
         
-        if (! isAssignableFrom(bound))
+        // if (! isAssignableFrom(bound))
+        //  return false;
+        
+        // ioc/2601
+        if (! bound.isAssignableFrom(this))
           return false;
         
         // ioc/024n        
@@ -141,6 +145,16 @@ public class ClassType extends BaseType
       return true;
     else
       return false;
+  }
+
+  /**
+   * Fills in a parameter with a given name.
+   */
+  @Override
+  public BaseType fill(BaseType ... baseType)
+  {
+    // ioc/1238
+    return this;
   }
    
   @Override

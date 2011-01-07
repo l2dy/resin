@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,13 +35,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
+import com.caucho.bam.stream.AbstractActorStream;
+import com.caucho.bam.stream.ActorStream;
 import com.caucho.vfs.WriteStream;
 
 /**
  * Handles callbacks for a xmpp service
  */
-public class XmppAgentStream implements ActorStream
+public class XmppAgentStream extends AbstractActorStream
 {
   private static final Logger log
     = Logger.getLogger(XmppAgentStream.class.getName());
@@ -113,7 +114,7 @@ public class XmppAgentStream implements ActorStream
     }
   }
   
-  public void queryGet(long id,
+  public void query(long id,
                               String to,
                               String from,
                               Serializable query)

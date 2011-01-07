@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -152,7 +152,7 @@ public interface SocketLink {
   /**
    * Starts a comet request
    */
-  public AsyncController toComet(CometHandler cometHandler);
+  public AsyncController toComet(SocketLinkCometListener cometHandler);
   
   /**
    * Returns true for a comet connection
@@ -164,9 +164,9 @@ public interface SocketLink {
    */
   public boolean isCometSuspend();
   
-  public boolean isCometComplete();
+  // public boolean isCometComplete();
 
-  public boolean wake();
+  // public boolean wake();
   
   //
   // duplex support

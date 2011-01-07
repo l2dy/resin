@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -320,7 +320,7 @@ abstract public class ObjectValue extends Value {
     if (delegate != null)
       return delegate.getIterator(env, this);
     else
-      return super.getIterator(env);
+      return getBaseIterator(env);
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,7 +35,6 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.inject.Specializes;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedParameter;
 import javax.enterprise.inject.spi.AnnotatedType;
@@ -43,6 +42,7 @@ import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.PassivationCapable;
 
+import com.caucho.config.ConfigException;
 import com.caucho.config.event.EventManager;
 import com.caucho.config.inject.CreationalContextImpl;
 import com.caucho.config.inject.InjectEnvironmentBean;
@@ -54,6 +54,7 @@ import com.caucho.config.reflect.AnnotatedParameterImpl;
 import com.caucho.config.reflect.AnnotatedTypeUtil;
 import com.caucho.ejb.session.AbstractSessionContext;
 import com.caucho.inject.Module;
+import com.caucho.util.L10N;
 
 /**
  * Internal implementation for a Bean
@@ -63,6 +64,8 @@ public class SessionBeanImpl<X,T>
   implements ScopeAdapterBean<T>, Bean<T>, PassivationCapable, EjbGeneratedBean,
              InjectEnvironmentBean
 {
+  private static final L10N L = new L10N(SessionBeanImpl.class);
+  
   private AbstractSessionContext<X,T> _context;
   private ManagedBeanImpl<X> _bean;
   private LinkedHashSet<Type> _types = new LinkedHashSet<Type>();
@@ -76,7 +79,7 @@ public class SessionBeanImpl<X,T>
     _bean = bean;
     
     _types.addAll(apiList);
-    
+
     introspectObservers(bean.getAnnotatedType(), extAnnType);
   }
   
@@ -123,16 +126,16 @@ public class SessionBeanImpl<X,T>
   public void destroy(T instance, CreationalContext<T> cxt)
   {
     CreationalContextImpl<T> env;
-    
+
     if (cxt instanceof CreationalContextImpl<?>)
       env = (CreationalContextImpl<T>) cxt;
     else
       env = null;
     
-    // ejb5012
+    // ejb/5012
     if (env != null)
       env.release();
-    else 
+    else
       _context.destroyProxy(instance, env);
   }
 
@@ -207,11 +210,14 @@ public class SessionBeanImpl<X,T>
   {
     EventManager eventManager = _context.getModuleInjectManager().getEventManager();
 
+    // ioc/0b26
     for (AnnotatedMethod<? super X> beanMethod : beanType.getMethods()) {
+      /*
       if (! beanMethod.getJavaMember().getDeclaringClass().equals(beanType.getJavaClass())
           && ! beanType.isAnnotationPresent(Specializes.class)) {
         continue;
       }
+      */
       
       AnnotatedMethod<? super X> apiMethod
         = AnnotatedTypeUtil.findMethod(extAnnType, beanMethod);
@@ -222,7 +228,7 @@ public class SessionBeanImpl<X,T>
         // ioc/0b0h
         AnnotatedMethodImpl<? super X> apiMethodImpl
           = (AnnotatedMethodImpl<? super X>) apiMethod;
-        
+
         apiMethodImpl.addAnnotations(beanMethod.getAnnotations());
         
         for (int i = 0; i < apiMethod.getParameters().size(); i++) {
@@ -237,8 +243,19 @@ public class SessionBeanImpl<X,T>
       
       int param = EventManager.findObserverAnnotation(apiMethod);
       
-      if (param >= 0)
+      if (param >= 0) {
+        /*
+        if (apiMethod == beanMethod
+            && ! apiMethod.isStatic()
+            && _types.size() > 1) {
+          throw new ConfigException(L.l("{0}.{1} is an invalid @Observes method because @Observes must be in the @Local API.",
+                                        beanMethod.getDeclaringType().getJavaClass().getSimpleName(),
+                                        beanMethod.getJavaMember().getName()));
+        }
+        */
+          
         eventManager.addObserver(this, apiMethod);
+      }
     }
   }
   

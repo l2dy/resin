@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -75,7 +75,10 @@ public class ObjectExtJavaValue extends ObjectExtValue
     if (_object == null) {
       _object = createJavaObject(env);
     }
-    
+    Value parentValue = super.getFieldExt(env, name);
+    if(parentValue != NullValue.NULL && parentValue != UnsetValue.UNSET)
+        return parentValue;
+
     Value value = _javaClassDef.getField(env, this, name);
     Value quercusValue = _quercusClass.getField(env,this, name);
 

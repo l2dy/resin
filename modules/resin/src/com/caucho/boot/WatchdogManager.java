@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -61,7 +61,7 @@ import com.caucho.loader.DynamicClassLoader;
 import com.caucho.log.EnvironmentStream;
 import com.caucho.log.LogHandlerConfig;
 import com.caucho.log.RotateStream;
-import com.caucho.network.listen.SocketLinkListener;
+import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
@@ -96,7 +96,7 @@ class WatchdogManager implements AlarmListener {
   private final ResinSystem _system;
 
   private Server _server;
-  private SocketLinkListener _httpPort;
+  private TcpSocketLinkListener _httpPort;
 
   private HashMap<String,WatchdogChild> _watchdogMap
     = new HashMap<String,WatchdogChild>();
@@ -129,7 +129,7 @@ class WatchdogManager implements AlarmListener {
     log.setName("");
     log.setPath(logPath);
     log.init();
-    
+
     Thread thread = Thread.currentThread();
     thread.setContextClassLoader(_system.getClassLoader());
 
@@ -206,7 +206,7 @@ class WatchdogManager implements AlarmListener {
     NetworkListenService listenService 
       = _system.getService(NetworkListenService.class);
     
-    _httpPort = new SocketLinkListener();
+    _httpPort = new TcpSocketLinkListener();
     _httpPort.setProtocol(new HttpProtocol());
 
     if (_watchdogPort > 0)
@@ -252,19 +252,18 @@ class WatchdogManager implements AlarmListener {
       adminService.setAuthenticationRequired(false);
       adminService.init();
 
-      WatchdogService service
-        = new WatchdogService(this, "watchdog@admin.resin.caucho");
-
       HempBroker broker = HempBroker.getCurrent();
+      
+      WatchdogService service
+        = new WatchdogService(this, "watchdog@admin.resin.caucho", broker);
+
 
       /*
       broker.setAdmin(true);
       broker.setAllowNullAdminAuthenticator(true);
       */
 
-      service.setLinkStream(broker.getBrokerStream());
-
-      broker.addActor(service);
+      broker.createAgent(service.getActorStream());
 
       ResinSystem.getCurrent().start();
 

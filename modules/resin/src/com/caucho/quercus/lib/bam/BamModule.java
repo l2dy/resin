@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,10 +34,11 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.logging.Logger;
 
-import com.caucho.bam.ActorClient;
 import com.caucho.bam.ActorError;
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.SimpleActorClient;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.stream.ActorStream;
+import com.caucho.bam.stream.NullActorStream;
 import com.caucho.hemp.broker.HempBroker;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.quercus.annotation.ClassImplementation;
@@ -83,10 +84,10 @@ public class BamModule extends AbstractQuercusModule
     return null;
   }
 
-  private static ActorClient getActorClient(Env env)
+  private static ActorSender getActorClient(Env env)
   {
-    ActorClient connection
-      = (ActorClient) env.getSpecialValue("_quercus_bam_connection");
+    ActorSender connection
+      = (ActorSender) env.getSpecialValue("_quercus_bam_connection");
 
     // create a connection lazily
     if (connection == null) {
@@ -97,8 +98,10 @@ public class BamModule extends AbstractQuercusModule
 
       if (resource.indexOf('/') == 0)
         resource = resource.substring(1);
+      
+      NullActorStream stream = new NullActorStream(jid, broker);
 
-      connection = new SimpleActorClient(broker, jid, resource);
+      connection = new SimpleActorSender(stream, broker, jid, resource);
       env.addCleanup(new BamConnectionResource(connection));
       env.setSpecialValue("_quercus_bam_connection", connection);
     }
@@ -121,11 +124,11 @@ public class BamModule extends AbstractQuercusModule
     BamPhpActor actor = getActor(env);
 
     if (actor != null)
-      return actor.getLinkStream();
+      return actor.getBroker();
 
-    ActorClient connection = getActorClient(env);
+    ActorSender connection = getActorClient(env);
 
-    return connection.getLinkStream();
+    return connection.getBroker();
   }
 
   private static String getJid(Env env)
@@ -135,7 +138,7 @@ public class BamModule extends AbstractQuercusModule
     if (actor != null)
       return actor.getJid();
 
-    ActorClient connection = getActorClient(env);
+    ActorSender connection = getActorClient(env);
 
     return connection.getJid();
   }
@@ -150,7 +153,7 @@ public class BamModule extends AbstractQuercusModule
     if (actor != null)
       return env.error("bam_login not available from actor script");
 
-    HmtpClient client = new HmtpClient(url);
+    HmtpClient client = null;//new HmtpClient(url);
 
     BamConnectionResource resource = new BamConnectionResource(client);
     env.addCleanup(resource);
@@ -224,7 +227,7 @@ public class BamModule extends AbstractQuercusModule
     if (service == null)
       return BooleanValue.FALSE;
 
-    manager.getBroker().removeActor(service);
+    // XXX: manager.getBroker().removeMailbox(service);
 
     return BooleanValue.TRUE;
   }
@@ -313,24 +316,13 @@ public class BamModule extends AbstractQuercusModule
     getBrokerStream(env).messageError(to, getJid(env), value, error);
   }
 
-  public static Value bam_send_query_get(Env env, 
+  public static Value bam_send_query(Env env, 
                                          long id, 
                                          String to, 
                                          Serializable value)
   {
     String from = getJid(env);
-    getBrokerStream(env).queryGet(id, to, from, value);
-
-    return BooleanValue.TRUE;
-  }
-
-  public static Value bam_send_query_set(Env env, 
-                                         long id, 
-                                         String to, 
-                                         Serializable value)
-  {
-    String from = getJid(env);
-    getBrokerStream(env).querySet(id, to, from, value);
+    getBrokerStream(env).query(id, to, from, value);
 
     return BooleanValue.TRUE;
   }

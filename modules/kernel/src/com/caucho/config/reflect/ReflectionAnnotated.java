@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,8 @@ package com.caucho.config.reflect;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
@@ -39,14 +41,14 @@ import javax.enterprise.inject.spi.Annotated;
 /**
  * Annotated object based only on reflection.
  */
-public class ReflectionAnnotated implements Annotated
+public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
 {
   private static final LinkedHashSet<Annotation> _emptyAnnSet
     = new  LinkedHashSet<Annotation>();
 
   private static final Annotation []_emptyAnnArray = new Annotation[0];
 
-  private Type _type;
+  private BaseType _type;
 
   private Set<Type> _typeSet;
 
@@ -54,7 +56,7 @@ public class ReflectionAnnotated implements Annotated
 
   private Annotation []_annArray;
 
-  protected ReflectionAnnotated(Type type,
+  protected ReflectionAnnotated(BaseType type,
                                 Set<Type> typeClosure,
                                 Annotation []annList)
   {
@@ -80,9 +82,37 @@ public class ReflectionAnnotated implements Annotated
   /**
    * Returns the base type of the annotated member.
    */
+  @Override
   public Type getBaseType()
   {
+    return _type.toType();
+  }
+  
+  @Override
+  public BaseType getBaseTypeImpl()
+  {
     return _type;
+  }
+  
+  @Override
+  public Set<VarType<?>> getTypeVariables()
+  {
+    HashSet<VarType<?>> typeVariables = new HashSet<VarType<?>>();
+    
+    fillTypeVariables(typeVariables);
+    
+    return typeVariables;
+  }
+
+  protected void fillTypeVariables(Set<VarType<?>> typeVariables)
+  {
+    getBaseTypeImpl().fillSyntheticTypes(typeVariables);
+  }
+
+  @Override
+  public HashMap<String,BaseType> getBaseTypeParamMap()
+  {
+    return _type.getParamMap();
   }
 
   /**

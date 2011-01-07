@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1301,7 +1301,11 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     }
 
     if (session != null) {
-      if (session.load(isNew)) {
+      if (session.isTimeout()) {
+        session.invalidateTimeout();
+        session = null;
+      }
+      else if (session.load(isNew)) {
         session.addUse();
 
         if (isCreate) {
@@ -1387,9 +1391,11 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
     if (now <= 0) // just generating id
       return session;
-
-    if (session != null && ! session.addUse()) {
-      session = null;
+    
+    if (session != null) {
+      if (! session.addUse()) {
+        session = null;
+      }
     }
 
     if (session == null && _sessionStore != null) {

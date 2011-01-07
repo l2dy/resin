@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,6 +51,7 @@ import javax.enterprise.inject.spi.InjectionPoint;
 import javax.enterprise.inject.spi.InjectionTarget;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configured;
 import com.caucho.config.bytecode.ScopeAdapter;
 import com.caucho.config.event.EventManager;
 import com.caucho.config.event.ObserverMethodImpl;
@@ -308,7 +309,10 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     Class<? extends Annotation> scopeType = getScope();
     
     if (javaClass.getTypeParameters().length != 0) {
-      if (! Dependent.class.equals(scopeType)) {
+      if (_annotatedType.isAnnotationPresent(Configured.class)) {
+        // ioc/2601
+      }
+      else if (! Dependent.class.equals(scopeType)) {
         throw new ConfigException(L.l("'{0}' is an invalid bean because it has a generic type and a non-dependent scope.",
                                       javaClass.getName()));
       }
@@ -325,7 +329,7 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     if (! getBeanManager().isNormalScope(scopeType))
       return;
     
-    boolean isPassivation = getBeanManager().isPassivatingScope(scopeType);
+    // boolean isPassivation = getBeanManager().isPassivatingScope(scopeType);
     
     Class<?> cl = _annotatedType.getJavaClass();
     
@@ -362,22 +366,27 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     EventManager eventManager = getBeanManager().getEventManager();
     
     AnnotatedType<X> annType = getAnnotatedType();
-    
+
+    // ioc/0b25
+    /*
     if (! getBeanManager().isIntrospectObservers(annType))
       return;
-    
-    for (AnnotatedMethod<? super X> beanMethod : getAnnotatedType().getMethods()) {
+      */
+    for (AnnotatedMethod<? super X> beanMethod : annType.getMethods()) {
       int param = EventManager.findObserverAnnotation(beanMethod);
       
       if (param < 0)
         continue;
       
+      // ioc/0b25
+      /*
       Class<?> declClass = beanMethod.getJavaMember().getDeclaringClass();
       if (declClass != annType.getJavaClass() 
           && declClass.isAssignableFrom(annType.getJavaClass())
           && ! annType.isAnnotationPresent(Specializes.class)) {
         continue;
       }
+      */
       
       eventManager.addObserver(this, beanMethod);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,6 +36,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.AccessibleObject;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.Member;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
@@ -51,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -99,6 +101,7 @@ import javax.enterprise.inject.spi.ProcessBean;
 import javax.enterprise.inject.spi.Producer;
 import javax.inject.Inject;
 import javax.inject.Named;
+import javax.inject.Provider;
 import javax.inject.Qualifier;
 import javax.inject.Scope;
 import javax.interceptor.InterceptorBinding;
@@ -208,8 +211,7 @@ public final class InjectManager
   private boolean _isChildManager;
   
   private final InjectScanManager _scanManager;
-  private final ExtensionManager _extensionManager
-    = new ExtensionManager(this);
+  private final ExtensionManager _extensionManager;
   private EventManager _eventManager = new EventManager(this);
   
   private AtomicLong _version = new AtomicLong();
@@ -232,11 +234,11 @@ public final class InjectManager
   // self configuration
   //
 
-  private HashMap<Class<?>,ArrayList<TypedBean>> _selfBeanMap
-    = new HashMap<Class<?>,ArrayList<TypedBean>>();
+  private ConcurrentHashMap<Class<?>,ArrayList<TypedBean>> _selfBeanMap
+    = new ConcurrentHashMap<Class<?>,ArrayList<TypedBean>>();
 
-  private HashMap<String,ArrayList<Bean<?>>> _selfNamedBeanMap
-    = new HashMap<String,ArrayList<Bean<?>>>();
+  private ConcurrentHashMap<String,ArrayList<Bean<?>>> _selfNamedBeanMap
+    = new ConcurrentHashMap<String,ArrayList<Bean<?>>>();
 
   private HashMap<String,Bean<?>> _selfPassivationBeanMap
     = new HashMap<String,Bean<?>>();
@@ -311,7 +313,10 @@ public final class InjectManager
     = new ConcurrentHashMap<Bean<?>,ReferenceFactory<?>>();
   
   private ConcurrentHashMap<String,ReferenceFactory<?>> _namedRefFactoryMap
-    = new ConcurrentHashMap<String,ReferenceFactory<?>>();
+  = new ConcurrentHashMap<String,ReferenceFactory<?>>();
+  
+  private ConcurrentHashMap<Member,AtomicBoolean> _staticMemberMap
+  = new ConcurrentHashMap<Member,AtomicBoolean>();
 
   private ThreadLocal<CreationalContextImpl<?>> _proxyThreadLocal
     = new ThreadLocal<CreationalContextImpl<?>>();
@@ -351,6 +356,7 @@ public final class InjectManager
     
     _parent = parent;
     
+    _extensionManager = new ExtensionManager(this);
     _scanManager = new InjectScanManager(this);
 
     Thread thread = Thread.currentThread();
@@ -1317,6 +1323,22 @@ public final class InjectManager
   }
   
   @Module
+  public AtomicBoolean getStaticMemberBoolean(Member member)
+  {
+    AtomicBoolean flag = _staticMemberMap.get(member);
+    
+    if (flag == null) {
+      flag = new AtomicBoolean();
+      
+      _staticMemberMap.putIfAbsent(member, flag);
+      
+      flag = _staticMemberMap.get(member);
+    }
+    
+    return flag;
+  }
+  
+  @Module
   public ReferenceFactory<?> getReferenceFactory(String name)
   {
     // ioc/23n3
@@ -1469,7 +1491,8 @@ public final class InjectManager
 
     Class<?> rawType = baseType.getRawClass();
 
-    if (Instance.class.equals(rawType)) {
+    if (Instance.class.equals(rawType)
+        || Provider.class.equals(rawType)) {
       BaseType []param = baseType.getParameters();
 
       Type beanType;
@@ -1994,17 +2017,15 @@ public final class InjectManager
 
   private Set<Bean<?>> resolveAllBeans()
   {
-    synchronized (_beanMap) {
-      LinkedHashSet<Bean<?>> beans = new LinkedHashSet<Bean<?>>();
+    LinkedHashSet<Bean<?>> beans = new LinkedHashSet<Bean<?>>();
 
-      for (ArrayList<TypedBean> comp : _selfBeanMap.values()) {
-        for (TypedBean typedBean : comp) {
-          beans.add(typedBean.getBean());
-        }
+    for (ArrayList<TypedBean> comp : _selfBeanMap.values()) {
+      for (TypedBean typedBean : comp) {
+        beans.add(typedBean.getBean());
       }
-
-      return beans;
     }
+
+    return beans;
   }
 
   @Override
@@ -2164,6 +2185,7 @@ public final class InjectManager
     if (factory == null) {
       factory = createReferenceFactory(bean);
       _refFactoryMap.put(bean, factory);
+      factory.validate();
     }
     
     return factory;
@@ -2425,7 +2447,7 @@ public final class InjectManager
                                        baseType, ij));
                                        */
     if (baseType.isGenericVariable())
-      throw new InjectionException(L.l("'{0}' is an invalid type for injection because it's a variable . {1}",
+      throw new InjectionException(L.l("'{0}' is an invalid type for injection because it's a variable generic type.\n  {1}",
                                        baseType, ij));
 
     Set<Bean<?>> set = resolveRec(baseType, qualifiers);
@@ -3084,8 +3106,8 @@ public final class InjectManager
     
     if (scanClass == null)
       return true;
-    else
-      return scanClass.isObserves();
+    
+    return scanClass.isObserves();
   }
   
   private boolean isValidSimpleBean(Class<?> type)
@@ -3720,6 +3742,10 @@ public final class InjectManager
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
+    
+    // ioc/0p30
+    if (_configException != null)
+      throw _configException;
   }
 
   public void addDefinitionError(Throwable t)
@@ -3733,6 +3759,11 @@ public final class InjectManager
     else {
       _configException = ConfigException.create(t);
     }
+  }
+  
+  public RuntimeException getConfigException()
+  {
+    return _configException;
   }
 
   public void addConfiguredBean(String className)
@@ -4164,6 +4195,10 @@ public final class InjectManager
       return null;
     }
     
+    protected void validate()
+    {
+    }
+    
     public final T create()
     {
       return create(null, null, null);
@@ -4443,6 +4478,11 @@ public final class InjectManager
       
       ScopeAdapter scopeAdapter = ScopeAdapter.create(bean);
       _scopeAdapter = scopeAdapter.wrap(createNormalInstanceFactory(bean));
+    }
+    
+    protected void validate()
+    {
+      validateNormal(_bean);
     }
     
     @Override

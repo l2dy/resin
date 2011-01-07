@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -2666,9 +2666,10 @@ public class WebApp extends ServletContextImpl
       _cdiManager = InjectManager.getCurrent();
       _cdiManager.update();
       
+      // server/1al4 vs server/1ak1, server/1la5
+      /*
       SingleSignon singleSignon = AbstractSingleSignon.getCurrent();
       
-      // server/1al4 vs server/1ak1
       if (singleSignon == null && Server.getCurrent() != null) {
         if (getSessionManager().isUsePersistentStore()) {
           ClusterSingleSignon clusterSignon = new ClusterSingleSignon("web-app");
@@ -2682,35 +2683,7 @@ public class WebApp extends ServletContextImpl
           
         AbstractSingleSignon.setCurrent(singleSignon);
       }
-      try {
-        // server/1a36
-
-        Authenticator auth = _cdiManager.getReference(Authenticator.class);
-
-        setAttribute("caucho.authenticator", auth);
-      } catch (Exception e) {
-        log.finest(e.toString());
-      }
-
-      try {
-        if (_login == null) {
-          _login = _cdiManager.getReference(Login.class);
-        }
-
-        if (_login == null) {
-          Bean<?> loginBean = _cdiManager.createManagedBean(BasicLogin.class);
-          
-          _cdiManager.addBean(loginBean);
-          // server/1aj0
-          _defaultLogin = _cdiManager.getReference(Login.class);
-
-          _authenticator = _cdiManager.getReference(Authenticator.class);
-        }
-
-        setAttribute("caucho.login", _login);
-      } catch (Exception e) {
-        log.log(Level.FINEST, e.toString(), e);
-      }
+      */
 
       // server/5030
       _cdiManager.addBean(_cdiManager.createManagedBean(WebServiceContextProxy.class));
@@ -2831,7 +2804,8 @@ public class WebApp extends ServletContextImpl
     }
   }
 
-  private List<WebAppFragmentConfig> sortWebFragments() {
+  private List<WebAppFragmentConfig> sortWebFragments() 
+  {
     Map<String, WebAppFragmentConfig> namedFragments
       = new HashMap<String, WebAppFragmentConfig>();
 
@@ -2957,7 +2931,8 @@ public class WebApp extends ServletContextImpl
   private List<WebAppFragmentConfig> getWebFragments(final WebAppFragmentConfig config,
                                                      Ordering ordering,
                                                      Map<String, WebAppFragmentConfig> namedFragments,
-                                                     List<WebAppFragmentConfig> anonFragments) {
+                                                     List<WebAppFragmentConfig> anonFragments)
+  {
     if (ordering == null)
       return null;
 
@@ -3094,7 +3069,7 @@ public class WebApp extends ServletContextImpl
         return;
 
       isOkay = false;
-
+      
       if (_accessLog == null)
         _accessLog = _accessLogLocal.get();
 
@@ -3124,6 +3099,8 @@ public class WebApp extends ServletContextImpl
       // the persistence manager
       if (_configException == null)
         _configException = Environment.getConfigException();
+
+      startAuthenticators();
 
       try {
         if (getSessionManager() != null)
@@ -3185,6 +3162,39 @@ public class WebApp extends ServletContextImpl
         _lifecycle.toError();
 
       thread.setContextClassLoader(oldLoader);
+    }
+  }
+  
+  private void startAuthenticators()
+  {
+    try {
+      // server/1a36
+
+      Authenticator auth = _cdiManager.getReference(Authenticator.class);
+
+      setAttribute("caucho.authenticator", auth);
+    } catch (Exception e) {
+      log.finest(e.toString());
+    }
+
+    try {
+      if (_login == null) {
+        _login = _cdiManager.getReference(Login.class);
+      }
+
+      if (_login == null) {
+        Bean<?> loginBean = _cdiManager.createManagedBean(BasicLogin.class);
+        
+        _cdiManager.addBean(loginBean);
+        // server/1aj0
+        _defaultLogin = _cdiManager.getReference(Login.class);
+
+        _authenticator = _cdiManager.getReference(Authenticator.class);
+      }
+
+      setAttribute("caucho.login", _login);
+    } catch (Exception e) {
+      log.log(Level.FINEST, e.toString(), e);
     }
   }
 
@@ -3393,28 +3403,7 @@ public class WebApp extends ServletContextImpl
             _filterChainCache.put(invocation.getContextURI(), entry);
         }
 
-        // the cache must be outside of the WebAppFilterChain because
-        // the CacheListener in ServletInvocation needs the top to
-        // be a CacheListener.  Otherwise, the cache won't get lru.
-
-        if (_isStatisticsEnabled)
-          chain = new StatisticsFilterChain(chain, this);
-
-        WebAppFilterChain webAppChain = new WebAppFilterChain(chain, this);
-
-        webAppChain.setSecurityRoleMap(invocation.getSecurityRoleMap());
-        chain = webAppChain;
-
-        // TCK: cache needs to be outside because the cache flush conflicts
-        // with the request listener destroy callback
-        // top-level filter elements
-        // server/021h - cache not logging
-
-        if (_cache != null)
-          chain = _cache.createFilterChain(chain, this);
-
-        if (getAccessLog() != null)
-          chain = new AccessLogFilterChain(chain, this);
+        chain = createWebAppFilterChain(chain, invocation);
 
         invocation.setFilterChain(chain);
         invocation.setPathInfo(entry.getPathInfo());
@@ -3448,6 +3437,35 @@ public class WebApp extends ServletContextImpl
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
+  }
+  
+  FilterChain createWebAppFilterChain(FilterChain chain,
+                                      Invocation invocation)
+  {
+    // the cache must be outside of the WebAppFilterChain because
+    // the CacheListener in ServletInvocation needs the top to
+    // be a CacheListener.  Otherwise, the cache won't get lru.
+
+    if (_isStatisticsEnabled)
+      chain = new StatisticsFilterChain(chain, this);
+
+    WebAppFilterChain webAppChain = new WebAppFilterChain(chain, this);
+
+    webAppChain.setSecurityRoleMap(invocation.getSecurityRoleMap());
+    chain = webAppChain;
+
+    // TCK: cache needs to be outside because the cache flush conflicts
+    // with the request listener destroy callback
+    // top-level filter elements
+    // server/021h - cache not logging
+
+    if (_cache != null)
+      chain = _cache.createFilterChain(chain, this);
+
+    if (getAccessLog() != null)
+      chain = new AccessLogFilterChain(chain, this);
+    
+    return chain;
   }
 
   public ServletMapper getServletMapper()
@@ -3813,21 +3831,26 @@ public class WebApp extends ServletContextImpl
     if (realPath != null)
       return realPath;
 
-    String fullURI = getContextPath() + "/" + uri;
+    WebApp webApp = this;
+    String tail = uri;
+    
+    if (isActive()) {
+      String fullURI = getContextPath() + "/" + uri;
 
-    try {
-      fullURI = getInvocationDecoder().normalizeUri(fullURI);
-    } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      try {
+        fullURI = getInvocationDecoder().normalizeUri(fullURI);
+      } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
+
+      webApp = (WebApp) getContext(fullURI);
+
+      if (webApp == null)
+        return null;
+
+      String cp = webApp.getContextPath();
+      tail = fullURI.substring(cp.length());
     }
-
-    WebApp webApp = (WebApp) getContext(fullURI);
-
-    if (webApp == null)
-      return null;
-
-    String cp = webApp.getContextPath();
-    String tail = fullURI.substring(cp.length());
 
     realPath = webApp.getRealPathImpl(tail);
 
@@ -3953,7 +3976,7 @@ public class WebApp extends ServletContextImpl
   public SessionManager getSessionManager()
   {
     if (_sessionManager == null) {
-      if (_lifecycle.isStopped())
+      if (_lifecycle.isAfterStopping())
         throw new IllegalStateException(L.l("Resin is shutting down."));
 
       if (_isInheritSession && _parent != null)
@@ -4128,6 +4151,8 @@ public class WebApp extends ServletContextImpl
 
       long beginStop = Alarm.getCurrentTime();
 
+      clearCache();
+      
       while (_requestCount.get() > 0
              && Alarm.getCurrentTime() < beginStop + _shutdownWaitTime
              && ! Alarm.isTest()) {

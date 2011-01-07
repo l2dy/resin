@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,9 +29,10 @@
 
 package com.caucho.hemp.broker;
 
-import com.caucho.bam.ActorClient;
-import com.caucho.bam.ActorClientFactory;
-import com.caucho.bam.SimpleActorClient;
+import com.caucho.bam.actor.ActorClientFactory;
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.stream.NullActorStream;
 import com.caucho.util.L10N;
 
 public class LocalActorFactoryImpl implements ActorClientFactory
@@ -47,9 +48,11 @@ public class LocalActorFactoryImpl implements ActorClientFactory
   }
 
   @Override
-  public ActorClient createClient(String uid, String resource)
+  public ActorSender createClient(String uid, String resource)
   {
-    SimpleActorClient client = new SimpleActorClient(_broker, uid, resource);
+    NullActorStream stream = new NullActorStream(uid, _broker);
+    
+    SimpleActorSender client = new SimpleActorSender(stream, _broker, uid, resource);
     
     return client;
   }

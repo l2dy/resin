@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,4 +31,6 @@ package com.caucho.boot;
 
 public interface BootCommand {
   public void doCommand(WatchdogArgs args, WatchdogClient client);
+
+  public void usage();
 }

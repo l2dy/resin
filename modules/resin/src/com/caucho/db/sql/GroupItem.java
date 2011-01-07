@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,6 @@
 package com.caucho.db.sql;
 
 import com.caucho.util.FreeList;
-
-import java.util.logging.Logger;
 
 /**
  * Represents a row of a group item.

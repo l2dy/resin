@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -229,14 +229,15 @@ public class MnodeStore implements AlarmListener {
 
         return;
       } catch (Exception e) {
-        log.log(Level.FINEST, e.toString(), e);
+        log.log(Level.ALL, e.toString(), e);
         log.finer(this + " " + e.toString());
       }
 
       try {
         stmt.executeQuery("DROP TABLE " + _tableName);
       } catch (Exception e) {
-        log.log(Level.FINEST, e.toString(), e);
+        log.log(Level.ALL, e.toString(), e);
+        log.finer(this + " " + e.toString());
       }
 
       String sql = ("CREATE TABLE " + _tableName + " (\n"
@@ -460,12 +461,11 @@ public class MnodeStore implements AlarmListener {
                               false);
       }
 
-      if (log.isLoggable(Level.FINER))
-        log.finer(this + " load: no mnode for " + id);
+      if (log.isLoggable(Level.FINEST))
+        log.finest(this + " load: no mnode for cache key " + id);
 
       return null;
     } catch (SQLException e) {
-      e.printStackTrace();
       log.log(Level.FINE, e.toString(), e);
     } finally {
       if (conn != null)

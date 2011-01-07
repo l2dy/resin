@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -172,7 +172,8 @@ public class WildcardTypeImpl extends BaseType implements WildcardType
     }
     
     for (BaseType type : _upperBounds) {
-      sb.append(" extends ").append(type);
+      if (! Object.class.equals(type.getRawClass()))
+        sb.append(" extends ").append(type);
     }
     
     return sb.toString();

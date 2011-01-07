@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -160,9 +160,13 @@ public class ScanManager {
                                  JarByteCodeMatcher matcher)
   {
     ZipFile zipFile = null;
+    Jar jar = JarPath.create(path).getJar();
 
     try {
-      zipFile = new ZipFile(path.getNativePath());
+      zipFile = jar.getZipFile();
+      
+      if (zipFile == null)
+        return;
 
       Enumeration<? extends ZipEntry> e = zipFile.entries();
 
@@ -190,11 +194,7 @@ public class ScanManager {
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
-      try {
-        if (zipFile != null)
-          zipFile.close();
-      } catch (Exception e) {
-      }
+      jar.closeZipFile(zipFile);
     }
   }
 

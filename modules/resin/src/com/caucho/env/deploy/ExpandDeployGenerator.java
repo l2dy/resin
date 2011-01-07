@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,8 +43,8 @@ import com.caucho.config.types.Period;
 import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.env.repository.RepositoryTagListener;
+import com.caucho.loader.DependencyCheckInterval;
 import com.caucho.loader.Environment;
-import com.caucho.make.DependencyContainer;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
@@ -128,13 +128,15 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
 
     _alarm = new WeakAlarm(this);
 
+    _checkInterval = Environment.getDependencyCheckInterval();
+    
     _cronInterval = Environment.getDependencyCheckInterval();
     if (_cronInterval < MIN_CRON_INTERVAL)
       _cronInterval = MIN_CRON_INTERVAL;
 
     _loader = Thread.currentThread().getContextClassLoader();
     
-    _deployService = DeployControllerService.create();
+    _deployService = DeployControllerService.getCurrent();
     _deployService.addUpdateListener(this);
     
     _repository = RepositoryService.getCurrentRepository();

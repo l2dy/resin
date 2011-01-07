@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,7 @@
 package com.caucho.db.table;
 
 import com.caucho.db.sql.QueryContext;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.inject.Module;
 
 import java.sql.SQLException;
@@ -61,7 +61,7 @@ abstract public class Constraint {
    * Tries to validate the constraint.
    */
   public void validate(TableIterator []rows,
-                       QueryContext contstraint, Transaction xa)
+                       QueryContext contstraint, DbTransaction xa)
     throws SQLException
   {
     throw new UnsupportedOperationException(getClass().getName());

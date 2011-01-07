@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.WatchdogMXBean;
-import com.caucho.network.listen.SocketLinkListener;
+import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -226,7 +226,7 @@ class WatchdogChild
     return _config.getWatchdogAddress();
   }
 
-  Iterable<SocketLinkListener> getPorts()
+  Iterable<TcpSocketLinkListener> getPorts()
   {
     return _config.getPorts();
   }

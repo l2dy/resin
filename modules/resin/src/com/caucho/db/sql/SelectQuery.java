@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,7 +31,7 @@ package com.caucho.db.sql;
 
 import com.caucho.db.Database;
 import com.caucho.db.table.TableIterator;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.CharBuffer;
 
@@ -154,7 +154,7 @@ public class SelectQuery extends Query {
    * Executes the query.
    */
   @Override
-  public void execute(QueryContext context, Transaction xa)
+  public void execute(QueryContext context, DbTransaction xa)
     throws SQLException
   {
     SelectResult result = SelectResult.create(_results, _order);
@@ -195,7 +195,7 @@ public class SelectQuery extends Query {
   private void execute(SelectResult result,
                        TableIterator []rows,
                        QueryContext context,
-                       Transaction xa)
+                       DbTransaction xa)
     throws SQLException, IOException
   {
     FromItem []fromItems = getFromItems();
@@ -220,7 +220,7 @@ public class SelectQuery extends Query {
   private void executeGroup(SelectResult result,
                             TableIterator []rows,
                             QueryContext context,
-                            Transaction transaction)
+                            DbTransaction transaction)
     throws SQLException, IOException
   {
     FromItem []fromItems = getFromItems();
@@ -276,7 +276,7 @@ public class SelectQuery extends Query {
    * Executes the query.
    */
   @Override
-  public SelectCursor executeCursor(QueryContext context, Transaction xa)
+  public SelectCursor executeCursor(QueryContext context, DbTransaction xa)
     throws SQLException
   {
     if (isGroup())
@@ -308,18 +308,14 @@ public class SelectQuery extends Query {
    */
   public final boolean nextCursor(TableIterator []rows,
                                   QueryContext context,
-                                  Transaction xa)
+                                  DbTransaction xa)
     throws SQLException
   {
     try {
       FromItem []fromItems = getFromItems();
       int rowLength = fromItems.length;
 
-      context.lock();
-
       boolean value = nextTuple(rows, rowLength, context, xa);
-
-      context.unlock();
 
       return value;
     } catch (IOException e) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,15 +29,6 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.QuercusRuntimeException;
-import com.caucho.quercus.env.ArrayValue.Entry;
-import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.function.AbstractFunction;
-import com.caucho.quercus.marshal.Marshal;
-import com.caucho.util.L10N;
-import com.caucho.vfs.WriteStream;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
@@ -45,7 +36,22 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.*;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.caucho.quercus.QuercusException;
+import com.caucho.quercus.QuercusRuntimeException;
+import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.marshal.Marshal;
+import com.caucho.util.L10N;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Represents a PHP expression value.
@@ -2162,6 +2168,14 @@ abstract public class Value implements java.io.Serializable
    * Returns an iterator for the key => value pairs.
    */
   public Iterator<Map.Entry<Value, Value>> getIterator(Env env)
+  {
+    return getBaseIterator(env);
+  }
+
+  /**
+   * Returns an iterator for the key => value pairs.
+   */
+  public Iterator<Map.Entry<Value, Value>> getBaseIterator(Env env)
   {
     Set<Map.Entry<Value, Value>> emptySet = Collections.emptySet();
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -74,6 +74,10 @@ public class ConversationJsfViewHandler extends ViewHandlerWrapper
     throws IOException, FacesException
   {
     try {
+      if (_conversation.getId() != null) {
+        viewToRender.getAttributes().put("caucho.cid", _conversation.getId());
+      }
+      
       super.renderView(context, viewToRender);
     } finally {
       _conversation.destroy();

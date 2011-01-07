@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package com.caucho.config.gen;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -41,7 +42,10 @@ import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.enterprise.inject.spi.AnnotatedMethod;
 import javax.enterprise.inject.spi.AnnotatedType;
+import javax.interceptor.InterceptorBinding;
+import javax.interceptor.Interceptors;
 
+import com.caucho.config.reflect.AnnotatedMethodImpl;
 import com.caucho.inject.Module;
 import com.caucho.java.JavaWriter;
 import com.caucho.java.gen.DependencyComponent;
@@ -115,6 +119,11 @@ abstract public class BeanGenerator<X> extends GenClass
   }
   
   protected abstract AspectBeanFactory<X> getAspectBeanFactory();
+  
+  protected AspectBeanFactory<X> getLifecycleAspectFactory()
+  {
+    return getAspectBeanFactory();
+  }
 
   public void introspect()
   {
@@ -322,12 +331,24 @@ abstract public class BeanGenerator<X> extends GenClass
                                            HashMap<String,Object> map)
        throws IOException
   {
+    ArrayList<Method> postConstructMethods 
+      = getLifecycleAspects(PostConstruct.class);
+    
+    if (postConstructMethods.size() == 0
+        && getBeanType().isAnnotationPresent(Interceptors.class)) {
+      generateDummyPostConstruct(postConstructMethods, out, map);
+    }
+    
+    // postConstructMethods = getLifecycleAspects(PostConstruct.class);
+    
     out.println();
     out.println("public void __caucho_postConstruct()");
     out.println("  throws Exception");
     out.println("{");
     out.pushDepth();
 
+    // postConstructMethods = getLifecycleMethods(PostConstruct.class);
+    
     /*
     for (AspectGenerator<?> method : getLifecycleAspects(PostConstruct.class)) {
       // method.generatePostConstruct(out, map);
@@ -335,41 +356,54 @@ abstract public class BeanGenerator<X> extends GenClass
     }
     */
 
-    ArrayList<Method> postConstructMethods 
-      = getLifecycleAspects(PostConstruct.class);
-    /*
-    ArrayList<Method> postConstructMethods 
-      = getLifecycleMethods(PostConstruct.class);
-      */
-
     Method postConstructMethod = null;
-    if (postConstructMethods.size() > 0) {
-      Method method = postConstructMethods.get(0);
-      postConstructMethod = method;
-
-      String declName = method.getDeclaringClass().getSimpleName();
-      String methodName = method.getName();
+    int methodsSize = postConstructMethods.size();
+    for (int i = 0; i < methodsSize && postConstructMethod == null; i++) {
+      Method method = postConstructMethods.get(i);
       
-      out.println("__caucho_lifecycle_" + declName + "_" + methodName + "();");
+      if (Modifier.isPrivate(method.getModifiers())
+          && i + 1 < methodsSize) {
+        // ejb/1064, ejb/1063
+        continue;
+      }
+                             
+      postConstructMethod = method;
     }
 
-    int j = 1;
-    for (int i = 1; i < postConstructMethods.size(); i++) {
+    // ejb/1060 - TCK
+    boolean isLifecycle = false;
+    for (int i = 0; i < methodsSize; i++) {
       Method method = postConstructMethods.get(i);
 
-      // ejb/
-      if (postConstructMethod != null && method.equals(postConstructMethod))
-        continue;
-      
-      generateLifecycleMethod(out, j++, method, "postConstruct");
+      if (postConstructMethod != method) {
+        generateLifecycleMethod(out, i, method, "postConstruct");
+      }
+      else if (! isLifecycle) {
+        isLifecycle = true;
+        
+        String declName = method.getDeclaringClass().getSimpleName();
+        String methodName = method.getName();
+
+        out.println("__caucho_lifecycle_" + declName + "_" + methodName + "();");
+      }
     }
+    
+    /*
+    // ejb/4018, ejb/1060 - TCK
+    for (int i = 0; i < methodsSize; i++) {
+      Method method = postConstructMethods.get(i);
+      
+      String declName = method.getDeclaringClass().getSimpleName();
+      String methodName = method.getName();
+
+      out.println("__caucho_lifecycle_" + declName + "_" + methodName + "();");
+    }
+    */
       
     // getAspectBeanFactory().generatePostConstruct(out, map);
 
     out.popDepth();
     out.println("}");
-    
-    postConstructMethods = getLifecycleMethods(PostConstruct.class);
     
     generateLifecycleMethodReflection(out, postConstructMethods, "postConstruct");
     
@@ -383,12 +417,43 @@ abstract public class BeanGenerator<X> extends GenClass
     out.popDepth();
     out.println("}");
   }
+  
+  private void generateDummyPostConstruct(ArrayList<Method> postConstructMethods,
+                                          JavaWriter out,
+                                          HashMap<String,Object> map)
+    throws IOException
+  {
+    if (postConstructMethods.size() > 0)
+      throw new IllegalStateException();
+    
+    Method method = CandiUtil.getDummyPostConstruct();
+    
+    AnnotatedMethodImpl annMethod;
+    annMethod = new AnnotatedMethodImpl(getBeanType(), null, method);
+    annMethod.addAnnotation(new PostConstructLiteral());
+    
+    AspectGenerator<X> methodGen
+      = getLifecycleAspectFactory().create(annMethod);
+   
+    if (methodGen != null) {
+      methodGen.generate(out, map);
+      
+      out.println("public static void __caucho_CandiUtil_dummyPostConstruct_POST_CONSTRUCT() {}");
+      
+      postConstructMethods.add(method);
+    }
+  }
 
   private void generatePreDestroy(JavaWriter out, 
                                   HashMap<String,Object> map)
      throws IOException
   {
     ArrayList<Method> preDestroyMethods = getLifecycleAspects(PreDestroy.class);
+    
+    if (preDestroyMethods.size() == 0
+        && isInterceptorPresent(getBeanType())) {
+      generateDummyPreDestroy(preDestroyMethods, out, map);
+    }
     
     out.println();
     out.println("public void __caucho_preDestroy()");
@@ -428,6 +493,46 @@ abstract public class BeanGenerator<X> extends GenClass
     
     out.popDepth();
     out.println("}");
+  }
+  
+  private boolean isInterceptorPresent(AnnotatedType<?> beanType)
+  {
+    for (Annotation ann : beanType.getAnnotations()) {
+      Class<?> annType = ann.annotationType();
+      
+      if (Interceptors.class.equals(annType))
+        return true;
+      else if (annType.isAnnotationPresent(InterceptorBinding.class))
+        return true;
+    }
+    
+    return false;
+  }
+  
+  private void generateDummyPreDestroy(ArrayList<Method> preDestroyMethods,
+                                       JavaWriter out,
+                                       HashMap<String,Object> map)
+    throws IOException
+  {
+    if (preDestroyMethods.size() > 0)
+      throw new IllegalStateException();
+    
+    Method method = CandiUtil.getDummyPreDestroy();
+    
+    AnnotatedMethodImpl annMethod;
+    annMethod = new AnnotatedMethodImpl(getBeanType(), null, method);
+    annMethod.addAnnotation(new PreDestroyLiteral());
+    
+    AspectGenerator<X> methodGen
+      = getLifecycleAspectFactory().create(annMethod);
+   
+    if (methodGen != null) {
+      methodGen.generate(out, map);
+      
+      out.println("public static void __caucho_CandiUtil_dummyPreDestroy_PRE_DESTROY() {}");
+      
+      preDestroyMethods.add(method);
+    }
   }
   
   protected void generateLifecycleMethodReflection(JavaWriter out,

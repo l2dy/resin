@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,11 +29,11 @@
 
 package com.caucho.cloud.hmtp;
 
-import com.caucho.bam.ActorStream;
-import com.caucho.bam.Broker;
 import com.caucho.bam.Message;
+import com.caucho.bam.broker.Broker;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterService;
+import com.caucho.hemp.servlet.ClientStubManager;
 import com.caucho.hemp.servlet.ServerAuthManager;
 import com.caucho.hemp.servlet.ServerLinkActor;
 
@@ -42,22 +42,28 @@ import com.caucho.hemp.servlet.ServerLinkActor;
  */
 class HmtpLinkActor extends ServerLinkActor {
   private Object _linkClosePayload;
+  private NetworkClusterService _clusterService;
   
-  public HmtpLinkActor(ActorStream linkStream,
-                       Broker broker,
+  public HmtpLinkActor(Broker toLinkBroker,
+                       ClientStubManager clientManager,
                        ServerAuthManager authManager,
-                       String ipAddress,
-                       boolean isUnidir)
+                       String ipAddress)
   {
-    super(linkStream, broker, authManager, ipAddress, isUnidir);
+    super(toLinkBroker, clientManager, authManager, ipAddress);
   }
   
   void onCloseConnection()
   {
-    if (_linkClosePayload != null) {
-      NetworkClusterService clusterService = NetworkClusterService.getCurrent();
-      
-      clusterService.notifyLinkClose(_linkClosePayload);
+    super.onClose();
+
+    NetworkClusterService clusterService = _clusterService;
+    _clusterService = null;
+    
+    Object linkClosePayload = _linkClosePayload;
+    _linkClosePayload = null;
+    
+    if (linkClosePayload != null) {
+      clusterService.notifyLinkClose(linkClosePayload);
     }  
   }
   
@@ -107,6 +113,12 @@ class HmtpLinkActor extends ServerLinkActor {
                               String from,
                               HmtpLinkRegisterMessage registerMessage)
   {
+    NetworkClusterService clusterService = NetworkClusterService.getCurrent();
+    
+    if (clusterService == null)
+      throw new IllegalStateException(getClass().getSimpleName());
+    
+    _clusterService = clusterService;
     _linkClosePayload = registerMessage.getPayload();
   }
 }

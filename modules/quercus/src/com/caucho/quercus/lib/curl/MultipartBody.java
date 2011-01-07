@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,7 +49,7 @@ import com.caucho.vfs.TempBuffer;
 
 public class MultipartBody extends PostBody
 {
-  private static final L10N L = new L10N(HttpRequest.class);
+  private static final L10N L = new L10N(CurlHttpRequest.class);
   
   private ArrayList<MultipartEntry> _postItems
     = new ArrayList<MultipartEntry>();

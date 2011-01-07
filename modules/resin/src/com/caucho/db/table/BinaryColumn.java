@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,7 +38,7 @@ import com.caucho.db.index.SqlIndexAlreadyExistsException;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.sql.SelectResult;
-import com.caucho.db.xa.Transaction;
+import com.caucho.db.xa.DbTransaction;
 import com.caucho.util.L10N;
 
 class BinaryColumn extends Column {
@@ -117,7 +117,7 @@ class BinaryColumn extends Column {
    * @param str the string value
    */
   @Override
-  void setString(Transaction xa, byte []block, int rowOffset, String str)
+  void setString(DbTransaction xa, byte []block, int rowOffset, String str)
   {
     int offset = rowOffset + _columnOffset;
     
@@ -169,6 +169,22 @@ class BinaryColumn extends Column {
     return new String(buffer, 0, len);
   }
   
+  @Override
+  public byte []getBytes(long blockId, byte []block, int rowOffset)
+  {
+    if (isNull(block, rowOffset))
+      return null;
+    
+    int startOffset = rowOffset + _columnOffset;
+    int len = _length;
+
+    byte []buffer = new byte[len];
+
+    System.arraycopy(block, startOffset, buffer, 0, len);
+
+    return buffer;
+  }
+  
   /**
    * Sets the column based on an expression.
    *
@@ -177,7 +193,7 @@ class BinaryColumn extends Column {
    * @param expr the expression to store
    */
   @Override
-  void setExpr(Transaction xa,
+  void setExpr(DbTransaction xa,
                byte []block, int rowOffset,
                Expr expr, QueryContext context)
     throws SQLException
@@ -317,7 +333,7 @@ class BinaryColumn extends Column {
    * Sets based on an iterator.
    */
   @Override
-  public void set(Transaction xa,
+  public void set(DbTransaction xa,
                   TableIterator iter, Expr expr, QueryContext context)
     throws SQLException
   {
@@ -359,7 +375,7 @@ class BinaryColumn extends Column {
    * @param rowAddr the address of the row
    */
   @Override
-  void setIndex(Transaction xa,
+  void setIndex(DbTransaction xa,
                 byte []block, int rowOffset,
                 long rowAddr, QueryContext context)
     throws SQLException
@@ -391,7 +407,7 @@ class BinaryColumn extends Column {
    * @param expr the expression to store
    */
   @Override
-  void deleteIndex(Transaction xa, byte []block, int rowOffset)
+  void deleteIndex(DbTransaction xa, byte []block, int rowOffset)
     throws SQLException
   {
     BTree index = getIndex();

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -102,6 +102,7 @@ public abstract class AbstractHttpRequest
 
   private static final char []CONTINUE_100 = "100-continue".toCharArray();
   private static final char []CLOSE = "close".toCharArray();
+  private static final char []KEEPALIVE = "keep-alive".toCharArray();
 
   private static final boolean []TOKEN;
   private static final boolean []VALUE;
@@ -171,7 +172,7 @@ public abstract class AbstractHttpRequest
   protected AbstractHttpRequest(Server server, SocketLink conn)
   {
     _server = server;
-    
+
     if (server == null)
       throw new NullPointerException();
     
@@ -378,7 +379,7 @@ public abstract class AbstractHttpRequest
   public void clientDisconnect()
   {
     if (_tcpConn != null)
-      _tcpConn.close();
+      _tcpConn.requestClose();
   }
 
   public final HttpServletRequestImpl getRequestFacade()
@@ -639,8 +640,8 @@ public abstract class AbstractHttpRequest
     case 'C':
       if (keyLen == CONNECTION.length
           && match(keyBuf, keyOff, keyLen, CONNECTION)) {
-        if (match(value.getBuffer(), value.getOffset(), value.getLength(),
-                  CLOSE)) {
+        if (! match(value.getBuffer(), value.getOffset(), value.getLength(),
+                    KEEPALIVE)) {
           handleConnectionClose();
         }
       }
@@ -1651,7 +1652,7 @@ public abstract class AbstractHttpRequest
   public boolean isKeepaliveAllowed()
   {
     SocketLink conn = _conn;
-
+    
     if (conn != null)
       return conn.isKeepaliveAllocated();
     else
@@ -1735,12 +1736,24 @@ public abstract class AbstractHttpRequest
       HttpBufferStore httpBuffer = _httpBuffer;
       _httpBuffer = null;
 
+      /*
       if (_tcpConn != null) {
         _tcpConn.finishRequest();
       }
+      */
 
       if (httpBuffer != null)
         HttpBufferStore.free(httpBuffer);
+    }
+  }
+
+  @Override
+  public void onCloseConnection()
+  {
+    try {
+      finishRequest();
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
     }
   }
 

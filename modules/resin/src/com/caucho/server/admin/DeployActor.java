@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,10 +44,10 @@ import javax.annotation.PostConstruct;
 import javax.management.ObjectName;
 
 import com.caucho.bam.ActorError;
-import com.caucho.bam.Broker;
-import com.caucho.bam.QueryGet;
-import com.caucho.bam.QuerySet;
-import com.caucho.bam.SimpleActor;
+import com.caucho.bam.Query;
+import com.caucho.bam.actor.SimpleActor;
+import com.caucho.bam.mailbox.MultiworkerMailbox;
+import com.caucho.cloud.bam.BamService;
 import com.caucho.cloud.deploy.CopyTagQuery;
 import com.caucho.cloud.deploy.RemoveTagQuery;
 import com.caucho.cloud.deploy.SetTagQuery;
@@ -55,11 +55,9 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Service;
 import com.caucho.env.deploy.DeployControllerService;
 import com.caucho.env.deploy.DeployTagItem;
-import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.env.repository.RepositorySpi;
 import com.caucho.env.repository.RepositoryTagEntry;
-import com.caucho.hemp.broker.HempMemoryQueue;
 import com.caucho.jmx.Jmx;
 import com.caucho.management.server.DeployControllerMXBean;
 import com.caucho.management.server.EAppMXBean;
@@ -75,7 +73,6 @@ import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
-@Service
 public class DeployActor extends SimpleActor
 {
   private static final Logger log
@@ -91,18 +88,16 @@ public class DeployActor extends SimpleActor
 
   public DeployActor()
   {
+    super("deploy@resin.caucho", BamService.getCurrentBroker());
   }
-
+  
+  /*
   @Override
-  public String getJid()
-  {
-    return "deploy@resin.caucho";
-  }
-
-  private Broker getBroker()
+  public ManagedBroker getBroker()
   {
     return _server.getAdminBroker();
   }
+  */
 
   @PostConstruct
   public void init()
@@ -118,14 +113,15 @@ public class DeployActor extends SimpleActor
 
     _repository = RepositoryService.getCurrentRepositorySpi();
 
-    setLinkStream(getBroker().getBrokerStream());
-    HempMemoryQueue queue
-      = new HempMemoryQueue(getActorStream(), getLinkStream(), 2);
+    setBroker(getBroker());
+    MultiworkerMailbox mailbox
+      = new MultiworkerMailbox(getActorStream().getJid(), 
+                               getActorStream(), getBroker(), 2);
     
-    getBroker().addActor(queue);
+    getBroker().addMailbox(mailbox);
   }
 
-  @QueryGet
+  @Query
   public boolean commitList(long id, String to, String from,
                             DeployCommitListQuery commitList)
   {
@@ -141,12 +137,12 @@ public class DeployActor extends SimpleActor
     DeployCommitListQuery resultList
       = new DeployCommitListQuery(uncommittedList);
 
-    getLinkStream().queryResult(id, from, to, resultList);
+    getBroker().queryResult(id, from, to, resultList);
 
     return true;
   }
 
-  @QuerySet
+  @Query
   public void tagCopy(long id,
                       String to,
                       String from,
@@ -160,7 +156,7 @@ public class DeployActor extends SimpleActor
     if (entry == null) {
       log.fine(this + " copyError dst='" + query.getTag() + "' src='" + query.getSourceTag() + "'");
 
-      getLinkStream().queryError(id, from, to, query,
+      getBroker().queryError(id, from, to, query,
                                    new ActorError(ActorError.TYPE_CANCEL,
                                                   ActorError.ITEM_NOT_FOUND,
                                                   "unknown tag"));
@@ -183,10 +179,10 @@ public class DeployActor extends SimpleActor
                                         entry.getRoot(),
                                         metaDataMap);
 
-    getLinkStream().queryResult(id, from, to, result);
+    getBroker().queryResult(id, from, to, result);
   }
 
-  @QueryGet
+  @Query
   public void tagState(long id,
                        String to,
                        String from,
@@ -209,13 +205,13 @@ public class DeployActor extends SimpleActor
       TagStateQuery result = new TagStateQuery(tag, item.getState(), 
                                                item.getDeployException());
       
-      getLinkStream().queryResult(id, from, to, result);
+      getBroker().queryResult(id, from, to, result);
     }
     else
-      getLinkStream().queryResult(id, from, to, null);
+      getBroker().queryResult(id, from, to, null);
   }
 
-  @QuerySet
+  @Query
   public void removeTag(long id,
                         String to,
                         String from,
@@ -233,10 +229,10 @@ public class DeployActor extends SimpleActor
     boolean result = _repository.removeTag(query.getTag(),
                                            commitMetaData);
 
-    getLinkStream().queryResult(id, from, to, result);
+    getBroker().queryResult(id, from, to, result);
   }
 
-  @QuerySet
+  @Query
   public boolean sendFileQuery(long id, String to, String from,
                                DeploySendQuery query)
   {
@@ -251,11 +247,11 @@ public class DeployActor extends SimpleActor
 
       _repository.writeRawGitFile(sha1, is);
 
-      getLinkStream().queryResult(id, from, to, true);
+      getBroker().queryResult(id, from, to, true);
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
 
-      getLinkStream().queryResult(id, from, to, false);
+      getBroker().queryResult(id, from, to, false);
     } finally {
       IoUtil.close(is);
     }
@@ -263,7 +259,7 @@ public class DeployActor extends SimpleActor
     return true;
   }
 
-  @QuerySet
+  @Query
   public boolean setTagQuery(long id, String to, String from, SetTagQuery query)
   {
     String tagName = query.getTag();
@@ -285,12 +281,12 @@ public class DeployActor extends SimpleActor
                                         contentHash,
                                         commitMetaData);
 
-    getLinkStream().queryResult(id, from, to, String.valueOf(result));
+    getBroker().queryResult(id, from, to, String.valueOf(result));
 
     return true;
   }
 
-  @QueryGet
+  @Query
   public boolean queryTags(long id,
                            String to,
                            String from,
@@ -308,7 +304,7 @@ public class DeployActor extends SimpleActor
         tags.add(new TagResult(tag, entry.getValue().getRoot()));
     }
 
-    getLinkStream()
+    getBroker()
       .queryResult(id, from, to, tags.toArray(new TagResult[tags.size()]));
 
     return true;
@@ -317,7 +313,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean controllerDeploy(long id,
                                   String to,
                                   String from,
@@ -327,62 +323,20 @@ public class DeployActor extends SimpleActor
 
     log.fine(this + " deploy '" + query.getTag() + "' -> " + status);
 
-    getLinkStream().queryResult(id, from, to, true);
+    getBroker().queryResult(id, from, to, true);
 
     return true;
   }
 
   private String deploy(String gitPath)
   {
-    int p = gitPath.indexOf('/');
-    int q = gitPath.indexOf('/', p + 1);
-    int r = gitPath.lastIndexOf('/');
-
-    if (p < 0 || q < 0 || r < 0 || r <= q)
-      return L.l("'{0}' is an unknown type", gitPath);
-
-    String type = gitPath.substring(0, p);
-    // String stage = gitPath.substring(p + 1, q);
-    // String host = gitPath.substring(q + 1, r);
-    String name = gitPath.substring(r + 1);
-
-    try {
-      if (type.equals("ears")) {
-        ObjectName pattern = new ObjectName("resin:type=EarDeploy,*");
-
-        for (Object proxy : Jmx.query(pattern)) {
-          EarDeployMXBean earDeploy = (EarDeployMXBean) proxy;
-
-          earDeploy.deploy(name);
-
-
-          return statusMessage(gitPath);
-        }
-      }
-      else if (type.equals("wars")) {
-        ObjectName pattern = new ObjectName("resin:type=WebAppDeploy,*");
-
-        for (Object proxy : Jmx.query(pattern)) {
-          WebAppDeployMXBean warDeploy = (WebAppDeployMXBean) proxy;
-
-          warDeploy.deploy(name);
-
-          return statusMessage(gitPath);
-        }
-      }
-
-      return L.l("'{0}' is an unknown type", gitPath);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-
-      return L.l("deploy '{0}' failed\n{1}", gitPath, e.toString());
-    }
+    return start(gitPath);
   }
 
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean controllerStart(long id,
                                  String to,
                                  String from,
@@ -392,7 +346,7 @@ public class DeployActor extends SimpleActor
 
     log.fine(this + " start '" + query.getTag() + "' -> " + status);
 
-    getLinkStream().queryResult(id, from, to, true);
+    getBroker().queryResult(id, from, to, true);
 
     return true;
   }
@@ -420,7 +374,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean controllerStop(long id,
                                 String to,
                                 String from,
@@ -430,7 +384,7 @@ public class DeployActor extends SimpleActor
 
     log.fine(this + " stop '" + query.getTag() + "' -> " + status);
 
-    getLinkStream().queryResult(id, from, to, true);
+    getBroker().queryResult(id, from, to, true);
 
     return true;
   }
@@ -438,7 +392,7 @@ public class DeployActor extends SimpleActor
   private String stop(String tag)
   {
     DeployControllerService service = DeployControllerService.getCurrent();
-    
+
     DeployTagItem controller = service.getTagItem(tag);
 
     if (controller == null)
@@ -455,10 +409,45 @@ public class DeployActor extends SimpleActor
     }
   }
 
+  @Query
+  public boolean controllerRestart(long id,
+                                   String to,
+                                   String from,
+                                   ControllerRestartQuery query)
+  {
+    String status = restart(query.getTag());
+
+    log.fine(this + " restart '" + query.getTag() + "' -> " + status);
+
+    getBroker().queryResult(id, from, to, true);
+
+    return true;
+  }
+
+  private String restart(String tag)
+  {
+    DeployControllerService service = DeployControllerService.getCurrent();
+
+    DeployTagItem controller = service.getTagItem(tag);
+
+    if (controller == null)
+      return L.l("'{0}' is an unknown controller", controller);
+
+    try {
+      controller.toRestart();
+
+      return controller.getState();
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+
+      return e.toString();
+    }
+  }
+
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean controllerUndeploy(long id,
                                     String to,
                                     String from,
@@ -468,7 +457,7 @@ public class DeployActor extends SimpleActor
 
     log.fine(this + " undeploy '" + query.getTag() + "' -> " + status);
 
-    getLinkStream().queryResult(id, from, to, true);
+    getBroker().queryResult(id, from, to, true);
 
     return true;
   }
@@ -506,7 +495,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean controllerUndeploy(long id,
                                     String to,
                                     String from,
@@ -519,7 +508,7 @@ public class DeployActor extends SimpleActor
 
     log.fine(this + " undeploy '" + query.getTag() + "' -> " + status);
 
-    getLinkStream().queryResult(id, from, to, true);
+    getBroker().queryResult(id, from, to, true);
 
     return true;
   }
@@ -566,7 +555,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    */
-  @QuerySet
+  @Query
   public boolean sendAddFileQuery(long id, String to, String from,
                                   DeployAddFileQuery query)
   {
@@ -581,7 +570,7 @@ public class DeployActor extends SimpleActor
         if (log.isLoggable(Level.FINE))
           log.fine(this + " sendAddFileQuery '" + tag + "' is an unknown DeployController");
 
-        getLinkStream().queryResult(id, from, to, "no-deploy: " + tag);
+        getBroker().queryResult(id, from, to, "no-deploy: " + tag);
 
         return true;
       }
@@ -596,13 +585,13 @@ public class DeployActor extends SimpleActor
 
       _repository.expandToPath(contentHash, path);
 
-      getLinkStream().queryResult(id, from, to, "ok");
+      getBroker().queryResult(id, from, to, "ok");
 
       return true;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
 
-      getLinkStream().queryResult(id, from, to, "fail");
+      getBroker().queryResult(id, from, to, "fail");
 
       return true;
     }
@@ -611,7 +600,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    **/
-  @QueryGet
+  @Query
   public boolean listWebApps(long id,
                              String to,
                              String from,
@@ -643,7 +632,7 @@ public class DeployActor extends SimpleActor
       }
     }
 
-    getLinkStream()
+    getBroker()
       .queryResult(id, from, to, apps.toArray(new WebAppQuery[apps.size()]));
 
     return true;
@@ -652,7 +641,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    **/
-  @QueryGet
+  @Query
   public boolean listTags(long id,
                           String to,
                           String from,
@@ -675,7 +664,7 @@ public class DeployActor extends SimpleActor
       }
     }
 
-    getLinkStream()
+    getBroker()
       .queryResult(id, from, to, tags.toArray(new TagQuery[tags.size()]));
 
     return true;
@@ -684,7 +673,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    **/
-  @QueryGet
+  @Query
   public boolean listHosts(long id,
                            String to,
                            String from,
@@ -702,7 +691,7 @@ public class DeployActor extends SimpleActor
       hosts.add(q);
     }
 
-    getLinkStream()
+    getBroker()
       .queryResult(id, from, to, hosts.toArray(new HostQuery[hosts.size()]));
 
     return true;
@@ -711,7 +700,7 @@ public class DeployActor extends SimpleActor
   /**
    * @deprecated
    **/
-  @QueryGet
+  @Query
   public boolean status(long id,
                         String to,
                         String from,
@@ -724,7 +713,7 @@ public class DeployActor extends SimpleActor
 
     StatusQuery result = new StatusQuery(tag, state, errorMessage);
 
-    getLinkStream().queryResult(id, from, to, result);
+    getBroker().queryResult(id, from, to, result);
 
     return true;
   }

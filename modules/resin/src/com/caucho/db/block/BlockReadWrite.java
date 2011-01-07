@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,6 +49,8 @@ public class BlockReadWrite {
   private final static Logger log
     = Logger.getLogger(BlockReadWrite.class.getName());
   private final static L10N L = new L10N(BlockReadWrite.class);
+  
+  private final static long FILE_SIZE_INCREMENT = 32L * 1024 * 1024; 
 
   private final BlockStore _store;
   private final BlockManager _blockManager;
@@ -59,6 +61,9 @@ public class BlockReadWrite {
 
   private Object _fileLock = new Object();
 
+  private RandomAccessStream _mmapFile;
+  private boolean _isEnableMmap = true;
+  
   private FreeList<RandomAccessWrapper> _cachedRowFile
     = new FreeList<RandomAccessWrapper>(4);
 
@@ -80,6 +85,11 @@ public class BlockReadWrite {
 
     if (path == null)
       throw new NullPointerException();
+  }
+  
+  public void setEnableMmap(boolean isEnable)
+  {
+    _isEnableMmap = isEnable;
   }
 
   /**
@@ -199,6 +209,12 @@ public class BlockReadWrite {
   {
     RandomAccessWrapper wrapper;
 
+    synchronized (_fileLock) {
+      while (_fileSize < blockAddress + length) {
+        _fileSize += FILE_SIZE_INCREMENT;
+      }
+    }
+
     wrapper = openRowFile(isPriority);
 
     try {
@@ -213,15 +229,8 @@ public class BlockReadWrite {
         System.out.println("BUFFER: " + buffer + " " + offset + " " + length);
 
       os.write(blockAddress, buffer, offset, length);
-
       freeRowFile(wrapper, isPriority);
       wrapper = null;
-
-      synchronized (_fileLock) {
-        if (_fileSize < blockAddress + length) {
-          _fileSize = blockAddress + length;
-        }
-      }
 
       _blockManager.addBlockWrite();
     } finally {
@@ -283,14 +292,30 @@ public class BlockReadWrite {
     }
     */
 
-    if (wrapper != null)
+    if (wrapper != null) {
       file = wrapper.getFile();
+      
+      if (_mmapFile != null && file.getLength() != _fileSize)
+        file = null;
+    }
 
     if (file == null) {
       Path path = _path;
 
       if (path != null) {
-        file = path.openRandomAccess();
+        RandomAccessStream mmapFile = _mmapFile;
+        
+        if (mmapFile != null && mmapFile.getLength() == _fileSize) {
+          return new RandomAccessWrapper(mmapFile);
+        }
+        
+        if (_isEnableMmap)
+          file = path.openMemoryMappedFile(_fileSize);
+        
+        if (file != null)
+          _mmapFile = file;
+        else 
+          file = path.openRandomAccess();
 
         wrapper = new RandomAccessWrapper(file);
       }
@@ -317,7 +342,9 @@ public class BlockReadWrite {
       return;
     }
 
-    wrapper.close();
+    if (wrapper.getFile() != _mmapFile) {
+      wrapper.close();
+    }
   }
 
   private void closeRowFile(RandomAccessWrapper wrapper, boolean isPriority)
@@ -329,7 +356,9 @@ public class BlockReadWrite {
     if (! isPriority)
       _rowFileSemaphore.release();
 
-    wrapper.close();
+    if (wrapper.getFile() != _mmapFile) {
+      wrapper.close();
+    }
   }
 
   /**

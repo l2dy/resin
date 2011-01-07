@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -73,6 +73,7 @@ import com.caucho.server.session.SessionManager;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
+import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
@@ -798,10 +799,14 @@ public class WebAppContainer
         // server/13sf, server/1kq1
         webApp = findWebAppByURI("/");
 
-        if (webApp != null)
-          invocation.setWebApp(webApp);
-        else
-          invocation.setWebApp(getErrorWebApp());
+        if (webApp == null) {
+          // server/1u12
+          webApp = getErrorWebApp();
+        }
+        
+        invocation.setWebApp(webApp);
+        
+        rewriteChain = webApp.createWebAppFilterChain(rewriteChain, invocation);
 
         invocation.setFilterChain(rewriteChain);
         isAlwaysModified = false;
@@ -1216,8 +1221,9 @@ public class WebAppContainer
       try {
         thread.setContextClassLoader(_classLoader);
 
-        Path errorRoot = Vfs.lookup("memory:/error-root");
-        
+        Path errorRoot = new MemoryPath().lookup("/error-root");
+        errorRoot.mkdirs();
+
         WebAppController webAppController
           = new WebAppController("error/webapp/default/error", errorRoot, this);
         webAppController.init();
