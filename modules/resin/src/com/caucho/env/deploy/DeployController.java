@@ -354,7 +354,7 @@ abstract public class DeployController<I extends DeployInstance>
    */
   public final boolean isIdleTimeout()
   {
-    DeployInstance instance = getDeployInstance();
+    DeployInstance instance = getDeployInstanceImpl();
 
     if (instance != null)
       return instance.isDeployIdle();
@@ -376,7 +376,7 @@ abstract public class DeployController<I extends DeployInstance>
       return true;
     }
     
-    DeployInstance instance = getDeployInstance();
+    DeployInstance instance = getDeployInstanceImpl();
 
     return instance == null || instance.isModified();
   }
@@ -389,7 +389,7 @@ abstract public class DeployController<I extends DeployInstance>
     if (isControllerModifiedNow())
       return true;
     
-    DeployInstance instance = getDeployInstance();
+    DeployInstance instance = getDeployInstanceImpl();
 
     return instance == null || instance.isModifiedNow();
   }
@@ -404,7 +404,7 @@ abstract public class DeployController<I extends DeployInstance>
       return true;
     }
     
-    DeployInstance instance = getDeployInstance();
+    DeployInstance instance = getDeployInstanceImpl();
 
     if (instance != null) {
       Thread thread = Thread.currentThread();
@@ -443,6 +443,17 @@ abstract public class DeployController<I extends DeployInstance>
   @Override
   public I getDeployInstance()
   {
+    if (_lifecycle.isActive() || _lifecycle.isError())
+      return getDeployInstanceImpl();
+    else
+      return null;
+  }
+
+  /**
+   * Returns the current instance.
+   */
+  public I getDeployInstanceImpl()
+  {
     return _deployInstance;
   }
 
@@ -451,21 +462,15 @@ abstract public class DeployController<I extends DeployInstance>
    */
   protected final I createDeployInstance()
   {
-    synchronized (this) {
-      if (_deployInstance == null) {
-        Thread thread = Thread.currentThread();
-        ClassLoader oldLoader = thread.getContextClassLoader();
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
 
-        try {
-          thread.setContextClassLoader(_parentLoader);
+    try {
+      thread.setContextClassLoader(_parentLoader);
 
-          _deployInstance = instantiateDeployInstance();
-        } finally {
-          thread.setContextClassLoader(oldLoader);
-        }
-      }
-
-      return _deployInstance;
+      return instantiateDeployInstance();
+    } finally {
+      thread.setContextClassLoader(oldLoader);
     }
   }
 
@@ -476,7 +481,7 @@ abstract public class DeployController<I extends DeployInstance>
   }
 
   /**
-   * Redeploys the entry if it's modified.
+   * Starts the entry on initialization
    */
   @Override
   public void startOnInit()
@@ -611,10 +616,10 @@ abstract public class DeployController<I extends DeployInstance>
       isStarting = _lifecycle.toStarting();
 
       if (! isStarting) {
-        _lifecycle.waitForActive(_waitForActiveTimeout);
-        
-        return deployInstance;
+        return getDeployInstance();
       }
+      
+      _deployInstance = deployInstance;
       
       preConfigureInstance(deployInstance);
       
@@ -789,7 +794,8 @@ abstract public class DeployController<I extends DeployInstance>
     start();
   }
 
-  @Override public void toStop()
+  @Override 
+  public void toStop()
   {
     stop();
   }

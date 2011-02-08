@@ -44,9 +44,9 @@ import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.bam.stream.ActorStream;
 import com.caucho.bam.stream.NullActorStream;
-import com.caucho.cloud.bam.BamService;
+import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.ClusterServer;
-import com.caucho.cloud.network.NetworkClusterService;
+import com.caucho.cloud.network.NetworkClusterSystem;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
 import com.caucho.config.ConfigException;
@@ -56,7 +56,7 @@ import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.GlobalCache;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
-import com.caucho.env.shutdown.ShutdownService;
+import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.hemp.broker.HempBrokerManager;
 import com.caucho.hemp.servlet.ServerAuthManager;
@@ -86,6 +86,7 @@ import com.caucho.server.host.HostConfig;
 import com.caucho.server.host.HostContainer;
 import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
+import com.caucho.server.http.HttpBufferStore;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
@@ -95,6 +96,7 @@ import com.caucho.server.webapp.WebApp;
 import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Dependency;
 import com.caucho.vfs.Path;
@@ -117,7 +119,7 @@ public class Server
 
   private final Resin _resin;
   private final ResinSystem _resinSystem;
-  private final NetworkClusterService _clusterService;
+  private final NetworkClusterSystem _clusterService;
   private final ClusterServer _selfServer;
 
   private Throwable _configException;
@@ -127,7 +129,7 @@ public class Server
 
   private InjectManager _cdiManager;
 
-  private BamService _bamService;
+  private BamSystem _bamService;
 
   private InvocationServer _invocationServer;
   private HostContainer _hostContainer;
@@ -160,6 +162,10 @@ public class Server
 
   private PersistentStoreConfig _persistentStoreConfig;
   
+  private final FreeList<HttpBufferStore> _httpBufferFreeList
+    = new FreeList<HttpBufferStore>(256);
+
+  
   //
   // internal databases
   //
@@ -179,7 +185,7 @@ public class Server
    */
   public Server(Resin resin,
                 ResinSystem resinSystem,
-                NetworkClusterService clusterService)
+                NetworkClusterSystem clusterService)
   {
     if (resin == null)
       throw new NullPointerException();
@@ -255,7 +261,7 @@ public class Server
 
     _alarm = new Alarm(this);
     
-    _bamService = BamService.getCurrent();
+    _bamService = BamSystem.getCurrent();
 
     _authManager = new ServerAuthManager();
     // XXX:
@@ -362,7 +368,7 @@ public class Server
    */
   protected HempBrokerManager createBrokerManager()
   {
-    return new HempBrokerManager();
+    return new HempBrokerManager(_resinSystem);
   }
 
   /**
@@ -615,9 +621,11 @@ public class Server
   /**
    * Sets the url-length-max
    */
-  public void setUrlLengthMax(int max)
+  public void setUrlLengthMax(int length)
   {
-    _urlLengthMax = max;
+    _urlLengthMax = length;
+
+    getInvocationDecoder().setMaxURILength(length);
   }
 
   /**
@@ -725,14 +733,6 @@ public class Server
   }
 
   /**
-   * Sets the max-uri
-   */
-  public void setMaxUriLength(int length)
-  {
-    getInvocationDecoder().setMaxURILength(length);
-  }
-
-  /**
    * Sets the session cookie
    */
   public void setSessionCookie(String cookie)
@@ -826,7 +826,10 @@ public class Server
    */
   public void addErrorPage(ErrorPage errorPage)
   {
-    getErrorWebApp().addErrorPage(errorPage);
+    WebApp webApp = getErrorWebApp();
+    
+    if (webApp != null)
+      webApp.addErrorPage(errorPage);
   }
   
   public void setPersistentStore(PersistentStoreConfig config)
@@ -1035,6 +1038,21 @@ public class Server
     _systemStore.init();
 
     return _systemStore;
+  }
+
+  public HttpBufferStore allocateHttpBuffer()
+  {
+    HttpBufferStore buffer = _httpBufferFreeList.allocate();
+
+    if (buffer == null)
+      buffer = new HttpBufferStore(getUrlLengthMax());
+
+    return buffer;
+  }
+
+  public void freeHttpBuffer(HttpBufferStore buffer)
+  {
+    _httpBufferFreeList.free(buffer);
   }
 
   /**
@@ -1247,7 +1265,7 @@ public class Server
         // XXX: message slightly wrong
         String msg = L.l("Resin restarting due to configuration change");
 
-        ShutdownService.getCurrent().shutdown(ExitCode.MODIFIED, msg);
+        ShutdownSystem.getCurrent().shutdown(ExitCode.MODIFIED, msg);
         return;
       }
     } finally {
@@ -1440,7 +1458,7 @@ public class Server
   {
     String msg = L.l("Server restarting due to configuration change");
     
-    ShutdownService.shutdownActive(ExitCode.MODIFIED, msg);
+    ShutdownSystem.shutdownActive(ExitCode.MODIFIED, msg);
   }
   /**
    * Closes the server.

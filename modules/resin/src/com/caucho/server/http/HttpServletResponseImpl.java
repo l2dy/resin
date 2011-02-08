@@ -176,8 +176,16 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     if (_writer != null)
       return _writer;
 
-    if (_outputStream != null)
+    if (_outputStream != null) {
+      if (_response.isClosed()) {
+        // jsp/017o
+        _writer = _response.getResponsePrintWriter();
+        _writer.init(_responseStream);
+        return _writer;
+      }
+      
       throw new IllegalStateException(L.l("getWriter() can't be called after getOutputStream()."));
+    }
 
     String encoding = getCharacterEncoding();
 
@@ -304,6 +312,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * Explicitly sets the length of the result value.  Normally, the servlet
    * engine will handle this.
    */
+  @Override
   public void setContentLength(int len)
   {
     if (_outputStream == null && _writer == null)
@@ -1278,11 +1287,18 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     cookie.setPort(manager.getCookiePort());
 
     if (manager.isSecure()) {
-      // cookie.setSecure(_request.isSecure());
+      // server/12zc (tck) vs server/01io (#4372)
+      /*
+      if (_request.isSecure())
+        cookie.setSecure(true);
+        */
 
-      // server/12zc (tck)
       cookie.setSecure(true);
-   }
+    }
+    else if (manager.isCookieSecure()) {
+      if (_request.isSecure())
+        cookie.setSecure(true);
+    }
     
     if (manager.isCookieHttpOnly())
       cookie.setHttpOnly(true);
@@ -1420,6 +1436,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     return _responseStream;
   }
 
+  @Override
   public void setResponseStream(AbstractResponseStream responseStream)
   {
     _responseStream = responseStream;
@@ -1431,6 +1448,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       _writer.init(responseStream);
   }
 
+  @Override
   public boolean isCauchoResponseStream()
   {
     return _responseStream.isCauchoResponseStream();
@@ -1448,6 +1466,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   }
   */
 
+  @Override
   public String getHeader(String key)
   {
     return _response.getHeader(key);
@@ -1463,11 +1482,13 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     return _response.getHeaderValues();
   }
 
+  @Override
   public void setFooter(String key, String value)
   {
     _response.setFooter(key, value);
   }
 
+  @Override
   public void addFooter(String key, String value)
   {
     _response.addFooter(key, value);
@@ -1475,6 +1496,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
   // XXX: really close invocation
 
+  @Override
   public void close()
     throws IOException
   {
@@ -1486,6 +1508,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * When set to true, RequestDispatcher.forward() is disallowed on
    * this stream.
    */
+  @Override
   public void setForbidForward(boolean forbid)
   {
     _forbidForward = forbid;
@@ -1495,6 +1518,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
    * Returns true if RequestDispatcher.forward() is disallowed on
    * this stream.
    */
+  @Override
   public boolean getForbidForward()
   {
     return _forbidForward;
@@ -1535,6 +1559,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   }
   */
 
+  @Override
   public AbstractHttpResponse getAbstractHttpResponse()
   {
     return _response;

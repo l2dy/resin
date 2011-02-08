@@ -578,6 +578,14 @@ public class TcpSocketLinkListener
   {
     _isEnableJni = isEnableJni;
   }
+  
+  public boolean isJniEnabled()
+  {
+    if (_serverSocket != null)
+      return _serverSocket.isJni();
+    else
+      return false;
+  }
 
   private Throttle createThrottle()
   {
@@ -645,6 +653,11 @@ public class TcpSocketLinkListener
   public void setSuspendTimeMax(Period period)
   {
     _suspendTimeMax = period.getPeriod();
+  }
+
+  public void setSuspendReaperTimeout(Period period)
+  {
+    _suspendReaperTimeout = period.getPeriod();
   }
 
   public void setKeepaliveTimeout(Period period)
@@ -1104,10 +1117,15 @@ public class TcpSocketLinkListener
     }
   }
 
+  public boolean isEnabled()
+  {
+    return _lifecycle.isActive();
+  }
+  
   /**
    * Starts the port listening for new connections.
    */
-  void enable()
+  public void enable()
   {
     if (_lifecycle.toActive()) {
       if (_serverSocket != null) {
@@ -1119,7 +1137,7 @@ public class TcpSocketLinkListener
   /**
    * Stops the port from listening for new connections.
    */
-  void disable()
+  public void disable()
   {
     if (_lifecycle.toStop()) {
       if (_serverSocket != null)
@@ -1451,9 +1469,9 @@ public class TcpSocketLinkListener
     return _lifetimeRequestTime;
   }
 
-  void addLifetimeReadBytes(long time)
+  void addLifetimeReadBytes(long bytes)
   {
-    _lifetimeReadBytes += time;
+    _lifetimeReadBytes += bytes;
   }
 
   public long getLifetimeReadBytes()
@@ -1461,9 +1479,9 @@ public class TcpSocketLinkListener
     return _lifetimeReadBytes;
   }
 
-  void addLifetimeWriteBytes(long time)
+  void addLifetimeWriteBytes(long bytes)
   {
-    _lifetimeWriteBytes += time;
+    _lifetimeWriteBytes += bytes;
   }
 
   public long getLifetimeWriteBytes()

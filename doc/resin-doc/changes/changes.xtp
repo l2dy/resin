@@ -11,7 +11,77 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.14 - snapshot">
+<s2 title="4.0.15 - snapshot">
+<ul>
+<li>eclipse-plugin: require automated eval. license request only for new download (#4379, rep by Daniel Lopez)</li>
+<li>jsp: sendRedirect in JSP could cause IllegalStateException (#4290, rep by Mattias Jiderhamn)</li>
+<li>cookie: ssl-session-cookie should not automatically set Secure for the non-SSL cookie (#4372)</li>
+<li>/resin-admin: increased upload_max_filesize for web app deployment. New limit is 128Mb. (#4371 rep by Naoki Yano)</li>
+<li>bam/cluster: HmtpQueue in ProDomainManager needs to be ConcurrentHashMap and not WeakReference (rep by Jamie Novak)</li>
+<li>watchdog: "status" was returning the watchdog's user, not the Resin instance user (#4359, rep by mros2stf)</li>
+<li>async/comet: request should not force flush on async (#4360, rep by Manoj Chennath)</li>
+<li>cloud: server.ifSelf() changed to more reliable predicate (#4355, rep by Jamison Novak)</li>
+<li>http: url-length-max wasn't allowing large URLs (#4358, rep by Daniel Kador)</li>
+<li>cloud: messages during startup are queued if mailbox isn't registered yet (rep by Jamison Novak)</li>
+<li>cdi: enable Conversation scope for JSP/servlets</li>
+<li>database: add DatabaseManager.closeConnection (#3703, rep by Nobuaki Shinomiya)</li>
+<li>servlet: request HashMapImpl fixes for inserts (#3726, rep by Fiaz Hossein)</li>
+<li>install: ${resin.root}/resin-doc will be updated on a new install (#4350, rep by mros2stf)</li>
+<li>resin-admin: use ${resin.root}/resin-doc location for resin-admin (#4350, rep by mros2stf)</li>
+<li>configure: test for dev environment faulty, causing resinssl build issues (#4352, rep by mros2stf)</li>
+<li>meter/sensor: add sensor callback to so failures can be acted on (#3731, rep by Martin Thompson)</li>
+<li>resin-admin: if admin-users.xml.generated cannot be created in resin.conf, use resin-data (#3785)</li>
+<li>network: add listener/port read/write statistics (#4150)</li>
+<li>bam: separate queues for large messages (#4128, rep by Martin Thompson)</li>
+<li>git: validate repository and reload from triad if corrupted (#4341, rep by Jamison Novak)</li>
+<li>cdi: serialization of intercepted beans (#4083, rep by sweigersf)</li>
+<li>cdi: enhanced CDI beans must use proxies (TCK)</li>
+<li>jni: JniSelectManager should use toError() is removeNative fails (#4349, rep by Jens Christensen)</li>
+<li>gzip: flush/error issue with JSP (#3893)</li>
+<li>watchdog: add "watchdog" command for MacOS LaunchD (#3891, #4124, rep by Rob Lockstone)</li>
+<li>session: if session is not valid due to timing issues, create new session (#3942, rep by bregnvig)</li>
+<li>jpa: eclipselink was not properly closed on webapp restart (#4154, rep by Riccardo Cohen)</li>
+<li>ssl: jsse-ssl add cipher-suites-forbidden (#3970, rep by Aaron Freeman)</li>
+<li>jsp: @page contentType should not affect request.getCharacterEncoding() (#4007, rep by Shinomiya Nobuaki)</li>
+<li>ssl: jsse-ssl add verify-client="optional" support (#4052, rep by adamknight)</li>
+<li>ear: ear deployment problems when war context-url is "/" (#4348, rep by koge_pan)</li>
+<li>security: allow FormLogin with selected authenticator (#4143)</li>
+<li>cdi: allow inline injection &lt;value>&lt;qa:MyQualifier>&lt;/value></li>
+<li>session: add serialization-collection-type to allow disabling of Hibernate collection serialization (#4211, rep by Matthew Schmidt)</li>
+<li>watchdog: on configuration error, delay Resin restart by 30s (#4202, rep by norlab)</li>
+<li>load-balance: bind-ports-after-start and disable should cause failover during startup (#4129, rep by Wesley Wu)</li>
+<li>date: setMonth(1) when setDay(31) previously was setting to march (#4094, rep by nam)</li>
+<li>admin: add isJniEnabled() property to the Port MBean (#4088, rep by skippopotamus)</li>
+<li>servlet: allow cookies with space values (#3897, rep by ykim)</li>
+<li>cluster: triad warning when triad servers are on same machine (#4177)</li>
+<li>webapp: web-app deployment with invalid root-directory needs warning (#4207)</li>
+<li>database: logging adds ".d0", ".d1" to show round-robin (#4222, rep by Anthony Balandran)</li>
+<li>init.d: change init.d/resin to log startup to /var/log/resin/console.log (#4223, rep by Raul Luna)</li>
+<li>i18n: changed MacRoman file.encoding to default to utf-8 (#4180)</li>
+<li>url: invalid utf-8 character parses to %xfffd (#4183, rep by cjohn)</li>
+<li>comet: add suspend-reaper-timeout to port configuration (#4249, rep by baoqinye)</li>
+<li>startup: Resin started message changed to log at INFO level (#4135, rep by briandeng)</li>
+<li>database: check isClosed() on connection reuse to avoid dead connections (#4231)</li>
+<li>log: rollover needs dedicated alarm for proper timeout (#4234, rep by mros2stf)</li>
+<li>watchdog: relative -root-directory was applying the relative path twice (#4198)</li>
+<li>servlet: getResource("/") was returning a URL for the directory incorrectly (#4301, rep by mate)</li>
+<li>watchdog: Resin child needs -Xrs on windows (#4308, rep by robin dun)</li>
+<li>deploy: web-app start needs to synchronize on getDeployInstance (#4342, rep by Jamison Novak)</li>
+<li>session: session cache needs to use createIfAbsent to avoid timing issues (#4340, rep by Jamison Novak)</li>
+<li>access-log: AbstractRolloverLog needs dedicated rollover alarm (#4321, rep by mros2stf)</li>
+<li>access-log: content-length improperly calculated for chunked (#4317, rep by Martin Thompson)</li>
+<li>rewrite: added AddHeader to add cookies (#4326, rep by C. Stokes)</li>
+<li>jni: npe check for nativeWrite (#4323, rep by Prabhu)</li>
+<li>watchdog: check that watchdog-manager.log can be written before starting (#4333)</li>
+<li>cloud: errors for messages which cannot connect log the destination for debugging (#4315, rep by Cameron Stokes)</li>
+<li>proxy-cache: 304 returned for proxy cache (#4239, rep by Jamison Novak)</li>
+<li>proxy-cache: pdf/range using improper recursive call (#4334 rep by C. Fernandez)</li>
+<li>embed: add setAsyncSupported to ServletEmbed (#4332, rep by Michael Barker)</li>
+<li>resin: LoadBalance inside &lt;web-app> needs to pass along context-path (#4304, rep by Kenneth Yeung)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.14 - Jan 7, 2011">
 <ul>
 <li>resin: CLI added deploy, undeploy, list, start-webapp, stop-webapp, restar-webapp commands (#4316, rep by Patrick Brigger)</li>
 <li>cache: use cursor to update data timeouts</li>

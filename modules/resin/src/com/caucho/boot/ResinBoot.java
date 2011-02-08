@@ -40,6 +40,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.env.service.ResinSystem;
+import com.caucho.env.shutdown.ExitCode;
 import com.caucho.loader.Environment;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.util.L10N;
@@ -307,6 +308,9 @@ public class ResinBoot {
     else if (_args.isConsole()) {
       return _client.startConsole() != 0;
     }
+    else if (_args.isWatchdogConsole()) {
+      WatchdogManager.main(_args.getRawArgv());
+    }
     else if (_args.isGui()) {
       if (_ui != null && _ui.isVisible())
         return true;
@@ -360,15 +364,15 @@ public class ResinBoot {
         }
       }
       
-      System.exit(0);
+      System.exit(ExitCode.OK.ordinal());
     } catch (ConfigException e) {
       System.out.println(e.getMessage());
 
-      System.exit(2);
+      System.exit(ExitCode.BAD_CONFIG.ordinal());
     } catch (Exception e) {
       e.printStackTrace();
 
-      System.exit(3);
+      System.exit(ExitCode.UNKNOWN.ordinal());
     }
   }
 

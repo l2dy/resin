@@ -29,18 +29,21 @@
 
 package com.caucho.junit;
 
-import org.junit.runner.*;
-import org.junit.runner.notification.*;
-import org.junit.runners.*;
-import org.junit.runners.model.*;
+import org.junit.runner.notification.RunNotifier;
+import org.junit.runners.BlockJUnit4ClassRunner;
+import org.junit.runners.model.FrameworkMethod;
 
-import com.caucho.resin.*;
-import com.caucho.config.inject.*;
-import com.caucho.vfs.*;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.resin.BeanContainerRequest;
+import com.caucho.resin.ResinBeanContainer;
 
 /**
- * ResinJUnit runner runs a JUnit within the context of Resin.
+ * Resin bean container runner runs a JUnit 4 test backed by a Resin context.
+ * 
+ * TODO Add more Javadoc since this is a public API.
  */
+// TODO The container is not being shutdown properly, so some pre-destroy call-backs may not
+// happen. Add a JVM shutdown hook or register to listen when JUnit finishes running all the tests?
 public class ResinBeanContainerRunner extends BlockJUnit4ClassRunner {
   private Class<?> _testClass;
 
@@ -58,9 +61,21 @@ public class ResinBeanContainerRunner extends BlockJUnit4ClassRunner {
   }
 
   @Override
+  protected Object createTest()
+    throws Exception
+  {
+    InjectManager manager = getResinContext().getInstance(InjectManager.class);
+
+    // Make the test class a CDI bean, but do not actually register it with CDI.
+    return manager.createTransientObject(_testClass);
+  }  
+  
+  @Override
   protected void runChild(FrameworkMethod method, RunNotifier notifier)
   {
     ResinBeanContainer beanContainer = getResinContext();
+    
+    // Each method is treated as a separate HTTP request.
     BeanContainerRequest request = beanContainer.beginRequest();
 
     try {
@@ -70,20 +85,13 @@ public class ResinBeanContainerRunner extends BlockJUnit4ClassRunner {
     }
   }
 
-  @Override
-  protected Object createTest()
-    throws Exception
-  {
-    InjectManager manager = getResinContext().getInstance(InjectManager.class);
-
-    return manager.createTransientObject(_testClass);
-  }
-
   protected ResinBeanContainer getResinContext()
   {
     if (_beanContainer == null) {
       _beanContainer = new ResinBeanContainer();
 
+      // TODO Make sure this is system-independent. Use java.io.tmpdir, path.separator, 
+      // user.dir, user.home, instead?      
       String userName = System.getProperty("user.name");
       String workDir = "file:/tmp/" + userName;
 

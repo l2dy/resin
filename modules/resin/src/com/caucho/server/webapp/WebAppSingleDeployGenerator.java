@@ -216,7 +216,7 @@ public class WebAppSingleDeployGenerator
       _rootDirectory = PathBuilder.lookupPath(rootDir, null,
                                               _container.getDocumentDirectory());
     }
-
+    
     _controller = new WebAppController(_rootDirectory, 
                                        _container,
                                        _urlPrefix);
@@ -242,6 +242,14 @@ public class WebAppSingleDeployGenerator
     _controller.setSourceType("single");
 
     Environment.addEnvironmentListener(this, _parentLoader);
+
+    // server/1d02
+    //_controller.init();
+    
+    if (! isDeployed()) {
+      log.warning(_controller + " does not have an active root-directory "
+                  + _controller.getRootDirectory());
+    }
   }
 
   /**
@@ -250,8 +258,29 @@ public class WebAppSingleDeployGenerator
   @Override
   protected void fillDeployedNames(Set<String> keys)
   {
+    if (! isDeployed())
+      return;
+    
     if (_controller != null)
       keys.add(_controller.getContextPath());
+  }
+  
+  private boolean isDeployed()
+  {
+    if (_controller == null)
+      return false;
+    
+    // server/1d--
+    return true;
+    
+    /*
+    if (_controller.getRootDirectory().exists())
+      return true;
+    else if (_controller.getArchivePath() == null)
+      return false;
+    else
+      return _controller.getArchivePath().canRead();
+      */
   }
   
   /**
@@ -260,6 +289,10 @@ public class WebAppSingleDeployGenerator
   @Override
   public void generateController(String name, ArrayList<WebAppController> list)
   {
+    if (! isDeployed()) {
+      return;
+    }
+    
     if (name.equals(_controller.getContextPath())) {
       WebAppController webApp;
       

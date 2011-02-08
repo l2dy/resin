@@ -29,25 +29,21 @@
 
 package com.caucho.server.security;
 
-import com.caucho.server.dispatch.ErrorFilterChain;
-import com.caucho.server.dispatch.FilterChainBuilder;
-import com.caucho.server.dispatch.ForwardFilterChain;
-import com.caucho.server.dispatch.Invocation;
-import com.caucho.server.webapp.WebApp;
-import com.caucho.util.L10N;
-
-import javax.servlet.FilterChain;
-import javax.servlet.RequestDispatcher;
-import javax.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.HashMap;
+
+import javax.servlet.FilterChain;
+import javax.servlet.http.HttpServletResponse;
+
+import com.caucho.server.dispatch.ErrorFilterChain;
+import com.caucho.server.dispatch.FilterChainBuilder;
+import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.webapp.WebApp;
 
 /**
  * Manages security constraint.
  */
 public class ConstraintManager extends FilterChainBuilder {
-  private static L10N L = new L10N(ConstraintManager.class);
-
   private ArrayList<SecurityConstraint> _constraints
     = new ArrayList<SecurityConstraint>();
 
@@ -73,12 +69,13 @@ public class ConstraintManager extends FilterChainBuilder {
    * @param next the next filter in the chain.
    * @param invocation the request's invocation.
    */
+  @Override
   public FilterChain build(FilterChain next, Invocation invocation)
   {
     String uri = invocation.getContextURI();
 
-    WebApp app = invocation.getWebApp();
-    if (app == null)
+    WebApp webApp = invocation.getWebApp();
+    if (webApp == null)
       return next;
 
     String lower = uri.toLowerCase();
@@ -100,7 +97,6 @@ public class ConstraintManager extends FilterChainBuilder {
 
       if (constraint.isMatch(uri)) {
         AbstractConstraint absConstraint = constraint.getConstraint();
-
         if (absConstraint != null) {
           ArrayList<String> methods = constraint.getMethods(uri);
 
@@ -109,29 +105,13 @@ public class ConstraintManager extends FilterChainBuilder {
 
             AbstractConstraint []methodList = methodMap.get(method);
 
-            if (methodList == null)
+            if (methodList == null) {
+              // server/1ak4
+              // server/12ba - the first constraint matches, following are
+              // ignored
               methodList = absConstraint.toArray();
-            // server/12ba - the first constraint matches, following are
-            // ignored
-            /*
-            else {
-
-              AbstractConstraint []newMethods = absConstraint.toArray();
-
-              AbstractConstraint []newList;
-
-              newList = new AbstractConstraint[methodList.length
-                                               + newMethods.length];
-
-              System.arraycopy(methodList, 0, newList, 0, methodList.length);
-              System.arraycopy(newMethods, 0, newList,
-                               methodList.length, newMethods.length);
-
-              methodList = newList;
+              methodMap.put(method, methodList);
             }
-            */
-
-            methodMap.put(method, methodList);
           }
           
           if (methods == null || methods.size() == 0) {
@@ -155,15 +135,6 @@ public class ConstraintManager extends FilterChainBuilder {
       }
     }
 
-    if (uri.endsWith("/j_security_check")
-        && app.getLogin() instanceof FormLogin) {
-      RequestDispatcher disp = app.getNamedDispatcher("j_security_check");
-      if (disp == null)
-        throw new IllegalStateException(L.l("j_security_check is an undefined servlet"));
-
-      next = new ForwardFilterChain(disp);
-    }
-
     if (constraints.size() > 0 || methodMap.size() > 0) {
       SecurityFilterChain filterChain = new SecurityFilterChain(next);
       filterChain.setWebApp(invocation.getWebApp());
@@ -177,7 +148,8 @@ public class ConstraintManager extends FilterChainBuilder {
     return next;
   }
 
-  public boolean hasConstraintForUrlPattern(String pattern) {
+  public boolean hasConstraintForUrlPattern(String pattern)
+  {
     for (SecurityConstraint constraint : _constraints) {
       if (constraint.isMatch(pattern))
         return true;

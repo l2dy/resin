@@ -28,6 +28,7 @@
 
 package com.caucho.filters;
 
+import com.caucho.config.types.Period;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
 
@@ -39,6 +40,8 @@ import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
 /**
@@ -52,6 +55,11 @@ public class ThrottleFilter implements Filter {
   private IntMap _throttleCache = new IntMap();
 
   private int _maxConcurrentRequests = 2;
+  
+  private int _maxTotalRequests = -1;
+  private long _timeout = 120 * 1000L;
+  private long _requestDelay = 0;
+  private Semaphore _requestSemaphore;
 
   /**
    * Sets the maximum number of concurrent requests for a single IP.
@@ -60,12 +68,30 @@ public class ThrottleFilter implements Filter {
   {
     _maxConcurrentRequests = max;
   }
+  
+  public void setMaxTotalRequests(int max)
+  {
+    _maxTotalRequests = max;
+  }
+  
+  public void setTimeout(Period period)
+  {
+    _timeout = period.getPeriod();
+  }
+  
+  public void setDelay(Period period)
+  {
+    _requestDelay = period.getPeriod();
+  }
 
   public void init(FilterConfig config)
     throws ServletException
   {
+    if (_maxTotalRequests > 0)
+      _requestSemaphore = new Semaphore(_maxTotalRequests);
   }
 
+  @Override
   public void doFilter(ServletRequest request, ServletResponse response,
                        FilterChain nextFilter)
     throws ServletException, IOException
@@ -96,8 +122,32 @@ public class ThrottleFilter implements Filter {
       return;
     }
 
+    if (_requestSemaphore != null) {
+      boolean isAcquire = false;
+      
+      try {
+        if (_requestSemaphore.tryAcquire(_timeout, TimeUnit.MILLISECONDS))
+          isAcquire = true;
+      } catch (InterruptedException e) {
+      }
+      
+      if (! isAcquire) {
+        if (response instanceof HttpServletResponse)
+          ((HttpServletResponse) response).sendError(503);
+      
+        return;
+      }
+    }
+    
     try {
       nextFilter.doFilter(request, response);
+      
+      if (_requestDelay > 0) {
+        try {
+          Thread.sleep(_requestDelay);
+        } catch (Exception e) {
+        }
+      }
     } finally {
       synchronized (this) {
         int count = _throttleCache.get(ip);
@@ -106,6 +156,10 @@ public class ThrottleFilter implements Filter {
           _throttleCache.remove(ip);
         else
           _throttleCache.put(ip, count - 1);
+      }
+      
+      if (_requestSemaphore != null) {
+        _requestSemaphore.release();
       }
     }
   }

@@ -53,7 +53,7 @@ import javax.cache.CacheStatistics;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
-import com.caucho.env.distcache.DistCacheService;
+import com.caucho.env.distcache.DistCacheSystem;
 import com.caucho.loader.Environment;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.distcache.AbstractCacheManager;
@@ -391,7 +391,7 @@ abstract public class AbstractCache extends AbstractMap
 
   public static AbstractCache getMatchingCache(String name)
   {
-    DistCacheService cacheService = DistCacheService.getCurrent();
+    DistCacheSystem cacheService = DistCacheSystem.getCurrent();
     
     CacheManager localManager = cacheService.getCacheManager();
 
@@ -407,6 +407,20 @@ abstract public class AbstractCache extends AbstractMap
    */
   @PostConstruct
   public void init()
+  {
+    init(false);
+  }
+  
+  public AbstractCache createIfAbsent()
+  {
+    init(true);
+    
+    return _localManager.get(_guid);
+  }
+  
+  
+
+  private void init(boolean ifAbsent)
   {
     synchronized (this) {
       if (_isInit)
@@ -428,12 +442,17 @@ abstract public class AbstractCache extends AbstractMap
                                                      _config.getKeySerializer()));
 
       if (_localManager == null) {
-        DistCacheService cacheService = DistCacheService.getCurrent();
+        DistCacheSystem cacheService = DistCacheSystem.getCurrent();
         
         _localManager = cacheService.getCacheManager();
       }
       
       if (_localManager.putIfAbsent(_guid, this) != null) {
+        if (ifAbsent) {
+          close();
+          return;
+        }
+        
         throw new ConfigException(L.l("'{0}' with full name '{1}' is an invalid Cache name because it's already used by another cache.",
                                       this, _guid));
       }
@@ -1058,7 +1077,7 @@ abstract public class AbstractCache extends AbstractMap
     if (_manager != null)
       return;
     
-    DistCacheService cacheService = DistCacheService.getCurrent();
+    DistCacheSystem cacheService = DistCacheSystem.getCurrent();
 
     if (cacheService == null)
       throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a clustered environment",

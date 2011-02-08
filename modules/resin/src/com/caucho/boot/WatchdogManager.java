@@ -39,7 +39,7 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.caucho.admin.RemoteAdminService;
-import com.caucho.cloud.network.NetworkListenService;
+import com.caucho.cloud.network.NetworkListenSystem;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudSystem;
@@ -115,6 +115,21 @@ class WatchdogManager implements AlarmListener {
     boolean isLogDirectoryExists = getLogDirectory().exists();
 
     Path logPath = getLogDirectory().lookup("watchdog-manager.log");
+    
+    try {
+      getLogDirectory().mkdirs();
+    } catch (Exception e) {
+      log().log(Level.ALL, e.toString(), e);
+    }
+    
+    // #4333 - check watchdog-manager.log can be written
+    WriteStream testOut = logPath.openAppend();
+    testOut.close();
+    
+    if (! logPath.canWrite()) {
+      throw new ConfigException("Cannot open " + logPath.getNativePath()
+                                + " required for Resin start. Please check permissions");
+    }
 
     RotateStream logStream = RotateStream.create(logPath);
     logStream.setRolloverSize(64L * 1024 * 1024);
@@ -203,8 +218,8 @@ class WatchdogManager implements AlarmListener {
     thread.setContextClassLoader(_server.getClassLoader());
     
     
-    NetworkListenService listenService 
-      = _system.getService(NetworkListenService.class);
+    NetworkListenSystem listenService 
+      = _system.getService(NetworkListenSystem.class);
     
     _httpPort = new TcpSocketLinkListener();
     _httpPort.setProtocol(new HttpProtocol());
@@ -365,8 +380,13 @@ class WatchdogManager implements AlarmListener {
           sb.append("  password: missing\n");
         else
           sb.append("  password: ok\n");
+        
+        sb.append("  watchdog-user: " + System.getProperty("user.name") + "\n");
 
-        sb.append("  user: " + System.getProperty("user.name"));
+        if (child.getUserName() != null)
+          sb.append("  user: " + child.getUserName());
+        else
+          sb.append("  user: " + System.getProperty("user.name"));
 
         if (child.getGroupName() != null)
           sb.append("(" + child.getGroupName() + ")");

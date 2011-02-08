@@ -40,21 +40,22 @@ import com.caucho.lifecycle.*;
 import com.caucho.util.*;
 
 /**
- * The Resin class represents the top-level container for Resin.
- * It exactly matches the &lt;resin> tag in the resin.xml
+ * The ShutdownSystem manages the Resin shutdown and includes a timeout
+ * thread. If the timeout takes longer than shutdown-wait-max, the ShutdownSystem
+ * will force a JVM exit.
  */
-public class ShutdownService extends AbstractResinService
+public class ShutdownSystem extends AbstractResinSubSystem
 {
   public static final int START_PRIORITY = 1;
 
   private static final Logger log = 
-    Logger.getLogger(ShutdownService.class.getName());
-  private static final L10N L = new L10N(ShutdownService.class);
+    Logger.getLogger(ShutdownSystem.class.getName());
+  private static final L10N L = new L10N(ShutdownSystem.class);
 
-  private static final AtomicReference<ShutdownService> _activeService
-    = new AtomicReference<ShutdownService>();
+  private static final AtomicReference<ShutdownSystem> _activeService
+    = new AtomicReference<ShutdownSystem>();
   
-  private long _shutdownWaitMax = 60000L;
+  private long _shutdownWaitMax = 120000L;
 
   private WeakReference<ResinSystem> _resinSystemRef;
   private WarningService _warningService;
@@ -66,9 +67,7 @@ public class ShutdownService extends AbstractResinService
   
   private boolean _isEmbedded;
   
-  private boolean _isDumpHeapOnExit;
-
-  private ShutdownService(boolean isEmbedded)
+  private ShutdownSystem(boolean isEmbedded)
   {
     _isEmbedded = isEmbedded;
     
@@ -77,29 +76,29 @@ public class ShutdownService extends AbstractResinService
     _warningService = ResinSystem.getCurrentService(WarningService.class);
     if (_warningService == null) {
       throw new IllegalStateException(L.l("{0} requires an active {1}",
-                                           ShutdownService.class.getSimpleName(),
+                                           ShutdownSystem.class.getSimpleName(),
                                            WarningService.class.getSimpleName()));
     }
   }
   
-  public static ShutdownService createAndAddService()
+  public static ShutdownSystem createAndAddService()
   {
     return createAndAddService(Alarm.isTest());
   }
 
-  public static ShutdownService createAndAddService(boolean isEmbedded)
+  public static ShutdownSystem createAndAddService(boolean isEmbedded)
   {
-    ResinSystem system = preCreate(ShutdownService.class);
+    ResinSystem system = preCreate(ShutdownSystem.class);
       
-    ShutdownService service = new ShutdownService(isEmbedded);
-    system.addService(ShutdownService.class, service);
+    ShutdownSystem service = new ShutdownSystem(isEmbedded);
+    system.addService(ShutdownSystem.class, service);
     
     return service;
   }
 
-  public static ShutdownService getCurrent()
+  public static ShutdownSystem getCurrent()
   {
-    return ResinSystem.getCurrentService(ShutdownService.class);
+    return ResinSystem.getCurrentService(ShutdownSystem.class);
   }
   
   public long getShutdownWaitMax()
@@ -125,7 +124,7 @@ public class ShutdownService extends AbstractResinService
    */
   public static void shutdownActive(ExitCode exitCode, String msg)
   {
-    ShutdownService shutdown = _activeService.get();
+    ShutdownSystem shutdown = _activeService.get();
     
     if (shutdown != null) {
       shutdown.shutdown(exitCode, msg);
@@ -148,9 +147,6 @@ public class ShutdownService extends AbstractResinService
    */
   public void shutdown(ExitCode exitCode, String msg)
   {
-    if (exitCode == ExitCode.MEMORY)
-      _isDumpHeapOnExit = true;
-
     startFailSafeShutdown(msg);
 
     ShutdownThread shutdownThread = _shutdownThread;
@@ -159,10 +155,7 @@ public class ShutdownService extends AbstractResinService
       shutdownThread.startShutdown(exitCode);
 
       if (! _isEmbedded) {
-        try {
-          Thread.sleep(15 * 60000);
-        } catch (Exception e) {
-        }
+        waitForShutdown();
       
         System.out.println("Shutdown timeout");
         System.exit(exitCode.ordinal());
@@ -196,10 +189,6 @@ public class ShutdownService extends AbstractResinService
       haltThread.startShutdown();
 
     try {
-      if (_isDumpHeapOnExit) {
-        dumpHeapOnExit();
-      }
-
       try {
         ResinSystem resinSystem = _resinSystemRef.get();
         
@@ -235,11 +224,6 @@ public class ShutdownService extends AbstractResinService
       return resinSystemRef.get();
     else
       return null;
-  }
-
-  public void dumpHeapOnExit()
-  {
-
   }
 
   /**
@@ -306,6 +290,21 @@ public class ShutdownService extends AbstractResinService
   public void destroy()
   {
     _lifecycle.toDestroy();
+  }
+  
+  private void waitForShutdown()
+  {
+    
+    long expire = System.currentTimeMillis() + _shutdownWaitMax;
+    long now;
+
+    while ((now = System.currentTimeMillis()) < expire) {
+      try {
+        Thread.interrupted();
+        Thread.sleep(expire - now);
+      } catch (Exception e) {
+      }
+    }
   }
 
   @Override
@@ -401,16 +400,7 @@ public class ShutdownService extends AbstractResinService
       if (! _lifecycle.isActive())
         return;
       
-      long expire = System.currentTimeMillis() + _shutdownWaitMax;
-      long now;
-
-      while ((now = System.currentTimeMillis()) < expire) {
-        try {
-          Thread.interrupted();
-          Thread.sleep(expire - now);
-        } catch (Exception e) {
-        }
-      }
+      waitForShutdown();
 
       if (_lifecycle.isActive()) {
         Runtime.getRuntime().halt(ExitCode.FAIL_SAFE_HALT.ordinal());

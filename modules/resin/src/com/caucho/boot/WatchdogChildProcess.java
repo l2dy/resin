@@ -118,6 +118,11 @@ class WatchdogChildProcess
     else
       return null;
   }
+  
+  public int getStatus()
+  {
+    return _status;
+  }
 
   public void run()
   {
@@ -236,6 +241,9 @@ class WatchdogChildProcess
         break;
       case 14:
         type = "SIGALRM";
+        break;
+      case 15:
+        type = "SIGTERM";
         break;
       case 19:
         type = "SIGSTOP";
@@ -569,6 +577,9 @@ class WatchdogChildProcess
 
     if (! _watchdog.hasXmx())
       jvmArgs.add("-Xmx256m");
+    
+    // #4308
+    jvmArgs.add("-Xrs");
 
     String[] argv = _watchdog.getArgv();
 

@@ -160,6 +160,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   // XXX: changed for JSF
   private boolean _ignoreSerializationErrors = true;
   private boolean _isHessianSerialization = true;
+  private boolean _isSerializeCollectionType = true;
 
   // List of the HttpSessionListeners from the configuration file
   private ArrayList<HttpSessionListener> _listeners;
@@ -225,8 +226,10 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookieName = _servletContainer.getSessionCookie();
     _sslCookieName = _servletContainer.getSSLSessionCookie();
       
+    /*
     if (_sslCookieName != null && ! _sslCookieName.equals(_cookieName))
       _isSecure = true;
+      */
 
     String hostName = webApp.getHostName();
     String contextPath = webApp.getContextPath();
@@ -514,6 +517,11 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     else
       throw new ConfigException(L.l("'{0}' is an unknown valud for serialization-type.  The valid types are 'hessian' and 'java'.",
                                     type));
+  }
+  
+  public void setSerializeCollectionType(boolean isEnable)
+  {
+    _isSerializeCollectionType = isEnable;
   }
 
   /**
@@ -887,6 +895,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _isSecure = secure;
   }
 
+  @Override
   public boolean isSecure()
   {
     return _isSecure;
@@ -980,7 +989,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   /**
    * Returns the secure of the session cookie.
    */
-  public boolean getCookieSecure()
+  public boolean isCookieSecure()
   {
     if (_isSecure)
       return true;
@@ -1080,7 +1089,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
         sessionCache.setName("resin:session");
         sessionCache.setBackup(_isSaveBackup);
         sessionCache.setTriplicate(_isSaveTriplicate);
-        sessionCache.init();
+        sessionCache = sessionCache.createIfAbsent();
       }
 
       _sessionStore = sessionCache;
@@ -1112,8 +1121,15 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   public SessionSerializer createSessionSerializer(OutputStream os)
     throws IOException
   {
-    if (_isHessianSerialization)
-      return new HessianSessionSerializer(os, getClassLoader());
+    if (_isHessianSerialization) {
+      HessianSessionSerializer ser;
+      
+      ser = new HessianSessionSerializer(os, getClassLoader());
+      
+      ser.setSerializeCollectionType(_isSerializeCollectionType);
+      
+      return ser;
+    }
     else
       return new JavaSessionSerializer(os, getClassLoader());
   }
@@ -1285,6 +1301,9 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
       return null;
 
     SessionImpl session = _sessions.get(sessionId);
+    
+    if (session != null && ! session.isValid())
+      session = null;
     
     boolean isNew = false;
 
@@ -1672,9 +1691,9 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
         SessionImpl session = _sessionList.get(i);
 
         try {
-          session.timeout();
-
           _sessions.remove(session.getId());
+          
+          session.timeout();
         } catch (Throwable e) {
           log.log(Level.FINE, e.toString(), e);
         }

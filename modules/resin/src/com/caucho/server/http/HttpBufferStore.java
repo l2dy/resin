@@ -42,9 +42,6 @@ import com.caucho.vfs.TempBuffer;
  */
 public final class HttpBufferStore
 {
-  private static final FreeList<HttpBufferStore> _freeList
-    = new FreeList<HttpBufferStore>(256);
-
   private final byte []_logBuffer = null;//new byte[1024];
   
   private final byte []_uri;              // "/path/test.jsp/Junk?query=7"
@@ -62,10 +59,8 @@ public final class HttpBufferStore
    *
    * @param server the parent server
    */
-  private HttpBufferStore(Server server)
+  public HttpBufferStore(int urlLengthMax)
   {
-    int urlLengthMax = server.getUrlLengthMax();
-    
     _uri = new byte[urlLengthMax];
 
     if (TempBuffer.isSmallmem()) {
@@ -84,21 +79,6 @@ public final class HttpBufferStore
       _headerKeys[i] = new CharSegment();
       _headerValues[i] = new CharSegment();
     }
-  }
-
-  public static HttpBufferStore allocate(Server server)
-  {
-    HttpBufferStore buffer = _freeList.allocate();
-
-    if (buffer == null)
-      buffer = new HttpBufferStore(server);
-
-    return buffer;
-  }
-
-  public static void free(HttpBufferStore buffer)
-  {
-    _freeList.free(buffer);
   }
 
   public final byte []getUriBuffer()

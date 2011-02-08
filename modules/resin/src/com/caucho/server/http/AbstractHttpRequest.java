@@ -1569,6 +1569,8 @@ public abstract class AbstractHttpRequest
   protected void sendRequestError(Throwable e)
     throws IOException
   {
+    killKeepalive();
+    
     try {
       ErrorPageManager errorManager = getErrorManager();
       
@@ -1743,7 +1745,7 @@ public abstract class AbstractHttpRequest
       */
 
       if (httpBuffer != null)
-        HttpBufferStore.free(httpBuffer);
+        getServer().freeHttpBuffer(httpBuffer);
     }
   }
 

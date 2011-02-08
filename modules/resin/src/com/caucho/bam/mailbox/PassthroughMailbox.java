@@ -181,6 +181,11 @@ public class PassthroughMailbox implements Mailbox
       log.log(Level.WARNING, e.toString(), e);
     }
   }
+
+  @Override
+  public void close()
+  {
+  }
   
   @Override
   public String toString()

@@ -24,50 +24,13 @@
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Scott Ferguson
+ * @author Emil Ong
  */
 
-package com.caucho.config.gen;
-
-import java.io.IOException;
-
-import javax.enterprise.inject.spi.AnnotatedMethod;
-
-import com.caucho.inject.Module;
-import com.caucho.java.JavaWriter;
+package com.caucho.bam;
 
 /**
- * Represents a CDI local business method
+ * Marker for a payload with a large message.
  */
-@Module
-public class CandiHeadGenerator<X> extends MethodHeadGenerator<X>
-{
-  public CandiHeadGenerator(MethodHeadFactory<X> factory,
-                            AnnotatedMethod<? super X> method,
-                            AspectGenerator<X> next)
-  {
-    super(factory, method, next);
-  }
-
-  /**
-   * Generates code before the "try" block
-   * <code><pre>
-   * retType myMethod(...)
-   * {
-   *   [pre-try]
-   *   try {
-   *     ...
-   * }
-   * </pre></code>
-   */
-  @Override
-  public void generatePreTry(JavaWriter out)
-    throws IOException
-  {
-    super.generatePreTry(out);
-    
-    String beanClassName = getJavaClass().getName();
-
-    out.println(beanClassName + " bean = this;");
-  }
+public interface BamLargeMessage {
 }

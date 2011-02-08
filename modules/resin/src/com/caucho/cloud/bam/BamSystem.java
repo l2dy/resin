@@ -29,9 +29,9 @@
 
 package com.caucho.cloud.bam;
 
-import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
-import com.caucho.env.service.AbstractResinService;
+import com.caucho.config.ConfigException;
+import com.caucho.env.service.AbstractResinSubSystem;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.hemp.broker.DomainManager;
 import com.caucho.hemp.broker.HempBroker;
@@ -43,22 +43,35 @@ import com.caucho.util.L10N;
 /**
  * The BAM service registered in the Resin network.
  */
-public class BamService extends AbstractResinService
+public class BamSystem extends AbstractResinSubSystem
 {
-  public static final int START_PRIORITY = START_PRIORITY_NETWORK_CLUSTER;
+  private static final L10N L = new L10N(BamSystem.class);
+  
+  // priority must be before network so it's available to handle incoming
+  // messages
+  public static final int START_PRIORITY = START_PRIORITY_ENV_SYSTEM;
   
   private String _jid;
   
+  private final ResinSystem _resinSystem;
   private final HempBrokerManager _brokerManager;
   private final HempBroker _broker;
   
   private ServerAuthManager _linkManager;
   
-  public BamService(String jid)
+  public BamSystem(String jid)
   {
+    _resinSystem = ResinSystem.getCurrent();
+    
+    if (_resinSystem == null) {
+      throw new ConfigException(L.l("{0} requires an active {1}",
+                                    getClass().getSimpleName(),
+                                    ResinSystem.class.getSimpleName()));
+    }
+    
     _jid = jid;
     
-    _brokerManager = new HempBrokerManager();
+    _brokerManager = new HempBrokerManager(_resinSystem);
 
     _broker = new HempBroker(_brokerManager, getJid());
 
@@ -68,19 +81,19 @@ public class BamService extends AbstractResinService
     _brokerManager.addBroker("resin.caucho", _broker);
   }
   
-  public static BamService createAndAddService(String jid)
+  public static BamSystem createAndAddService(String jid)
   {
-    ResinSystem system = preCreate(BamService.class);
+    ResinSystem system = preCreate(BamSystem.class);
       
-    BamService service = new BamService(jid);
+    BamSystem service = new BamSystem(jid);
     system.addService(service);
     
     return service;
   }
   
-  public static BamService getCurrent()
+  public static BamSystem getCurrent()
   {
-    return ResinSystem.getCurrentService(BamService.class);
+    return ResinSystem.getCurrentService(BamSystem.class);
   }
   
   public static ManagedBroker getCurrentBroker()

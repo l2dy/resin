@@ -65,10 +65,17 @@ abstract public class AbstractTargetDispatchRule extends AbstractRegexpDispatchR
                                  String uri,
                                  String queryString)
   {
-    if (_target != null)
+    if (_target == null)
+      return rewriteDefault(uri, queryString);
+    else if (matcher != null)
       return matcher.replaceFirst(_target);
     else
-      return uri;
+      return _target;
+  }
+  
+  protected String rewriteDefault(String uri, String queryString)
+  {
+    return uri;
   }
 
   //  @Override

@@ -29,7 +29,6 @@
 
 package com.caucho.bam.mailbox;
 
-import com.caucho.bam.broker.Broker;
 import com.caucho.bam.stream.ActorStream;
 
 /**
@@ -38,12 +37,12 @@ import com.caucho.bam.stream.ActorStream;
 public interface Mailbox extends ActorStream
 {
   /**
-   * Returns the mailbox's broker.
-   */
-  public Broker getBroker();
-  
-  /**
    * Returns the actor stream for the actor itself.
    */
   public ActorStream getActorStream();
+  
+  /**
+   * Closes the mailbox
+   */
+  public void close();
 }

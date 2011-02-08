@@ -29,6 +29,7 @@
 
 package com.caucho.hemp.broker;
 
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -42,14 +43,23 @@ import java.util.logging.Logger;
 
 import javax.enterprise.inject.spi.Bean;
 
+import com.caucho.bam.ActorError;
 import com.caucho.bam.actor.Actor;
 import com.caucho.bam.broker.AbstractManagedBroker;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MultiworkerMailbox;
 import com.caucho.bam.mailbox.PassthroughMailbox;
+import com.caucho.bam.packet.Message;
+import com.caucho.bam.packet.MessageError;
+import com.caucho.bam.packet.Packet;
+import com.caucho.bam.packet.Query;
+import com.caucho.bam.packet.QueryError;
+import com.caucho.bam.packet.QueryResult;
 import com.caucho.bam.stream.ActorStream;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.env.service.AfterResinStartListener;
+import com.caucho.env.service.ResinSystem;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
@@ -93,7 +103,10 @@ public class HempBroker extends AbstractManagedBroker
   private String _managerJid = "localhost";
 
   private ArrayList<String> _aliasList = new ArrayList<String>();
+  
+  private ArrayList<Packet> _startupPacketList = new ArrayList<Packet>();
 
+  private ResinSystem _resinSystem;
   /*
   private BrokerListener []_actorManagerList
     = new BrokerListener[0];
@@ -103,12 +116,16 @@ public class HempBroker extends AbstractManagedBroker
 
   public HempBroker(HempBrokerManager manager)
   {
+    _resinSystem = manager.getResinSystem();
     _manager = manager;
-
+    
     Environment.addCloseListener(this);
 
     if (_localBroker.getLevel() == null)
       _localBroker.set(this);
+    
+    if (_resinSystem != null)
+      _resinSystem.addListener(new AfterStartListener(this));
   }
 
   public HempBroker(HempBrokerManager manager, String domain)
@@ -145,60 +162,22 @@ public class HempBroker extends AbstractManagedBroker
   {
     _aliasList.add(domain);
   }
-
-  /**
-   * Returns the stream to the broker
-   */
-  /*
-  @Override
-  public ActorStream getBrokerMailbox()
+  
+  public void afterStart()
   {
-    return this;
+    deliverStartupPackets();
+    
+    ArrayList<Packet> deadPackets = new ArrayList<Packet>(_startupPacketList);
+    _startupPacketList.clear();
+    
+    for (Packet packet : deadPackets) {
+      packet.dispatch(this, this);
+    }
   }
-  */
-
-  //
-  // configuration
-  //
-
-  /**
-   * Adds a broker implementation, e.g. the IM broker.
-   */
-  /*
-  public void addBrokerListener(BrokerListener actorManager)
-  {
-    BrokerListener []actorManagerList
-      = new BrokerListener[_actorManagerList.length + 1];
-
-    System.arraycopy(_actorManagerList, 0, actorManagerList, 0,
-                     _actorManagerList.length);
-    actorManagerList[actorManagerList.length - 1] = actorManager;
-    _actorManagerList = actorManagerList;
-  }
-  */
 
   //
   // API
   //
-
-  /**
-   * Creates a session
-   */
-  /*
-  public String createClient(ActorStream clientStream,
-                             String uid,
-                             String resourceId)
-  {
-    String jid = generateJid(uid, resourceId);
-
-    _actorStreamMap.put(jid, new WeakReference<Mailbox>(clientStream));
-
-    if (log.isLoggable(Level.FINE))
-      log.fine(clientStream + " " + jid + " created");
-
-    return jid;
-  }
-  */
 
   protected String generateJid(String uid, String resource)
   {
@@ -252,6 +231,11 @@ public class HempBroker extends AbstractManagedBroker
 
     if (log.isLoggable(Level.FINEST))
       log.finest(this + " addMailbox jid=" + jid + " " + mailbox);
+    
+    // if in startup phase, deliver the queued messages
+    if (isBeforeActive()) {
+      deliverStartupPackets();
+    }
  }
 
   /**
@@ -293,11 +277,209 @@ public class HempBroker extends AbstractManagedBroker
   /**
    * getJid() returns null for the broker
    */
+  @Override
   public String getJid()
   {
     return _domain;
   }
+  
+  //
+  // state methods
+  //
+  
+  private boolean isBeforeActive()
+  {
+    if (_resinSystem != null)
+      return _resinSystem.isBeforeActive();
+    else
+      return false;
+  }
+  
+  //
+  // packet methods
+  //
 
+  /**
+   * Sends a message to the desination mailbox.
+   */
+  @Override
+  public void message(String to, String from, Serializable payload)
+  {
+    Mailbox mailbox = getMailbox(to);
+    
+    if (mailbox != null) {
+      mailbox.message(to, from, payload);
+      return;
+    }
+    
+    // on startup, queue the messages until the startup completes
+    if (isBeforeActive() && addStartupPacket(new Message(to, from, payload))) {
+      // startup packets are successful
+    }
+    else {
+      // use default error handling
+      super.message(to, from, payload);
+    }
+  }
+
+  /**
+   * Sends a messageError to the desination mailbox.
+   */
+  @Override
+  public void messageError(String to, 
+                           String from, 
+                           Serializable payload,
+                           ActorError error)
+  {
+    Mailbox mailbox = getMailbox(to);
+    
+    if (mailbox != null) {
+      mailbox.messageError(to, from, payload, error);
+      return;
+    }
+    
+    // on startup, queue the messages until the startup completes
+    if (isBeforeActive()
+        && addStartupPacket(new MessageError(to, from, payload, error))) {
+      // startup packets are successful
+    }
+    else {
+      // use default error handling
+      super.messageError(to, from, payload, error);
+    }
+  }
+
+  /**
+   * Sends a query to the destination mailbox.
+   */
+  @Override
+  public void query(long id, String to, String from, Serializable payload)
+  {
+    Mailbox mailbox = getMailbox(to);
+    
+    if (mailbox != null) {
+      mailbox.query(id, to, from, payload);
+      return;
+    }
+    
+    // on startup, queue the messages until the startup completes
+    if (isBeforeActive()
+        && addStartupPacket(new Query(id, to, from, payload))) {
+      // startup packets are successful
+    }
+    else {
+      // use default error handling
+      super.query(id, to, from, payload);
+    }
+  }
+
+  /**
+   * Sends a query to the destination mailbox.
+   */
+  @Override
+  public void queryResult(long id, String to, String from, Serializable payload)
+  {
+    Mailbox mailbox = getMailbox(to);
+    
+    if (mailbox != null) {
+      mailbox.queryResult(id, to, from, payload);
+      return;
+    }
+    
+    // on startup, queue the messages until the startup completes
+    if (isBeforeActive()
+        && addStartupPacket(new QueryResult(id, to, from, payload))) {
+      // startup packets are successful
+    }
+    else {
+      // use default error handling
+      super.queryResult(id, to, from, payload);
+    }
+  }
+
+  /**
+   * Sends a query to the destination mailbox.
+   */
+  @Override
+  public void queryError(long id, String to, String from, Serializable payload,
+                         ActorError error)
+  {
+    Mailbox mailbox = getMailbox(to);
+    
+    if (mailbox != null) {
+      mailbox.queryError(id, to, from, payload, error);
+      return;
+    }
+    
+    // on startup, queue the messages until the startup completes
+    if (isBeforeActive()
+        && addStartupPacket(new QueryError(id, to, from, payload, error))) {
+      // startup packets are successful
+    }
+    else {
+      // use default error handling
+      super.queryError(id, to, from, payload, error);
+    }
+  }
+   
+  private boolean addStartupPacket(Packet packet)
+  {
+    synchronized (_startupPacketList) {
+      _startupPacketList.add(packet);
+    }
+    
+    deliverStartupPackets();
+    
+    return true;
+  }
+  
+  private void deliverStartupPackets()
+  {
+    Packet packet;
+    
+    while ((packet = extractStartupPacket()) != null) {
+      Mailbox mailbox = getMailbox(packet.getTo());
+      
+      if (mailbox != null)
+        packet.dispatch(mailbox, this);
+      else {
+        log.warning(this + " failed to find mailbox " + packet.getTo()
+                    + " for " + packet);
+      }
+    }
+  }
+  
+  /**
+   * Return a queued packet that has an active mailbox.
+   */
+  private Packet extractStartupPacket()
+  {
+    synchronized (_startupPacketList) {
+      int size = _startupPacketList.size();
+      
+      for (int i = 0; i < size; i++) {
+        Packet packet = _startupPacketList.get(i);
+        
+        Mailbox mailbox = getMailbox(packet.getTo());
+        
+        if (mailbox != null) {
+          _startupPacketList.remove(i);
+          
+          return packet;
+        }
+      }
+    }
+    
+    return null;
+  }
+  
+  //
+  // mailbox methods
+  //
+  
+  /**
+   * Returns the mailbox for the given JID
+   */
   @Override
   public Mailbox getMailbox(String jid)
   {
@@ -318,32 +500,7 @@ public class HempBroker extends AbstractManagedBroker
       jid = jid + getDomain();
     }
 
-    ActorStream actorStream;
-    Actor actor = findParentActor(jid);
-
-    if (actor == null) {
-      return putActorStream(jid, findDomain(jid));
-    }
-    else if (jid.equals(actor.getJid())) {
-      actorStream = actor.getActorStream();
-
-      if (actorStream != null) {
-        return putActorStream(jid, new MultiworkerMailbox(jid, actorStream, this, 1));
-      }
-    }
-    else {
-      /*
-      if (! actor.startChild(jid))
-        return null;
-        */
-
-      ref = _actorStreamMap.get(jid);
-
-      if (ref != null)
-        return ref.get();
-    }
-
-    return null;
+    return putActorStream(jid, findDomain(jid));
   }
 
   private Mailbox putActorStream(String jid, Mailbox actorStream)
@@ -363,59 +520,7 @@ public class HempBroker extends AbstractManagedBroker
     }
   }
 
-  protected Actor findParentActor(String jid)
-  {
-    return null;
-    /*
-    if (jid == null)
-      return null;
-
-    WeakReference<Actor> ref = _actorCache.get(jid);
-
-    if (ref != null)
-      return ref.get();
-
-    if (startActorFromManager(jid)) {
-      ref = _actorCache.get(jid);
-
-      if (ref != null)
-        return ref.get();
-    }
-
-    if (jid.indexOf('/') < 0 && jid.indexOf('@') < 0) {
-      Broker broker = _manager.findBroker(jid);
-      Actor actor = null;
-
-      if (actor != null) {
-        ref = _actorCache.get(jid);
-
-        if (ref != null)
-          return ref.get();
-
-        _actorCache.put(jid, new WeakReference<Actor>(actor));
-
-        return actor;
-      }
-    }
-
-    int p;
-
-    if ((p = jid.indexOf('/')) > 0) {
-      String uid = jid.substring(0, p);
-
-      return findParentActor(uid);
-    }
-    else if ((p = jid.indexOf('@')) > 0) {
-      String domainName = jid.substring(p + 1);
-
-      return findParentActor(domainName);
-    }
-    else
-      return null;
-      */
-  }
-
-  protected Mailbox findDomain(String domain)
+  private Mailbox findDomain(String domain)
   {
     if (domain == null)
       return null;
@@ -460,7 +565,7 @@ public class HempBroker extends AbstractManagedBroker
     if (p > 0) {
       String owner = jid.substring(0, p);
 
-      Actor actor = findParentActor(owner);
+      Actor actor = null;
 
       /*
       if (actor != null) {
@@ -693,6 +798,24 @@ public class HempBroker extends AbstractManagedBroker
     public void close()
     {
       removeMailbox(_actor);
+    }
+  }
+  
+  static class AfterStartListener implements AfterResinStartListener {
+    private WeakReference<HempBroker> _brokerRef;
+    
+    AfterStartListener(HempBroker broker)
+    {
+      _brokerRef = new WeakReference<HempBroker>(broker);
+    }
+    
+    @Override
+    public void afterStart()
+    {
+      HempBroker broker = _brokerRef.get();
+      
+      if (broker != null)
+        broker.afterStart();
     }
   }
 }

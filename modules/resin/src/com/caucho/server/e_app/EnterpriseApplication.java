@@ -554,6 +554,7 @@ public class EnterpriseApplication
         for (WebAppController webApp : _webApps) {
           // server/13bb
           //_webAppContainer.getWebAppGenerator().updateNoStart(webApp.getContextPath());
+          // _webAppContainer.getWebAppGenerator().update(
           _webAppContainer.getWebAppGenerator().update(webApp.getContextPath());
         }
       }
@@ -642,9 +643,17 @@ public class EnterpriseApplication
 
     controller = findWebAppEntry(contextUrl);
     
-    String id = "production/webapp/default" + contextUrl;
+    String id;
+    
+    if (contextUrl.equals("/"))
+      id = "production/webapp/default/ROOT";
+    else
+      id = "production/webapp/default" + contextUrl;
 
     if (controller == null) {
+      if (contextUrl.equals("/"))
+        contextUrl = "";
+      
       controller = new WebAppController(id, 
                                         path,
                                         _webAppContainer,
@@ -655,7 +664,7 @@ public class EnterpriseApplication
 
     if (archivePath != null)
       controller.setArchivePath(archivePath);
-
+    
     controller.setDynamicDeploy(true);
 
     if (_configException != null)

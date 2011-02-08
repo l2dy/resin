@@ -63,7 +63,7 @@ public final class ClusterServer {
 
   private static final int DECODE[];
 
-  private final NetworkClusterService _clusterService;
+  private final NetworkClusterSystem _clusterService;
   private final CloudServer _cloudServer;
 
   private boolean _isDynamic;
@@ -115,7 +115,7 @@ public final class ClusterServer {
 
   private ClusterServerAdmin _admin = new ClusterServerAdmin(this);
 
-  ClusterServer(NetworkClusterService networkService,
+  ClusterServer(NetworkClusterSystem networkService,
                 CloudServer cloudServer)
   {
     _clusterService = networkService;
@@ -582,7 +582,7 @@ public final class ClusterServer {
    */
   public boolean isSelf()
   {
-    return _clusterService.getSelfServer() == getCloudServer();
+    return getCloudServer().isSelf();
   }
 
   /**
@@ -644,8 +644,7 @@ public final class ClusterServer {
     _clusterPort.init();
     */
 
-    if (getCloudServer() != _clusterService.getSelfServer()
-        && getCloudServer().getPort() >= 0) {
+    if (! isSelf() && getCloudServer().getPort() >= 0) {
       _serverPool = createServerPool(_clusterService.getServerId());
       _serverPool.init();
     }

@@ -46,12 +46,12 @@ import javax.management.ObjectName;
 
 import com.caucho.VersionFactory;
 import com.caucho.bam.broker.Broker;
-import com.caucho.cloud.bam.BamService;
+import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.loadbalance.LoadBalanceFactory;
 import com.caucho.cloud.loadbalance.LoadBalanceService;
 import com.caucho.cloud.network.ClusterServer;
-import com.caucho.cloud.network.NetworkClusterService;
-import com.caucho.cloud.network.NetworkListenService;
+import com.caucho.cloud.network.NetworkClusterSystem;
+import com.caucho.cloud.network.NetworkListenSystem;
 import com.caucho.cloud.security.SecurityService;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.cloud.topology.CloudSystem;
@@ -65,8 +65,9 @@ import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.deploy.DeployControllerService;
-import com.caucho.env.distcache.DistCacheService;
-import com.caucho.env.git.GitService;
+import com.caucho.env.distcache.DistCacheSystem;
+import com.caucho.env.git.GitSystem;
+import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.env.lock.*;
 import com.caucho.env.repository.AbstractRepository;
@@ -74,9 +75,9 @@ import com.caucho.env.repository.LocalRepositoryService;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.env.repository.RepositorySpi;
 import com.caucho.env.service.ResinSystem;
-import com.caucho.env.service.RootDirectoryService;
+import com.caucho.env.service.RootDirectorySystem;
 import com.caucho.env.shutdown.ExitCode;
-import com.caucho.env.shutdown.ShutdownService;
+import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.env.warning.WarningService;
 import com.caucho.java.WorkDir;
 import com.caucho.license.LicenseCheck;
@@ -501,7 +502,9 @@ public class Resin
   {
     WarningService.createAndAddService();
     
-    ShutdownService.createAndAddService(_isEmbedded);
+    ShutdownSystem.createAndAddService(_isEmbedded);
+    
+    HealthStatusService.createAndAddService();
     
     TopologyService.createAndAddService(_serverId);
     
@@ -515,9 +518,9 @@ public class Resin
     LockService.createAndAddService(createLockManager());
   }
   
-  protected DistCacheService createDistCacheService()
+  protected DistCacheSystem createDistCacheService()
   {
-    return DistCacheService.
+    return DistCacheSystem.
       createAndAddService(new FileCacheManager(getResinSystem()));
   }
   
@@ -875,8 +878,8 @@ public class Resin
 
       _servletContainer = createServer();
       
-      NetworkListenService listenService 
-        = _resinSystem.getService(NetworkListenService.class);
+      NetworkListenSystem listenService 
+        = _resinSystem.getService(NetworkListenSystem.class);
 
       if (_args != null) {
         for (BoundPort port : _args.getBoundPortList()) {
@@ -896,7 +899,7 @@ public class Resin
       */
       
 
-      log().severe(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
+      log().info(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -904,7 +907,7 @@ public class Resin
   
   private void initRepository()
   {
-    GitService.createAndAddService();
+    GitSystem.createAndAddService();
     
     LocalRepositoryService localRepositoryService = 
       LocalRepositoryService.createAndAddService();
@@ -1107,7 +1110,7 @@ public class Resin
   
     dataDirectory = dataDirectory.lookup("./" + serverName);
     
-    RootDirectoryService.createAndAddService(_rootDirectory, dataDirectory);
+    RootDirectorySystem.createAndAddService(_rootDirectory, dataDirectory);
   }
   
   /**
@@ -1156,14 +1159,14 @@ public class Resin
     
     _selfServer = bootServer.getCloudServer();
     
-    NetworkClusterService networkService = 
-      NetworkClusterService.createAndAddService(_selfServer);
+    NetworkClusterSystem networkService = 
+      NetworkClusterSystem.createAndAddService(_selfServer);
     
     ClusterServer server = _selfServer.getData(ClusterServer.class);
     
     LoadBalanceService.createAndAddService(createLoadBalanceFactory());
     
-    BamService.createAndAddService(server.getBamAdminName());
+    BamSystem.createAndAddService(server.getBamAdminName());
     
     DeployControllerService.createAndAddService();
     
@@ -1174,7 +1177,7 @@ public class Resin
     if (_args != null && _args.getStage() != null)
       _servletContainer.setStage(_args.getStage());
     
-    NetworkListenService.createAndAddService(_selfServer);
+    NetworkListenSystem.createAndAddService(_selfServer);
     
     ServletService.createAndAddService(_servletContainer);
     
@@ -1207,7 +1210,7 @@ public class Resin
     return new LoadBalanceFactory();
   }
   
-  protected Server createServer(NetworkClusterService clusterService)
+  protected Server createServer(NetworkClusterSystem clusterService)
   {
     return new Server(this, _resinSystem, clusterService);
   }
@@ -1288,7 +1291,7 @@ public class Resin
       resin.waitForExit();
 
       if (! resin.isClosing()) {
-        ShutdownService.shutdownActive(ExitCode.FAIL_SAFE_HALT,
+        ShutdownSystem.shutdownActive(ExitCode.FAIL_SAFE_HALT,
                                        "Resin shutdown from unknown reason");
       }
     } catch (Throwable e) {
@@ -1311,16 +1314,22 @@ public class Resin
 
         System.exit(ExitCode.BIND.ordinal());
       }
-      else if (e instanceof CompileException) {
+      else if (e instanceof ConfigException) {
         System.err.println(e.getMessage());
 
         log().log(Level.CONFIG, e.toString(), e);
+        
+        System.exit(ExitCode.BAD_CONFIG.ordinal());
       }
       else {
+        System.err.println(e.getMessage());
+
+        log().log(Level.WARNING, e.toString(), e);
+        
         e.printStackTrace(System.err);
       }
     } finally {
-      System.exit(ExitCode.BAD_CONFIG.ordinal());
+      System.exit(ExitCode.UNKNOWN.ordinal());
     }
   }
 

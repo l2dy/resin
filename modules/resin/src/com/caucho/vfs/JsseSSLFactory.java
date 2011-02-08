@@ -30,6 +30,10 @@
 package com.caucho.vfs;
 
 import com.caucho.config.ConfigException;
+import com.caucho.env.service.RootDirectorySystem;
+import com.caucho.hessian.io.Hessian2Input;
+import com.caucho.hessian.io.Hessian2Output;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 
 import javax.annotation.PostConstruct;
@@ -43,6 +47,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
+import java.util.ArrayList;
 import java.util.logging.*;
 import java.security.*;
 import java.security.cert.Certificate;
@@ -66,6 +71,7 @@ public class JsseSSLFactory implements SSLFactory {
   private String _keyManagerFactory = "SunX509";
   private String _sslContext = "TLS";
   private String []_cipherSuites;
+  private String []_cipherSuitesForbidden;
   private String []_protocols;
 
   private String _selfSignedName;
@@ -85,6 +91,14 @@ public class JsseSSLFactory implements SSLFactory {
   public void setCipherSuites(String []ciphers)
   {
     _cipherSuites = ciphers;
+  }
+
+  /**
+   * Sets the enabled cipher suites
+   */
+  public void setCipherSuitesForbidden(String []ciphers)
+  {
+    _cipherSuitesForbidden = ciphers;
   }
 
   /**
@@ -283,9 +297,29 @@ public class JsseSSLFactory implements SSLFactory {
       serverSocket = factory.createServerSocket(port, listen, host);
 
     SSLServerSocket sslServerSocket = (SSLServerSocket) serverSocket;
-
+    
     if (_cipherSuites != null) {
       sslServerSocket.setEnabledCipherSuites(_cipherSuites);
+    }
+    
+    if (_cipherSuitesForbidden != null) {
+      String []cipherSuites = sslServerSocket.getEnabledCipherSuites();
+      
+      if (cipherSuites == null)
+        cipherSuites = sslServerSocket.getSupportedCipherSuites();
+      
+      ArrayList<String> cipherList = new ArrayList<String>();
+      
+      for (String cipher : cipherSuites) {
+        if (! isCipherForbidden(cipher, _cipherSuitesForbidden)) {
+          cipherList.add(cipher);
+        }
+      }
+      
+      cipherSuites = new String[cipherList.size()];
+      cipherList.toArray(cipherSuites);
+      
+      sslServerSocket.setEnabledCipherSuites(cipherSuites);
     }
 
     if (_protocols != null) {
@@ -294,8 +328,21 @@ public class JsseSSLFactory implements SSLFactory {
     
     if ("required".equals(_verifyClient))
       sslServerSocket.setNeedClientAuth(true);
+    else if ("optional".equals(_verifyClient))
+      sslServerSocket.setWantClientAuth(true);
 
     return new QServerSocketWrapper(serverSocket);
+  }
+  
+  private boolean isCipherForbidden(String cipher,
+                                    String []forbiddenList)
+  {
+    for (String forbidden : forbiddenList) {
+      if (cipher.equals(forbidden))
+        return true;
+    }
+    
+    return false;
   }
 
   private SSLServerSocketFactory createAnonymousFactory(InetAddress hostAddr,
@@ -326,8 +373,7 @@ public class JsseSSLFactory implements SSLFactory {
       }
     }
     
-    SelfSignedCert cert = SelfSignedCert.create(selfSignedName,
-                                                cipherSuites);
+    SelfSignedCert cert = createSelfSignedCert(selfSignedName, cipherSuites);
 
     if (cert == null)
       throw new ConfigException(L.l("Cannot generate anonymous certificate"));
@@ -339,6 +385,61 @@ public class JsseSSLFactory implements SSLFactory {
     SSLServerSocketFactory factory = sslContext.getServerSocketFactory();
 
     return factory;
+  }
+  
+  private SelfSignedCert createSelfSignedCert(String name, 
+                                              String []cipherSuites)
+  {
+    Path dataDir = RootDirectorySystem.getCurrentDataDirectory();
+    Path certDir = dataDir.lookup("certs");
+    
+    SelfSignedCert cert = null;
+    
+    try {
+      Path certPath = certDir.lookup(name + ".cert");
+      
+      if (certPath.canRead()) {
+        ReadStream is = certPath.openRead();
+        
+        try {
+          Hessian2Input hIn = new Hessian2Input(is);
+          
+          cert = (SelfSignedCert) hIn.readObject(SelfSignedCert.class);
+          
+          hIn.close();
+          
+          return cert;
+        } finally {
+          IoUtil.close(is);
+        }
+      }
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+      
+    cert = SelfSignedCert.create(name, cipherSuites);
+    
+    try {
+      certDir.mkdirs();
+      
+      Path certPath = certDir.lookup(name + ".cert");
+      
+      WriteStream os = certPath.openWrite();
+        
+      try {
+        Hessian2Output hOut = new Hessian2Output(os);
+        
+        hOut.writeObject(cert);
+        
+        hOut.close();
+      } finally {
+        IoUtil.close(os);
+      }
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
+    return cert;
   }
   
   /**

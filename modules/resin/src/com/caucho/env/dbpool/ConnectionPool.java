@@ -47,9 +47,9 @@ import javax.transaction.xa.XAResource;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
+import com.caucho.env.health.*;
 import com.caucho.env.meter.ActiveTimeMeter;
 import com.caucho.env.meter.MeterService;
-import com.caucho.env.warning.WarningService;
 import com.caucho.inject.Module;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.AbstractManagedObject;
@@ -713,7 +713,9 @@ public class ConnectionPool extends AbstractManagedObject
         if (userPoolItem == null)
           userPoolItem = allocatePoolConnection(mcf, subject, info, null);
 
-        Object userConn = userPoolItem.allocateUserConnection();
+        Object userConn;
+        
+        userConn = userPoolItem.allocateUserConnection();
         
         if (userConn != null) {
           userPoolItem = null;
@@ -802,8 +804,10 @@ public class ConnectionPool extends AbstractManagedObject
   {
     long expireTime = Alarm.getCurrentTimeActual() + _connectionWaitTimeout;
 
-    if (! _lifecycle.isActive())
-      throw new IllegalStateException(L.l("Can't allocate connection because the connection pool is closed."));
+    if (! _lifecycle.isActive()) {
+      throw new IllegalStateException(L.l("{0}: Can't allocate connection because the connection pool is closed.",
+                                          this));
+    }
 
     do {
       UserPoolItem userPoolItem
@@ -824,7 +828,8 @@ public class ConnectionPool extends AbstractManagedObject
              && waitForAvailableConnection(expireTime));
     
     if (! _lifecycle.isActive())
-      throw new IllegalStateException(L.l("Can't allocate connection because the connection pool is closed."));
+      throw new IllegalStateException(L.l("{0}: Can't allocate connection because the connection pool is closed.",
+                                          this));
 
     String message = (this + " pool throttled create timeout"
         + " (pool-size=" + _connectionPool.size()
@@ -833,9 +838,9 @@ public class ConnectionPool extends AbstractManagedObject
         + ", max-create-connections=" + _maxCreateConnections
         + ")");
 
-    // XXX: This isn't a warning, it's a health nexus message.
-    WarningService.sendCurrentWarning(this, message);
-    log.warning(message);
+    HealthStatusService.updateCurrentHealthStatus(this, 
+                                                  HealthStatus.WARNING, 
+                                                  message);
 
     if (startCreateOverflow()) {
       try {
@@ -852,9 +857,9 @@ public class ConnectionPool extends AbstractManagedObject
         + ", max-create-connections=" + _maxCreateConnections
         + ")");
 
-    log.warning(message);
-
-    ThreadDump.dumpThreads();
+    HealthStatusService.updateCurrentHealthStatus(this, 
+                                                  HealthStatus.FAIL, 
+                                                  message);
 
     throw new ResourceException(L.l("Can't create overflow connection connection-max={0}",
                                     _maxConnections));
@@ -986,8 +991,8 @@ public class ConnectionPool extends AbstractManagedObject
       userPoolItem = poolItem.toActive(subject, info, oldPoolItem);
       
       if (userPoolItem == null) {
-        throw new IllegalStateException(L.l("Connection '{0}' was not valid on creation",
-                                            poolItem));
+        throw new ResourceException(L.l("Connection '{0}' was not valid on creation",
+                                   poolItem));
       }
         
       _connectionCreateCountTotal.incrementAndGet();
@@ -1063,9 +1068,9 @@ public class ConnectionPool extends AbstractManagedObject
                          _maxCreateConnections,
                          _maxOverflowConnections);
 
-    // XXX: not exactly a warning, it's a health check system.
-    WarningService.sendCurrentWarning(this, message);
-    log.warning(message);
+    HealthStatusService.updateCurrentHealthStatus(this, 
+                                                  HealthStatus.WARNING, 
+                                                  message);
     
     throw new ResourceException(message);
  }
@@ -1286,6 +1291,8 @@ public class ConnectionPool extends AbstractManagedObject
   {
     if (! _lifecycle.toStop())
       return;
+    
+    log.finer(this + " stopping");
 
     if (_alarm != null)
       _alarm.dequeue();
