@@ -99,6 +99,14 @@ public abstract class AbstractResponseStream extends OutputStreamWithBuffer {
   {
     return _state.isClosing();
   }
+  
+  /**
+   * Test if the request is closing.
+   */
+  public boolean isCloseComplete()
+  {
+    return _state.isClosing();
+  }
 
   /**
    * Returns true for a Caucho response stream.
@@ -326,7 +334,11 @@ public abstract class AbstractResponseStream extends OutputStreamWithBuffer {
   protected void killCaching()
   {
   }
-
+  
+  public void completeCache()
+  {
+  }
+  
   public final boolean isClosed()
   {
     return _state.isClosed();
@@ -351,6 +363,23 @@ public abstract class AbstractResponseStream extends OutputStreamWithBuffer {
     } finally {
       _state = _state.toClose();
     }
+  }
+  
+  protected boolean toClosing()
+  {
+    State state = _state;
+    
+    if (state.isClosing())
+      return false;
+    
+    _state = state.toClosing();
+    
+    return true;
+  }
+  
+  protected void toClose()
+  {
+    _state = _state.toClose();
   }
   
   protected void closeImpl()
@@ -452,4 +481,5 @@ public abstract class AbstractResponseStream extends OutputStreamWithBuffer {
       throw new IllegalStateException(toString());
     }
   }
+
 }

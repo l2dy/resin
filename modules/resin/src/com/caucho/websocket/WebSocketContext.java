@@ -30,7 +30,6 @@
 package com.caucho.websocket;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 
@@ -41,12 +40,6 @@ import java.io.PrintWriter;
  * thread normally is the only thread reading from the input stream.
  */
 public interface WebSocketContext {
-  /**
-   * Returns the input stream
-   */
-  public InputStream getInputStream()
-    throws IOException;
-
   /**
    * Returns the output stream for a binary message.
    * The message will complete when the OutputStream is closed.
@@ -72,7 +65,12 @@ public interface WebSocketContext {
   public long getTimeout();
 
   /**
-   * Complete and close the connection.
+   * gracefully close the connection, waiting for unread messages.
    */
-  public void complete();
+  public void close();
+
+  /**
+   * Disconnect the connection.
+   */
+  public void disconnect();
 }

@@ -145,14 +145,10 @@ import com.caucho.rewrite.Not;
 import com.caucho.rewrite.RedirectSecure;
 import com.caucho.rewrite.RewriteFilter;
 import com.caucho.rewrite.WelcomeFile;
-import com.caucho.security.AbstractSingleSignon;
 import com.caucho.security.Authenticator;
 import com.caucho.security.BasicLogin;
-import com.caucho.security.ClusterSingleSignon;
 import com.caucho.security.Login;
-import com.caucho.security.MemorySingleSignon;
 import com.caucho.security.RoleMapManager;
-import com.caucho.security.SingleSignon;
 import com.caucho.server.cache.AbstractProxyCache;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.dispatch.ErrorFilterChain;
@@ -283,6 +279,8 @@ public class WebApp extends ServletContextImpl
   private FilterMapper _filterMapper;
   // The filter mapper
   private FilterMapper _loginFilterMapper;
+  // The dispatch filter mapper
+  private FilterMapper _dispatchFilterMapper;
   // The include filter mapper
   private FilterMapper _includeFilterMapper;
   // The forward filter mapper
@@ -291,6 +289,8 @@ public class WebApp extends ServletContextImpl
   private FilterMapper _errorFilterMapper;
   // True if includes are allowed to wrap a filter (forbidden by servlet spec)
   private boolean _dispatchWrapsFilters;
+
+  private FilterChainBuilder _securityBuilder;
 
   // The session manager
   private SessionManager _sessionManager;
@@ -331,6 +331,8 @@ public class WebApp extends ServletContextImpl
   private RewriteDispatch _requestRewriteDispatch;
   private RewriteDispatch _includeRewriteDispatch;
   private RewriteDispatch _forwardRewriteDispatch;
+  
+  private WelcomeFile _welcomeFile;
 
   private LruCache<String,String> _realPathCache
     = new LruCache<String,String>(1024);
@@ -518,6 +520,10 @@ public class WebApp extends ServletContextImpl
       _forwardFilterMapper = new FilterMapper();
       _forwardFilterMapper.setServletContext(this);
       _forwardFilterMapper.setFilterManager(_filterManager);
+
+      _dispatchFilterMapper = new FilterMapper();
+      _dispatchFilterMapper.setServletContext(this);
+      _dispatchFilterMapper.setFilterManager(_filterManager);
 
       _errorFilterMapper = new FilterMapper();
       _errorFilterMapper.setServletContext(this);
@@ -1801,7 +1807,7 @@ public class WebApp extends ServletContextImpl
    */
   public void putLocaleEncoding(String locale, String encoding)
   {
-    _localeMapping.put(locale.toLowerCase(), encoding);
+    _localeMapping.put(locale.toLowerCase(Locale.ENGLISH), encoding);
   }
 
   /**
@@ -1812,21 +1818,21 @@ public class WebApp extends ServletContextImpl
     String encoding;
 
     String key = locale.toString();
-    encoding = _localeMapping.get(key.toLowerCase());
+    encoding = _localeMapping.get(key.toLowerCase(Locale.ENGLISH));
 
     if (encoding != null)
       return encoding;
 
     if (locale.getVariant() != null) {
       key = locale.getLanguage() + '_' + locale.getCountry();
-      encoding = _localeMapping.get(key.toLowerCase());
+      encoding = _localeMapping.get(key.toLowerCase(Locale.ENGLISH));
       if (encoding != null)
         return encoding;
     }
 
     if (locale.getCountry() != null) {
       key = locale.getLanguage();
-      encoding = _localeMapping.get(key.toLowerCase());
+      encoding = _localeMapping.get(key.toLowerCase(Locale.ENGLISH));
       if (encoding != null)
         return encoding;
     }
@@ -2045,7 +2051,7 @@ public class WebApp extends ServletContextImpl
   {
     if (! hasListener(listener.getListenerClass())) {
       _listeners.add(listener);
-
+      
       //jsp/18n
       if (_lifecycle.isStarting() || _lifecycle.isActive()) {
         addListenerObject(listener.createListenerObject(), true);
@@ -2083,6 +2089,7 @@ public class WebApp extends ServletContextImpl
         try {
           scListener.contextInitialized(event);
         } catch (Exception e) {
+          e.printStackTrace();
           log.log(Level.FINE, e.toString(), e);
         }
       }
@@ -2651,11 +2658,13 @@ public class WebApp extends ServletContextImpl
 
       setAttribute("javax.servlet.context.tempdir", new File(_tempDir.getNativePath()));
 
-      FilterChainBuilder securityBuilder
-        = _constraintManager.getFilterBuilder();
+      _securityBuilder = _constraintManager.getFilterBuilder();
       
-      if (securityBuilder != null)
-        _filterMapper.addTopFilter(securityBuilder);
+      /*
+      if (_securityBuilder != null) {
+        _filterMapper.addTopFilter(_securityBuilder);
+      }
+      */
 
       if (_server != null)
         _cache = _server.getProxyCache();
@@ -2730,7 +2739,9 @@ public class WebApp extends ServletContextImpl
       
       WelcomeFile welcomeFile = new WelcomeFile(_welcomeFileList);
       
-      add(welcomeFile);
+      _welcomeFile = welcomeFile;
+      
+      // add(welcomeFile);
 
       if (! _isCompileContext) {
         for (int i = 0; i < _resourceValidators.size(); i++) {
@@ -3386,6 +3397,12 @@ public class WebApp extends ServletContextImpl
           invocation.setMultipartConfig(entry.getMultipartConfig());
         } else {
           chain = _servletMapper.mapServlet(invocation);
+          
+          // server/13s[o-r]
+          _filterMapper.buildDispatchChain(invocation, chain);
+          chain = invocation.getFilterChain();
+
+          chain = applyWelcomeFile(DispatcherType.REQUEST, invocation, chain);
 
           if (_requestRewriteDispatch != null) {
             FilterChain newChain
@@ -3396,20 +3413,23 @@ public class WebApp extends ServletContextImpl
 
             chain = newChain;
           }
-          
+
+                    /*
           // server/13s[o-r]
-          _filterMapper.buildDispatchChain(invocation, chain);
-
+          // _filterMapper.buildDispatchChain(invocation, chain);
           chain = invocation.getFilterChain();
-
+           */
+          
           entry = new FilterChainEntry(chain, invocation);
           chain = entry.getFilterChain();
 
           if (isCache)
             _filterChainCache.put(invocation.getContextURI(), entry);
         }
+        
+        chain = buildSecurity(chain, invocation);
 
-        chain = createWebAppFilterChain(chain, invocation);
+        chain = createWebAppFilterChain(chain, invocation, true);
 
         invocation.setFilterChain(chain);
         invocation.setPathInfo(entry.getPathInfo());
@@ -3445,8 +3465,24 @@ public class WebApp extends ServletContextImpl
     }
   }
   
+  private FilterChain applyWelcomeFile(DispatcherType type,
+                                       Invocation invocation, 
+                                       FilterChain chain)
+  throws ServletException
+{
+    if (_welcomeFile != null) {
+      chain = _welcomeFile.map(type,
+                               invocation.getContextURI(),
+                               invocation.getQueryString(),
+                               chain, chain);
+    }
+    
+    return chain;
+  }
+  
   FilterChain createWebAppFilterChain(FilterChain chain,
-                                      Invocation invocation)
+                                      Invocation invocation,
+                                      boolean isTop)
   {
     // the cache must be outside of the WebAppFilterChain because
     // the CacheListener in ServletInvocation needs the top to
@@ -3454,11 +3490,9 @@ public class WebApp extends ServletContextImpl
 
     if (_isStatisticsEnabled)
       chain = new StatisticsFilterChain(chain, this);
-
-    WebAppFilterChain webAppChain = new WebAppFilterChain(chain, this);
-
-    webAppChain.setSecurityRoleMap(invocation.getSecurityRoleMap());
-    chain = webAppChain;
+    
+    if (getRequestListeners() != null && getRequestListeners().length > 0)
+      chain = new WebAppListenerFilterChain(chain, this, getRequestListeners());
 
     // TCK: cache needs to be outside because the cache flush conflicts
     // with the request listener destroy callback
@@ -3468,7 +3502,12 @@ public class WebApp extends ServletContextImpl
     if (_cache != null)
       chain = _cache.createFilterChain(chain, this);
 
-    if (getAccessLog() != null)
+    WebAppFilterChain webAppChain = new WebAppFilterChain(chain, this);
+
+    // webAppChain.setSecurityRoleMap(invocation.getSecurityRoleMap());
+    chain = webAppChain;
+
+    if (getAccessLog() != null && isTop)
       chain = new AccessLogFilterChain(chain, this);
     
     return chain;
@@ -3538,7 +3577,10 @@ public class WebApp extends ServletContextImpl
   public void buildDispatchInvocation(Invocation invocation)
     throws ServletException
   {
+    // buildDispatchInvocation(invocation, _dispatchFilterMapper);
     buildDispatchInvocation(invocation, _filterMapper);
+    
+    buildSecurity(invocation);
   }
 
   /**
@@ -3569,25 +3611,28 @@ public class WebApp extends ServletContextImpl
       }
       else {
         chain = _servletMapper.mapServlet(invocation);
-
-        if (_includeRewriteDispatch != null
-            && filterMapper == _includeFilterMapper) {
-          chain = _includeRewriteDispatch.map(DispatcherType.INCLUDE,
-                                              invocation.getContextURI(),
-                                              invocation.getQueryString(),
-                                              chain);
+        chain = filterMapper.buildDispatchChain(invocation, chain);
+        
+        if (filterMapper == _includeFilterMapper) {
+          chain = applyWelcomeFile(DispatcherType.INCLUDE, invocation, chain);
+          
+          if (_includeRewriteDispatch != null) {
+            chain = _includeRewriteDispatch.map(DispatcherType.INCLUDE,
+                                                invocation.getContextURI(),
+                                                invocation.getQueryString(),
+                                                chain);
+          }
         }
-        else if (_forwardRewriteDispatch != null
-                 && filterMapper == _forwardFilterMapper) {
-          chain = _forwardRewriteDispatch.map(DispatcherType.FORWARD,
-                                              invocation.getContextURI(),
-                                              invocation.getQueryString(),
-                                              chain);
+        else if (filterMapper == _forwardFilterMapper) {
+          chain = applyWelcomeFile(DispatcherType.FORWARD, invocation, chain);
+          
+          if (_forwardRewriteDispatch != null) {
+            chain = _forwardRewriteDispatch.map(DispatcherType.FORWARD,
+                                                invocation.getContextURI(),
+                                                invocation.getQueryString(),
+                                                chain);
+          }
         }
-
-        filterMapper.buildDispatchChain(invocation, chain);
-
-        chain = invocation.getFilterChain();
 
         /* server/10gw - #3111 */
         /*
@@ -3610,10 +3655,28 @@ public class WebApp extends ServletContextImpl
       thread.setContextClassLoader(oldLoader);
     }
   }
+  
+  private void buildSecurity(Invocation invocation)
+  {
+    invocation.setFilterChain(buildSecurity(invocation.getFilterChain(), invocation));
+  }
+  
+  private FilterChain buildSecurity(FilterChain chain, Invocation invocation)
+  {
+    if (_securityBuilder != null) {
+      // server/1ksa
+      // _dispatchFilterMapper.addTopFilter(_securityBuilder);
+      return _securityBuilder.build(chain, invocation);
+    }
+    
+    
+    return chain;
+  }
 
   /**
    * Returns a dispatcher for the named servlet.
    */
+  @Override
   public RequestDispatcherImpl getRequestDispatcher(String url)
   {
     if (url == null)
@@ -3630,6 +3693,8 @@ public class WebApp extends ServletContextImpl
     Invocation forwardInvocation = new SubInvocation();
     Invocation errorInvocation = new SubInvocation();
     Invocation dispatchInvocation = new SubInvocation();
+    Invocation requestInvocation = dispatchInvocation;
+    
     InvocationDecoder decoder = new InvocationDecoder();
 
     String rawURI = escapeURL(getContextPath() + url);
@@ -3659,6 +3724,7 @@ public class WebApp extends ServletContextImpl
       }
 
       if (_parent != null && ! isSameWebApp) {
+        // jsp/15ll
         _parent.buildIncludeInvocation(includeInvocation);
         _parent.buildForwardInvocation(forwardInvocation);
         _parent.buildErrorInvocation(errorInvocation);
@@ -3674,11 +3740,18 @@ public class WebApp extends ServletContextImpl
         buildErrorInvocation(errorInvocation);
         buildDispatchInvocation(dispatchInvocation);
       }
-
+      
+      // jsp/15ln
+      buildCrossContextFilter(includeInvocation);
+      buildCrossContextFilter(forwardInvocation);
+      buildCrossContextFilter(errorInvocation);
+      buildCrossContextFilter(dispatchInvocation);
+      
       disp = new RequestDispatcherImpl(includeInvocation,
                                        forwardInvocation,
                                        errorInvocation,
                                        dispatchInvocation,
+                                       requestInvocation,
                                        this);
 
       getDispatcherCache().put(url, disp);
@@ -3691,6 +3764,15 @@ public class WebApp extends ServletContextImpl
 
       return null;
     }
+  }
+  
+  private void buildCrossContextFilter(Invocation invocation)
+  {
+    FilterChain chain = invocation.getFilterChain();
+    
+    chain = new DispatchFilterChain(chain, invocation.getWebApp());
+    
+    invocation.setFilterChain(chain);
   }
 
   /**
@@ -3787,6 +3869,7 @@ public class WebApp extends ServletContextImpl
       disp = new RequestDispatcherImpl(loginInvocation,
                                        loginInvocation,
                                        errorInvocation,
+                                       loginInvocation,
                                        loginInvocation,
                                        this);
       disp.setLogin(true);

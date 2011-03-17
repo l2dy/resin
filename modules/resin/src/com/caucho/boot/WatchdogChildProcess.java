@@ -51,6 +51,8 @@ import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.hmtp.HmtpLinkWorker;
 import com.caucho.lifecycle.Lifecycle;
+import com.caucho.loader.EnvironmentClassLoader;
+import com.caucho.log.RotateLog;
 import com.caucho.log.RotateStream;
 import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.server.util.CauchoSystem;
@@ -128,14 +130,20 @@ class WatchdogChildProcess
   {
     if (! _lifecycle.toActive())
       return;
+
+    EnvironmentClassLoader envLoader
+      = EnvironmentClassLoader.create(_system.getClassLoader());
     
-    Thread.currentThread().setContextClassLoader(_system.getClassLoader());
+    Thread thread = Thread.currentThread();
     
     WriteStream jvmOut = null;
     ServerSocket ss = null;
     Socket s = null;
 
     try {
+      thread.setContextClassLoader(envLoader);
+      envLoader.start();
+
       ss = new ServerSocket(0, 5, InetAddress.getByName("127.0.0.1"));
 
       int port = ss.getLocalPort();
@@ -207,6 +215,8 @@ class WatchdogChildProcess
 
         notifyAll();
       }
+
+      thread.setContextClassLoader(_system.getClassLoader());
     }
   }
   
@@ -549,11 +559,16 @@ class WatchdogChildProcess
     ArrayList<String> jvmArgs = new ArrayList<String>();
 
     jvmArgs.add(_watchdog.getJavaExe());
+    
+    boolean isEndorsed = false;
 
     // user args are first so they're displayed by ps
     for (String arg : _watchdog.getJvmArgs()) {
       if (! arg.startsWith("-Djava.class.path"))
         jvmArgs.add(arg);
+      
+      if (arg.startsWith("-Djava.endorsed.dirs"))
+        isEndorsed = true;
     }
     
     jvmArgs.add("-Dresin.server=" + _id);
@@ -565,11 +580,26 @@ class WatchdogChildProcess
     if (systemClassLoader != null && ! "".equals(systemClassLoader)) {
       jvmArgs.add("-Djava.system.class.loader=" + systemClassLoader);
     }
+    
+    Path resinHome = _watchdog.getResinHome();
+    
+    if (! isEndorsed) {
+      String endorsed = System.getProperty("java.endorsed.dirs");
+      String resinEndorsed = resinHome.getNativePath() + File.separator + "endorsed";
+      
+      
+      if (endorsed != null)
+        endorsed = endorsed + File.pathSeparator + resinEndorsed;
+      else
+        endorsed = resinEndorsed;
+      
+      jvmArgs.add("-Djava.endorsed.dirs=" + endorsed);
+    }
+    
     // #2567
     jvmArgs.add("-Djavax.management.builder.initial=com.caucho.jmx.MBeanServerBuilderImpl");
     jvmArgs.add("-Djava.awt.headless=true");
 
-    Path resinHome = _watchdog.getResinHome();
     jvmArgs.add("-Dresin.home=" + resinHome.getFullPath());
 
     if (! _watchdog.hasXss())
@@ -763,10 +793,20 @@ class WatchdogChildProcess
       log.log(Level.WARNING, e.toString(), e);
     }
 
-    RotateStream rotateStream = RotateStream.create(jvmPath);
-    rotateStream.getRolloverLog().setRolloverSizeBytes(64L * 1024 * 1024);
-    _watchdog.getConfig().logInit(rotateStream);
-    rotateStream.init();
+    RotateLog log = new RotateLog();
+    log.setPath(jvmPath);
+    log.setRolloverSizeBytes(64L * 1024 * 1024);
+    
+    if (_watchdog.getStdoutLog() != null)
+      _watchdog.getStdoutLog().configure(log);
+
+    log.init();
+    
+    RotateStream rotateStream = log.getRotateStream();
+
+    // _watchdog.getConfig().logInit(rotateStream);
+    
+    // rotateStream.init();
     return rotateStream.getStream();
   }
 

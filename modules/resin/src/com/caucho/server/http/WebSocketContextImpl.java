@@ -33,7 +33,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.security.MessageDigest;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.caucho.network.listen.SocketLinkDuplexController;
 import com.caucho.network.listen.SocketLinkDuplexListener;
@@ -43,9 +45,8 @@ import com.caucho.remote.websocket.WebSocketOutputStream;
 import com.caucho.remote.websocket.WebSocketPrintWriter;
 import com.caucho.remote.websocket.WebSocketReader;
 import com.caucho.remote.websocket.WebSocketWriter;
-import com.caucho.util.Hex;
+import com.caucho.remote.websocket.FrameInputStream;
 import com.caucho.util.L10N;
-import com.caucho.util.RandomUtil;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.WriteStream;
@@ -59,15 +60,15 @@ class WebSocketContextImpl
   implements WebSocketContext, WebSocketConstants, SocketLinkDuplexListener
 {
   private static final L10N L = new L10N(WebSocketContextImpl.class);
+  private static final Logger log
+    = Logger.getLogger(WebSocketContextImpl.class.getName());
   
   private final HttpServletRequestImpl _request;
   private final WebSocketListener _listener;
 
   private SocketLinkDuplexController _controller;
-  private byte []_clientNonce;
-  private byte []_serverNonce;
   
-  private byte []_authNonce;
+  private FrameInputStream _is;
   
   private WebSocketOutputStream _binaryOut;
   private WebSocketInputStream _binaryIn;
@@ -75,36 +76,25 @@ class WebSocketContextImpl
   private WebSocketWriter _textOut;
   private PrintWriter _textWriter;
   private WebSocketReader _textIn;
+  
+  private boolean _isReadClosed;
+  private AtomicBoolean _isWriteClosed = new AtomicBoolean();
 
   WebSocketContextImpl(HttpServletRequestImpl request,
                        HttpServletResponseImpl response,
                        WebSocketListener listener,
-                       byte []clientNonce)
-  {
+                       FrameInputStream is)
+  {     
     _request = request;
     _listener = listener;
-
-    _clientNonce = clientNonce;
-    _serverNonce = new byte[8];
-    
-    setLong(_serverNonce, 0, RandomUtil.getRandomLong());
-  }
-  
-  private void setLong(byte []buffer, int offset, long value)
-  {
-    buffer[offset + 0] = (byte) (value >> 56);
-    buffer[offset + 1] = (byte) (value >> 48);
-    buffer[offset + 2] = (byte) (value >> 40);
-    buffer[offset + 3] = (byte) (value >> 32);
-    buffer[offset + 4] = (byte) (value >> 24);
-    buffer[offset + 5] = (byte) (value >> 16);
-    buffer[offset + 6] = (byte) (value >> 8);
-    buffer[offset + 7] = (byte) (value >> 0);
+    _is = is;
   }
 
   public void setController(SocketLinkDuplexController controller)
   {
     _controller = controller;
+    
+    _is.init(controller.getReadStream());
   }
 
   @Override
@@ -119,17 +109,23 @@ class WebSocketContextImpl
     return _controller.getIdleTimeMax();
   }
 
+  /*
   @Override
   public InputStream getInputStream()
   throws IOException
   {
     return _controller.getReadStream();
   }
+  */
 
   @Override
   public OutputStream startBinaryMessage()
   throws IOException
   {
+    if (_isWriteClosed.get())
+      throw new IllegalStateException(L.l("{0} is closed for writing.",
+                                          this));
+    
     if (_binaryOut == null)
       _binaryOut = new WebSocketOutputStream(_controller.getWriteStream(),
                                              TempBuffer.allocate().getBuffer());
@@ -153,9 +149,28 @@ class WebSocketContextImpl
     
     return _textWriter;
   }
+  
+  @Override
+  public void close()
+  {
+    if (_isWriteClosed.getAndSet(true))
+      return;
+
+    try {
+      WriteStream out = _controller.getWriteStream();
+    
+      out.write(0x81);
+      out.write(0x00);
+      out.flush();
+    } catch (IOException e) {
+      log.log(Level.WARNING, e.toString(), e);
+    } finally {
+      disconnect();
+    }
+  }
 
   @Override
-  public void complete()
+  public void disconnect()
   {
     _controller.complete();
   }
@@ -163,198 +178,6 @@ class WebSocketContextImpl
   //
   // duplex callbacks
   //
-  
-  void sendHello()
-    throws IOException
-  {
-    WriteStream out = _controller.getWriteStream();
-
-    byte []hash = calculateServerHash();
-
-    out.write(FLAG_FIN | OP_HELLO);
-    out.write(_serverNonce.length + hash.length);
-    out.write(_serverNonce, 0, _serverNonce.length);
-    out.write(hash, 0, hash.length);
-  }
-
-  void sendAuthChallenge()
-    throws IOException
-  {
-    WriteStream out = _controller.getWriteStream();
-    
-    long nonceValue = RandomUtil.getRandomLong();
-    
-    _authNonce = new byte[8];
-    setLong(_authNonce, 0, nonceValue);
-    
-    String code = "x-authentication/challenge\n";
-    
-    out.write(FLAG_FIN | OP_EXT);
-    out.write(code.length() + _authNonce.length);
-    out.print(code);
-    out.write(_authNonce, 0, _authNonce.length);
-    
-    System.out.println("CHALLENGE");
-  }
-
-  private byte []calculateServerHash()
-  {
-    try {
-      MessageDigest md = MessageDigest.getInstance("MD5");
-      
-      md.update(_clientNonce);
-      
-      String webSocket = "WebSocket";
-      for (int i = 0; i < webSocket.length(); i++) {
-        md.update((byte) webSocket.charAt(i));
-      }
-      
-      md.update(_serverNonce);
-      
-      byte []digest = md.digest();
-      
-      return digest;
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-  
-  private byte []calculateClientHash()
-  {
-    try {
-      MessageDigest md = MessageDigest.getInstance("MD5");
-      
-      md.update(_serverNonce);
-      
-      String webSocket = "WebSocket";
-      for (int i = 0; i < webSocket.length(); i++) {
-        md.update((byte) webSocket.charAt(i));
-      }
-      
-      md.update(_clientNonce);
-      
-      return md.digest();
-    } catch (Exception e) {
-      throw new IllegalStateException(e);
-    }
-  }
-  
-  void readHello()
-    throws IOException
-  {
-    ReadStream is = _controller.getReadStream();
-
-    int frame1 = is.read();
-    int frame2 = is.read();
-    
-    if (frame2 < 0)
-      throw new IllegalStateException(L.l("Unexpected end-of-file waiting for HELLO"));
-
-    boolean isFinal = (frame1 & FLAG_FIN) != 0;
-    int opcode = frame1 & OP_HELLO;
-    int len = frame2 & 0x7f;
-
-    if (! isFinal) {
-      throw new IllegalStateException(L.l("Invalid HELLO packet. Missing FIN."));
-    }
-
-    if (opcode != OP_HELLO) {
-      throw new IllegalStateException(L.l("Invalid HELLO packet. OP=0x{0}.",
-                                          Integer.toHexString(opcode)));
-    }
-
-    if (len != 16) {
-      throw new IllegalStateException(L.l("Invalid HELLO packet. len={0}.",
-                                          len));
-    }
-
-    byte []hash = new byte[len];
-    is.readAll(hash, 0, len);
-
-    byte []expectedHash = calculateClientHash();
-
-    if (! isMatch(hash, expectedHash)) {
-      throw new IllegalStateException(L.l("Invalid Hash. expected={0}, client={1}.",
-                                          Hex.toHex(expectedHash),
-                                          Hex.toHex(hash)));
-    }
-  }
-  
-  void readAuthResponse()
-    throws IOException
-  {
-    System.out.println("AUTH:");
-    ReadStream is = _controller.getReadStream();
-
-    int frame1 = is.read();
-    int frame2 = is.read();
-    
-    if (frame2 < 0)
-      throw new IllegalStateException(L.l("Unexpected end-of-file waiting for login"));
-
-    boolean isFinal = (frame1 & FLAG_FIN) != 0;
-    int opcode = frame1 & OP_HELLO;
-    int len = frame2 & 0x7f;
-
-    if (! isFinal) {
-      throw new IllegalStateException(L.l("Invalid login packet. Missing FIN."));
-    }
-
-    if (opcode != OP_EXT) {
-      throw new IllegalStateException(L.l("Invalid login packet. OP=0x{0}.",
-                                          Integer.toHexString(opcode)));
-    }
-    
-    byte []buffer = new byte[len];
-    
-    is.readAll(buffer, 0, len);
-    
-    int p = indexOf(buffer, 0, '\n');
-    int q = indexOf(buffer, p + 1, '\n');
-    
-    String code = new String(buffer, 0, p);
-    String user = new String(buffer, p + 1, q);
-    
-    byte []digest = new byte[buffer.length - q - 1];
-    System.arraycopy(buffer, q + 1, digest, 0, digest.length);
-
-    System.out.println("BUFF: " + code + " " + user + " " + new String(digest));
-  }
-  
-  private int indexOf(byte []buffer, int offset, int ch)
-  {
-    for (int i = offset; i < buffer.length; i++) {
-      if (buffer[i] == ch)
-        return i;
-    }
-    
-    return -1;
-  }
-
-  void onHandshakeComplete(boolean isValid)
-    throws IOException
-  {
-    try {
-      _listener.onHandshakeComplete(this, isValid);
-    } finally {
-      if (! isValid)
-        complete();
-    }
-  }
-  
-  private boolean isMatch(byte []clientHash,
-                          byte []expectedHash)
-  {
-    if (clientHash.length != expectedHash.length)
-      return false;
-    
-    for (int i = clientHash.length - 1; i >= 0; i--) {
-      if (clientHash[i] != expectedHash[i])
-        return false;
-    }
-    
-    return true;
-  }
   
   void onStart()
     throws IOException
@@ -376,72 +199,78 @@ class WebSocketContextImpl
   {
   }
 
+  @Override
   public void onRead(SocketLinkDuplexController duplex)
   throws IOException
   {
-    ReadStream is = _controller.getReadStream();
-    
     do {
-      int frame1 = is.read();
-      int frame2 = is.read();
-      
-      boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
-      
-      int opcode = frame1 & 0xf;
-      
-      long len = frame2 & 0x7f;
-      
-      if (len < 0x7e) {
-      }
-      else if (len == 0x7e) {
-        len = (is.read() << 8) + is.read();
-      }
-      else {
-        len = (((long) is.read() << 56)
-              + ((long) is.read() << 48)
-              + ((long) is.read() << 40)
-              + ((long) is.read() << 32)
-              + ((long) is.read() << 24)
-              + ((long) is.read() << 16)
-              + ((long) is.read() << 8)
-              + ((long) is.read()));
-      }
-      
-      switch (opcode) {
-      case OP_BINARY:
-        if (_binaryIn == null)
-          _binaryIn = new WebSocketInputStream(is);
-        
-        _binaryIn.init(isFinal, len);
-        
-        _listener.onReadBinary(this, _binaryIn);
-        break;
-        
-      case OP_TEXT:
-        if (_textIn == null)
-          _textIn = new WebSocketReader(is);
-        
-        _textIn.init(isFinal, len);
-        
-        _listener.onReadText(this, _textIn);
-        break;
-        
-      default:
-        // XXX:
-        complete();
-        break;
-      }
+      if (! readFrame())
+        return;
     } while (_request.getAvailable() > 0);
   }
+  
+  private boolean readFrame()
+    throws IOException
+  {  
+    if (! _is.readFrameHeader()) {
+      return false;
+    }
 
-  public void onComplete(SocketLinkDuplexController duplex)
-  throws IOException
+    int opcode = _is.getOpcode();
+
+    switch (opcode) {
+    case OP_BINARY:
+      if (_binaryIn == null)
+        _binaryIn = createWebSocketInputStream(_is);
+
+      _binaryIn.init();
+
+      _listener.onReadBinary(this, _binaryIn);
+      break;
+
+    case OP_TEXT:
+      if (_textIn == null)
+        _textIn = new WebSocketReader(_is);
+
+      _textIn.init();
+
+      _listener.onReadText(this, _textIn);
+      break;
+      
+    case OP_CLOSE:
+      _isReadClosed = true;
+      try {
+        _listener.onClose(this);
+      } finally {
+        close();
+      }
+      break;
+
+    default:
+      // XXX:
+      disconnect();
+      break;
+    }
+    
+    return true;
+  }
+  
+  protected WebSocketInputStream createWebSocketInputStream(FrameInputStream is)
+    throws IOException
   {
-    _listener.onComplete(this);
+    return new WebSocketInputStream(is);
   }
 
+  @Override
+  public void onDisconnect(SocketLinkDuplexController duplex)
+    throws IOException
+  {
+    _listener.onDisconnect(this);
+  }
+
+  @Override
   public void onTimeout(SocketLinkDuplexController duplex)
-  throws IOException
+    throws IOException
   {
     _listener.onTimeout(this);
   }

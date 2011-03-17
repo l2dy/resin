@@ -1,0 +1,99 @@
+<cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  <!--
+     - Health monitoring system default configuration
+    -->
+         
+  <health:HealthSystem>
+    <enabled>true</enabled>
+    <startup-delay>15m</startup-delay>
+    <period>5m</period>
+    <recheck-period>15s</recheck-period>
+    <recheck-max>5</recheck-max>
+  </health:HealthSystem>
+  
+  <health:Restart>
+    <health:IfHealthFatal/>
+  </health:Restart>
+
+  <!--
+     - Restart on critical if the problem persists for 5 min.
+    -->
+  <health:Restart>
+    <health:IfCriticalRechecked time="5m"/>
+  </health:Restart>
+
+  <!--
+     - Checks for JVM-detected deadlocks.
+    -->
+  
+  <health:JvmDeadlockHealthCheck/>
+
+  <!--
+     - heap memory checks
+    -->
+  
+  <health:MemoryTenuredHealthCheck>
+    <memory-free-min>1m</memory-free-min>
+  </health:MemoryTenuredHealthCheck>
+  
+  <health:MemoryPermGenHealthCheck>
+    <memory-free-min>1m</memory-free-min>
+  </health:MemoryPermGenHealthCheck>
+
+  <!--
+     - Dump heap if memory pools are critically low 
+    -->
+  
+  <health:DumpHeap>
+    <health:Or>
+      <health:IfHealthCritical healthCheck="${memoryTenuredHealthCheck}"/>
+      <health:IfHealthCritical healthCheck="${memoryPermGenHealthCheck}"/>
+    </health:Or>
+    <health:IfRechecked/>
+  </health:DumpHeap>
+  
+  <!--
+     - Dump active threads if cpu usage is critically high
+    -->
+
+  <health:CpuHealthCheck>
+    <warning-threshold>95</warning-threshold>
+    <!--
+       - <critical-threshold>99</critical-threshold>
+      -->
+  </health:CpuHealthCheck>
+  
+  <health:DumpThreads>
+    <health:IfHealthCritical healthCheck="${cpuHealthCheck}"/>
+    <health:IfRechecked/>
+  </health:DumpThreads>
+  
+  <!--
+     - Check cluster heartbeats
+    -->
+
+  <health:HeartbeatHealthCheck/>
+
+  <!--
+     - Log connection pool limits reached
+    -->
+
+  <health:ConnectionPoolHealthCheck/>
+  
+  <!--
+     - Log transaction manager commit failures 
+    -->
+
+  <health:TransactionHealthCheck/>
+  
+  <!--
+     - Restart if any health checks are frozen or threads are hung 
+    -->
+    
+  <health:HealthSystemHealthCheck/>
+  
+</cluster>

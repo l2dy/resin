@@ -29,8 +29,6 @@
 
 package com.caucho.cloud.network;
 
-import javax.annotation.PostConstruct;
-
 import com.caucho.config.ConfigException;
 import com.caucho.network.listen.TcpSocketLinkListener;
 
@@ -38,29 +36,14 @@ import com.caucho.network.listen.TcpSocketLinkListener;
  * Represents a protocol connection.
  */
 public class ClusterListener extends TcpSocketLinkListener {
-  private static final long KEEPALIVE_TIME_MAX = Long.MAX_VALUE / 2;
-  private static final long KEEPALIVE_TIMEOUT = 60 * 60 * 1000;
-  private static final long SOCKET_TIMEOUT = 10 * 60 * 1000;
-  
   public ClusterListener(String address, int port)
   {
     try {
       setAddress(address);
       
       setPort(port);
-      
-      setKeepaliveConnectionTimeMaxMillis(KEEPALIVE_TIME_MAX);
-      setKeepaliveTimeoutMillis(KEEPALIVE_TIMEOUT);
-      setSocketTimeoutMillis(SOCKET_TIMEOUT);
-      
-      // setProtocol(new HmuxProtocol());
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
-  }
-
-  @PostConstruct
-  public void init()
-  {
   }
 }

@@ -35,7 +35,7 @@ import java.util.logging.Logger;
 import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
-import com.caucho.bam.ActorError;
+import com.caucho.bam.BamError;
 import com.caucho.bam.Query;
 import com.caucho.bam.actor.SimpleActor;
 import com.caucho.boot.PidQuery;
@@ -63,7 +63,7 @@ public class ResinActor extends SimpleActor
   {
     _resin = resin;
     
-    setJid("resin");
+    setAddress("resin");
     
     _shutdown = ShutdownSystem.getCurrent();
     
@@ -78,7 +78,11 @@ public class ResinActor extends SimpleActor
    */
   public void sendWarning(String msg)
   {
-    getBroker().message("watchdog", getJid(), new WarningMessage(msg));
+    try {
+      getBroker().message("watchdog", getAddress(), new WarningMessage(msg));
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
   }
   
   //
@@ -105,7 +109,7 @@ public class ResinActor extends SimpleActor
       
       if (runtimeName == null) {
         getBroker().queryError(id, from, to, query, 
-                                   new ActorError("null runtime name"));
+                                   new BamError("null runtime name"));
         return;
       }
       
@@ -119,11 +123,11 @@ public class ResinActor extends SimpleActor
       }
       
       getBroker().queryError(id, from, to, query,
-                                 new ActorError("malformed name=" + runtimeName));
+                                 new BamError("malformed name=" + runtimeName));
    
     } catch (Exception e) {
       getBroker().queryError(id, from, to, query,
-                                 ActorError.create(e));
+                                 BamError.create(e));
     }
    }
 

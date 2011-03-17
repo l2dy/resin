@@ -38,6 +38,7 @@ import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -73,9 +74,6 @@ abstract public class AbstractCache extends AbstractMap
   implements ObjectCache, ByteStreamCache, CacheStatistics, Closeable
 {
   private static final L10N L = new L10N(AbstractCache.class);
-
-  private static final Logger log
-    = Logger.getLogger(AbstractCache.class.getName());
 
   private CacheManager _localManager;
   private DistributedCacheManager _manager;
@@ -376,7 +374,7 @@ abstract public class AbstractCache extends AbstractMap
    */
   public String getScope()
   {
-    return _config.getScopeMode().toString().toLowerCase();
+    return _config.getScopeMode().toString().toLowerCase(Locale.ENGLISH);
   }
 
   public void setPersistence(String persistenceOption)
@@ -1007,7 +1005,7 @@ abstract public class AbstractCache extends AbstractMap
 
     if (persistence != null) {
       try {
-        result = Persistence.valueOf(persistence.toUpperCase());
+        result = Persistence.valueOf(persistence.toUpperCase(Locale.ENGLISH));
       }
       catch (Exception e) {
         throw new ConfigException(L.l("'{0}' is not a valid Persistence option", persistence));
@@ -1056,7 +1054,7 @@ abstract public class AbstractCache extends AbstractMap
 
     if (_scopeName != null) {
       try {
-        scope = Scope.valueOf(_scopeName.toUpperCase());
+        scope = Scope.valueOf(_scopeName.toUpperCase(Locale.ENGLISH));
       }
       catch (Exception e) {
         throw new ConfigException(L.l("'{0}' is not a valid Scope option", scopeName));

@@ -147,7 +147,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getIdleTime()
   {
-    return _server.getClusterIdleTime();
+    return _server.getLoadBalanceIdleTime();
   }
 
   /**
@@ -178,6 +178,15 @@ public class ClusterServerAdmin extends AbstractManagedObject
   }
 
   /**
+   * Returns the socket timeout for a client.
+   */
+  @Override
+  public long getClusterIdleTime()
+  {
+    return _server.getClusterIdleTime();
+  }
+
+  /**
    * Returns the warmup time in milliseconds.
    */
   @Override
@@ -202,7 +211,8 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public String getState()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    //ClientSocketFactory pool = _server.getClusterSocketPool();
+    ClientSocketFactory pool = _server.getLoadBalanceSocketPool();
     
     if (pool != null)
       return pool.getState();
@@ -234,7 +244,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public int getConnectionActiveCount()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getActiveCount();
@@ -245,7 +255,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public int getConnectionIdleCount()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getIdleCount();
@@ -256,7 +266,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getConnectionNewCountTotal()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getConnectCountTotal();
@@ -267,7 +277,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getConnectionFailCountTotal()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getFailCountTotal();
@@ -278,7 +288,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public Date getLastFailTime()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getLastFailTime();
@@ -288,7 +298,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
 
   public Date getLastSuccessTime()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return new Date(pool.getLastSuccessTime());
@@ -299,7 +309,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public double getLatencyFactor()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getLatencyFactor();
@@ -310,7 +320,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getConnectionBusyCountTotal()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getBusyCountTotal();
@@ -321,7 +331,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public Date getLastBusyTime()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getLastBusyTime();
@@ -332,7 +342,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public long getConnectionKeepaliveCountTotal()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getKeepaliveCountTotal();
@@ -343,7 +353,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public double getServerCpuLoadAvg()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.getCpuLoadAvg();
@@ -354,7 +364,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public void start()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getLoadBalanceSocketPool();
 
     if (pool != null)
       pool.start();
@@ -363,7 +373,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public void stop()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getLoadBalanceSocketPool();
 
     if (pool != null)
       pool.stop();
@@ -372,7 +382,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public void enableSessionOnly()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getLoadBalanceSocketPool();
 
     if (pool != null)
       pool.enableSessionOnly();
@@ -381,7 +391,7 @@ public class ClusterServerAdmin extends AbstractManagedObject
   @Override
   public boolean ping()
   {
-    ClientSocketFactory pool = _server.getServerPool();
+    ClientSocketFactory pool = _server.getClusterSocketPool();
 
     if (pool != null)
       return pool.canConnect();

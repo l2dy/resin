@@ -32,7 +32,7 @@ package com.caucho.hmtp;
 import java.io.IOException;
 import java.io.InputStream;
 
-import com.caucho.bam.actor.Actor;
+import com.caucho.bam.actor.ActorHolder;
 import com.caucho.bam.broker.Broker;
 import com.caucho.websocket.AbstractWebSocketListener;
 import com.caucho.websocket.WebSocketContext;
@@ -59,6 +59,11 @@ public class HmtpWebSocketListener extends AbstractWebSocketListener {
     return _hOut;
   }
   
+  String getAddress()
+  {
+    return "hmtp@" + _broker.getAddress();
+  }
+  
   @Override
   public void onStart(WebSocketContext context)
   {
@@ -78,7 +83,7 @@ public class HmtpWebSocketListener extends AbstractWebSocketListener {
   }
   
   @Override
-  public void onComplete(WebSocketContext context)
+  public void onDisconnect(WebSocketContext context)
   {
     _hOut = null;
     _hIn = null;

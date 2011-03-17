@@ -62,6 +62,7 @@ import javax.annotation.sql.DataSourceDefinition;
 import javax.annotation.sql.DataSourceDefinitions;
 import javax.ejb.EJB;
 import javax.ejb.EJBs;
+import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.el.ELResolver;
 import javax.el.ExpressionFactory;
@@ -148,6 +149,7 @@ import com.caucho.loader.EnvironmentApply;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.naming.Jndi;
 import com.caucho.util.Alarm;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
@@ -1094,6 +1096,9 @@ public final class InjectManager
   @Override
   public <T> AnnotatedType<T> createAnnotatedType(Class<T> cl)
   {
+    if (cl == null)
+      throw new NullPointerException();
+    
     AnnotatedType<T> annType = ReflectionAnnotatedFactory.introspectType(cl);
     
     // TCK:
@@ -1163,6 +1168,9 @@ public final class InjectManager
    */
   public <T> ManagedBeanImpl<T> createManagedBean(Class<T> cl)
   {
+    if (cl == null)
+      throw new NullPointerException();
+    
     AnnotatedType<T> type = createAnnotatedType(cl);
     
     AnnotatedType<T> extType = getExtensionManager().processAnnotatedType(type);
@@ -1392,7 +1400,7 @@ public final class InjectManager
       }
     }
     
-    Set<Bean<?>> set = resolve(type, qualifiers);
+    Set<Bean<?>> set = resolve(type, qualifiers, null);
 
     if (set != null)
       return (Set<Bean<?>>) set;
@@ -1418,7 +1426,9 @@ public final class InjectManager
   /**
    * Returns the web beans component with a given binding list.
    */
-  private Set<Bean<?>> resolve(Type type, Annotation []bindings)
+  private Set<Bean<?>> resolve(Type type, 
+                               Annotation []bindings,
+                               InjectionPoint ip)
   {
     if (type == null)
       throw new NullPointerException();
@@ -1444,14 +1454,15 @@ public final class InjectManager
       throw new IllegalArgumentException(L.l("'{0}' is an invalid getBeans type because it's a type variable.",
                                              baseType));
 
-    return resolveRec(baseType, bindings);
+    return resolveRec(baseType, bindings, ip);
   }
 
   /**
    * Returns the web beans component with a given binding list.
    */
   private Set<Bean<?>> resolveRec(BaseType baseType,
-                                  Annotation []qualifiers)
+                                  Annotation []qualifiers,
+                                  InjectionPoint ip)
   {
     WebComponent component = getWebComponent(baseType);
     
@@ -1502,7 +1513,7 @@ public final class InjectManager
         beanType = Object.class;
 
       HashSet<Bean<?>> set = new HashSet<Bean<?>>();
-      set.add(new InstanceBeanImpl(this, beanType, qualifiers));
+      set.add(new InstanceBeanImpl(this, beanType, qualifiers, ip));
       return set;
     }
     else if (Event.class.equals(rawType)) {
@@ -1531,7 +1542,7 @@ public final class InjectManager
     }
 
     if (_parent != null) {
-      return _parent.resolveRec(baseType, qualifiers);
+      return _parent.resolveRec(baseType, qualifiers, ip);
     }
 
     for (Annotation ann : qualifiers) {
@@ -1653,7 +1664,7 @@ public final class InjectManager
     }
   }
 
-  @Override
+  //@Override
   public <X> Bean<X> getMostSpecializedBean(Bean<X> bean)
   {
     throw new UnsupportedOperationException();
@@ -1800,19 +1811,21 @@ public final class InjectManager
     
       // TCK conflict
       if (! cl.isInterface()
+          && ! cl.isPrimitive()
           && ! Serializable.class.isAssignableFrom(cl)
-          && ! isNormalScope(prodBean.getScope())) {
+          && ! isPassivationCapable(prodBean)) {
         RuntimeException exn;
-        
+
         if (isProduct(prodBean))
           exn = new IllegalProductException(L.l("'{0}' is an invalid injection point of type {1} because it's not serializable for {2}",
                                                 ip.getMember().getName(),
                                                 ip.getType(),
                                                 bean));
         else
-          exn = new ConfigException(L.l("'{0}' is an invalid injection point of type {1} because it's not serializable for {2}",
+          exn = new ConfigException(L.l("'{0}' is an invalid injection point of type {1} ({2}) because it's not serializable for {3}",
                                         ip.getMember().getName(),
                                         ip.getType(),
+                                        prodBean,
                                         bean));
         
         return exn;
@@ -1820,6 +1833,20 @@ public final class InjectManager
     }
     
     return null;
+  }
+  
+  private boolean isPassivationCapable(Bean<?> bean)
+  {
+    if (isNormalScope(bean.getScope()))
+      return true;
+    
+    // ioc/05e2
+    if (bean instanceof PassivationCapable
+        && ((PassivationCapable) bean).getId() != null) {
+      return true;
+    }
+    
+    return false;
   }
   
   private boolean isProduct(Bean<?> bean)
@@ -1869,8 +1896,11 @@ public final class InjectManager
     Constructor<?> ctor = null;
     
     for (Constructor<?> ctorPtr : cl.getDeclaredConstructors()) {
-      if (ctorPtr.getParameterTypes().length > 0)
+      if (ctorPtr.getParameterTypes().length > 0
+          && ! ctorPtr.isAnnotationPresent(Inject.class)) {
+        // ioc/05am
         continue;
+      }
       
       if (Modifier.isPrivate(ctorPtr.getModifiers())) {
         throw new ConfigException(L.l("'{0}' is an invalid @{1} bean because its constructor is private for {2}.",
@@ -2450,7 +2480,7 @@ public final class InjectManager
       throw new InjectionException(L.l("'{0}' is an invalid type for injection because it's a variable generic type.\n  {1}",
                                        baseType, ij));
 
-    Set<Bean<?>> set = resolveRec(baseType, qualifiers);
+    Set<Bean<?>> set = resolveRec(baseType, qualifiers, ij);
 
     if (set == null || set.size() == 0) {
       if (InjectionPoint.class.equals(type))
@@ -4251,8 +4281,12 @@ public final class InjectManager
       if (env == null) {
         if (parentEnv != null)
           env = new DependentCreationalContext<T>(bean, parentEnv, ip);
-        else
+        else {
           env = new OwnerCreationalContext<T>(bean);
+          
+          if (ip != null)
+            env = new DependentCreationalContext<T>(bean, env, ip);
+        }
       }
       
       instance = bean.create(env);

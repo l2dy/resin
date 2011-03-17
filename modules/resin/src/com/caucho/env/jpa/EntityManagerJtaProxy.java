@@ -30,6 +30,7 @@
 package com.caucho.env.jpa;
 
 import java.util.Map;
+import java.util.logging.Logger;
 
 import javax.persistence.EntityManager;
 import javax.persistence.EntityManagerFactory;
@@ -37,12 +38,14 @@ import javax.persistence.EntityTransaction;
 import javax.persistence.FlushModeType;
 import javax.persistence.LockModeType;
 import javax.persistence.Query;
+import javax.persistence.TransactionRequiredException;
 import javax.persistence.TypedQuery;
 import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.metamodel.Metamodel;
 import javax.transaction.Status;
 import javax.transaction.Synchronization;
+import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 
 import com.caucho.amber.AmberRuntimeException;
@@ -50,7 +53,6 @@ import com.caucho.config.inject.HandleAware;
 import com.caucho.transaction.ManagedResource;
 import com.caucho.transaction.ManagedXAResource;
 import com.caucho.transaction.TransactionImpl;
-import com.caucho.transaction.UserTransactionImpl;
 import com.caucho.transaction.UserTransactionProxy;
 import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
@@ -74,8 +76,10 @@ public class EntityManagerJtaProxy
   private final FreeList<EntityManager> _idleEntityManagerPool
     = new FreeList<EntityManager>(8);
 
+  /*
   private final ThreadLocal<EntityManagerItem> _threadEntityManager
     = new ThreadLocal<EntityManagerItem>();
+    */
 
   private Object _serializationHandle;
   
@@ -334,7 +338,14 @@ public class EntityManagerJtaProxy
       em.persist(entity);
       return;
     }
-    
+
+    try {
+      if (_ut.getStatus() == Status.STATUS_NO_TRANSACTION)
+        throw new TransactionRequiredException(L.l("persist must be called within transaction."));
+    } catch (SystemException e) {
+      throw new RuntimeException(e);
+    }
+
     em = createEntityManager();
     
     try {
@@ -377,7 +388,14 @@ public class EntityManagerJtaProxy
       em.remove(entity);
       return;
     }
-    
+
+    try {
+      if (_ut.getStatus() == Status.STATUS_NO_TRANSACTION)
+        throw new TransactionRequiredException(L.l("remove must be called within transaction."));
+    } catch (SystemException e) {
+      throw new RuntimeException(e);
+    }
+
     em = createEntityManager();
     
     try {
@@ -399,7 +417,14 @@ public class EntityManagerJtaProxy
       em.refresh(entity);
       return;
     }
-    
+
+    try {
+      if (_ut.getStatus() == Status.STATUS_NO_TRANSACTION)
+        throw new TransactionRequiredException(L.l("refresh must be called within transaction."));
+    } catch (SystemException e) {
+      throw new RuntimeException(e);
+    }
+
     em = createEntityManager();
     
     try {
@@ -834,7 +859,10 @@ public class EntityManagerJtaProxy
   @Override
   public void clear()
   {
-    throw new IllegalStateException(L.l("Container-manager @PersistenceContext may not be cleared."));
+    EntityManager em = getCurrent();
+
+    if(em != null)
+      em.clear();
   }
 
   /**
@@ -861,11 +889,16 @@ public class EntityManagerJtaProxy
   private EntityManager getCurrent()
   {
     try {
-      EntityManagerItem item = _threadEntityManager.get();
-      Transaction xa = _ut.getTransaction();
+      TransactionImpl xa = (TransactionImpl) _ut.getTransaction();
       
-      if (item != null
-          && xa == item.getXa()) {
+      if (xa == null)
+        return null;
+      
+      EntityManagerItem item;
+      
+      item = (EntityManagerItem) xa.getAttribute("resin.env.jpa.EntityManagerItem");
+      
+      if (item != null) {
         return item.getEntityManager();
       }
 
@@ -879,8 +912,10 @@ public class EntityManagerJtaProxy
         em = _emf.createEntityManager(_persistenceUnit.getProperties());
 
         item = new EntityManagerItem(item, em, xa);
+
+        xa.setAttribute("resin.env.jpa.EntityManagerItem", item);
         
-        _threadEntityManager.set(item);
+        // _threadEntityManager.set(item);
 
         xa.registerSynchronization(item);
 
@@ -933,7 +968,7 @@ public class EntityManagerJtaProxy
   private void freeEntityManager(EntityManager em)
   {
     em.clear();
-    
+
     if (! _idleEntityManagerPool.free(em))
       em.close();
   }
@@ -1003,7 +1038,7 @@ public class EntityManagerJtaProxy
 
     public void close()
     {
-      _threadEntityManager.set(_prev);
+      // _threadEntityManager.set(_prev);
 
       freeEntityManager(_em);
     }

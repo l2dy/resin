@@ -56,7 +56,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
   private CauchoResponse _proxyCacheResponse;
 
   private AbstractCacheFilterChain _cacheInvocation;
-  private AbstractCacheEntry _newCacheEntry;
+
   private OutputStream _cacheStream;
   private long _cacheMaxLength;
 
@@ -66,6 +66,8 @@ abstract public class ResponseStream extends ToByteResponseStream {
   private int _contentLength;
 
   private boolean _isAllowFlush = true;
+  private boolean _isComplete;
+  private boolean _isNextDisconnect;
 
   public ResponseStream()
   {
@@ -108,6 +110,8 @@ abstract public class ResponseStream extends ToByteResponseStream {
     _isDisableAutoFlush = false;
     _cacheStream = null;
     _proxyCacheResponse = null;
+    _isNextDisconnect = false;
+    _isComplete = false;
   }
 
   /**
@@ -133,8 +137,8 @@ abstract public class ResponseStream extends ToByteResponseStream {
       return;
 
     AbstractHttpRequest req = _response.getRequest();
-    WebApp app = req.getWebApp();
-    _cacheMaxLength = app.getCacheMaxLength();
+    WebApp webApp = req.getWebApp();
+    _cacheMaxLength = webApp.getCacheMaxLength();
   }
 
   @Override
@@ -257,6 +261,10 @@ abstract public class ResponseStream extends ToByteResponseStream {
     clearNext();
   }
 
+  public boolean isCloseComplete()
+  {
+    return super.isCloseComplete() || _isComplete;
+  }
   /**
    * Clear the closed state, because of the NOT_MODIFIED
    */
@@ -273,7 +281,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
       return;
 
     // server/05ef
-    if (! isClosing() || isCharFlushing())
+    if (! isCloseComplete() || isCharFlushing())
       length = -1;
     
     CauchoResponse proxyCacheResponse = _proxyCacheResponse;
@@ -415,29 +423,14 @@ abstract public class ResponseStream extends ToByteResponseStream {
     // server/1213
     offset = oldOffset + sublen;
 
-    try {
-      if (isHead()) {
-        return nextBuffer;
-      }
-
-      if (_cacheStream != null)
-        writeCache(nextBuffer, oldOffset, sublen);
-
-      return writeNextBuffer(offset);
-    } catch (ClientDisconnectException e) {
-      _response.clientDisconnect();
-      // XXX: _response.killCache();
-
-      if (_response.isIgnoreClientDisconnect()) {
-        return nextBuffer;
-      }
-      else
-        throw e;
-    } catch (IOException e) {
-      // XXX: _response.killCache();
-
-      throw e;
+    if (isHead()) {
+      return nextBuffer;
     }
+
+    if (_cacheStream != null)
+      writeCache(nextBuffer, oldOffset, sublen);
+
+    return writeNextBuffer(offset);
   }
 
   /**
@@ -448,85 +441,77 @@ abstract public class ResponseStream extends ToByteResponseStream {
    * @param length length of the data in the buffer
    */
   @Override
-  protected void writeNext(byte []buf, int offset, int length,
-                           boolean isFinished)
+  protected final void writeNext(byte []buf, int offset, int length,
+                                 boolean isFinished)
     throws IOException
   {
-    try {
-      if (isClosed())
+    if (isClosed()) {
+      return;
+    }
+
+    if (_isDisableAutoFlush && ! isFinished)
+      throw new IOException(L.l("auto-flushing has been disabled"));
+
+    int bufferOffset = getNextBufferOffset();
+    if (length == 0 && bufferOffset == 0) {
+      return;
+    }
+
+    int bufferStart = getNextStartOffset();
+
+    // server/05e2
+    if (length == 0 && bufferStart == bufferOffset) {
+      // server/26a5
+      // writeNextBuffer(bufferOffset);
+      return;
+    }
+
+    long contentLengthHeader = _response.getContentLengthHeader();
+    // Can't write beyond the content length
+    if (0 < contentLengthHeader
+        && contentLengthHeader < length + _contentLength) {
+      if (lengthException(buf, offset, length, contentLengthHeader))
         return;
 
-      if (_isDisableAutoFlush && ! isFinished)
-        throw new IOException(L.l("auto-flushing has been disabled"));
+      length = (int) (contentLengthHeader - _contentLength);
+    }
 
-      int bufferOffset = getNextBufferOffset();
-      if (length == 0 && bufferOffset == 0) {
-        return;
+    if (isHead()) {
+      return;
+    }
+
+    if (_cacheStream != null)
+      writeCache(buf, offset, length);
+
+    byte []buffer = getNextBuffer();
+    int writeLength = length;
+
+    while (writeLength > 0) {
+      int sublen = buffer.length - bufferOffset;
+
+      if (writeLength < sublen)
+        sublen = writeLength;
+
+      System.arraycopy(buf, offset, buffer, bufferOffset, sublen);
+
+      writeLength -= sublen;
+      offset += sublen;
+      bufferOffset += sublen;
+      _contentLength += sublen;
+
+      if (writeLength > 0) {
+        buffer = writeNextBuffer(bufferOffset);
+
+        bufferStart = getNextStartOffset();
+        bufferOffset = bufferStart;
       }
+    }
 
-      int bufferStart = getNextStartOffset();
-
-      // server/05e2
-      if (length == 0 && bufferStart == bufferOffset) {
-        // server/26a5
-        // writeNextBuffer(bufferOffset);
-        return;
-      }
-
-      long contentLengthHeader = _response.getContentLengthHeader();
-      // Can't write beyond the content length
-      if (0 < contentLengthHeader
-          && contentLengthHeader < length + _contentLength) {
-        if (lengthException(buf, offset, length, contentLengthHeader))
-          return;
-
-        length = (int) (contentLengthHeader - _contentLength);
-      }
-
-      if (isHead()) {
-        return;
-      }
-
-      if (_cacheStream != null)
-        writeCache(buf, offset, length);
-
-      byte []buffer = getNextBuffer();
-      int writeLength = length;
-
-      while (writeLength > 0) {
-        int sublen = buffer.length - bufferOffset;
-
-        if (writeLength < sublen)
-          sublen = writeLength;
-
-        System.arraycopy(buf, offset, buffer, bufferOffset, sublen);
-
-        writeLength -= sublen;
-        offset += sublen;
-        bufferOffset += sublen;
-        _contentLength += sublen;
-
-        if (writeLength > 0) {
-          buffer = writeNextBuffer(bufferOffset);
-
-          bufferStart = getNextStartOffset();
-          bufferOffset = bufferStart;
-        }
-      }
-
-      // server/051c
-      if (bufferOffset < buffer.length)
-        setNextBufferOffset(bufferOffset);
-      else {
-        writeNextBuffer(bufferOffset);
-      }
-    } catch (ClientDisconnectException e) {
-      // server/183c
-      // XXX: _response.killCache();
-      _response.clientDisconnect();
-
-      if (! _response.isIgnoreClientDisconnect())
-        throw e;
+    // server/051c
+    if (bufferOffset < buffer.length)
+      setNextBufferOffset(bufferOffset);
+    else {
+      writeNextBuffer(bufferOffset);
     }
   }
 
@@ -580,35 +565,28 @@ abstract public class ResponseStream extends ToByteResponseStream {
    * Flushes the buffered response to the output stream.
    */
   @Override
-  public void flush()
+  public final void flush()
     throws IOException
   {
-    try {
-      _isDisableAutoFlush = false;
+    _isDisableAutoFlush = false;
 
-      if (_isAllowFlush && ! isClosed()) {
-        flushBuffer();
+    if (_isAllowFlush && ! isClosed()) {
+      flushBuffer();
 
-        int bufferOffset = getNextBufferOffset();
+      int bufferOffset = getNextBufferOffset();
 
-        if (bufferOffset > 0) {
-          int bufferStart = getNextStartOffset();
+      if (bufferOffset > 0) {
+        int bufferStart = getNextStartOffset();
 
-          if (bufferStart != bufferOffset) {
-            // server/10c9
-            // _contentLength += (bufferOffset - bufferStart);
+        if (bufferStart != bufferOffset) {
+          // server/10c9
+          // _contentLength += (bufferOffset - bufferStart);
 
-            writeNextBuffer(bufferOffset);
-          }
+          writeNextBuffer(bufferOffset);
         }
-
-        flushNext();
       }
-    } catch (ClientDisconnectException e) {
-      _response.clientDisconnect();
 
-      if (! _response.isIgnoreClientDisconnect())
-        throw e;
+      flushNext();
     }
   }
 
@@ -640,6 +618,11 @@ abstract public class ResponseStream extends ToByteResponseStream {
     throws IOException
   {
     try {
+      closeBuffer();
+
+      writeTail(true);
+      
+      /*
       _isDisableAutoFlush = false;
 
       flushCharBuffer();
@@ -649,11 +632,9 @@ abstract public class ResponseStream extends ToByteResponseStream {
       flushBuffer();
       // flushBuffer can force 304 and then a cache write which would
       // complete the finish.
-      /*
-      if (isClosed()) {
-        return;
-      }
-      */
+      //if (isClosed()) {
+      //  return;
+      //}
 
       // XXX: this needs to be cleaned up with the above
       // use of writeHeaders
@@ -662,31 +643,11 @@ abstract public class ResponseStream extends ToByteResponseStream {
       }
 
       writeTail(true);
+      */
 
-      finishCache();
+      closeCache();
 
       closeNext();
-      /*
-      AbstractHttpRequest req = _response.getRequest();
-      if (req.isComet() || req.isDuplex()) {
-      }
-      else if (! req.allowKeepalive()) {
-        // close();
-
-        if (log.isLoggable(Level.FINE)) {
-          log.fine(dbgId() + "close stream");
-        }
-
-        closeNext();
-      }
-      else {
-        // close();
-
-        if (log.isLoggable(Level.FINE)) {
-          log.fine(dbgId() + "finish/keepalive");
-        }
-      }
-      */
     } catch (ClientDisconnectException e) {
       _response.clientDisconnect();
 
@@ -695,40 +656,30 @@ abstract public class ResponseStream extends ToByteResponseStream {
       }
     }
   }
-
-  //
-  // implementations
-  //
-
-  abstract protected byte []getNextBuffer();
-
-  protected int getNextStartOffset()
-  {
-    return 0;
-  }
-
-  abstract protected void setNextBufferOffset(int offset)
-    throws IOException;
-
-  abstract protected int getNextBufferOffset()
-    throws IOException;
-
-  abstract protected byte []writeNextBuffer(int offset)
-    throws IOException;
-
-  public abstract void flushNext()
-    throws IOException;
-
-  abstract protected void closeNext()
-    throws IOException;
-
-  protected void clearNext()
-  {
-  }
-
-  protected void writeTail(boolean isClosed)
+  
+  private void closeBuffer()
     throws IOException
   {
+    _isDisableAutoFlush = false;
+
+    flushCharBuffer();
+
+    _isAllowFlush = true;
+
+    flushBuffer();
+    // flushBuffer can force 304 and then a cache write which would
+    // complete the finish.
+    /*
+  if (isClosed()) {
+    return;
+  }
+     */
+
+    // XXX: this needs to be cleaned up with the above
+    // use of writeHeaders
+    if (! _response.isHeaderWritten()) {
+      writeHeaders(-1);
+    }
   }
 
   //
@@ -779,13 +730,9 @@ abstract public class ResponseStream extends ToByteResponseStream {
     if (newCacheEntry == null) {
     }
     else if (isByte) {
-      _newCacheEntry = newCacheEntry;
-
       setByteCacheStream(newCacheEntry.openOutputStream());
     }
     else {
-      _newCacheEntry = newCacheEntry;
-
       setCharCacheStream(newCacheEntry.openWriter());
     }
   }
@@ -808,19 +755,71 @@ abstract public class ResponseStream extends ToByteResponseStream {
   @Override
   public void killCaching()
   {
-    AbstractCacheEntry cacheEntry = _newCacheEntry;
-    _newCacheEntry = null;
+    AbstractCacheFilterChain cacheInvocation = _cacheInvocation;
 
-    if (cacheEntry != null) {
-      _cacheInvocation.killCaching(cacheEntry);
+    if (cacheInvocation != null) {
+      HttpServletResponseImpl res = _response.getRequest().getResponseFacade();
+      
+      cacheInvocation.killCaching(res);
       setByteCacheStream(null);
       setCharCacheStream(null);
     }
   }
 
-  public void finishCache()
-    throws IOException
+  @Override
+  public void completeCache()
   {
+    HttpServletResponseImpl res = _response.getRequest().getResponseFacade();
+
+    try {
+      _isComplete = true;
+      
+      closeBuffer();
+      
+      if (! isNextValid()) {
+        killCaching();
+      }
+      
+      OutputStream cacheStream = getByteCacheStream();
+      setByteCacheStream(null);
+
+      Writer cacheWriter = getCharCacheStream();
+      setCharCacheStream(null);
+
+      if (cacheStream != null)
+        cacheStream.close();
+
+      if (cacheWriter != null)
+        cacheWriter.close();
+      
+      AbstractCacheFilterChain cache = _cacheInvocation;
+
+      if (cache != null && res != null) {
+        _cacheInvocation = null;
+
+        WebApp webApp = res.getRequest().getWebApp();
+        if (webApp != null && webApp.isActive()) {
+          cache.finishCaching(res);
+        }
+      }
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    } finally {
+      AbstractCacheFilterChain cache = _cacheInvocation;
+      _cacheInvocation = null;
+
+      if (cache != null)
+        cache.killCaching(res);
+    }
+  }
+
+  private void closeCache()
+  {
+    AbstractCacheFilterChain cache = _cacheInvocation;
+    _cacheInvocation = null;
+
+    HttpServletResponseImpl res = _response.getRequest().getResponseFacade();
+    
     try {
       OutputStream cacheStream = getByteCacheStream();
       setByteCacheStream(null);
@@ -833,32 +832,142 @@ abstract public class ResponseStream extends ToByteResponseStream {
 
       if (cacheWriter != null)
         cacheWriter.close();
-
-      if (_newCacheEntry != null) {
-        HttpServletRequestImpl request
-          = _response.getRequest().getRequestFacade();
-        if (request == null)
-          return;
-
-        WebApp webApp = request.getWebApp();
-        if (webApp != null && webApp.isActive()) {
-          AbstractCacheEntry cacheEntry = _newCacheEntry;
-
-          _cacheInvocation.finishCaching(cacheEntry);
-
-          _newCacheEntry = null;
-        }
-      }
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
     } finally {
-      AbstractCacheFilterChain cache = _cacheInvocation;
-      _cacheInvocation = null;
-
-      AbstractCacheEntry cacheEntry = _newCacheEntry;
-      _newCacheEntry = null;
-
-      if (cache != null && cacheEntry != null)
-        cache.killCaching(cacheEntry);
+      if (cache != null)
+        cache.killCaching(res);
     }
+  }
+
+  //
+  // implementations
+  //
+
+  protected final boolean isNextValid()
+  {
+    return ! _isNextDisconnect;
+  }
+  
+  protected void clearNext()
+  {
+  }
+
+  abstract protected byte []getNextBuffer();
+
+  protected int getNextStartOffset()
+  {
+    return 0;
+  }
+
+  abstract protected int getNextBufferOffset()
+    throws IOException;
+
+  protected final void setNextBufferOffset(int offset)
+    throws IOException
+  {
+    boolean isValid = false; 
+    try {
+      setNextBufferOffsetImpl(offset);
+      
+      isValid = true;
+    } catch (ClientDisconnectException e) {
+      _response.clientDisconnect();
+
+      if (! _response.isIgnoreClientDisconnect())
+        throw e;
+    } finally {
+      if (! isValid)
+        _isNextDisconnect = true;
+    }
+  }
+
+  abstract protected void setNextBufferOffsetImpl(int offset)
+    throws IOException;
+
+  protected final byte []writeNextBuffer(int offset)
+    throws IOException
+  {
+    boolean isValid = false; 
+    try {
+      byte []buffer = writeNextBufferImpl(offset);
+      
+      isValid = true;
+      
+      return buffer;
+    } catch (ClientDisconnectException e) {
+      _response.clientDisconnect();
+
+      if (! _response.isIgnoreClientDisconnect())
+        throw e;
+      
+      return getNextBuffer();
+    } finally {
+      if (! isValid)
+        _isNextDisconnect = true;
+    }
+  }
+
+  abstract protected byte []writeNextBufferImpl(int offset)
+    throws IOException;
+
+  @Override
+  public final void flushNext()
+    throws IOException
+  {
+    boolean isValid = false; 
+    try {
+      flushNextImpl();
+      
+      isValid = true;
+    } catch (ClientDisconnectException e) {
+      _response.clientDisconnect();
+
+      if (! _response.isIgnoreClientDisconnect())
+        throw e;
+    } finally {
+      if (! isValid)
+        _isNextDisconnect = true;
+    }
+  }
+
+  protected abstract void flushNextImpl()
+    throws IOException;
+
+  protected final void closeNext()
+    throws IOException
+  {
+    boolean isValid = false; 
+    try {
+      closeNextImpl();
+      
+      isValid = true;
+    } finally {
+      if (! isValid)
+        _isNextDisconnect = true;
+    }
+  }
+
+  abstract protected void closeNextImpl()
+    throws IOException;
+
+  protected final void writeTail(boolean isClose)
+    throws IOException
+  {
+    boolean isValid = false; 
+    try {
+      writeTailImpl(isClose);
+      
+      isValid = true;
+    } finally {
+      if (! isValid)
+        _isNextDisconnect = true;
+    }
+  }
+
+  protected void writeTailImpl(boolean isClosed)
+    throws IOException
+  {
   }
 
   protected String dbgId()
@@ -874,6 +983,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
       return "inc ";
   }
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _response + "]";

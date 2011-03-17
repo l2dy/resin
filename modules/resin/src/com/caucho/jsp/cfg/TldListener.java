@@ -91,7 +91,7 @@ public class TldListener {
       // avoid initializing JSF if it's not used.
       return;
     }
-
+    
     try {
       ListenerConfig listener = new ListenerConfig();
       listener.setListenerClass(_listenerClass);

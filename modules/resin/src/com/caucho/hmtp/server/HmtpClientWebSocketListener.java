@@ -64,7 +64,7 @@ public class HmtpClientWebSocketListener extends AbstractWebSocketListener {
     String uid = null;
     
     _linkActor = _hmtpServlet.createClientLinkActor(uid, _hOut);
-    _hOut.setJid(_linkActor.getJid());
+    _hOut.setAddress(_linkActor.getAddress());
     
     _hmtpServlet.addClientLinkActor(_linkActor);
   }
@@ -81,7 +81,7 @@ public class HmtpClientWebSocketListener extends AbstractWebSocketListener {
   }
   
   @Override
-  public void onComplete(WebSocketContext context)
+  public void onDisconnect(WebSocketContext context)
   {
     //_hmtpServlet.removeClientLinkActor(_linkActor);
     

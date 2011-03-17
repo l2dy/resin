@@ -89,6 +89,7 @@ public class ServletContainerConfig implements EnvironmentBean, SchemaBean
   private int _threadExecutorTaskMax = -1;
   private int _threadIdleMin = -1;
   private int _threadIdleMax = -1;
+  private long _threadIdleTimeout = -1;
   
   private CloudServer _selfServer;
   private Server _servletContainer;
@@ -340,6 +341,12 @@ public class ServletContainerConfig implements EnvironmentBean, SchemaBean
   {
     _servletContainer.setShutdownWaitMax(waitTime);
   }
+  
+  @Configurable
+  public void setInvocationCacheSize(int count)
+  {
+    _servletContainer.getInvocationServer().setInvocationCacheSize(count);
+  }
 
   /**
    * Sets the maximum thread-based keepalive
@@ -379,6 +386,12 @@ public class ServletContainerConfig implements EnvironmentBean, SchemaBean
   public void setThreadIdleMax(int max)
   {
     _threadIdleMax = max;
+  }
+  
+  @Configurable
+  public void setThreadIdleTimeout(Period timeout)
+  {
+    _threadIdleTimeout = timeout.getPeriod();
   }
 
   //
@@ -647,6 +660,9 @@ public class ServletContainerConfig implements EnvironmentBean, SchemaBean
 
     if (_threadIdleMin > 0)
       threadPool.setIdleMin(_threadIdleMin);
+    
+    if (_threadIdleTimeout > 0)
+      threadPool.setIdleTimeout(_threadIdleTimeout);
 
     threadPool.setExecutorTaskMax(_threadExecutorTaskMax);
     

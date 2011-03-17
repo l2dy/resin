@@ -48,6 +48,7 @@ import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ClientDisconnectException;
 import com.caucho.vfs.QSocket;
+import com.caucho.vfs.SocketTimeoutException;
 import com.caucho.vfs.StreamImpl;
 
 /**
@@ -794,19 +795,38 @@ public class TcpSocketLink extends AbstractSocketLink
       }
     }
 
+    return threadKeepalive();
+  }
+  
+  private RequestState threadKeepalive()
+  {
     if (log.isLoggable(Level.FINE))
       log.fine(dbgId() + " keepalive (thread)");
 
-    // if blocking read has available data
-    if (getReadStream().waitForRead()) {
-      return RequestState.REQUEST;
-    }
-    // blocking read timed out or closed
-    else {
-      close();
+    long timeout = getListener().getKeepaliveTimeout();
+    long expires = timeout + Alarm.getCurrentTimeActual();
 
-      return RequestState.EXIT;
-    }
+    do {
+      try {
+        long delta = expires - Alarm.getCurrentTimeActual();
+        if (delta < 0)
+          delta = 0;
+        
+        if (getReadStream().fillWithTimeout(delta) > 0) {
+          return RequestState.REQUEST;
+        }
+        break;
+      } catch (SocketTimeoutException e) {
+        log.log(Level.FINEST, e.toString(), e);
+      } catch (IOException e) {
+        log.log(Level.FINEST, e.toString(), e);
+        break;
+      }
+    } while (Alarm.getCurrentTimeActual() < expires);
+
+    close();
+
+    return RequestState.EXIT;
   }
 
   //

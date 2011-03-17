@@ -68,6 +68,7 @@ public class RewriteDispatchFilterChain implements FilterChain {
    * @param request the servlet request
    * @param response the servlet response
    */
+  @Override
   public void doFilter(ServletRequest request,
                        ServletResponse response)
     throws ServletException, IOException
@@ -76,8 +77,16 @@ public class RewriteDispatchFilterChain implements FilterChain {
     HttpServletResponse res = (HttpServletResponse) response;
 
     try {
+      String queryString = req.getQueryString();
+      
+      // server/1u24
+      String url = _url;
+      
+      if (queryString != null)
+        url = url + "?" + queryString;
+      
       RequestDispatcherImpl disp
-        = (RequestDispatcherImpl) req.getRequestDispatcher(_url);
+        = (RequestDispatcherImpl) req.getRequestDispatcher(url);
 
       disp.dispatch(request, response);
     } catch (FileNotFoundException e) {
@@ -87,6 +96,7 @@ public class RewriteDispatchFilterChain implements FilterChain {
     }
   }
 
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _url + "]";

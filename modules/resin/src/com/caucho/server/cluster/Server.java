@@ -42,8 +42,9 @@ import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.SimpleActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
-import com.caucho.bam.stream.ActorStream;
-import com.caucho.bam.stream.NullActorStream;
+import com.caucho.bam.manager.BamManager;
+import com.caucho.bam.stream.MessageStream;
+import com.caucho.bam.stream.NullMessageStream;
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterSystem;
@@ -354,6 +355,11 @@ public class Server
   {
     return _selfServer.getCluster().getSystem().getClusterList();
   }
+  
+  public NetworkClusterSystem getClusterService()
+  {
+    return _clusterService;
+  }
 
   /**
    * Returns the admin path
@@ -410,18 +416,26 @@ public class Server
   {
     return getBamBroker();
   }
+
+  /**
+   * Returns the bam broker.
+   */
+  public BamManager getAdminBrokerManager()
+  {
+    return _bamService.getBrokerManager();
+  }
   
   /**
    * Creates a bam client to the admin.
    */
   public ActorSender createAdminClient(String uid)
   {
-    String jid = uid + "@" + getAdminBroker().getJid();
+    String address = uid + "@" + getAdminBroker().getAddress();
 
-    NullActorStream stream = new NullActorStream(jid, getAdminBroker());
+    NullMessageStream stream = new NullMessageStream(address, getAdminBroker());
     
     SimpleActorSender sender 
-      = new SimpleActorSender(stream, getAdminBroker(), jid, null);
+      = new SimpleActorSender(stream, getAdminBroker(), address, null);
     
     return sender;
   }
@@ -1449,7 +1463,7 @@ public class Server
   /**
    * Returns any HMTP stream
    */
-  public ActorStream getHmtpStream()
+  public MessageStream getHmtpStream()
   {
     return null;
   }

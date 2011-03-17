@@ -29,7 +29,7 @@
 
 package com.caucho.bam.client;
 
-import com.caucho.bam.stream.ActorStream;
+import com.caucho.bam.stream.MessageStream;
 
 /**
  * HMTP client protocol
@@ -37,5 +37,7 @@ import com.caucho.bam.stream.ActorStream;
 public interface LinkConnection {
   public boolean isClosed();
   
-  public ActorStream getOutboundStream();
+  public String getAddress();
+  
+  public MessageStream getOutboundStream();
 }

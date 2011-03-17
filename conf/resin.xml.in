@@ -54,6 +54,13 @@
      - default configuration applied to all clusters
     -->
   <cluster-default>
+    <!-- shared webapp jars for non-classloader-aware libraries -->
+    <web-app-default>
+      <class-loader>
+        <library-loader path="${resin.home}/webapp-jars"/>
+      </class-loader>
+    </web-app-default>
+
     <!-- standard servlet behavior, including .jsp, .php, and WEB-INF -->
     <resin:import path="${__DIR__}/app-default.xml"/>
 
@@ -80,6 +87,13 @@
     </resin:if>
 
     <!--
+       - Configuration for the health monitoring system
+      -->
+    <resin:if test="${resin.professional}">
+      <resin:import path="${__DIR__}/health.xml"/>
+    </resin:if>
+
+    <!--
        - Default host configuration applied to all virtual hosts.
       -->
     <host-default>
@@ -98,9 +112,11 @@
           <allow-servlet-el/>
         </prologue>
 
-        <!-- enable persistent sessions -->
         <session-config>
-          <use-persistent-store/>
+	  <!--
+	     - enable persistent sessions
+             - <use-persistent-store/>
+	    -->
           <enable-url-rewriting>false</enable-url-rewriting>
         </session-config>
      

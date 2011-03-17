@@ -31,10 +31,10 @@ package com.caucho.server.webapp;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import javax.annotation.PostConstruct;
 import javax.servlet.DispatcherType;
 import javax.servlet.FilterChain;
 import javax.servlet.RequestDispatcher;
@@ -481,7 +481,7 @@ public class WebAppContainer
   /**
    * Sets the war-expansion
    */
-  public void addDeploy(DeployGenerator deploy)
+  public void addDeploy(DeployGenerator<WebAppController> deploy)
     throws ConfigException
   {
     if (deploy instanceof WebAppExpandDeployGenerator)
@@ -493,7 +493,7 @@ public class WebAppContainer
   /**
    * Removes a web-app-generator.
    */
-  public void removeWebAppDeploy(DeployGenerator deploy)
+  public void removeWebAppDeploy(DeployGenerator<WebAppController> deploy)
   {
     _appDeploy.remove(deploy);
   }
@@ -806,9 +806,11 @@ public class WebAppContainer
         
         invocation.setWebApp(rootWebApp);
         
-        // server/1k21
+        // server/1k21 vs server/1kk7
         // if (rootWebApp != webApp)
-        rewriteChain = rootWebApp.createWebAppFilterChain(rewriteChain, invocation);
+        rewriteChain = rootWebApp.createWebAppFilterChain(rewriteChain, 
+                                                          invocation,
+                                                          true);
 
         invocation.setFilterChain(rewriteChain);
         isAlwaysModified = false;
@@ -837,6 +839,7 @@ public class WebAppContainer
     Invocation forwardInvocation = new Invocation();
     Invocation errorInvocation = new Invocation();
     Invocation dispatchInvocation = new Invocation();
+    Invocation requestInvocation = dispatchInvocation;
     InvocationDecoder decoder = new InvocationDecoder();
 
     String rawURI = url;
@@ -860,6 +863,7 @@ public class WebAppContainer
                                     forwardInvocation,
                                     errorInvocation,
                                     dispatchInvocation,
+                                    requestInvocation,
                                     webApp);
 
       return disp;
@@ -876,10 +880,10 @@ public class WebAppContainer
   public void buildIncludeInvocation(Invocation invocation)
     throws ServletException
   {
-    WebApp app = buildSubInvocation(invocation);
+    WebApp webApp = buildSubInvocation(invocation);
 
-    if (app != null)
-      app.buildIncludeInvocation(invocation);
+    if (webApp != null)
+      webApp.buildIncludeInvocation(invocation);
   }
 
   /**
@@ -888,10 +892,10 @@ public class WebAppContainer
   public void buildForwardInvocation(Invocation invocation)
     throws ServletException
   {
-    WebApp app = buildSubInvocation(invocation);
+    WebApp webApp = buildSubInvocation(invocation);
 
-    if (app != null)
-      app.buildForwardInvocation(invocation);
+    if (webApp != null)
+      webApp.buildForwardInvocation(invocation);
   }
 
   /**
@@ -958,9 +962,9 @@ public class WebAppContainer
       return null;
     }
 
-    WebApp app = appController.subrequest();
+    WebApp webApp = appController.subrequest();
 
-    if (app == null) {
+    if (webApp == null) {
       UnavailableException e;
       e = new UnavailableException(invocation.getURI());
 
@@ -970,7 +974,7 @@ public class WebAppContainer
       return null;
     }
 
-    return app;
+    return webApp;
   }
 
   /**
@@ -1069,12 +1073,13 @@ public class WebAppContainer
       _uriToAppCache.clear();
 
     WebAppController controller = _uriToAppCache.get(uri);
+
     if (controller != null)
       return controller;
 
     String cleanUri = uri;
     if (CauchoSystem.isCaseInsensitive())
-      cleanUri = cleanUri.toLowerCase();
+      cleanUri = cleanUri.toLowerCase(Locale.ENGLISH);
 
     // server/105w
     try {
@@ -1237,8 +1242,8 @@ public class WebAppContainer
       
       String id = "error/webapp/" + getHostName()+ "/error";
 
-      WebAppController webAppController
-        = new WebAppController(id, errorRoot, this);
+      UnknownWebAppController webAppController
+        = new UnknownWebAppController(id, errorRoot, this);
       webAppController.init();
       webAppController.startOnInit();
         

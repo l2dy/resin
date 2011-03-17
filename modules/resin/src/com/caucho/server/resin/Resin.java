@@ -199,7 +199,7 @@ public class Resin
     initEnvironment();
 
     try {
-      URL.setURLStreamHandlerFactory(new ResinURLStreamHandlerFactory());
+      URL.setURLStreamHandlerFactory(ResinURLStreamHandlerFactory.create());
     } catch (java.lang.Error e) {
       //operation permitted once per jvm; catching for harness.
     }
@@ -1159,6 +1159,8 @@ public class Resin
     
     _selfServer = bootServer.getCloudServer();
     
+    validateServerCluster();
+    
     NetworkClusterSystem networkService = 
       NetworkClusterSystem.createAndAddService(_selfServer);
     
@@ -1200,7 +1202,15 @@ public class Resin
     _servletContainer.init();
   }
   
-  protected ServletContainerConfig getServletContainerConfig()
+  protected void validateServerCluster()
+  {
+    if (_selfServer.getPod().getServerLength() != 1) {
+      throw new ConfigException(L().l("{0} does not support multiple <server> instances in a cluster.\nFor clustered servers, please use Resin Professional with a valid license.",
+                                    this));
+    }
+  }
+  
+  public ServletContainerConfig getServletContainerConfig()
   {
     return _servletContainerConfig;
   }

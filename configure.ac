@@ -108,16 +108,17 @@ esac
 
 AC_SUBST(resin_init_d)
 
-resin_pro=.
-resin_os=../resin_os
+resin_pro="."
+resin_os="../resin_os"
 is_dev=""
 
 if test -r "modules/c/src/resin/resin.h"; then
-  resin_pro=.
+  resin_pro="."
 elif test -r "../pro/modules/c/src/resin/resin.h"; then
   resin_pro="../pro"
   resin_os="../../../../../resin/modules/c/src/resin_os"
   is_dev="true"
+  echo "development mode"
 fi  
 
 AC_SUBST(resin_os)
@@ -766,14 +767,16 @@ if test -z "${LD_SHLIB}"; then
     *solaris*)
       if test -n "$is_gcc"; then
         CFLAGS_SHLIB="-fPIC"
+        CFLAGS="$CFLAGS -fPIC"
+        CFLAGS_JNI="$CFLAGS_JNI -fPIC"
 
         if test -n "$b64"; then
-          CFLAGS="$CFLAGS -m64 -G -fPIC"
-          LDFLAGS_SHLIB="-m64"
+          CFLAGS="$CFLAGS -m64 -G"
+          LDFLAGS_SHLIB="-m64 -R/usr/sfw/lib/64 -R/usr/local/lib/sparcv9"
         fi
         if test -n "$b64_jni"; then
-          CFLAGS_JNI="$CFLAGS_JNI -m64 -G -fPIC"
-          LDFLAGS_SHLIB="-m64"
+          CFLAGS_JNI="$CFLAGS_JNI -m64 -G"
+          LDFLAGS_SHLIB="-m64 -R/usr/sfw/lib/64 -R/usr/local/lib/sparcv9"
         fi
       else
         CFLAGS_SHLIB="-KPIC"
@@ -842,6 +845,9 @@ fi
 
 case "$target_os" in
   linux*)
+        CFLAGS="$CFLAGS -DHAS_SOCK_TIMEOUT"
+	;;
+  solaris*)
         CFLAGS="$CFLAGS -DHAS_SOCK_TIMEOUT"
 	;;
   darwin*)
@@ -940,6 +946,7 @@ case "$target_cpu" in
 	
   *)
 	CPU=$target_cpu
+	resin_pro_plugins="$resin_pro_plugin $resin_ssl_plugin"
 	;;
 esac
 
@@ -1407,13 +1414,15 @@ echo ""
 echo ""
 echo "Resin Configuration summary:"
 echo ""
-echo "  RESIN_HOME: ${resin_home}"
-echo "      root: ${resin_root}"
-echo "      conf: ${resin_conf}"
-echo "      log : ${resin_log}"
+echo "  RESIN_HOME  : ${resin_home}"
+echo "      root    : ${resin_root}"
+echo "      conf    : ${resin_conf}"
+echo "      log     : ${resin_log}"
+echo "      plugins : ${plugins}" 
+
 
 if test -n "${resin_init_d}"; then
-  echo "      init: ${resin_init_d}"
+  echo "      init    : ${resin_init_d}"
 fi
 
 if test "$JNI" = "false" ; then
@@ -1450,6 +1459,10 @@ else
   else
     echo "    + not using OpenSSL"
   fi
+fi
+
+if test -n "${is_dev}"; then
+  echo "  Development build"
 fi
 
 if test -n "${apache}"; then

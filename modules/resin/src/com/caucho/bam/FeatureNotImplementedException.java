@@ -32,7 +32,7 @@ package com.caucho.bam;
 
 /**
  * Actor exception when a feature does not exist because the
- * service {@link com.caucho.bam.actor.Actor}
+ * service {@link com.caucho.bam.actor.ActorHolder}
  * does not understand or implement the message or RPC query.
  */
 @SuppressWarnings("serial")
@@ -48,12 +48,12 @@ public class FeatureNotImplementedException
     super(msg);
   }
 
-  public FeatureNotImplementedException(String msg, ActorError error)
+  public FeatureNotImplementedException(String msg, BamError error)
   {
     super(msg, error);
   }
 
-  public FeatureNotImplementedException(ActorError error)
+  public FeatureNotImplementedException(BamError error)
   {
     super(error);
   }
@@ -62,15 +62,15 @@ public class FeatureNotImplementedException
    * Creates the ActorError corresponding to this exception
    */
   @Override
-  public ActorError createActorError()
+  public BamError createActorError()
   {
-    ActorError error = getActorError();
+    BamError error = getActorError();
 
     if (error != null)
       return error;
 
-    return new ActorError(ActorError.TYPE_CANCEL,
-                          ActorError.FEATURE_NOT_IMPLEMENTED,
+    return new BamError(BamError.TYPE_CANCEL,
+                          BamError.FEATURE_NOT_IMPLEMENTED,
                           getMessage());
   }
 }

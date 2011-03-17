@@ -62,6 +62,7 @@ public class RequestDispatcherImpl implements RequestDispatcher {
   private Invocation _forwardInvocation;
   private Invocation _errorInvocation;
   private Invocation _dispatchInvocation;
+  private Invocation _requestInvocation;
   private Invocation _asyncInvocation;
   private boolean _isLogin;
 
@@ -69,12 +70,14 @@ public class RequestDispatcherImpl implements RequestDispatcher {
                         Invocation forwardInvocation,
                         Invocation errorInvocation,
                         Invocation dispatchInvocation,
+                        Invocation requestInvocation,
                         WebApp webApp)
   {
     _includeInvocation = includeInvocation;
     _forwardInvocation = forwardInvocation;
     _errorInvocation = errorInvocation;
     _dispatchInvocation = dispatchInvocation;
+    _requestInvocation = requestInvocation;
 
     _webApp = webApp;
   }
@@ -131,8 +134,13 @@ public class RequestDispatcherImpl implements RequestDispatcher {
   public void dispatch(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
-    forward(request, response,
-            "error", _dispatchInvocation, DispatcherType.REQUEST);
+    if (request.getServletContext() instanceof UnknownWebApp) {
+      _requestInvocation.getFilterChain().doFilter(request, response);
+    }
+    else {
+      forward(request, response,
+              "error", _dispatchInvocation, DispatcherType.REQUEST);
+    }
   }
 
   /**
@@ -397,7 +405,7 @@ public class RequestDispatcherImpl implements RequestDispatcher {
       parentRes = (HttpServletResponse) topResponse;
     } else {
       throw new IllegalStateException(L.l(
-        "expected instance of ServletResponse at `{0}'", topResponse));
+        "expected instance of ServletResponse at '{0}'", topResponse));
     }
 
     IncludeRequest subRequest
@@ -405,7 +413,7 @@ public class RequestDispatcherImpl implements RequestDispatcher {
     
     // server/10yf, jsp/15di
     if (subRequest.getRequestDepth(0) > MAX_DEPTH)
-      throw new ServletException(L.l("too many servlet includes `{0}'", parentReq.getServletPath()));
+      throw new ServletException(L.l("too many servlet includes '{0}'", parentReq.getServletPath()));
 
     IncludeResponse subResponse = subRequest.getResponse();
 

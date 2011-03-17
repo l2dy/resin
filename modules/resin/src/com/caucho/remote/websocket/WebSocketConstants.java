@@ -47,5 +47,4 @@ public interface WebSocketConstants {
   public static final int OP_BINARY = 0x05;
   
   public static final int OP_EXT = 0x0E;
-  public static final int OP_HELLO = 0x0F;
 }

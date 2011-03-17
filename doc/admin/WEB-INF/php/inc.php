@@ -72,6 +72,7 @@ function mbean_init()
 
     if (! $g_server_id)
       $g_server_id = "default";
+
   }
   else {
     $server = server_find_by_index($g_mbean_server, $g_server_index);
@@ -647,6 +648,7 @@ if ($is_refresh) {
 <body>
 
 <?
+  
 if ($user_principal) {
 ?>
 <div id="status-bar">
