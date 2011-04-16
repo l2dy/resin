@@ -32,14 +32,18 @@ package com.caucho.bam.manager;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.caucho.bam.actor.AbstractAgent;
+import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.Agent;
 import com.caucho.bam.actor.ManagedActor;
+import com.caucho.bam.actor.SimpleActor;
 import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MailboxType;
 import com.caucho.bam.mailbox.MultiworkerMailbox;
 import com.caucho.bam.mailbox.PassthroughMailbox;
+import com.caucho.bam.query.QuerySender;
 import com.caucho.bam.stream.MessageStream;
+import com.caucho.bam.stream.NullActor;
 import com.caucho.util.Alarm;
 
 /**
@@ -59,6 +63,7 @@ public class SimpleBamManager implements BamManager
       throw new NullPointerException();
   }
   
+  @Override
   public ManagedBroker getBroker()
   {
     return _broker;
@@ -92,7 +97,9 @@ public class SimpleBamManager implements BamManager
     actor.setAddress(address);
     actor.setBroker(getBroker());
     
-    Mailbox mailbox = createMailbox(address, actor, MailboxType.DEFAULT);
+    Mailbox mailbox = createMailbox(address, 
+                                    actor.getActor(), 
+                                    MailboxType.DEFAULT);
     actor.setMailbox(mailbox);
     
     addMailbox(mailbox);
@@ -176,5 +183,42 @@ public class SimpleBamManager implements BamManager
     addMailbox(mailbox);
     
     return mailbox;
+  }
+  
+  @Override
+  public ActorSender createClient(String uid,
+                                  String resource)
+  {
+    String address = null;
+    
+    if (uid == null)
+      uid = Long.toHexString(_sequence.incrementAndGet());
+    
+    if (uid.indexOf('@') < 0)
+      uid = uid + '@' + getBroker().getAddress();
+    
+    if (resource != null) {
+      address = uid + "/" + resource;
+      
+      Mailbox mailbox = getBroker().getMailbox(address);
+      
+      if (mailbox != null)
+        address = uid + "/" + resource + "-" + Long.toHexString(_sequence.incrementAndGet());
+    }
+    else {
+      address = uid + "/" + Long.toHexString(_sequence.incrementAndGet());
+    }
+
+    SimpleActor actor = new SimpleActor(address, getBroker());
+
+    addActor(address, actor);
+    
+    return actor.getSender();
+  }
+
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + getBroker().getAddress() + "]";
   }
 }

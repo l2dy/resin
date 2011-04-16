@@ -88,7 +88,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private final static URL []NULL_URL_ARRAY = new URL[0];
 
   private static long _globalDependencyCheckInterval = 2000L;
-  private static boolean _isJarCacheEnabled;
+  private static boolean _isJarCacheEnabled = true;
 
   private String _id;
 
@@ -1340,7 +1340,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       loaders.get(i).validate();
   }
 
-  public void scanRoot()
+  public void addScanRoot()
   {
     _hasNewLoader = true;
   }
@@ -1782,7 +1782,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     }
 
     URL url = _resourceCache.get(name);
-
+    
     if (url == NULL_URL)
       return null;
     else if (url != null)
@@ -1814,7 +1814,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       Loader loader = loaders.get(i);
 
       url = loader.getResource(name);
-
+      
       if (url != null) {
         _resourceCache.put(name, url);
 
@@ -1951,11 +1951,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (name.startsWith("/"))
       name = name.substring(1);
 
-    // server/249b
-    /*
+    // server/249b, env/009b
     if (name.endsWith("/"))
       name = name.substring(0, name.length() - 1);
-    */
 
     Vector<URL> resources = new Vector<URL>();
 

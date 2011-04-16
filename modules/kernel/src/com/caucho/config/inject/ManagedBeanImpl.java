@@ -241,6 +241,17 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
   {
     return _injectionTarget.getInjectionPoints();
   }
+  
+  public boolean validate()
+  {
+    if (_injectionTarget instanceof InjectionTargetBuilder) {
+      ((InjectionTargetBuilder) _injectionTarget).validate();
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
 
   /*
   public Set<Bean<?>> getProducerBeans()
@@ -312,6 +323,9 @@ public class ManagedBeanImpl<X> extends AbstractIntrospectedBean<X>
     if (javaClass.getTypeParameters().length != 0) {
       if (_annotatedType.isAnnotationPresent(Configured.class)) {
         // ioc/2601
+      }
+      else if (javax.inject.Singleton.class.equals(scopeType)) {
+        // ioc/024q - used for ClusterQueue
       }
       else if (! Dependent.class.equals(scopeType)) {
         throw new ConfigException(L.l("'{0}' is an invalid bean because it has a generic type and a non-dependent scope.",

@@ -157,6 +157,10 @@ public class ResinBoot {
     else {
       _client = bootManager.findClient(_args.getServerId());
     }
+    
+    if (_client == null && _args.isShutdown()) {
+      _client = bootManager.findShutdownClient();
+    }
 
     if (_client == null) {
       throw new ConfigException(L().l("Resin/{0}: -server '{1}' does not match any defined <server>\nin {2}.",
@@ -393,13 +397,25 @@ public class ResinBoot {
   }
   
   static {
-    _commandMap.put(StartMode.COPY, new DeployCopyCommand());
+    _commandMap.put(StartMode.DEPLOY_COPY, new DeployCopyCommand());
     _commandMap.put(StartMode.DEPLOY, new DeployCommand());
+    _commandMap.put(StartMode.DEPLOY_LIST, new DeployListCommand());
+    _commandMap.put(StartMode.DEPLOY_RESTART, new DeployRestartCommand());
+    _commandMap.put(StartMode.THREAD_DUMP, new DeployStartCommand());
+    _commandMap.put(StartMode.DEPLOY_START, new DeployStartCommand());
+    _commandMap.put(StartMode.DEPLOY_STOP, new DeployStopCommand());
+    _commandMap.put(StartMode.DISABLE, new DisableCommand());
+    _commandMap.put(StartMode.ENABLE, new EnableCommand());
+    _commandMap.put(StartMode.HEAP_DUMP, new HeapDumpCommand());
+    _commandMap.put(StartMode.JMX_INVOKE, new JmxInvokeCommand());
+    _commandMap.put(StartMode.JMX_GET, new JmxGetCommand());
+    _commandMap.put(StartMode.JMX_LIST, new JmxListCommand());
+    _commandMap.put(StartMode.JMX_SET, new JmxSetCommand());
     _commandMap.put(StartMode.JSPC, new JspcCommand());
-    _commandMap.put(StartMode.LIST, new DeployListCommand());
-    _commandMap.put(StartMode.RESTART_WEBAPP, new DeployRestartCommand());
-    _commandMap.put(StartMode.START_WEBAPP, new DeployStartCommand());
-    _commandMap.put(StartMode.STOP_WEBAPP, new DeployStopCommand());
+    _commandMap.put(StartMode.LOG_LEVEL, new LogLevelCommand());
+    _commandMap.put(StartMode.PROFILE, new ProfileCommand());
+    _commandMap.put(StartMode.THREAD_DUMP, new ThreadDumpCommand());
+
     _commandMap.put(StartMode.UNDEPLOY, new UnDeployCommand());
   }
 }

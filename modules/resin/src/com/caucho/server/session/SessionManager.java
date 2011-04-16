@@ -160,7 +160,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   // If true, serialization errors should not be logged
   // XXX: changed for JSF
   private boolean _ignoreSerializationErrors = true;
-  private boolean _isHessianSerialization = true;
+  private boolean _isHessianSerialization = false;
   private SerializerFactory _hessianFactory;
   private boolean _isSerializeCollectionType = true;
 
@@ -1748,18 +1748,27 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     boolean isError = false;
     for (int i = list.size() - 1; i >= 0; i--) {
       SessionImpl session = list.get(i);
+      
+      if (! session.isValid())
+        continue;
 
       if (log.isLoggable(Level.FINE))
         log.fine("close session " + session.getId());
 
       try {
         session.saveOnShutdown();
-
-        _sessions.remove(session.getId());
       } catch (Exception e) {
         if (! isError)
           log.log(Level.WARNING, "Can't store session: " + e, e);
+        
         isError = true;
+      }
+
+      try {
+        if (session.isValid())
+          _sessions.remove(session.getId());
+      } catch (Exception e) {
+        log.log(Level.FINE, e.toString(), e);
       }
     }
 

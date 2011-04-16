@@ -62,7 +62,6 @@ import javax.annotation.sql.DataSourceDefinition;
 import javax.annotation.sql.DataSourceDefinitions;
 import javax.ejb.EJB;
 import javax.ejb.EJBs;
-import javax.ejb.Singleton;
 import javax.ejb.Stateful;
 import javax.el.ELResolver;
 import javax.el.ExpressionFactory;
@@ -149,7 +148,6 @@ import com.caucho.loader.EnvironmentApply;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
 import com.caucho.loader.EnvironmentLocal;
-import com.caucho.naming.Jndi;
 import com.caucho.util.Alarm;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
@@ -164,7 +162,7 @@ import com.caucho.vfs.Vfs;
 @SuppressWarnings("serial")
 public final class InjectManager
   implements BeanManager, EnvironmentListener,
-             java.io.Serializable, HandleAware
+             Serializable, HandleAware
 {
   private static final L10N L = new L10N(InjectManager.class);
   private static final Logger log
@@ -293,9 +291,9 @@ public final class InjectManager
   private boolean _isUpdateNeeded = true;
   private boolean _isAfterValidationNeeded = true;
 
-  private ArrayList<Path> _pendingPathList
-    = new ArrayList<Path>();
-
+  private ConcurrentHashMap<Path, List<Path>> _beansXMLOverrides 
+    = new ConcurrentHashMap<Path, List<Path>>();
+  
   private ArrayList<AnnotatedType<?>> _pendingAnnotatedTypes
     = new ArrayList<AnnotatedType<?>>();
 
@@ -633,11 +631,34 @@ public final class InjectManager
     _parent = parent;
   }
 
-  public void addPath(Path path)
+  public void addXmlPath(Path path)
   {
-    _pendingPathList.add(path);
+    _isUpdateNeeded = true;
+
+    _xmlExtension.addXmlPath(path);
   }
 
+  public void addBeansXmlOverride(Path path, Path beansXmlPath)
+  {
+    if (path == null)
+      throw new NullPointerException();
+    
+    List<Path> beansXmlPaths = _beansXMLOverrides.get(path);
+
+    if (beansXmlPaths == null) {
+      beansXmlPaths = new ArrayList<Path>();
+    }
+
+    beansXmlPaths.add(beansXmlPath);
+
+    _beansXMLOverrides.put(path, beansXmlPaths);
+  }
+  
+  public List<Path> getBeansXmlOverride(Path path)
+  {
+    return _beansXMLOverrides.get(path);
+  }  
+  
   public void setDeploymentTypes(ArrayList<Class<?>> deploymentList)
   {
     _deploymentMap.clear();
@@ -1232,6 +1253,7 @@ public final class InjectManager
     if (bean != null)
       addBeanImpl(bean, process.getAnnotated());
   }
+
   /**
    * Adds a new bean definition to the manager
    */
@@ -1770,21 +1792,26 @@ public final class InjectManager
     
     if (bean instanceof CdiStatefulBean)
       isPassivating = true;
+    
+    if (bean instanceof ManagedBeanImpl
+        && ((ManagedBeanImpl) bean).validate()) {
+    }
 
+    // System.out.println("VALID: " + bean);
     for (InjectionPoint ip : bean.getInjectionPoints()) {
       ReferenceFactory<?> factory = validateInjectionPoint(ip);
-      
+
       if (ip.isDelegate() && ! (bean instanceof Decorator))
         throw new ConfigException(L.l("'{0}' is an invalid delegate because {1} is not a Decorator.",
                                       ip.getMember().getName(),
                                       bean));
-      
+
       RuntimeException exn = validatePassivation(ip);
-      
+
       if (exn != null && ! factory.isProducer())
         throw exn;
     }
-    
+
     if (isNormalScope(bean.getScope())) {
       validateNormal(bean);
     }
@@ -1822,7 +1849,8 @@ public final class InjectManager
                                                 ip.getType(),
                                                 bean));
         else
-          exn = new ConfigException(L.l("'{0}' is an invalid injection point of type {1} ({2}) because it's not serializable for {3}",
+          exn = new ConfigException(L.l("'{0}.{1}' is an invalid injection point of type {2} ({3}) because it's not serializable for {4}",
+                                        bean.getBeanClass().getName(),
                                         ip.getMember().getName(),
                                         ip.getType(),
                                         prodBean,
@@ -2798,6 +2826,26 @@ public final class InjectManager
     DecoratorEntry<X> entry = new DecoratorEntry<X>(this, decorator, baseType);
     
     _decoratorList.add(entry);
+    
+    for (Type type : decorator.getDecoratedTypes()) {
+      if (type instanceof Class<?>) {
+        Class<?> cl = (Class<?>) type;
+      
+        if (Object.class.equals(cl)
+            || Serializable.class.equals(cl)) {
+          continue;
+        }
+        
+        String javaClassName = cl.getName();
+      
+        InjectScanClass scanClass = getScanManager().getScanClass(javaClassName);
+
+        if (scanClass != null && ! scanClass.isRegistered()) {
+          discoverScanClass(scanClass);
+        }
+      }
+    }
+    processPendingAnnotatedTypes();
 
     return entry;
   }
@@ -2817,29 +2865,29 @@ public final class InjectManager
    */
   public List<Decorator<?>> resolveDecorators(Class<?> type)
   {
-    HashSet<Type> types = new HashSet<Type>();                                  
-    types.add(type);                                                            
+    HashSet<Type> types = new HashSet<Type>();
+    types.add(type);
 
-    ArrayList<Annotation> bindingList = new ArrayList<Annotation>();            
+    ArrayList<Annotation> bindingList = new ArrayList<Annotation>();
 
-    boolean isQualifier = false;                                                
+    boolean isQualifier = false;
 
     for (Annotation ann : type.getAnnotations()) {
       if (isQualifier(ann.annotationType())) {
-        bindingList.add(ann);                                                   
+        bindingList.add(ann);
 
         if (! Named.class.equals(ann.annotationType())) {
-          isQualifier = true;                                                   
+          isQualifier = true;
         }
       }
     }
 
     if (! isQualifier)
-      bindingList.add(DefaultLiteral.DEFAULT);                                  
-    bindingList.add(AnyLiteral.ANY);                                            
+      bindingList.add(DefaultLiteral.DEFAULT);
+    bindingList.add(AnyLiteral.ANY);
 
-    Annotation []bindings = new Annotation[bindingList.size()];                 
-    bindingList.toArray(bindings);                                              
+    Annotation []bindings = new Annotation[bindingList.size()];
+    bindingList.toArray(bindings);
 
     List<Decorator<?>> decorators = resolveDecorators(types, bindings);
     
@@ -2997,6 +3045,8 @@ public final class InjectManager
     for (AnnotatedType<?> type : types) {
       discoverBeanImpl(type);
     }
+    
+    _extensionManager.processPendingEvents();
   }
 
   void discoverScanClass(InjectScanClass scanClass)
@@ -3073,7 +3123,7 @@ public final class InjectManager
   public <X> void discoverBean(AnnotatedType<X> beanType)
   {
     Class<X> cl;
-    
+
     // ioc/07fb
     cl = beanType.getJavaClass();
     

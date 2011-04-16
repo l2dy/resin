@@ -161,13 +161,6 @@ public class HmtpRequest extends AbstractProtocolConnection
     InputStream rawIs = is;
     
     is.skip(len - 1);
-    
-    if (log.isLoggable(Level.FINEST)) {
-      HessianDebugInputStream dIs
-        = new HessianDebugInputStream(is, log, Level.FINEST);
-      // dIs.startStreaming();
-      rawIs = dIs;
-    }
 
     _hmtpReader = new HmtpWebSocketReader(rawIs);
 
@@ -192,12 +185,12 @@ public class HmtpRequest extends AbstractProtocolConnection
     if (isUnidir) {
       _proxyBroker = new ServerGatewayBroker(broker,
                                              _clientManager, 
-                                               _linkActor.getActorStream());
+                                             _linkActor.getActor());
     }
     else {
       _proxyBroker = new ServerProxyBroker(broker,
                                            _clientManager, 
-                                           _linkActor.getActorStream());
+                                           _linkActor.getActor());
     }
 
     return dispatchHmtp();
@@ -210,7 +203,7 @@ public class HmtpRequest extends AbstractProtocolConnection
 
     do {
       Broker broker = _proxyBroker;
-      
+
       if (! in.readPacket(broker)) {
         return false;
       }
@@ -228,8 +221,11 @@ public class HmtpRequest extends AbstractProtocolConnection
     HmtpLinkActor linkActor = _linkActor;
     _linkActor = null;
 
-    MessageStream linkStream = _toLinkBroker;
+    Broker linkBroker = _toLinkBroker;
     _toLinkBroker = null;
+    
+    if (linkBroker != null)
+      linkBroker.close();
 
     if (linkActor != null) {
       linkActor.onCloseConnection();

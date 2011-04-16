@@ -27,7 +27,7 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.jmtp;
+package com.caucho.jsmp;
 
 import java.io.IOException;
 import java.io.InputStream;

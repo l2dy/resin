@@ -83,7 +83,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     _clusterBacking = new AbstractCacheClusterBacking();
   }
   
-  protected CacheDataBacking getDataBacking()
+  @Override
+  public CacheDataBacking getDataBacking()
   {
     return _dataBacking;
   }
@@ -110,6 +111,23 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
     while (cacheEntry == null) {
       cacheEntry = createCacheEntry(key, hashKey);
+
+      cacheEntry = _entryCache.putIfNew(cacheEntry.getKeyHash(), cacheEntry);
+    }
+
+    return cacheEntry;
+  }
+
+  /**
+   * Returns the key entry.
+   */
+  @Override
+  public final E getCacheEntry(HashKey hashKey, CacheConfig config)
+  {
+    E cacheEntry = _entryCache.get(hashKey);
+
+    while (cacheEntry == null) {
+      cacheEntry = createCacheEntry(null, hashKey);
 
       cacheEntry = _entryCache.putIfNew(cacheEntry.getKeyHash(), cacheEntry);
     }
@@ -239,8 +257,9 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
   {
     MnodeValue mnodeValue = loadMnodeValue(entry);
 
-    if (mnodeValue == null)
+    if (mnodeValue == null) {
       reloadValue(entry, config, now);
+    }
     else if (isLocalReadValid(mnodeValue, now)) {
     }
     else { // if (! isLazy) {
@@ -378,7 +397,8 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
 
     int leaseOwner = mnodeValue != null ? mnodeValue.getLeaseOwner() : -1;
 
-    mnodeValue = putLocalValue(entry, version + 1,
+    mnodeValue = putLocalValue(entry, 
+                               getNewVersion(version),
                                valueHash, value, cacheKey,
                                config.getFlags(),
                                config.getExpireTimeout(),
@@ -421,8 +441,10 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     idleTimeout = idleTimeout * 5L / 4;
 
     int leaseOwner = (mnodeValue != null) ? mnodeValue.getLeaseOwner() : -1;
+    
+    long newVersion = getNewVersion(version);
 
-    mnodeValue = putLocalValue(entry, version + 1,
+    mnodeValue = putLocalValue(entry, newVersion,
                                valueHash, null, cacheHash,
                                config.getFlags(),
                                config.getExpireTimeout(),
@@ -437,6 +459,52 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     getClusterBacking().putCluster(key, valueHash, cacheHash, mnodeValue);
 
     return mnodeValue;
+  }
+
+  public boolean compareAndPut(E entry,
+                               long version,
+                               HashKey valueHash, 
+                               CacheConfig config)
+  {
+    HashKey key = entry.getKeyHash();
+    MnodeValue mnodeValue = loadMnodeValue(entry);
+
+    HashKey oldValueHash = (mnodeValue != null
+                            ? mnodeValue.getValueHashKey()
+                            : null);
+    long oldVersion = mnodeValue != null ? mnodeValue.getVersion() : 0;
+
+    if (version <= oldVersion)
+      return false;
+
+    if (valueHash != null && valueHash.equals(oldValueHash)) {
+      return true;
+    }
+
+    HashKey cacheHash = config.getCacheKey();
+
+    long idleTimeout = config.getIdleTimeout();
+    
+    // add 25% window for update efficiency
+    idleTimeout = idleTimeout * 5L / 4;
+
+    int leaseOwner = (mnodeValue != null) ? mnodeValue.getLeaseOwner() : -1;
+    
+    mnodeValue = putLocalValue(entry, version,
+                               valueHash, null, cacheHash,
+                               config.getFlags(),
+                               config.getExpireTimeout(),
+                               idleTimeout,
+                               config.getLeaseTimeout(),
+                               config.getLocalReadTimeout(),
+                               leaseOwner);
+    
+    if (mnodeValue == null)
+      return false;
+
+    getClusterBacking().putCluster(key, valueHash, cacheHash, mnodeValue);
+
+    return true;
   }
 
   final E getLocalEntry(HashKey key)
@@ -503,7 +571,7 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     HashKey key = cacheEntry.getKeyHash();
     MnodeValue mnodeValue = cacheEntry.getMnodeValue();
 
-    if (mnodeValue == null) {
+    if (mnodeValue == null || mnodeValue.isImplicitNull()) {
       MnodeValue newMnodeValue = getDataBacking().loadLocalEntryValue(key);
 
       cacheEntry.compareAndSet(null, newMnodeValue);
@@ -661,7 +729,9 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
                              : config.getLocalReadTimeout());
     int leaseOwner = (mnodeValue != null ? mnodeValue.getLeaseOwner() : -1);
 
-    mnodeValue = putLocalValue(entry, version + 1, null, null, cacheKey,
+    mnodeValue = putLocalValue(entry, 
+                               getNewVersion(version),
+                               null, null, cacheKey,
                                flags,
                                expireTimeout, idleTimeout,
                                leaseTimeout, localReadTimeout,
@@ -696,7 +766,11 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     long localReadTimeout = mnodeValue != null ? mnodeValue.getLocalReadTimeout() : -1;
     int leaseOwner = mnodeValue != null ? mnodeValue.getLeaseOwner() : -1;
 
-    mnodeValue = putLocalValue(entry, version + 1, null, null, cacheKey,
+    mnodeValue = putLocalValue(entry,
+                               getNewVersion(version),
+                               null, 
+                               null, 
+                               cacheKey,
                                flags,
                                expireTimeout, idleTimeout,
                                leaseTimeout, localReadTimeout, leaseOwner);
@@ -990,6 +1064,18 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
     } finally {
       out.close();
     }
+  }
+  
+  private long getNewVersion(long version)
+  {
+    long newVersion = version + 1;
+
+    long now = Alarm.getCurrentTime();
+  
+    if (newVersion < now)
+      return now;
+    else
+      return newVersion;
   }
 
   /**

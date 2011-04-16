@@ -77,6 +77,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   /**
    * Returns the key for this entry in the Cache.
    */
+  @Override
   public final Object getKey()
   {
     return _key;
@@ -111,12 +112,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
    */
   public final HashKey getCacheHash()
   {
-    MnodeValue value = getMnodeValue();
-
-    if (value != null)
-      return value.getCacheHashKey();
-    else
-      return null;
+    return getMnodeValue().getCacheHashKey();
   }
 
   /**
@@ -187,6 +183,13 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
     throws IOException;
 
   /**
+   * Sets the value by an input stream
+   */
+  abstract public boolean compareAndPut(long version, 
+                                        HashKey value, 
+                                        CacheConfig config);
+
+  /**
    * Remove the value
    */
   abstract public boolean remove(CacheConfig config);
@@ -219,6 +222,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
     return _mnodeValue.compareAndSet(oldMnodeValue, mnodeValue);
   }
 
+  @Override
   public HashKey getValueHashKey()
   {
     return getMnodeValue().getValueHashKey();

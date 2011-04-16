@@ -32,10 +32,13 @@ install	:
 			cp -r $(CP_U_FLAG) webapps/* $(resin_root)/webapps; \
 			mkdir -p $(resin_log); \
 		fi;\
-		mkdir -p $(resin_root)/resin-doc; \
-		cp -r $(CP_U_FLAG) doc/* $(resin_root)/resin-doc; \
+		mkdir -p $(resin_root)/doc; \
+		cp -r $(CP_U_FLAG) doc/* $(resin_root)/doc; \
 		mkdir -p $(resin_root)/project-jars; \
 		cp -r $(CP_U_FLAG) project-jars/* $(resin_root)/project-jars; \
+		mkdir -p $(resin_root)/webapp-jars; \
+		cp -r $(CP_U_FLAG) webapp-jars/* $(resin_root)/webapp-jars; \
+		cp -r $(CP_U_FLAG) endorsed $(resin_root); \
 	fi
 	@ echo "Installing Resin home directory $(resin_root)"
 	@ if test "$(resin_home)" != $(abs_builddir); then \
@@ -55,13 +58,20 @@ install	:
 			echo "-------------------------------------------------------";\
 		else\
 			cp conf/resin.xml $(resin_conf)/resin.xml; \
-	  fi;\
+		fi;\
 		if test -f "$(resin_conf)/app-default.xml"; then\
 			echo "-------------------------------------------------------";\
 			echo "Will not overwrite $(resin_conf)/app-default.xml";\
 			echo "-------------------------------------------------------";\
 		else\
 			cp conf/app-default.xml $(resin_conf)/app-default.xml; \
+		fi;\
+		if test -f "$(resin_conf)/health.xml"; then\
+			echo "-------------------------------------------------------";\
+			echo "Will not overwrite $(resin_conf)/health.xml";\
+			echo "-------------------------------------------------------";\
+		else\
+			cp conf/health.xml $(resin_conf)/health.xml; \
 		fi;\
 	fi
 	(cd modules/c/src; $(MAKE) install)

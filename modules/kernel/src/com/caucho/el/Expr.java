@@ -108,6 +108,8 @@ public abstract class Expr extends ValueExpression {
   final static int DOUBLE_OBJ = FLOAT_OBJ + 1;
   
   final static int STRING = DOUBLE_OBJ + 1;
+  
+  final static int MATCHES = STRING + 1;
 
   final static IntMap _typeMap = new IntMap();
 
@@ -796,9 +798,12 @@ public abstract class Expr extends ValueExpression {
       return 0;
     else if (value instanceof String) {
       try {
-	return Long.parseLong((String) value);
+        String string = (String) value;
+        
+        // jsp/32a2
+        return Long.parseLong(string);
       } catch (Exception e) {
-	throw new ELException(e);
+        throw new ELException(e);
       }
     }
     else if (value instanceof Character) {

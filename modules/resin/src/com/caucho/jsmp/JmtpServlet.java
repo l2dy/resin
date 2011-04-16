@@ -27,7 +27,7 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.jmtp;
+package com.caucho.jsmp;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -101,7 +101,7 @@ public class JmtpServlet extends GenericServlet {
     private OutputStream _os;
 
     private JmtpReader _jmtpReader;
-    private JmtpWriter _jmtpWriter;
+    private JsmpWriter _jmtpWriter;
     
     private JmtpMailbox _jmtpMailbox;
     private JmtpBroker _jmtpBroker;
@@ -121,7 +121,7 @@ public class JmtpServlet extends GenericServlet {
       _jmtpMailbox = new JmtpMailbox(this);
       
       _actor.setBroker(new JmtpBroker(this));
-      _actorStream = _actor.getActorStream();
+      _actorStream = _actor.getActor();
     }
 
     @Override

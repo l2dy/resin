@@ -31,18 +31,13 @@ package com.caucho.jms.file;
 
 import java.io.Serializable;
 import java.security.MessageDigest;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import javax.jms.Topic;
 
-import com.caucho.jms.connection.JmsSession;
-import com.caucho.jms.message.MessageImpl;
 import com.caucho.jms.queue.AbstractMemoryQueue;
-import com.caucho.jms.queue.MessageException;
-import com.caucho.jms.queue.QueueEntry;
 import com.caucho.loader.Environment;
 import com.caucho.server.cluster.Server;
+import com.caucho.util.Hex;
 import com.caucho.vfs.Path;
 
 /**
@@ -79,6 +74,17 @@ public class FileQueueImpl<E extends Serializable>
   public FileQueueImpl()
   {
     _store = FileQueueStore.create();
+  }
+
+  public FileQueueImpl(byte []queueHash)
+  {
+    this();
+    
+    setName(Hex.toHex(queueHash, 0, 8));
+
+    _queueIdHash = queueHash;
+
+    init();
   }
 
   public FileQueueImpl(String name)
@@ -150,19 +156,21 @@ public class FileQueueImpl<E extends Serializable>
     try {
       // calculate a unique hash for the queue
       
-      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      if (_queueIdHash == null) {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
-      String env = Environment.getEnvironmentName();
+        String env = Environment.getEnvironmentName();
 
-      digest.update(env.getBytes());
-      
-      if (Server.getCurrent() != null)
-        digest.update(Server.getCurrent().getServerId().getBytes());
-      
-      digest.update(getClass().getSimpleName().getBytes());
-      digest.update(getName().getBytes());
+        digest.update(env.getBytes());
 
-      _queueIdHash = digest.digest();
+        if (Server.getCurrent() != null)
+          digest.update(Server.getCurrent().getServerId().getBytes());
+
+        digest.update(getClass().getSimpleName().getBytes());
+        digest.update(getName().getBytes());
+
+        _queueIdHash = digest.digest();
+      }
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
@@ -196,6 +204,7 @@ public class FileQueueImpl<E extends Serializable>
     return entry;
   }
 
+  @Override
   protected void readPayload(FileQueueEntry<E> entry)
   {
     E payload = entry.getPayload();
@@ -219,8 +228,11 @@ public class FileQueueImpl<E extends Serializable>
   /**
    * Callback from startup
    */
-  protected void addEntry(long id, String msgId, long leaseTimeout,
-                          int priority, long expireTime,
+  protected void addEntry(long id,
+                          String msgId,
+                          long leaseTimeout,
+                          int priority,
+                          long expireTime,
                           E payload)
   {
     FileQueueEntry<E> entry

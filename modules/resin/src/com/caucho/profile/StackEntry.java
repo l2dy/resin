@@ -19,28 +19,44 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
+ *
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Rodrigo Westrupp
+ * @author Alex Rojkov
  */
 
-package com.caucho.amber.type;
+package com.caucho.profile;
 
-/**
- * The type of a property.
- */
-abstract public class ArrayType extends AmberType {
+public class StackEntry
+{
+  public StackEntry()
+  {
+  }
 
-  /**
-   * Returns the corresponding primitive array
-   * type name. See, for example, ByteArrayType.
-   */
-  abstract public String getPrimitiveArrayTypeName();
+  public String getClassName()
+  {
+    throw new AbstractMethodError();
+  }
 
-  /**
-   * Returns the java type for a single entry.
-   */
-  abstract public String getJavaObjectTypeName();
+  public String getMethodName()
+  {
+    throw new AbstractMethodError();
+  }
+
+  public String getArg()
+  {
+    throw new AbstractMethodError();
+  }
+
+  public String getDescription()
+  {
+    throw new AbstractMethodError();
+  }
+
+  public String toString()
+  {
+    throw new AbstractMethodError();
+  }
 }

@@ -44,6 +44,7 @@ import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.bam.manager.BamManager;
 import com.caucho.bam.stream.MessageStream;
+import com.caucho.bam.stream.NullActor;
 import com.caucho.bam.stream.NullMessageStream;
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.ClusterServer;
@@ -430,14 +431,15 @@ public class Server
    */
   public ActorSender createAdminClient(String uid)
   {
-    String address = uid + "@" + getAdminBroker().getAddress();
-
-    NullMessageStream stream = new NullMessageStream(address, getAdminBroker());
-    
-    SimpleActorSender sender 
-      = new SimpleActorSender(stream, getAdminBroker(), address, null);
-    
-    return sender;
+    return createAdminClient(uid, null);
+  }
+  
+  /**
+   * Creates a bam client to the admin.
+   */
+  public ActorSender createAdminClient(String uid, String resource)
+  {
+    return getAdminBrokerManager().createClient(uid, resource);
   }
 
   /**

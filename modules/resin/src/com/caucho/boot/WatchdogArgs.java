@@ -42,6 +42,7 @@ import javax.management.ObjectName;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.logging.Level;
@@ -53,7 +54,6 @@ class WatchdogArgs
   private static final Logger log
     = Logger.getLogger(WatchdogArgs.class.getName());
 
-  private String []_rawArgv;
   private Path _javaHome;
   private Path _resinHome;
   private Path _rootDirectory;
@@ -65,7 +65,7 @@ class WatchdogArgs
   private boolean _isVerbose;
   private boolean _isHelp;
   private StartMode _startMode;
-  
+
   private ArrayList<String> _tailArgs = new ArrayList<String>();
 
   private boolean _isDynamicServer;
@@ -85,8 +85,6 @@ class WatchdogArgs
     if (isTop)
       setLogLevel(logLevel);
 
-    _rawArgv = argv;
-    
     _resinHome = calculateResinHome();
     _rootDirectory = calculateResinRoot(_resinHome);
 
@@ -105,7 +103,7 @@ class WatchdogArgs
   {
     return _argv;
   }
-  
+
   Path getJavaHome()
   {
     return _javaHome;
@@ -153,12 +151,31 @@ class WatchdogArgs
 
   String getDynamicAddress()
   {
-    return _dynamicAddress;
+    if (_dynamicAddress != null)
+      return _dynamicAddress;
+    else {
+      try {
+        return InetAddress.getLocalHost().getHostAddress();
+      } catch (Exception e) {
+        return null;
+      }
+    }
   }
 
   int getDynamicPort()
   {
-    return _dynamicPort;
+    if (_dynamicPort > 0)
+      return _dynamicPort;
+    else
+      return 6830;
+  }
+
+  String getDynamicServerId()
+  {
+    if (_serverId != null)
+      return _serverId;
+    else
+      return "dyn-" + getDynamicAddress() + "-" + getDynamicPort();
   }
 
   boolean isVerbose()
@@ -225,25 +242,35 @@ class WatchdogArgs
   {
     return _startMode == StartMode.WATCHDOG;
   }
-  
+
   StartMode getStartMode()
   {
     return _startMode;
   }
-  
+
   public ArrayList<String> getTailArgs()
   {
     return _tailArgs;
   }
-  
+
   public String getArg(String arg)
   {
     for (int i = 0; i + 1 < _argv.length; i++) {
       if (_argv[i].equals(arg) || _argv[i].equals("-" + arg))
         return _argv[i + 1];
     }
-    
+
     return null;
+  }
+
+  public boolean hasOption(String option)
+  {
+    for (String arg : _argv) {
+      if (option.equals(arg))
+        return true;
+    }
+
+    return false;
   }
 
   public ResinELContext getELContext()
@@ -315,19 +342,10 @@ class WatchdogArgs
         resinConf = argv[i + 1];
         i++;
       }
-      else if ("-dynamic-server".equals(arg)
-               || "--dynamic-server".equals(arg)) {
-        String []str = argv[i + 1].split(":");
-
-        if (str.length != 3) {
-          System.out.println(L().l("-dynamic server requires 'cluster:address:port' at '{0}'", argv[i + 1]));
-          System.exit(1);
-        }
-
+      else if ("-join-cluster".equals(arg)
+               || "--join-cluster".equals(arg)) {
         _isDynamicServer = true;
-        _dynamicCluster = str[0];
-        _dynamicAddress = str[1];
-        _dynamicPort = Integer.parseInt(str[2]);
+        _dynamicCluster = argv[i + 1];
 
         i++;
       }
@@ -399,22 +417,46 @@ class WatchdogArgs
         _startMode = StartMode.DEPLOY;
       }
       else if ("deploy-copy".equals(arg) || "copy".equals(arg)) {
-        _startMode = StartMode.COPY;
+        _startMode = StartMode.DEPLOY_COPY;
+      }
+      else if ("deploy-copy".equals(arg) || "copy".equals(arg)) {
+        _startMode = StartMode.DEPLOY_COPY;
       }
       else if ("deploy-list".equals(arg) || "list".equals(arg)) {
-        _startMode = StartMode.LIST;
+        _startMode = StartMode.DEPLOY_LIST;
       }
       else if ("deploy-restart".equals(arg) || "restart-webapp".equals(arg)) {
-        _startMode = StartMode.RESTART_WEBAPP;
+        _startMode = StartMode.DEPLOY_RESTART;
       }
       else if ("deploy-start".equals(arg) || "start-webapp".equals(arg)) {
-        _startMode = StartMode.START_WEBAPP;
+        _startMode = StartMode.DEPLOY_START;
       }
       else if ("deploy-stop".equals(arg) || "stop-webapp".equals(arg)) {
-        _startMode = StartMode.STOP_WEBAPP;
+        _startMode = StartMode.DEPLOY_STOP;
+      }
+      else if ("disable".equals(arg)) {
+        _startMode = StartMode.DISABLE;
+      }
+      else if ("enable".equals(arg)) {
+        _startMode = StartMode.ENABLE;
       }
       else if ("gui".equals(arg)) {
         _startMode = StartMode.GUI;
+      }
+      else if ("heap-dump".equals(arg)) {
+        _startMode = StartMode.HEAP_DUMP;
+      }
+      else if ("jmx-get".equals(arg)) {
+        _startMode = StartMode.JMX_GET;
+      }
+      else if ("jmx-call".equals(arg)) {
+        _startMode = StartMode.JMX_INVOKE;
+      }
+      else if ("jmx-list".equals(arg)) {
+        _startMode = StartMode.JMX_LIST;
+      }
+      else if ("jmx-set".equals(arg)) {
+        _startMode = StartMode.JMX_SET;
       }
       else if ("jspc".equals(arg)) {
         _startMode = StartMode.JSPC;
@@ -422,8 +464,17 @@ class WatchdogArgs
       else if ("kill".equals(arg)) {
         _startMode = StartMode.KILL;
       }
+      else if ("log-level".equals(arg)) {
+        _startMode = StartMode.LOG_LEVEL;
+      }
+      else if ("profile".equals(arg)) {
+        _startMode = StartMode.PROFILE;
+      }
       else if ("restart".equals(arg)) {
         _startMode = StartMode.RESTART;
+      }
+      else if ("thread-dump".equals(arg)) {
+        _startMode = StartMode.THREAD_DUMP;
       }
       else if ("shutdown".equals(arg)) {
         _startMode = StartMode.SHUTDOWN;
@@ -514,6 +565,7 @@ class WatchdogArgs
   {
     System.err.println(L().l("usage: java -jar resin.jar [-options] [console | status | start | gui | stop | restart | kill | shutdown | version]"));
     System.err.println(L().l("       java -jar resin.jar [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
+    System.err.println(L().l("       java -jar resin.jar [-options] [thread-dump | heap-dump | log-level | profile]"));
     System.err.println(L().l("       java -jar resin.jar help <command>"));
     System.err.println(L().l(""));
     System.err.println(L().l("where options include:"));
@@ -812,20 +864,30 @@ class WatchdogArgs
 
   enum StartMode {
     CONSOLE,
-    COPY,
     DEPLOY,
+    DEPLOY_COPY,
+    DEPLOY_LIST,
+    DEPLOY_RESTART,
+    DEPLOY_START,
+    DEPLOY_STOP,
+    DISABLE,
+    ENABLE,
     GUI,
+    HEAP_DUMP,
+    JMX_INVOKE,
+    JMX_GET,
+    JMX_LIST,
+    JMX_SET,
     JSPC,
     KILL,
-    LIST,
+    LOG_LEVEL,
+    PROFILE,
     RESTART,
-    RESTART_WEBAPP,
+    THREAD_DUMP,
     SHUTDOWN,
     START,
-    START_WEBAPP,
     STATUS,
     STOP,
-    STOP_WEBAPP,
     UNDEPLOY,
     WATCHDOG,
   };

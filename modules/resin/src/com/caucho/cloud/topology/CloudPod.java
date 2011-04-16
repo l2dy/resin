@@ -63,6 +63,8 @@ public class CloudPod
   private TriadDispatcher<CloudServer> _serverDispatcher
     = new TriadDispatcher<CloudServer>();
   
+  private boolean _isSelf;
+  
   private int _maxIndex = -1;
 
   /**
@@ -123,6 +125,26 @@ public class CloudPod
   public final CloudSystem getSystem()
   {
     return getCluster().getSystem();
+  }
+  
+  public final boolean isSelf()
+  {
+    return _isSelf;
+  }
+  
+  final void setSelf(boolean isSelf)
+  {
+    _isSelf = isSelf;
+  }
+  
+  public CloudServer getServer(int index)
+  {
+    CloudServer []servers = getServerList();
+    
+    if (index < servers.length)
+      return servers[index];
+    else
+      return null;
   }
 
   public CloudServer []getServerList()
@@ -268,6 +290,18 @@ public class CloudPod
   /**
    * Creates a new dynamic server
    */
+  public CloudServer createDynamicServer(int index,
+                                         String id,
+                                         String address,
+                                         int port,
+                                         boolean isSecure)
+  {
+    return createServer(index, id, address, port, isSecure, false);
+  }
+  
+  /**
+   * Creates a new dynamic server
+   */
   public CloudServer createDynamicServer(String id,
                                          String address,
                                          int port,
@@ -287,7 +321,6 @@ public class CloudPod
   {
     int index;
     CloudServer server;
-    boolean isSSL = false;
     
     synchronized (_serverList) {
       if (findServer(id) != null)
@@ -301,11 +334,34 @@ public class CloudPod
                                                findServer(address, port)));
       
       index = findFirstFreeIndex();
-      
+   
+      server = createServer(index, id, address, port, isSecure, isStatic);
+    }
+    
+    return server;
+  }
+  
+  /**
+   * Creates a new server
+   */
+  private CloudServer createServer(int index,
+                                   String id,
+                                   String address,
+                                   int port,
+                                   boolean isSecure,
+                                   boolean isStatic)
+  {
+    CloudServer server;
+    boolean isSSL = false;
+    
+    synchronized (_serverList) {
       if (index <= 2)
         server = new TriadServer(id, this, index, address, port, isSSL, isStatic);
       else
         server = new CloudServer(id, this, index, address, port, isSSL, isStatic);
+      
+      if (index < _serverList.size() && _serverList.get(index) != null)
+        return null;
   
       _serverList.set(index, server);
       _servers = _serverList.toArray();
@@ -329,29 +385,40 @@ public class CloudPod
   
   public CloudServer removeDynamicServer(String name)
   {
+    CloudServer server = findServer(name);
+    
+    if (server != null)
+      return removeDynamicServer(server.getIndex());
+    
+    return null;
+  }
+  
+  public CloudServer removeDynamicServer(int index)
+  {
     CloudServer removedServer = null;
     
     synchronized (_serverList) {
-      for (int i = 0; i < _serverList.size(); i++) {
-        CloudServer server = _serverList.get(i);
-        
-        if (name.equals(server.getId())) {
-          
-          if (server.isStatic())
-            throw new IllegalStateException(L.l("{0} must be dynamic for removeDynamicServer",
-                                                server));
-          
-          // _serverList.set(i, null);
-          
-          removedServer = server;
-        }
-      }
+      if (_serverList.size() <= index)
+        return null;
       
+      CloudServer server = _serverList.get(index);
+        
+      if (server.isStatic())
+        throw new IllegalStateException(L.l("{0} must be dynamic for removeDynamicServer",
+                                            server));
+          
+      _serverList.set(index, null);
+          
+      removedServer = server;
+
       while (_serverList.size() > 0
              && _serverList.get(_serverList.size() - 1) == null) {
         _serverList.remove(_serverList.size() - 1);
       }
-    
+      
+      if (_serverList.size() <= _maxIndex)
+        _maxIndex = _serverList.size() - 1; 
+      
       _servers = _serverList.toArray();
     }
 
@@ -367,7 +434,14 @@ public class CloudPod
     
     return removedServer;
   }
-  
+
+  void onServerStateChange(CloudServer server)
+  {
+    for (CloudServerListener listener : _listeners) {
+      listener.onServerStateChange(server);
+    }
+  }
+
   //
   // dispatcher
   //

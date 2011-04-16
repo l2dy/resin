@@ -58,4 +58,14 @@ public class IoUtil {
       log.log(Level.FINER, e.toString(), e);
     }
   }
+
+  public static void close(Writer os)
+  {
+    try {
+      if (os != null)
+        os.close();
+    } catch (IOException e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+  }
 }

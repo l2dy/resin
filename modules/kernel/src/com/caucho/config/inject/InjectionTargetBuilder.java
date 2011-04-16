@@ -119,6 +119,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
   private Set<InjectionPoint> _injectionPointSet;
   
+  private boolean _isBound;
+  
   public InjectionTargetBuilder(InjectManager cdiManager,
                                 AnnotatedType<X> beanType,
                                 Bean<X> bean)
@@ -172,10 +174,32 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   {
     if (_producer == null) {
       _producer = build();
-      validate(getBean());
+      
+      // bind();
+      // validate(getBean());
     }
     
     return _producer.getInjectionPoints();
+  }
+  
+  public void validate()
+  {
+    bind();
+    validate(getBean());
+  }
+  
+  public void bind()
+  {
+    try {
+      if (! _isBound) {
+        if (_producer == null)
+          _producer = build();
+
+        _producer.bind();
+      }
+    } finally {
+      _isBound = true;
+    }
   }
 
   public void setGenerateInterception(boolean isEnable)
@@ -186,8 +210,10 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   @Override
   public X produce(CreationalContext<X> env)
   {
-    if (_producer == null)
+    if (_producer == null) {
       getInjectionPoints();
+      bind();
+    }
     
     return _producer.produce(env);
   }
@@ -195,8 +221,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   @Override
   public void inject(X instance, CreationalContext<X> env)
   {
-    if (_producer == null)
-      getInjectionPoints();
+    if (! _isBound)
+      bind();
     
     _producer.inject(instance, env);
   }
@@ -204,8 +230,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   @Override
   public void postConstruct(X instance)
   {
-    if (_producer == null)
-      getInjectionPoints();
+    if (! _isBound)
+      bind();
     
     _producer.postConstruct(instance);
   }
@@ -618,7 +644,8 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     
     introspectInject(injectProgramList);
     
-    ConfigProgram []injectProgram = new ConfigProgram[injectProgramList.size()];
+    ConfigProgram []injectProgram
+      = new ConfigProgram[injectProgramList.size()];
     injectProgramList.toArray(injectProgram);
     
     Arrays.sort(injectProgram);
@@ -783,7 +810,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
     }
   }
   
-  private void validate(Bean<?> bean)
+  void validate(Bean<?> bean)
   {
     if (bean == null)
       return;
@@ -894,7 +921,7 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
   class FieldInjectProgram extends ConfigProgram {
     private final Field _field;
     private final InjectionPoint _ip;
-    private final InjectManager.ReferenceFactory<?> _fieldFactory;
+    private InjectManager.ReferenceFactory<?> _fieldFactory;
     
     private AtomicBoolean _isStaticSet;
 
@@ -906,25 +933,29 @@ public class InjectionTargetBuilder<X> implements InjectionTarget<X>
 
       if (Modifier.isStatic(field.getModifiers()))
         _isStaticSet = _cdiManager.getStaticMemberBoolean(field);
-      
+    }
+    
+    @Override
+    public void bind()
+    {
       InjectManager beanManager = getBeanManager();
 
       try {
         _fieldFactory = beanManager.getReferenceFactory(_ip);
       } catch (AmbiguousResolutionException e) {
-        String loc = getLocation(field);
+        String loc = getLocation(_field);
         
         throw new AmbiguousResolutionException(loc + e.getMessage(), e);
       } catch (UnsatisfiedResolutionException e) {
-        String loc = getLocation(field);
+        String loc = getLocation(_field);
         
         throw new UnsatisfiedResolutionException(loc + e.getMessage(), e);
       } catch (IllegalProductException e) {
-        String loc = getLocation(field);
+        String loc = getLocation(_field);
         
         throw new IllegalProductException(loc + e.getMessage(), e);
       } catch (InjectionException e) {
-        String loc = getLocation(field);
+        String loc = getLocation(_field);
       
         throw new InjectionException(loc + e.getMessage(), e);
       }

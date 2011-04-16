@@ -78,7 +78,8 @@ class InjectScanClass implements ScanClass
   
   private final String _className;
   private final InjectScanManager _scanManager;
-  
+
+  private InjectScanClass _parent;
   private ArrayList<InjectScanClass> _children;
   
   private boolean _isScanClass;
@@ -86,8 +87,6 @@ class InjectScanClass implements ScanClass
   private boolean _isRegistered;
   
   private boolean _isObserves;
-  
-  private boolean _isVeto;
   
   InjectScanClass(String className, InjectScanManager manager)
   {
@@ -213,7 +212,9 @@ class InjectScanClass implements ScanClass
   @Override
   public void finishScan()
   {
-    if (_isRegisterRequired || _scanManager.isCustomExtension()) {
+    if (_isRegisterRequired
+        || _scanManager.isCustomExtension()
+        || _parent != null && _parent.isRegistered()) {
       register();
     }
   }  
@@ -223,6 +224,9 @@ class InjectScanClass implements ScanClass
     InjectScanClass parent = _scanManager.createScanClass(className);
     
     parent.addChild(this);
+    
+    if (_parent == null)
+      _parent = parent;
   }
   
   private void addChild(InjectScanClass child)
@@ -253,7 +257,9 @@ class InjectScanClass implements ScanClass
     }
   }
   
-  private boolean isMatch(char []buffer, int offset, int length,
+  private boolean isMatch(char []buffer, 
+                          int offset,
+                          int length,
                           char []matchBuffer)
   {
     if (length != matchBuffer.length)

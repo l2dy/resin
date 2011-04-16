@@ -556,7 +556,7 @@ public class WebApp extends ServletContextImpl
       _invocationDependency.add(_controller);
 
       _cdiManager = InjectManager.create(_classLoader);
-      _cdiManager.addPath(getRootDirectory().lookup("WEB-INF/beans.xml"));
+      _cdiManager.addXmlPath(getRootDirectory().lookup("WEB-INF/beans.xml"));
       _cdiManager.addExtension(new WebAppInjectExtension(_cdiManager, this));
 
       _jspApplicationContext = new JspApplicationContextImpl(this);
@@ -2052,7 +2052,7 @@ public class WebApp extends ServletContextImpl
     if (! hasListener(listener.getListenerClass())) {
       _listeners.add(listener);
       
-      //jsp/18n
+      // jsp/18n, server/12t7
       if (_lifecycle.isStarting() || _lifecycle.isActive()) {
         addListenerObject(listener.createListenerObject(), true);
       }
@@ -3005,7 +3005,7 @@ public class WebApp extends ServletContextImpl
 
     for (String className : pendingClasses) {
       Class<?> cl = _classLoader.loadClass(className);
-
+      
       if (ServletContextListener.class.isAssignableFrom(cl))
         listeners.add(cl);
       else if (ServletContextAttributeListener.class.isAssignableFrom(cl))
@@ -3024,7 +3024,26 @@ public class WebApp extends ServletContextImpl
         filters.add(cl);
     }
 
+    // server/12t7
     for (Class<?> listenerClass : listeners) {
+      if (! isAttributeListener(listenerClass))
+        continue;
+      
+      WebListener webListener
+        = listenerClass.getAnnotation(WebListener.class);
+
+      if (webListener != null) {
+        ListenerConfig listener = new ListenerConfig();
+        listener.setListenerClass(listenerClass);
+
+        addListener(listener);
+      }
+    }
+
+    for (Class<?> listenerClass : listeners) {
+      if (isAttributeListener(listenerClass))
+        continue;
+      
       WebListener webListener
         = listenerClass.getAnnotation(WebListener.class);
 
@@ -3058,6 +3077,14 @@ public class WebApp extends ServletContextImpl
       if (servletSecurity != null)
         addServletSecurity(servletClass, servletSecurity);
     }
+  }
+  
+  private boolean isAttributeListener(Class<?> cl)
+  {
+    if (ServletContextAttributeListener.class.isAssignableFrom(cl))
+      return true;
+    else
+      return false;
   }
 
   public WebAppAdmin getAdmin()
@@ -3218,6 +3245,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns true if the webApp has been modified.
    */
+  @Override
   public boolean isModified()
   {
     // server/13l8
@@ -3235,6 +3263,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns true if the webApp has been modified.
    */
+  @Override
   public boolean isModifiedNow()
   {
     // force check
@@ -4449,11 +4478,15 @@ public class WebApp extends ServletContextImpl
     {
       HttpSession session = se.getSession();
       
-      SessionContextContainer candiContainer
-        = (SessionContextContainer) session.getAttribute("resin.candi.scope");
+      try {
+        SessionContextContainer candiContainer
+          = (SessionContextContainer) session.getAttribute("resin.candi.scope");
       
-      if (candiContainer != null)
-        candiContainer.close();
+        if (candiContainer != null)
+          candiContainer.close();
+      } catch (Exception e) {
+        log.log(Level.FINE, e.toString(), e);
+      }
     }
   }
   

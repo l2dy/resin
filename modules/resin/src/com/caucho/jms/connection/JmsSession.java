@@ -31,6 +31,7 @@ package com.caucho.jms.connection;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.concurrent.Semaphore;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -73,7 +74,9 @@ import com.caucho.jms.queue.AbstractDestination;
 import com.caucho.jms.queue.AbstractQueue;
 import com.caucho.jms.queue.AbstractTopic;
 import com.caucho.util.Alarm;
+import com.caucho.util.Base64;
 import com.caucho.util.L10N;
+import com.caucho.util.RandomUtil;
 import com.caucho.util.ThreadTask;
 
 /**
@@ -116,10 +119,14 @@ public class JmsSession implements XASession, ThreadTask, XAResource
   
   private volatile boolean _isClosed;
   private volatile boolean _hasMessage;
+  
+  private String _publisherId;
+  
+  private Semaphore _listenSemaphore = new Semaphore(1);
 
   public JmsSession(ConnectionImpl connection,
-                     boolean isTransacted, int ackMode,
-                     boolean isXA)
+                    boolean isTransacted, int ackMode,
+                    boolean isXA)
     throws JMSException
   {
     _classLoader = Thread.currentThread().getContextClassLoader();
@@ -130,6 +137,12 @@ public class JmsSession implements XASession, ThreadTask, XAResource
     
     _isTransacted = isTransacted;
     _acknowledgeMode = ackMode;
+    
+    StringBuilder sb = new StringBuilder();
+    sb.append("jms:");
+    Base64.encode(sb, RandomUtil.getRandomLong());
+    
+    _publisherId = sb.toString();
 
     if (isTransacted)
       _acknowledgeMode = 0;
@@ -193,6 +206,11 @@ public class JmsSession implements XASession, ThreadTask, XAResource
     throws JMSException
   {
     return _connection.getClientID();
+  }
+  
+  public String getPublisherId()
+  {
+    return _publisherId;
   }
 
   /**
@@ -458,6 +476,9 @@ public class JmsSession implements XASession, ThreadTask, XAResource
 
     
     addConsumer(consumer);
+    
+    if (isActive())
+      consumer.start();
 
     return consumer;
   }
@@ -613,7 +634,7 @@ public class JmsSession implements XASession, ThreadTask, XAResource
       */
     }
 
-    AbstractQueue<?> queue = topicImpl.createSubscriber(this, name, noLocal);
+    AbstractQueue<?> queue = topicImpl.createSubscriber(getPublisherId(), name, noLocal);
 
     TopicSubscriberImpl consumer;
     consumer = new TopicSubscriberImpl(this, topicImpl, queue,
@@ -720,7 +741,8 @@ public class JmsSession implements XASession, ThreadTask, XAResource
   {
     _xid = null;
 
-    if (! _isTransacted && ! _isXA)
+    // jms/2552
+    if (! _isTransacted && ! isXA)
       throw new IllegalStateException(L.l("commit() can only be called on a transacted session."));
 
     _isXA = false;
@@ -987,7 +1009,11 @@ public class JmsSession implements XASession, ThreadTask, XAResource
       if (log.isLoggable(Level.FINE))
         log.fine(queue + " sending " + message);
 
-      queue.send(message.getJMSMessageID(), message, priority, expireTime, this);
+      queue.send(message.getJMSMessageID(),
+                 message, 
+                 priority, 
+                 expireTime, 
+                 getPublisherId());
     }
   }
 
@@ -1157,6 +1183,24 @@ public class JmsSession implements XASession, ThreadTask, XAResource
     return null;
   }
 
+  public void acquireListenSemaphore()
+  {
+    try {
+      _listenSemaphore.acquire();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public void releaseListenSemaphore()
+  {
+    try {
+      _listenSemaphore.release();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   /**
    * Called to synchronously receive messages
    */
@@ -1264,7 +1308,8 @@ public class JmsSession implements XASession, ThreadTask, XAResource
       _queue.send(_message.getJMSMessageID(),
                   _message,
                   _message.getJMSPriority(),
-                  _expires);
+                  _expires,
+                  getPublisherId());
     }
 
     void rollback()
@@ -1299,7 +1344,7 @@ public class JmsSession implements XASession, ThreadTask, XAResource
     void commit()
       throws JMSException
     {
-        _queue.acknowledge(_message.getJMSMessageID());
+      _queue.acknowledge(_message.getJMSMessageID());
     }
 
     @Override

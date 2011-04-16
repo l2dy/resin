@@ -32,6 +32,7 @@ package com.caucho.hemp.broker;
 import com.caucho.bam.actor.ActorClientFactory;
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.stream.NullActor;
 import com.caucho.bam.stream.NullMessageStream;
 import com.caucho.util.L10N;
 
@@ -50,9 +51,9 @@ public class LocalActorFactoryImpl implements ActorClientFactory
   @Override
   public ActorSender createClient(String uid, String resource)
   {
-    NullMessageStream stream = new NullMessageStream(uid, _broker);
+    NullActor actor = new NullActor(uid, _broker);
     
-    SimpleActorSender client = new SimpleActorSender(stream, _broker, uid, resource);
+    SimpleActorSender client = new SimpleActorSender(actor, _broker, uid, resource);
     
     return client;
   }

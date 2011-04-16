@@ -3046,7 +3046,7 @@ a &lt;host-name&gt; to set the canonical name for the host.</p>
 
   &lt;root-directory&gt;/opt/www/www.foo.com&lt;/root-directory&gt;
 
-  &lt;web-app id="/" document-directory="webapps/ROOT"&gt;
+  &lt;web-app id="/" root-directory="webapps/ROOT"&gt;
     
   &lt;/web-app&gt;
   ...
@@ -4499,6 +4499,11 @@ with the other logging configuration.</p>
 <tr>
   <td>class</td>
   <td>configures a custom Handler class</td>
+  <td></td>
+</tr>
+<tr>
+  <td>format</td>
+  <td>An EL expression string to format the current output line.</td>
   <td></td>
 </tr>
 <tr>
@@ -7809,6 +7814,40 @@ element resin:message {
 
 </defun> <!-- resin:message -->
 
+<defun title="&lt;resin:MovedPermanently>" name="resin:MovedPermanently">
+<javadoc class="com.caucho.rewrite.MovedPermanently"/>
+
+<description>
+<p>
+  Send an HTTP redirect to a new URL specified by <em>target</em>.
+</p>
+</description>
+
+<attributes>
+<tr>
+  <th>Attribute</th>
+  <th>Description</th>
+</tr>
+<tr>
+  <td>regexp</td>
+  <td>The regular expression of the URL to match.</td>
+</tr>
+<tr>
+  <td>target</td>
+  <td>The target to which to redirect the request.</td>
+</tr>
+</attributes>
+
+<example title="Flipping elements of a path with a MovedPermanently">
+&lt;web-app xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin">
+
+  &lt;resin:MovedPermanently regexp='^/([^/]+)/([^/]+)' target='/$2/$1'/>
+  
+&lt;/web-app>
+</example>
+</defun> <!-- movedPermanently -->
+
 <defun title="&lt;resin:Not>" name="resin:Not">
 <javadoc class="com.caucho.rewrite.Not"/>
 <description>
@@ -9531,6 +9570,11 @@ been called</td>
   <td>java</td>
 </tr>
 <tr>
+  <td>serialize-collection-type</td>
+  <td>For hessian serialization, ignore the collection type when serializing lists (disable for some Hibernate lists)</td>
+  <td>true</td>
+</tr>
+<tr>
   <td>save-mode</td>
   <td>When to save sessions, one of "before-headers", "after-request", or "on-shutdown"</td>
   <td>after-request</td>
@@ -10698,7 +10742,7 @@ using the Apache htdocs directory to serve pages.</p>
 
 <example>
 &lt;host id=''&gt;
-  &lt;web-app id='/apache' document-directory='/usr/local/apache/htdocs'&gt;
+  &lt;web-app id='/apache' root-directory='/usr/local/apache/htdocs'&gt;
 
   ...
 
@@ -10709,11 +10753,11 @@ using the Apache htdocs directory to serve pages.</p>
 root directory. </p>
 
 <example>
-  &lt;web-app id='/' document-directory='C:/inetpub/wwwroot'&gt;
+  &lt;web-app id='/' root-directory='C:/inetpub/wwwroot'&gt;
 </example>
 
 <p>When the <var>web-app</var> is specified with a <var>url-regexp</var>,
-<var>document-directory</var> can use replacement variables (<var>$2</var>).</p>
+<var>root-directory</var> can use replacement variables (<var>$2</var>).</p>
 
 <p>In the following, each user gets his or her own independent
 application using <var>~user</var>.</p>
@@ -10722,7 +10766,7 @@ application using <var>~user</var>.</p>
 &lt;host id=''&gt;
 
   &lt;web-app url-regexp='/~([^/]*)'
-           document-directory='/home/$1/public_html'&gt;
+           root-directory='/home/$1/public_html'&gt;
 
     ...
 
@@ -10876,7 +10920,7 @@ element web-app-deploy {
 
 <p>The web-app-deploy can override configuration for an expanded war with
 a matching &lt;web-app&gt; inside the &lt;web-app-deploy&gt;.  The
-&lt;document-directory&gt; is used to match web-apps.</p>
+&lt;root-directory&gt; is used to match web-apps.</p>
 
 <example title="Example: resin.xml overriding web.xml">
 &lt;resin xmlns="http://caucho.com/ns/resin">
@@ -10885,7 +10929,7 @@ a matching &lt;web-app&gt; inside the &lt;web-app-deploy&gt;.  The
 
 &lt;web-app-deploy path="webapps"&gt;
   &lt;web-app context-path="/wiki"
-              document-directory="wiki"&gt;
+              root-directory="wiki"&gt;
     &lt;context-param database="jdbc/wiki"&gt;
   &lt;/web-app&gt;
 &lt;/web-app-deploy&gt;
