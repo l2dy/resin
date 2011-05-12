@@ -29,7 +29,6 @@
 
 package com.caucho.server.distcache;
 
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -41,13 +40,11 @@ import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
-import com.caucho.db.jdbc.DataSourceImpl;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
 import com.caucho.util.JdbcUtil;
-import com.caucho.vfs.Path;
 
 
 /**
@@ -62,7 +59,6 @@ public class MnodeStore implements AlarmListener {
 
   private final String _serverName;
   
-  private final Path _path;
   private final String _tableName;
 
   private DataSource _dataSource;
@@ -89,33 +85,22 @@ public class MnodeStore implements AlarmListener {
   // private long _expireReaperTimeout = 60 * 60 * 1000L;
   private long _expireReaperTimeout = 15 * 60 * 1000L;
 
-  public MnodeStore(Path path, String serverName)
+  public MnodeStore(DataSource dataSource,
+                    String tableName,
+                    String serverName)
     throws Exception
   {
+    _dataSource = dataSource;
     _serverName = serverName;
-    _path = path.lookup("distcache");
-    // _tableName = serverNameToTableName(serverName);
-    _tableName = "mnode";
+    _tableName = tableName;
 
-    if (_path == null)
+    if (dataSource == null)
       throw new NullPointerException();
 
     if (_tableName == null)
       throw new NullPointerException();
 
-    try {
-      _path.mkdirs();
-    } catch (IOException e) {
-    }
-
-    DataSourceImpl dataSource = new DataSourceImpl();
-    dataSource.setPath(_path);
-    dataSource.setRemoveOnError(true);
-    dataSource.init();
-
     _dataSource = dataSource;
-
-    init();
   }
 
   /**
@@ -146,7 +131,7 @@ public class MnodeStore implements AlarmListener {
   // lifecycle
   //
 
-  private void init()
+  protected void init()
     throws Exception
   {
     _loadQuery = ("SELECT value,cache_id,flags,server_version,item_version,expire_timeout,idle_timeout,lease_timeout,local_read_timeout,update_time"
@@ -209,7 +194,7 @@ public class MnodeStore implements AlarmListener {
   /**
    * Create the database, initializing if necessary.
    */
-  private void initDatabase()
+  protected void initDatabase()
     throws Exception
   {
     Connection conn = _dataSource.getConnection();

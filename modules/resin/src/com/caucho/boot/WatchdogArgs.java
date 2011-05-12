@@ -45,6 +45,8 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -300,6 +302,31 @@ class WatchdogArgs
     return null;
   }
 
+  /**
+   * returns all trailing following no dash prefixed token args
+   */
+  public String []getTrailingArgs(Set<String> options)
+  {
+    LinkedList<String> result = new LinkedList<String>();
+    ArrayList<String> tailArgs = getTailArgs();
+
+    for (int i = tailArgs.size() - 1; i >= 0; i--) {
+      String arg = tailArgs.get(i);
+
+      if (! arg.startsWith("-")) {
+        result.addFirst(arg);
+      }
+      else if (options.contains(arg)) {
+        break;
+      }
+      else if (! result.isEmpty()) {
+        result.removeFirst();
+      }
+    }
+
+    return result.toArray(new String[result.size()]);
+  }
+
   public boolean isHelp()
   {
     return _isHelp;
@@ -446,11 +473,8 @@ class WatchdogArgs
       else if ("heap-dump".equals(arg)) {
         _startMode = StartMode.HEAP_DUMP;
       }
-      else if ("jmx-get".equals(arg)) {
-        _startMode = StartMode.JMX_GET;
-      }
       else if ("jmx-call".equals(arg)) {
-        _startMode = StartMode.JMX_INVOKE;
+        _startMode = StartMode.JMX_CALL;
       }
       else if ("jmx-list".equals(arg)) {
         _startMode = StartMode.JMX_LIST;
@@ -542,6 +566,13 @@ class WatchdogArgs
                                + "\n  deploy-start - starts an application"
                                + "\n  deploy-stop - stops an application"
                                + "\n  undeploy - undeploys an application"
+                               + "\n  heap-dump - produces a heap dump"
+                               + "\n  thread-dump - produces a thread dump"
+                               + "\n  profile - profiles the system"
+                               + "\n  log-level - sets a log level"
+                               + "\n  jmx-list - lists MBeans, attributes, operations"
+                               + "\n  jmx-set - sets value on MBean's attribute"
+                               + "\n  jmx-call - invokes a method on MBean"
                                + "\n  help <command> - prints command usage message"
                                + "\n  version - prints version"));
       System.exit(1);
@@ -565,7 +596,7 @@ class WatchdogArgs
   {
     System.err.println(L().l("usage: java -jar resin.jar [-options] [console | status | start | gui | stop | restart | kill | shutdown | version]"));
     System.err.println(L().l("       java -jar resin.jar [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
-    System.err.println(L().l("       java -jar resin.jar [-options] [thread-dump | heap-dump | log-level | profile]"));
+    System.err.println(L().l("       java -jar resin.jar [-options] [thread-dump | heap-dump | log-level | profile | jmx-list | jmx-call | jmx-set]"));
     System.err.println(L().l("       java -jar resin.jar help <command>"));
     System.err.println(L().l(""));
     System.err.println(L().l("where options include:"));
@@ -874,8 +905,7 @@ class WatchdogArgs
     ENABLE,
     GUI,
     HEAP_DUMP,
-    JMX_INVOKE,
-    JMX_GET,
+    JMX_CALL,
     JMX_LIST,
     JMX_SET,
     JSPC,

@@ -63,6 +63,7 @@ public class XmlBeanAttribute extends Attribute {
     _setMethod = setMethod;
   }
 
+  @Override
   public ConfigType<?> getConfigType()
   {
     return _configType;
@@ -101,6 +102,8 @@ public class XmlBeanAttribute extends Attribute {
 
     String pkg = uri.substring("uri:java:".length());
 
+    // ioc/13jm
+    /*
     Class<?> cl = TypeFactory.loadClass(pkg, localName);
 
     if (cl == null) {
@@ -112,6 +115,22 @@ public class XmlBeanAttribute extends Attribute {
       throw new ConfigException(L.l("'{0}.{1}' is an unknown class for element '{2}'",
                                     pkg, localName, qName));
     }
+    */
+    
+    // ioc/13jm
+    ConfigType<?> type = TypeFactory.getFactory().getEnvironmentType(qName);
+
+    // ioc/0401
+    if (type != null && type.isEnvBean()) {
+      return type.create(parent, qName);
+    }
+    
+    Class<?> cl = TypeFactory.loadClass(pkg, localName);
+
+    if (cl == null) {
+      throw new ConfigException(L.l("'{0}.{1}' is an unknown class for element '{2}'",
+                                    pkg, localName, qName));
+    }
 
     if (Annotation.class.isAssignableFrom(cl)) {
       return new AnnotationConfig(cl);
@@ -120,7 +139,6 @@ public class XmlBeanAttribute extends Attribute {
       XmlBeanConfig config = new XmlBeanConfig(qName, cl, parent);
 
       // config.setScope("singleton");
-
       return config;
     }
   }
@@ -143,10 +161,16 @@ public class XmlBeanAttribute extends Attribute {
 
       config.init();
     }
+    else {
+      ConfigType<?> childType = TypeFactory.getType(beanChild);
+      
+      childType.setProperty(beanChild, XmlConfigContext.TEXT, value);
+      
+      childType.init(beanChild);
+    }
 
     setValue(bean, name, beanChild);
   }
-
 
   /**
    * Sets the value of the attribute

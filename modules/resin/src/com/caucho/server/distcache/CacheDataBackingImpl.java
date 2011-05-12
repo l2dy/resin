@@ -33,7 +33,10 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.logging.Logger;
 
+import javax.sql.DataSource;
+
 import com.caucho.config.ConfigException;
+import com.caucho.db.jdbc.DataSourceImpl;
 import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.service.RootDirectorySystem;
@@ -45,14 +48,14 @@ import com.caucho.vfs.WriteStream;
 /**
  * Manages the distributed cache
  */
-public class DataCacheBacking implements CacheDataBacking {
+public class CacheDataBackingImpl implements CacheDataBacking {
   private static final Logger log
-    = Logger.getLogger(DataCacheBacking.class.getName());
+    = Logger.getLogger(CacheDataBackingImpl.class.getName());
   
   private DataStore _dataStore;
   private MnodeStore _mnodeStore;
   
-  public DataCacheBacking()
+  public CacheDataBackingImpl()
   {
   }
   
@@ -265,14 +268,43 @@ public class DataCacheBacking implements CacheDataBacking {
 
       if (serverId.isEmpty())
         serverId = "default";
+      
+      DataSource dataSource = createDataSource(dataDirectory, serverId);
+      String tableName = "mnode";
 
-      _mnodeStore = new MnodeStore(dataDirectory, serverId);
+      _mnodeStore = new MnodeStore(dataSource, tableName, serverId);
+      _mnodeStore.init();
+      
       _dataStore = new DataStore(serverId, _mnodeStore);
+      _dataStore.init();
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
   }
   
+  private DataSource createDataSource(Path dataDirectory, String serverId)
+  {
+    Path path = dataDirectory.lookup("distcache");
+
+    if (path == null)
+      throw new NullPointerException();
+
+    try {
+      path.mkdirs();
+    } catch (IOException e) {
+    }
+
+    try {
+      DataSourceImpl dataSource = new DataSourceImpl();
+      dataSource.setPath(path);
+      dataSource.setRemoveOnError(true);
+      dataSource.init();
+
+      return dataSource;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
   @Override
   public void close()
   {

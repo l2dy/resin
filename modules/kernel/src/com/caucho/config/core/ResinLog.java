@@ -33,6 +33,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 
+import com.caucho.config.type.EnvBean;
 import com.caucho.util.CharBuffer;
 
 /**

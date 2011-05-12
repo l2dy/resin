@@ -37,7 +37,7 @@ import java.lang.reflect.Method;
 import java.net.BindException;
 import java.net.Socket;
 import java.net.URL;
-import java.util.Date;
+import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -74,8 +74,7 @@ import com.caucho.env.repository.AbstractRepository;
 import com.caucho.env.repository.LocalRepositoryService;
 import com.caucho.env.repository.RepositoryService;
 import com.caucho.env.repository.RepositorySpi;
-import com.caucho.env.service.ResinSystem;
-import com.caucho.env.service.RootDirectorySystem;
+import com.caucho.env.service.*;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.env.warning.WarningService;
@@ -158,6 +157,9 @@ public class Resin
 
   private long _initialStartTime;
   private long _startTime;
+  
+  private boolean _isRestart;
+  private String _restartMessage;
 
   private String _licenseErrorMessage;
 
@@ -178,6 +180,9 @@ public class Resin
   private Socket _pingSocket;
   
   private ResinWaitForExitService _waitForExitService;
+  
+  private final ArrayList<StartInfoListener> _startInfoListeners
+    = new ArrayList<StartInfoListener>();
 
   /**
    * Creates a new resin server.
@@ -375,6 +380,30 @@ public class Resin
   public boolean isEmbedded()
   {
     return _isEmbedded;
+  }
+  
+  public void addStartInfoListener(StartInfoListener listener)
+  {
+    _startInfoListeners.add(listener);
+  }
+  
+  void setStartInfo(boolean isRestart, String startMessage)
+  {
+    _isRestart = isRestart;
+    _restartMessage = startMessage;
+    
+    for (StartInfoListener listener : _startInfoListeners)
+      listener.setStartInfo(isRestart, startMessage);
+  }
+  
+  public boolean isRestart()
+  {
+    return _isRestart;
+  }
+  
+  public String getRestartMessage()
+  {
+    return _restartMessage;
   }
   
   private void initEnvironment()

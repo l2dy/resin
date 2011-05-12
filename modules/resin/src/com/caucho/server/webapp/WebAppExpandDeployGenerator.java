@@ -37,6 +37,7 @@ import java.util.logging.Logger;
 
 import com.caucho.config.ConfigException;
 import com.caucho.env.deploy.DeployContainer;
+import com.caucho.env.deploy.DeployControllerType;
 import com.caucho.env.deploy.DeployMode;
 import com.caucho.env.deploy.ExpandDeployGenerator;
 import com.caucho.env.deploy.ExpandVersion;
@@ -253,6 +254,7 @@ public class WebAppExpandDeployGenerator
                                          contextPath,
                                          this,
                                          _container);
+      controller.setControllerType(DeployControllerType.VERSIONING);
     
       return controller;
     }
@@ -288,6 +290,7 @@ public class WebAppExpandDeployGenerator
 
     controller.setDynamicDeploy(true);
     controller.setSourceType("expand");
+    controller.setControllerType(DeployControllerType.DYNAMIC);
     
     controller.setStartupMode(getStartupMode());
     controller.setRedeployMode(getRedeployMode());

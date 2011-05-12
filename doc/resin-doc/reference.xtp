@@ -872,7 +872,7 @@ The cluster typically configures a set of &lt;server&gt;s, each with some
 ports, and a set of virtual &lt;host&gt;s.</p>
 <p>Only one &lt;cluster&gt; is active in any on server.  At runtime,
 the &lt;cluster&gt; is selected by the &lt;server&gt; with <var>id</var>
-matching the -server-id on the command line.</p>
+matching the -server on the command line.</p>
 </description>
 <attributes>
 <tr>
@@ -1108,10 +1108,10 @@ clusters in the &lt;resin&gt; server.</p>
 <p>&lt;cluster-port> configures the cluster and load balancing socket,
 for load balancing, distributed sessions, and distributed management.</p>
 <p>When configuring Resin in a load-balanced cluster, each Resin instance
-will have its own &lt;srun&gt; configuration, which Resin uses for distributed
+will have its own &lt;server&gt; configuration, which Resin uses for distributed
 session management and for the load balancing itself.</p>
-<p>When configuring multiple JVMs, each &lt;srun&gt; has a
-unique &lt;id&gt; which allows the -server command-line to select
+<p>When configuring multiple JVMs, each &lt;server&gt; has a
+unique &lt;server-id&gt; which allows the -server command-line to select
 which ports the server should listen to.</p>
 <deftable-childtags>
 <tr><td>address</td>
@@ -1139,7 +1139,6 @@ which ports the server should listen to.</p>
     <td>sets the NO_DELAY socket parameter</td>
     <td>true</td></tr>
 </deftable-childtags>
-<p>The class that corresponds to &lt;srun&gt; is <a javadoc="com.caucho.server.cluster.ClusterPort"/></p>
 </defun>
 
 <defun title="&lt;compiling-loader>" name="compiling-loader" occur="*" version="Resin 3.0" type="defun">
@@ -1273,111 +1272,6 @@ only applies to IIS.</p>
 <schema>
 element connection-error-page {
   string
-}
-</schema>
-
-</defun>
-<defun title="&lt;connection-factory>" name="connection-factory" occur="*" version="Resin 3.1.5">
-       
-<parents>resin, cluster, host, web-app</parents>
-  <!-- com.caucho.jca.ConnectorResource -->
-
-<description>
-<deftable title="Parallels to JDBC">
-<tr>
-  <th>JDBC Class</th>
-  <th>Connector Class</th>
-</tr>
-<tr>
-  <td>Connection</td>
-  <td>Connection (driver-defined class)</td>
-</tr>
-<tr>
-  <td>DataSource</td>
-  <td>ConnectionFactory (driver-defined class)</td>
-</tr>
-<tr>
-  <td>Driver</td>
-  <td>ManagedConnectionFactory</td>
-</tr>
-<tr>
-  <td>n/a</td>
-  <td>ResourceAdapter</td>
-</tr>
-</deftable>
-</description>
-
-<attributes>
-<tr>
-  <th>Attribute</th>
-  <th>Description</th>
-  <th>Default</th>
-</tr>
-<tr>
-  <td>class</td>
-  <td>ManagedConnectionFactory driver for the resource</td>
-  <td>required or <var>uri</var></td>
-</tr>
-<tr>
-  <td>init</td>
-  <td>IoC configuration for the ManagedConnectionFactory</td>
-  <td></td>
-</tr>
-<tr>
-  <td>local-transaction-optimization</td>
-  <td>Enables the local transaction optimization during commit</td>
-  <td>true</td>
-</tr>
-<tr>
-  <td>max-active-time</td>
-  <td>Configures the maximum time allowed for a connection</td>
-  <td>infinite</td>
-</tr>
-<tr>
-  <td>max-connections</td>
-  <td>Configures the maximum connections available</td>
-  <td>1024</td>
-</tr>
-<tr>
-  <td>jndi-name</td>
-  <td>JNDI name for the <code>ConnectionFactory</code></td>
-  <td></td>
-</tr>
-<tr>
-  <td>name</td>
-  <td>The IoC name for the <code>ConnectionFactory</code>, used for @Named injection. Resin 3.1.4.</td>
-  <td></td>
-</tr>
-<tr>
-  <td>resource-adapter</td>
-  <td>The driver's <code>ResourceAdapter</code></td>
-  <td></td>
-</tr>
-<tr>
-  <td>shareable</td>
-  <td>Enables sharing of <code>Connection</code> objects in a transaction</td>
-  <td>true</td>
-</tr>
-<tr>
-  <td>uri</td>
-  <td>Shortcut alias for the ManagedConnectionFactory</td>
-  <td>required or <var>class</var></td>
-</tr>
-</attributes>
-
-<schema>
-r_connection-factory = element connection-factory {
-  (r_class | r_uri)
-  &amp; r_binding*
-  &amp; r_init?
-  &amp; r_jndi-name?
-  &amp; r_name?
-
-  &amp; local-transaction-optimization?
-  &amp; max-active-time?
-  &amp; max-connections?
-  &amp; resource-adapter?
-  &amp; shareable?
 }
 </schema>
 
@@ -2138,20 +2032,6 @@ element ejb-message-bean {
 
 &lt;/web-app>
 </example>
-
-<example title="Example: ActiveMQ in WEB-INF/resin-web.xml">
-&lt;web-app xmlns="http://caucho.com/ns/resin">
-
-  &lt;resource-adapter uri="activemq:"/>
-
-  &lt;ejb-message-bean class="qa.MyListener">
-    &lt;activation-spec uri="activemq:">
-       &lt;init physical-name="queue.test"/>
-    &lt;/activation-spec uri="activemq:">
-  &lt;/ejb-message-bean>
-
-&lt;/web-app>
-</example>
 -->
 
 </defun>
@@ -2447,8 +2327,10 @@ for JNDI-based application configuration.</p>
 
 <p>Some application beans prefer to retrieve configuration data from JNDI,
 including String, Integer, and Double constants.  env-entry configures
-that data in the current context.  As with other Resin configuration, the
-value can use JSP-EL expressions.</p>
+that data in the current context.</p>
+
+<p>The value can not use JSP-EL expressions, because the env-entry is
+part of the JavaEE spec.  To set EL expressions, use resin:set instead.</p>
 </description>
 
 <attributes>
@@ -2994,6 +2876,1950 @@ switch to a non-root user after binding to port 80.</p>
     ...
   &lt;/cluster>
 &lt;/resin>
+</example>
+
+</defun>
+
+<defun title="&lt;health:And>" name="health:And">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.And"/>
+
+<description>
+<p>Qualifies an action to match if all of the child predicates match.</p>
+
+<p><i>Note: &lt;health:And> is implied and thus not strictly necessary except 
+in when used in conjunction with more complex combining conditions.</i></p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:And> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:And>
+      &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+      &lt;health:IfHealthCritical health-check="${memoryPermGenHealthCheck}"/>      
+    &lt;/health:And>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:ConnectionPoolHealthCheck>" name="health:ConnectionPoolHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.ConnectionPoolHealthCheck"/>
+
+<description>
+<p>Monitors the health of Resin database connection pools.   See 
+<a config-tag="database">&lt;database></a> for additional information.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:ConnectionPoolHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>Upon exceeding <a config-tag="database">max-connections</a>.</td>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>Upon exceeding <a config-tag="database">max-overflow-connections</a>.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:ConnectionPoolHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:ConnectionPoolHealthCheck/>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:CpuHealthCheck>" name="health:CpuHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.CpuHealthCheck"/>
+
+<description>
+<p>Monitors CPU usage.  On multi-core machines, each CPU is checked 
+individually.</p>
+</description>  
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>warning-threshold</td>
+    <td>CPU usage warning threshold</td>
+    <td>int (percentage 0-100)</td>
+    <td>95</td>
+  </tr>
+  <tr>
+    <td>critical-threshold</td>
+    <td>CPU usage critical threshold</td>
+    <td>int (percentage 0-100)</td>
+    <td>200 (disabled)</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:CpuHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>Upon exceeding <var>warning-threshold</var> on any CPU.</td>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>Upon exceeding <var>critical-threshold</var> on any CPU.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:CpuHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:CpuHealthCheck>
+    &lt;warning-threshold>95&lt;/warning-threshold>
+    &lt;critical-threshold>99&lt;/critical-threshold>
+  &lt;/health:CpuHealthCheck>
+  
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:DumpHeap>" name="health:DumpHeap">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.DumpHealh"/>
+
+<description>
+<p>Create a memory heap dump.  The heap dump will be logged to the resin 
+log file using <code>com.caucho.health.action.DumpHeap</code> as the class, at 
+the <var>info</var> level.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:DumpHeap> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:DumpHeap/>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:DumpThreads>" name="health:DumpThreads">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.DumpThreads"/>
+
+<description>
+<p>Create a thread dump.  The thread dump will be logged to the resin 
+log file using <code>com.caucho.server.admin.AdminThreadDump</code> as the 
+class, at the <var>info</var> level.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>only-active</td>
+    <td>Output only currently active threads (<var>RUNNABLE</var> state)</td>
+    <td>boolean</td>
+    <td>false</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:DumpThreads> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:DumpThreads>
+    &lt;only-active>false&lt;/only-active>
+  &lt;/health:DumpThreads>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:ExecCommand>" name="health:ExecCommand">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.ExecCommand"/>
+
+<description>
+<p>Execute an operating system shell command.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>command</td>
+    <td>The command to execute, relative to <var>dir</var> if set</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>dir</td>
+    <td>The directory to execute from</td>
+    <td>java.io.File</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>timeout</td>
+    <td>Timeout on execution of the command, after which it will be killed if not complete</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>2s</td>
+  </tr>
+  <tr>
+    <td>env</td>
+    <td>A custom env variable, available to the command.</td>
+    <td>Name/Value Pair</td>
+    <td>N/A (System variables are available by default)</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:ExecCommand> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:ExecCommand>
+    &lt;dir>/tmp&lt;/dir>
+    &lt;command>remediation.sh&lt;/command>
+    &lt;timeout>2s&lt;/timeout>
+    &lt;env>
+      &lt;name>resin_home&lt;/name>
+      &lt;value>${resin.home}&lt;/value>
+    &lt;/env>
+    &lt;env>
+      &lt;name>password&lt;/name>
+      &lt;value>foo&lt;/value>
+    &lt;/env>
+  &lt;/health:ExecCommand>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:ExprHealthCheck>" name="health:ExprHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.ExprHealthCheck"/>
+
+<description>
+<p>Evaluates user supplied EL expressions to a boolean.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>fatal-test</td>
+    <td>EL expression that will trigger FATAL if it evaluates to true</td>
+    <td><a javadoc="com.caucho.el.Expr">Expr</a></td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>critical-test</td>
+    <td>EL expression that will trigger CRITICAL if it evaluates to true</td>
+    <td><a javadoc="com.caucho.el.Expr">Expr</a></td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>warning-test</td>
+    <td>EL expression that will trigger WARNING if it evaluates to true</td>
+    <td><a javadoc="com.caucho.el.Expr">Expr</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:ExprHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>FATAL</td>
+    <td>If any fatal-test expression evaluates to true</td>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>If any critical-test expression evaluates to true</td>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If any warning-test expression evaluates to true</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:ExprHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:ExprHealthCheck>
+    &lt;critical-test>${mbean('java.lang:type=Threading').ThreadCount > 100}&lt;/critical-test>
+  &lt;/health:ExprHealthCheck>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:HealthSystem>" name="health:HealthSystem">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.HealthSystem"/>
+
+<description>
+<p>Configures overall health checking frequency and recheck rules.  This 
+element is present in health.xml for clarity, but is not strictly required 
+since it will be created upon startup with default values.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>All health checking enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>startup-delay</td>
+    <td>The time after startup before actions are triggered (checks still execute).</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>15m</td>
+  </tr>
+  <tr>
+    <td>period</td>
+    <td>The time between checks</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>5m</td>
+  </tr>
+  <tr>
+    <td>recheck-period</td>
+    <td>The time between rechecks</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>30s</td>
+  </tr>
+  <tr>
+    <td>recheck-max</td>
+    <td>The number of rechecks before returning to the normal checking period</td>
+    <td>int</td>
+    <td>10</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:HealthSystem> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:HealthSystem>
+    &lt;enabled>true&lt;/enabled>
+    &lt;startup-delay>15m&lt;/startup-delay>
+    &lt;period>5m&lt;/period>
+    &lt;recheck-period>30s&lt;/recheck-period>
+    &lt;recheck-max>10&lt;/recheck-max>
+  &lt;/health:HealthSystem>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:HealthSystemHealthCheck>" name="health:HealthSystemHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.HealthSystemHealthCheck"/>
+
+<description>
+<p>Monitors the health system itself by using a separate thread to detect if 
+health checking is frozen or taking too long.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>thread-check-period</td>
+    <td>The polling frequency of the independent thread.</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>1m</td>
+  </tr>
+  <tr>
+    <td>freeze-timeout</td>
+    <td>The max time for no health checks to occur to declare the health system frozen</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>15m</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:HealthSystemHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>FATAL</td>
+    <td>If health checking has not occurred within <var>freeze-timeout</var>.</td>
+  </tr>
+  <tr>
+    <td>FATAL</td>
+    <td>If health checking has not completed within an acceptable time, 
+    calculated using <a config-tag="health:HealthSystem">&lt;health:HealthSystem></a>  <var>startup-delay</var>, <var>period</var>, and 
+    <var>recheck-period</var>.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:HealthSystemHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:HealthSystemHealthCheck>
+    &lt;thread-check-period>1m&lt;/thread-check-period>
+    &lt;freeze-timeout>15m&lt;/freeze-timeout>
+  &lt;/health:HealthSystemHealthCheck>
+  
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:HeartbeatHealthCheck>" name="health:HeartbeatHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.HeartbeatHealthCheck"/>
+
+<description>
+<p>Monitors for heartbeats from other members of the cluster.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:HeartbeatHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If no heartbeat has been received from a know member of the cluster.</td>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If a heartbeat has not been received in the last 180 seconds from a known member of the cluster.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:HeartbeatHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:HeartbeatHealthCheck/>
+  
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:HttpStatusHealthCheck>" name="health:HttpStatusHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.HttpStatusHealthCheck"/>
+
+<description>
+<p>Monitors one or more URLs on the current Resin instance by making an HTTP 
+GET request and comparing the returned HTTP status code to a pattern.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>ping-host</td>
+    <td>The server's ping host (for use where <var>url</var> is a URI)</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>ping-port</td>
+    <td>The server's ping port (for use where <var>url</var> is a URI)</td>
+    <td>int</td>
+    <td>80</td>
+  </tr>
+  <tr>
+    <td>url</td>
+    <td>A URL or URI to be tested</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>socket-timeout</td>
+    <td>The socket connection timeout</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>10s</td>
+  </tr>
+  <tr>
+    <td>regexp</td>
+    <td>The HTTP status regular expression</td>
+    <td>java.util.regex.Pattern</td>
+    <td>200</td>
+  </tr>
+
+</attributes>
+
+<deftable title="&lt;health:HttpStatusHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>If the HTTP GET request failed to connect or the status code 
+    does not match the regexp.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:HttpStatusHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:HttpStatusHealthCheck>
+    &lt;ping-host>localhost&lt;/ping-host>
+    &lt;ping-port>8080&lt;/ping-port>
+    &lt;url>/custom-test-1.jsp&lt;/url>
+    &lt;url>/custom-test-2.jsp&lt;/url>
+    &lt;socket-timeout>2s&lt;/socket-timeout>
+    &lt;regexp>^2|^3&lt;/regexp>
+  &lt;/health:HttpStatusHealthCheck>
+
+&lt;/cluster>
+</example>
+
+<p>In some clustered configurations it may be simpler to use the 
+<code>&lt;server-default> &lt;ping-url></code> element rather than specifying 
+the host and port in the health check itself.  <code>&lt;ping-url></code> will 
+dynamically construct a URL using the current server host.  To enabled this, 
+configure HttpStatusHealthCheck with no <code>&lt;url></code> elements and add 
+<code>&lt;ping-url></code>to <code>&lt;server></code> or 
+<code>&lt;server-default></code>.</p> 
+
+<example title="Example: &lt;health:HttpStatusHealthCheck> using ping-url">
+&lt;!-- resin.xml -->
+&lt;resin xmlns="http://caucho.com/ns/resin"&gt;
+
+  &lt;cluster id="web-tier"&gt;
+    &lt;server-default&gt;
+      &lt;ping-url>/ping-test.jsp&lt;ping-url>
+    &lt;/server-default&gt;
+    ...
+  &lt;/cluster>
+&lt;/resin>
+
+&lt;!-- health.xml -->
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:HttpStatusHealthCheck ee:Named="serverHttpPingCheck">
+    &lt;socket-timeout>5s&lt;/socket-timeout>
+    &lt;regexp>200&lt;/regexp>
+  &lt;/health:HttpStatusHealthCheck>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfCron>" name="health:IfCron">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfCron"/>
+
+<description>
+<p>Qualify an action to execute if the current time is in an active range configured by 
+cron-style times.  This can be used both to schedule regular actions or to 
+prevent restarts or other actions during critical times.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enable-at</td>
+    <td>The cron enable times</td>
+    <td><a javadoc="com.caucho.config.types.CronType">CronType</a></td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>disable-at-at</td>
+    <td>The cron diable times</td>
+    <td><a javadoc="com.caucho.config.types.CronType">CronType</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfCron> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfCron>
+      &lt;enable-at>0 0 * * *&lt;/enable-at>
+      &lt;disable-at>5 0 * * *&lt;/disable-at>
+    &lt;/health:IfCron>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfExpr>" name="health:IfExpr">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfExpr"/>
+
+<description>
+<p>Qualifies an action to execute based on the evaluation of an JSP EL 
+expression. Expression can include references to system properties, config 
+properties, and JMX mbean attributes.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>test</td>
+    <td>the JSP-EL expression value</td>
+    <td><a javadoc="com.caucho.el.Expr">Expr</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfExpr> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfExpr>
+      &lt;test>${mbean('java.lang:type=Threading').ThreadCount > 100}&lt;/test>
+    &lt;/health:IfExpr>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfHealthCritical>" name="health:IfHealthCritical">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfHealthCritical"/>
+
+<description>
+<p>Qualifies an action to match if health status is CRITICAL.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>time</td>
+    <td>The minimum amount of time since the status started</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfHealthCritical> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfHealthFatal>" name="health:IfHealthFatal">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfHealthFatal"/>
+
+<description>
+<p>Qualifies an action to match if health status is FATAL.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>time</td>
+    <td>The minimum amount of time since the status started</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfHealthFatal> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthFatal health-check="${memoryTenuredHealthCheck}"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfHealthOk>" name="health:IfHealthOk">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfHealthOk"/>
+
+<description>
+<p>Qualifies an action to match if health status is OK.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>time</td>
+    <td>The minimum amount of time since the status started</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfHealthOk> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:Not>
+      &lt;health:IfHealthOk health-check="${memoryTenuredHealthCheck}"/>
+    &lt;/health:Not>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfHealthUnknown>" name="health:IfHealthUnknown">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfHealthUnknown"/>
+
+<description>
+<p>Qualifies an action to match if health status is UNKNOWN.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>time</td>
+    <td>The minimum amount of time since the status started</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfHealthUnknown> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthUnknown health-check="${memoryTenuredHealthCheck}"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfHealthWarning>" name="health:IfHealthWarning">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfHealthWarning"/>
+
+<description>
+<p>Qualifies an action to match if health status is WARNING.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>time</td>
+    <td>The minimum amount of time since the status started</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfHealthWarning> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthWarning health-check="${memoryTenuredHealthCheck}"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfMessage>" name="health:IfMessage">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfMessage"/>
+
+<description>
+<p>Qualifies an action to match the health result message to a regular expression.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+  <tr>
+    <td>regexp</td>
+    <td>The health message match regular expression</td>
+    <td>java.util.regex.Pattern</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfMessage> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthCritical/>
+    &lt;health:IfMessage health-check="${httpStatusCheck}" regexp="Not Found"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfRecovered>" name="health:IfRecovered">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfRecovered"/>
+
+<description>
+<p>Qualifies an action to match upon recovery.  Recovery is defined as the 
+state change from FATAL, CRITICAL, or WARNING to OK.</p> 
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>health-check</td>
+    <td>The target health check</td>
+    <td><a javadoc="com.caucho.health.check.HealthCheck">HealthCheck</a></td>
+    <td>N/A (Overall Resin health will be used if absent)</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfRecovered> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:SendMail>
+    &lt;to>admin@yourdomain&lt;/to>
+    &lt;health:IfRecovered health-check="${cpuHealthCheck}"/>
+  &lt;/health:SendMail> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfRechecked>" name="health:IfRechecked">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfRechecked"/>
+
+<description>
+<p>Qualifies an action to match only after the required number of rechecks 
+have been performed.  Since rechecking is not a health check specific 
+condition, this predicate simply matches when recheck cycle count matches the 
+HealthSystem parameter <var>recheck-max</var>.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfRechecked> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthFatal/>
+    &lt;health:IfRechecked/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:IfUptime>" name="health:IfUptime">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.IfUptime"/>
+
+<description>
+<p>Qualifies an action to match an amount of time after startup.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>limit</td>
+    <td>The time after startup (at least)</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:IfUptime> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfUptime limit="12h"/>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:JmxDeltaMeter>" name="health:JmxDeltaMeter">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.meter.JmxDeltaMeter"/>
+
+<description>
+<p>Creates a meter that graphs the difference between the current and previous 
+values of a numeric JMX MBean attribute.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>name</td>
+    <td>The name of the meter to display in /resin-admin (see <a href="#Meter names">meter names</a>)</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>objectName</td>
+    <td>The JMX MBean name</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>attribute</td>
+    <td>The MBean attribute to sample</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:JmxDeltaMeter> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:JmxDeltaMeter>
+    &lt;name>JVM|Compilation|Compilation Time&lt;/name>
+    &lt;object-name>java.lang:type=Compilation&lt;/object-name>
+    &lt;attribute>TotalCompilationTime&lt;/attribute>
+  &lt;/health:JmxDeltaMeter>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:JmxMeter>" name="health:JmxMeter">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.meter.JmxMeter"/>
+
+<description>
+<p>Creates a meter that graphs the current value of a numeric JMX MBean 
+attribute.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>name</td>
+    <td>The name of the meter to display in /resin-admin (see <a href="#Meter names">meter names</a>)</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>objectName</td>
+    <td>The JMX MBean name</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>attribute</td>
+    <td>The MBean attribute to sample</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:JmxMeter> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:JmxMeter>
+    &lt;name>OS|Memory|Physical Memory Free&lt;/name>
+    &lt;object-name>java.lang:type=OperatingSystem&lt;/object-name>
+    &lt;attribute>FreePhysicalMemorySize&lt;/attribute>
+  &lt;/health:JmxMeter>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:JvmDeadlockHealthCheck>" name="health:JvmDeadlockHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.JvmDeadlockHealthCheck"/>
+
+<description>
+<p>Monitors for deadlocked threads, as determined by the JVM.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:JvmDeadlockHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>FATAL</td>
+    <td>If deadlocked threads are detected.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:JvmDeadlockHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:JvmDeadlockHealthCheck/>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:MemoryPermGenHealthCheck>" name="health:MemoryPermGenHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.MemoryPermGenHealthCheck"/>
+
+<description>
+<p>Monitors the amount of free memory in the JVM PermGen memory pool.  Requests 
+a garbage collection if memory falls too low.</p>
+
+<p>Note: This check does not apply to all JVM vendor implementations, and will 
+report <b>UNKNOWN</b> if there is no PermGen pool.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>memory-free-min</td>
+    <td>The critical minimum amount of free memory.</td>
+    <td><a javadoc="com.caucho.config.types.Bytes">Bytes</a></td>
+    <td>1m</td>
+  </tr>
+  <tr>
+    <td>free-warning</td>
+    <td>The warning threshold percentage.</td>
+    <td>double (percentage 0.0 - 100.0)</td>
+    <td>0.01</td>
+  </tr>
+  <tr>
+    <td>objectName</td>
+    <td>Explicitly set the MBean name to query for memory stats.  When left 
+    unset the health check will search available MBeans for the appropriate 
+    memory stats MBean.</td>
+    <td>javax.management.ObjectName</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:MemoryPermGenHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>UNKNOWN</td>
+    <td>If there is no PermGen pool (JVM vendor dependent) or the appropriate MBean could not be determined.</td>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If free memory is below <var>free-warning</var> percentage after a GC.</td>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>If free memory is below <var>memory-free-min</var> after a GC.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:MemoryPermGenHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:MemoryPermGenHealthCheck>
+    &lt;memory-free-min>1m&lt;/memory-free-min>
+    &lt;free-warning>0.01&lt;/free-warning>
+  &lt;/health:MemoryPermGenHealthCheck>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:MemoryTenuredHealthCheck>" name="health:MemoryTenuredHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.MemoryTenuredHealthCheck"/>
+
+<description>
+<p>Monitors the amount of free memory in the JVM Tenured memory pool.  Requests 
+a garbage collection if memory falls too low.  This check will monitor 
+heap memory on JVMs where there is no tenured pool.</p>
+
+<p>Note: <var>memory-free-min</var> will default to the value of 
+<code>&lt;server> &lt;memory-free-min></code> if present in resin.xml.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+  <tr>
+    <td>memory-free-min</td>
+    <td>The critical minimum amount of free memory.</td>
+    <td><a javadoc="com.caucho.config.types.Bytes">Bytes</a></td>
+    <td>1m</td>
+  </tr>
+  <tr>
+    <td>free-warning</td>
+    <td>The warning threshold percentage.</td>
+    <td>double (percentage 0.0 - 100.0)</td>
+    <td>0.01</td>
+  </tr>
+  <tr>
+    <td>objectName</td>
+    <td>Explicitly set the MBean name to query for memory stats.  When left 
+    unset the health check will search available MBeans for the appropriate 
+    memory stats MBean.</td>
+    <td>javax.management.ObjectName</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:MemoryTenuredHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>UNKNOWN</td>
+    <td>If there is no PermGen pool (JVM vendor dependent) or the appropriate MBean could not be determined.</td>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If free memory is below <var>free-warning</var> percentage after a GC.</td>
+  </tr>
+  <tr>
+    <td>CRITICAL</td>
+    <td>If free memory is below <var>memory-free-min</var> after a GC.</td>
+  </tr>
+</deftable>
+
+<example title="Example: &lt;health:MemoryTenuredHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:MemoryTenuredHealthCheck>
+    &lt;memory-free-min>1m&lt;/memory-free-min>
+    &lt;free-warning>0.01&lt;/free-warning>
+  &lt;/health:MemoryTenuredHealthCheck>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:Nand>" name="health:Nand">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.Nand"/>
+
+<description>
+<p>Qualifies an action to match if all of the child predicates fail.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Nand> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:Nand>
+      &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+      &lt;health:IfHealthCritical health-check="${memoryPermGenHealthCheck}"/>      
+    &lt;/health:Nand>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:Nor>" name="health:Nor">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.Nor"/>
+
+<description>
+<p>Qualifies an action to match if none of the child predicates match.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Nor> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:Nor>
+      &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+      &lt;health:IfHealthCritical health-check="${memoryPermGenHealthCheck}"/>      
+    &lt;/health:Nor>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:Not>" name="health:Not">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.Not"/>
+
+<description>
+<p>Qualifies an action to match if the child predicate is false.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Not> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+    &lt;health:Not>
+      &lt;health:IfCron>
+        &lt;enable-at>0 7 * * *&lt;/enable-at>
+        &lt;disable-at>0 11 * * *&lt;/disable-at>
+      &lt;/health:IfCron>
+    &lt;/health:Not>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:OnRestart>" name="health:OnRestart">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.OnRestart"/>
+
+<description>
+<p>Qualifies an action to match only when Resin is restarted by the watchdog.  
+This generally only occurs during an error condition.  <a href="#health:OnStart">
+OnStart</a> will fire during this event also.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:OnRestart> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:SendMail>
+    &lt;to>admin@yourdomain.com&lt;/to>
+    &lt;health:OnRestart/>
+  &lt;/health:SendMail> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:OnStart>" name="health:OnStart">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.OnStart"/>
+
+<description>
+<p>Qualifies an action to match only when Resin is starting.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:OnStart> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:SendMail>
+    &lt;to>admin@yourdomain.com&lt;/to>
+    &lt;health:OnStart/>
+  &lt;/health:SendMail> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:OnStop>" name="health:OnStop">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.OnStop"/>
+
+<description>
+<p>Qualifies an action to match only when Resin is stopping.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:OnStop> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:SendMail>
+    &lt;to>admin@yourdomain.com&lt;/to>
+    &lt;health:OnStop/>
+  &lt;/health:SendMail> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:Or>" name="health:Or">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.Or"/>
+
+<description>
+<p>Qualifies an action to match if any of the child predicates match.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Or> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:Restart>
+    &lt;health:Or>
+      &lt;health:IfHealthCritical health-check="${memoryTenuredHealthCheck}"/>
+      &lt;health:IfHealthCritical health-check="${memoryPermGenHealthCheck}"/>      
+    &lt;/health:Or>
+  &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:Restart>" name="health:Restart">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.Restart"/>
+
+<description>
+<p>Restart Resin.  Resin will exit with the reason HEALTH.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td colspan="4">None</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Restart> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:Restart/>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:SendMail>" name="health:SendMail">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.SendMail"/>
+
+<description>
+<p>Send an email containing a summary of the current Resin health status.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>to</td>
+    <td>A "TO:" address; a mail recipient</td>
+    <td>String</td>
+    <td>N/A</td>
+  </tr>
+  <tr>
+    <td>from</td>
+    <td>The "FROM:" address</td>
+    <td>String</td>
+    <td>resin@localhost</td>
+  </tr>
+  <tr>
+    <td>mail</td>
+    <td>A <a config-tag="mail">&lt;mail></a> resource to use, see example</td>
+    <td>javax.mail.Session</td>
+    <td>N/A</td>
+  </tr>
+</attributes>
+
+<p>Without the <var>mail</var> parameter, the default behaviour for sending 
+mail is to contact an SMTP server at host 127.0.0.1 (the localhost) on port 25. 
+System properties can be used to configure a different SMTP server.</p>
+
+<example title="resin.xml - smtp server configuration">
+  &lt;system-property mail.smtp.host="127.0.0.1"/&gt;
+  &lt;system-property mail.smtp.port="25"/&gt;
+</example>
+
+<example title="Example: &lt;health:SendMail> in health.xml using system properties">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:SendMail>
+    &lt;to>admin@yourdomain.com&lt;/to>
+    &lt;to>another_admin@yourdomain.com&lt;/to>
+    &lt;from>resin@yourdomain.com&lt;/from>
+  &lt;health:SendMail>
+
+&lt;/cluster>
+</example>
+
+<p>Much more advanced SMTP options can be set by configuring a 
+<a config-tag="mail">&lt;mail></a> resource to use for sending health alerts.</p>
+
+<example title="Example: &lt;health:SendMail> in health.xml referencing a &lt;mail> resource">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;mail name="healthMailer">
+    &lt;smtp-host>mail.yourdomain.com&lt;/smtp-host>
+    &lt;smtp-port>25&lt;/smtp-port>
+    &lt;from>resin@yourdomain.com&lt;/from>
+  &lt;/mail>
+  
+  &lt;health:SendMail mail="${healthMailer}">
+    &lt;to>admin@yourdomain.com&lt;/to>
+  &lt;health:SendMail>
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:TransactionHealthCheck>" name="health:TransactionHealthCheck">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.check.TransactionHealthCheck"/>
+
+<description>
+<p>Monitors the Resin transaction manager for commit failures.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>enabled</td>
+    <td>Check is enabled or disabled</td>
+    <td>boolean</td>
+    <td>true</td>
+  </tr>
+</attributes>
+
+<deftable title="&lt;health:TransactionHealthCheck> Conditions">
+  <tr>
+    <th>HealthStatus</th>
+    <th>condition</th>
+  </tr>
+  <tr>
+    <td>WARNING</td>
+    <td>If there were commit failures since the last check.</td>
+  </tr>
+</deftable>
+
+
+<example title="Example: &lt;health:TransactionHealthCheck> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:TransactionHealthCheck/>
+
+&lt;/cluster>
 </example>
 
 </defun>
@@ -8560,127 +10386,6 @@ singletons.  Applications should use the &lt;bean> syntax instead.</p>
 
 </defun> 
 
-<defun title="&lt;resource-adapter>" name="resource-adapter" occur="*" version="Resin 3.1">
-<parents>resin, cluster, host, web-app</parents>
-  <!-- com.caucho.config.types.Resource -->
-
-<description>
-<p>&lt;resource-adapter> configures a JCA <code>ResourceAdapter</code> 
-in combination with <a
-config-tag="connection-factory">&lt;connection-factory></a>
-for connections or <a config-tag="activation-spec">&lt;activation-spec</a> 
-for message listeners.</p>
-
-<p><code>ResourceAdapters</code> can be deployed in .rar files,
-but this is not required by Resin.  Instead, you can configure the
-ResourceAdapter directly.</p>
-
-<p>A symbolic URI can be used in place of the ResourceAdapter's
-class name.</p>
-</description>
-
-<attributes>
-<tr>
-  <th>Attribute</th>
-  <th>Description</th>
-  <th>Default</th>
-</tr>
-<tr>
-  <td>class</td>
-  <td>The classname of the ResourceAdapter implementation class</td>
-  <td>required (or <var>uri</var>)</td>
-</tr>
-<tr>
-  <td>init</td>
-  <td>IoC initialization for the ResourceAdapter</td>
-  <td></td>
-</tr>
-<tr>
-  <td>jndi-name</td>
-  <td>JNDI name for binding the ResourceAdapter</td>
-  <td></td>
-</tr>
-<tr>
-  <td>name</td>
-  <td><a href="admin/config-candi.xtp#@Named">@Named</a> binding for Resin-IoC injection.</td>
-  <td></td>
-</tr>
-<tr>
-  <td>uri</td>
-  <td>Alias schema for the ResourceAdapter class name</td>
-  <td></td>
-</tr>
-</attributes>
-
-<schema>
-element resource-adapter {
-  (class | uri)
-  &amp; init?
-  &amp; name?
-  &amp; jndi-name?
-}
-</schema>
-
-</defun> 
-
-<defun title="&lt;resource-deploy>" name="resource-deploy" occur="*" version="Resin 3.0">
-<parents>resin, cluster, host-default, host, web-app-default, web-app</parents>
-  <!-- com.caucho.jca.ResourceDeploy -->
-
-<description>
-<p>&lt;resource-deploy> defines a deployment directory for .rar files.</p>
-
-<p>Connectors and resources defined in .rar files must be deployed
-before they can be configured by <a config-tag="connector">connector</a>.
-The &lt;resource-deploy&gt; tag specifies the directory for that deployment.
-</p>
-</description>
-
-<attributes>
-<tr>
-  <th>Attribute</th>
-  <th>Description</th>
-  <th>Default</th>
-</tr>
-<tr>
-  <td>resource-deploy</td>
-  <td>Configures .rar deployment</td>
-  <td>required</td>
-</tr>
-<tr>
-  <td>path</td>
-  <td>Configures the path where users will place .rar files</td>
-  <td>required</td>
-</tr>
-<tr>
-  <td>expand-path</td>
-  <td>Configures the directory where Resin will expand rar files</td>
-  <td>the path value</td>
-</tr>
-</attributes>
-
-<schema>
-element resource-deploy {
-  path
-  &amp; expand-directory?
-  &amp; expand-path?
-  &amp; resource-default?
-}
-</schema>
-
-<example title="Example: resource-deploy">
-&lt;resin xmlns="http://caucho.com/ns/resin">
-  &lt;cluster id="app-tier">
-
-    &lt;host id=""&gt;
-      &lt;resource-deploy path="deploy"/&gt;
-    &lt;/host>
-  &lt;/cluster&gt;
-&lt;/resin&gt;
-</example>
-
-</defun>
-
 <defun title="&lt;resource-ref>" name="resource-ref" occur="*" version="Servlet 2.2">
 <parents>resin, cluster, host, web-app</parents>
   <!-- com.caucho.config.types.ResourceRef -->
@@ -8959,7 +10664,7 @@ element security-provider {
 <p>&lt;server> configures a JVM instance in the cluster.
 Each &lt;server&gt; is uniquely identified by
 its <var>id</var> attribute.  The <var>id</var> will match
-the -server-id command line argument.</p>
+the -server command line argument.</p>
 <p>The server listens to an internal network address,
 e.g. 192.168.0.10:6800 for clustering, load balancing,
 and administration.</p>
@@ -9005,7 +10710,7 @@ threads and virtual hosts.</p>
 <ul>
 <li>Common resources for all virtual hosts and web-apps.</li>
 <li>Thread pooling</li>
-<li>HTTP and SRUN/Cluster ports</li>
+<li>HTTP and Server/Cluster ports</li>
 <li>Caching</li>
 <li>virtual host configuration and common web-app-default</li>
 </ul>
@@ -9015,7 +10720,7 @@ to be dropped into resin/lib.  &lt;server&gt; configures
 the main dynamic environment.  Database pools common to all virtual hosts,
 for example, should be configured in the &lt;server&gt; block.</p>
 <p>The &lt;server&gt; configures the &lt;thread-pool&gt; and a set
-of &lt;http&gt; and &lt;srun&gt; ports which share the thread pool.
+of &lt;http&gt; and &lt;server&gt; ports which share the thread pool.
 Requests received on those ports will use worker threads from the
 thread pool.</p>
 <deftable-childtags>

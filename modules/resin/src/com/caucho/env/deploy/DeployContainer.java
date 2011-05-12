@@ -319,12 +319,13 @@ public class DeployContainer<C extends DeployControllerApi<?>>
     if (bestController == null)
       return null;
     
-    /*
+    // server/1h8j
     for (C controller : controllerList) {
-      bestController.merge((DeployControllerApi) controller);
+      if (controller != bestController)
+        bestController.merge((DeployControllerApi) controller);
     }
-    */
-    
+
+    // server/1h10
     _deployListGenerator.mergeController(bestController, name);
     
     return addController(bestController);
@@ -357,10 +358,6 @@ public class DeployContainer<C extends DeployControllerApi<?>>
     }
     else {
       init(newController);
-      
-      if (newController instanceof HostController) {
-        HostController host = (HostController) newController;
-      }
 
       return newController;
     }

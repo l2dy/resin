@@ -123,7 +123,7 @@ public class InlineBeanType<T> extends ConfigType<T>
   private ManagedBeanImpl<T> _bean;
   private InjectionTarget<T> _injectionTarget;
 
-  private ArrayList<ConfigProgram> _injectList;
+  //private ArrayList<ConfigProgram> _injectList;
   private ArrayList<ConfigProgram> _initList;
 
   private boolean _isIntrospecting;
@@ -134,6 +134,9 @@ public class InlineBeanType<T> extends ConfigType<T>
   public InlineBeanType(Class<T> beanClass)
   {
     _beanClass = beanClass;
+    
+    if (EnvBean.class.isAssignableFrom(beanClass))
+      setEnvBean(true);
   }
 
   /**
@@ -323,6 +326,12 @@ public class InlineBeanType<T> extends ConfigType<T>
       if (attr != null)
         return attr;
     }
+    
+    // server/13jm - environment beans have priority over the custom bean
+    ConfigType<?> envBean = TypeFactory.getFactory().getEnvironmentType(name);
+    
+    if (envBean != null && envBean.isEnvBean())
+      return null;
 
     if (_addCustomBean != null) {
       return _addCustomBean;
@@ -417,8 +426,10 @@ public class InlineBeanType<T> extends ConfigType<T>
   {
     introspectInject();
     
+    /*
     for (int i = 0; i < _injectList.size(); i++)
       _injectList.get(i).inject(bean, null);
+      */
   }
 
   /**
@@ -593,10 +604,11 @@ public class InlineBeanType<T> extends ConfigType<T>
 
   private void introspectComplete()
   {
-    ArrayList<InlineBeanType> childList = new ArrayList<InlineBeanType>(_pendingChildList);
+    ArrayList<InlineBeanType<?>> childList
+      = new ArrayList<InlineBeanType<?>>(_pendingChildList);
 
     // ioc/20h4
-    for (InlineBeanType child : childList) {
+    for (InlineBeanType<?> child : childList) {
       child.introspectParent();
       child.introspectComplete();
     }
@@ -607,13 +619,13 @@ public class InlineBeanType<T> extends ConfigType<T>
     if (_isIntrospecting)
       return true;
 
-    Class parentClass = _beanClass.getSuperclass();
+    Class<?> parentClass = _beanClass.getSuperclass();
     
     if (parentClass != null) {
-      ConfigType parentType = TypeFactory.getType(parentClass);
+      ConfigType<?> parentType = TypeFactory.getType(parentClass);
 
-      if (parentType instanceof InlineBeanType) {
-        InlineBeanType parentBean = (InlineBeanType) parentType;
+      if (parentType instanceof InlineBeanType<?>) {
+        InlineBeanType<?> parentBean = (InlineBeanType<?>) parentType;
 
         return parentBean.isIntrospecting();
       }
@@ -627,7 +639,7 @@ public class InlineBeanType<T> extends ConfigType<T>
     Class<?> parentClass = _beanClass.getSuperclass();
     
     if (parentClass != null) {
-      ConfigType parentType = TypeFactory.getType(parentClass);
+      ConfigType<?> parentType = TypeFactory.getType(parentClass);
 
       if (parentType instanceof InlineBeanType<?>) {
         InlineBeanType<?> parentBean = (InlineBeanType<?>) parentType;
@@ -689,7 +701,7 @@ public class InlineBeanType<T> extends ConfigType<T>
    */
   public void introspectMethods(Method []methods)
   {
-    Constructor []constructors = _beanClass.getConstructors();
+    Constructor<?> []constructors = _beanClass.getConstructors();
 
     _stringConstructor = findConstructor(constructors, String.class);
 
@@ -731,14 +743,14 @@ public class InlineBeanType<T> extends ConfigType<T>
       if ((name.equals("addBuilderProgram") || name.equals("addProgram"))
           && paramTypes.length == 1
           && paramTypes[0].equals(ConfigProgram.class)) {
-        ConfigType type = TypeFactory.getType(paramTypes[0]);
+        ConfigType<?> type = TypeFactory.getType(paramTypes[0]);
 
         _addProgram = new ProgramAttribute(method, type);
       }
       else if (name.equals("addContentProgram")
           && paramTypes.length == 1
           && paramTypes[0].equals(ConfigProgram.class)) {
-        ConfigType type = TypeFactory.getType(paramTypes[0]);
+        ConfigType<?> type = TypeFactory.getType(paramTypes[0]);
 
         _addContentProgram = new ProgramAttribute(method, type);
       }
@@ -756,23 +768,23 @@ public class InlineBeanType<T> extends ConfigType<T>
       else if ((name.equals("addCustomBean")
           && paramTypes.length == 1
           && paramTypes[0].equals(XmlBeanConfig.class))) {
-        ConfigType customBeanType
-        = TypeFactory.getType(XmlBeanConfig.class);
+        ConfigType<?> customBeanType
+          = TypeFactory.getType(XmlBeanConfig.class);
 
         _addCustomBean = new XmlBeanAttribute(method, customBeanType);
       }
       else if ((name.equals("addAnnotation")
           && paramTypes.length == 1
           && paramTypes[0].equals(Annotation.class))) {
-        ConfigType customBeanType
-        = TypeFactory.getType(XmlBeanConfig.class);
+        ConfigType<?> customBeanType
+          = TypeFactory.getType(XmlBeanConfig.class);
 
         _addCustomBean = new XmlBeanAttribute(method, customBeanType);
       }
       else if (name.equals("setProperty")
           && paramTypes.length == 2
           && paramTypes[0].equals(String.class)) {
-        ConfigType type = TypeFactory.getType(paramTypes[1]);
+        ConfigType<?> type = TypeFactory.getType(paramTypes[1]);
 
         PropertyAttribute attr = new PropertyAttribute(method, type);
 
@@ -784,8 +796,8 @@ public class InlineBeanType<T> extends ConfigType<T>
         _setParent = method;
       }
       else if (name.equals("add")
-          && paramTypes.length == 1) {
-        ConfigType type = TypeFactory.getType(paramTypes[0]);
+               && paramTypes.length == 1) {
+        ConfigType<?> type = TypeFactory.getType(paramTypes[0]);
 
         Attribute addAttr = new AddAttribute(method, type);
 
@@ -796,8 +808,6 @@ public class InlineBeanType<T> extends ConfigType<T>
       else if ((name.startsWith("set") || name.startsWith("add"))
           && paramTypes.length == 1
           && createMap.get(name.substring(3)) == null) {
-        Class<?> type = paramTypes[0];
-
         String className = name.substring(3);
         String xmlName = toXmlName(name.substring(3));
 
@@ -816,7 +826,7 @@ public class InlineBeanType<T> extends ConfigType<T>
       else if ((name.startsWith("create")
           && paramTypes.length == 0
           && ! void.class.equals(method.getReturnType()))) {
-        Class type = method.getReturnType();
+        Class<?> type = method.getReturnType();
 
         Method setter = setterMap.get(name.substring(6));
 
@@ -902,20 +912,22 @@ public class InlineBeanType<T> extends ConfigType<T>
   private void introspectInject()
   {
     synchronized (_introspectLock) {
-      if (_injectList != null)
+      if (_initList != null)
         return;
 
-      _injectList = new ArrayList<ConfigProgram>();
-      _initList = new ArrayList<ConfigProgram>();
+      ArrayList<ConfigProgram> initList = new ArrayList<ConfigProgram>();
     
-      InjectionTargetBuilder.introspectInit(_initList, getAnnotatedType());
+      InjectionTargetBuilder.introspectInit(initList, getAnnotatedType());
+      // InjectionTargetBuilder.introspectInit(initList, _beanClass);
+      
+      _initList = initList;
     }
   }
 
-  private static Constructor findConstructor(Constructor []constructors,
+  private static Constructor findConstructor(Constructor<?> []constructors,
                                              Class<?> ...types)
   {
-    for (Constructor ctor : constructors) {
+    for (Constructor<?> ctor : constructors) {
       Class<?> []paramTypes = ctor.getParameterTypes();
 
       if (isMatch(paramTypes, types))

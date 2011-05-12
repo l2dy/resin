@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
@@ -24,25 +24,18 @@
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Alex Rojkov
+ * @author Fred Zappert (fred@caucho.com)
  */
 
-package com.caucho.boot;
+package com.caucho.distcache;
 
-import com.caucho.server.admin.WebAppDeployClient;
-import com.caucho.util.L10N;
-
-public class JmxGetCommand extends JmxCommand
+/**
+ * Provides a null implementation of {@link javax.cache.CacheListener}
+ *
+ * @note This implementation of CacheListne is synchrnoous to the operation being observed.
+ */
+public class CacheListenerImpl
+  extends AbstractCacheListener
+  implements javax.cache.CacheListener
 {
-  private static final L10N L = new L10N(JmxGetCommand.class);
-
-  @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
-  {
-  }
-
-  @Override
-  public void usage()
-  {
-  }
 }

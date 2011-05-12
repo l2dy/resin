@@ -29,7 +29,12 @@
 
 package com.caucho.boot;
 
+import com.caucho.config.ConfigException;
+import com.caucho.server.admin.ManagerClient;
 import com.caucho.util.L10N;
+
+import javax.management.MalformedObjectNameException;
+import javax.management.ObjectName;
 
 public class JmxSetCommand extends JmxCommand
 {
@@ -38,10 +43,52 @@ public class JmxSetCommand extends JmxCommand
   @Override
   public void doCommand(WatchdogArgs args, WatchdogClient client)
   {
+
+    String pattern = args.getArg("-pattern");
+
+    if (pattern == null)
+      throw new ConfigException(L.l(
+        "-pattern is required for jmx-set command"));
+
+    try {
+      ObjectName.getInstance(pattern);
+    } catch (MalformedObjectNameException e) {
+      throw new ConfigException(L.l("invalid pattern `{0}': `{1}'",
+                                    pattern,
+                                    e.getMessage()));
+    }
+
+    String attribute = args.getArg("-attribute");
+
+    if (attribute == null)
+      throw new ConfigException(L.l(
+        "-attribute is required for jmx-set command"));
+
+    String value = args.getDefaultArg();
+
+    if (value == null)
+      throw new ConfigException(L.l(
+        "jmx-set requires <value> parameter be specified"));
+
+    ManagerClient manager = getManagerClient(args, client);
+
+    String result = manager.setJmx(pattern, attribute, value);
+
+    System.out.println(result);
   }
+
+
 
   @Override
   public void usage()
   {
+    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] jmx-set -user <user> -password <password> -pattern <pattern> -attribute <attribute> value"));
+    System.err.println(L.l(""));
+    System.err.println(L.l("description:"));
+    System.err.println(L.l("   sets value on a MBeans attribute to <value>"));
+    System.err.println(L.l(""));
+    System.err.println(L.l("options:"));
+    System.err.println(L.l("   -pattern               : pattern to match MBean, adheres to the rules defined for javax.managment.ObjectName e.g. qa:type=Foo"));
+    System.err.println(L.l("   -attribute             : name of the attribute"));
   }
 }

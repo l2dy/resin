@@ -29,7 +29,7 @@
 
 package com.caucho.env.distcache;
 
-import com.caucho.distcache.CacheManager;
+import com.caucho.distcache.CacheManagerImpl;
 import com.caucho.distcache.ObjectCache;
 import com.caucho.server.distcache.AbstractCacheManager;
 
@@ -40,7 +40,7 @@ public class CacheBuilder {
   private final DistCache _cache;
   
   CacheBuilder(String name,
-               CacheManager cacheManager,
+               CacheManagerImpl cacheManager,
                AbstractCacheManager<?> backingManager)
   {
     _cache = new DistCache(name, cacheManager, backingManager);

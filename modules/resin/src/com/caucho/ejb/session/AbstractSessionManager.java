@@ -560,6 +560,10 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
   mergeMethod(AnnotatedMethod<? super X> method,
               ArrayList<AnnotatedType<? super X>> apiList)
   {
+    // ioc/07g3
+    if (apiList.size() == 0)
+      return method;
+    
     for (AnnotatedType<? super X> api : apiList) {
       AnnotatedMethod<? super X> apiMethod
         = AnnotatedTypeUtil.findMethod(api, method);
@@ -569,7 +573,8 @@ abstract public class AbstractSessionManager<X> extends AbstractEjbBeanManager<X
           = new AnnotatedMethodImpl(apiMethod.getDeclaringType(),
                                     method,
                                     apiMethod.getJavaMember(),
-                                    toArray(apiMethod.getAnnotations()));
+                                    toArray(apiMethod.getAnnotations()),
+                                    null);
 
         return extMethod;
       }

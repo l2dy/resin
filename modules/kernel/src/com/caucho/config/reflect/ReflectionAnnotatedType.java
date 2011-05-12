@@ -35,6 +35,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Type;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -52,10 +53,10 @@ import javax.enterprise.inject.spi.AnnotatedType;
 import javax.inject.Named;
 import javax.inject.Qualifier;
 import javax.inject.Scope;
-import javax.interceptor.Interceptors;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.reflect.BaseType.ClassFill;
 import com.caucho.util.L10N;
 
 /**
@@ -84,6 +85,8 @@ public class ReflectionAnnotatedType<T>
 
   private Set<AnnotatedMethod<? super T>> _methodSet
     = new LinkedHashSet<AnnotatedMethod<? super T>>();
+  
+  private volatile boolean _isIntrospected;
 
   ReflectionAnnotatedType(InjectManager manager, 
                           BaseType type)
@@ -96,13 +99,17 @@ public class ReflectionAnnotatedType<T>
     
     Class<?> parentClass = _javaClass.getSuperclass();
     
-    if (parentClass != null && ! parentClass.equals(Object.class))
+    if (parentClass != null && ! parentClass.equals(Object.class)) {
       _parentType = ReflectionAnnotatedFactory.introspectType(parentClass);
+    }
     
     if (getBaseTypeImpl().getParamMap() != null)
       _paramMap.putAll(getBaseTypeImpl().getParamMap());
     
-    introspect(_javaClass);
+    introspectInheritedAnnotations(_javaClass);
+    
+    if (_javaClass.isAnnotationPresent(Specializes.class))
+      introspectSpecializesAnnotations(_javaClass);
   }
 
   /**
@@ -131,6 +138,8 @@ public class ReflectionAnnotatedType<T>
   @Override
   public Set<AnnotatedConstructor<T>> getConstructors()
   {
+    introspect();
+    
     return _constructorSet;
   }
 
@@ -140,6 +149,8 @@ public class ReflectionAnnotatedType<T>
   @Override
   public Set<AnnotatedMethod<? super T>> getMethods()
   {
+    introspect();
+    
     return _methodSet;
   }
 
@@ -167,20 +178,38 @@ public class ReflectionAnnotatedType<T>
   @Override
   public Set<AnnotatedField<? super T>> getFields()
   {
+    introspect();
+    
     return _fieldSet;
   }
 
+  private void introspect()
+  {
+    if (_isIntrospected)
+      return;
+    
+    synchronized (this) {
+      if (! _isIntrospected) {
+        introspect(_javaClass);
+        
+        _isIntrospected = true;
+      }
+    }
+  }
+  
   private void introspect(Class<T> cl)
   {
     try {
+      /*
       introspectInheritedAnnotations(cl);
       
       if (cl.isAnnotationPresent(Specializes.class))
         introspectSpecializesAnnotations(cl);
+        */
 
       introspectFields(cl);
 
-      introspectMethods(cl);
+      introspectMethods(cl, null);
 
       if (! cl.isInterface()) {
         for (Constructor<?> ctor : cl.getDeclaredConstructors()) {
@@ -222,7 +251,8 @@ public class ReflectionAnnotatedType<T>
     }
   }
 
-  private void introspectMethods(Class<?> cl)
+  private void introspectMethods(Class<?> cl,
+                                 HashMap<String,BaseType> paramMap)
   {
     if (cl == null)
       return;
@@ -244,7 +274,11 @@ public class ReflectionAnnotatedType<T>
         }
         
         if (! isMethodOverride(method, childMethod)) {
-          _methodSet.add(new AnnotatedMethodImpl<T>(this, null, method));
+          _methodSet.add(new AnnotatedMethodImpl<T>(this,
+                                                    null, 
+                                                    method,
+                                                    method.getAnnotations(),
+                                                    paramMap));
         }
         /*
         else if (! isParent)
@@ -272,8 +306,15 @@ public class ReflectionAnnotatedType<T>
     
     // ejb/4050
     if (cl.isInterface()) {
-      for (Class<?> superInterface : cl.getInterfaces()) 
-        introspectMethods(superInterface);
+      for (Type superInterface : cl.getGenericInterfaces()) {
+        if (superInterface instanceof Class<?>)
+          introspectMethods((Class<?>) superInterface, null);
+        else {
+          BaseType type = BaseType.create(superInterface, null, ClassFill.SOURCE);
+          
+          introspectMethods(type.getRawClass(), type.getParamMap());
+        }
+      }
     }
     else {
       introspectParentMethods(_parentType);

@@ -53,6 +53,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.annotation.PostConstruct;
+import javax.cache.CacheManager;
 import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.spi.Bean;
 import javax.management.ObjectName;
@@ -100,6 +101,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.el.CandiElResolver;
+import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.SingletonBindingHandle;
 import com.caucho.config.j2ee.PersistenceContextRefConfig;
@@ -110,6 +112,8 @@ import com.caucho.config.types.PathBuilder;
 import com.caucho.config.types.Period;
 import com.caucho.config.types.ResourceRef;
 import com.caucho.config.types.Validator;
+import com.caucho.distcache.ClusterCacheManager;
+import com.caucho.distcache.ClusterCacheManagerDelegate;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.manager.EjbModule;
 import com.caucho.env.deploy.DeployContainer;
@@ -582,6 +586,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Initialization before configuration
    */
+  @Override
   public void preConfigInit()
   {
     /*
@@ -2838,6 +2843,320 @@ public class WebApp extends ServletContextImpl
                              namedFragments,
                              anonFragments);
     } else {
+      List<WebAppFragmentConfig> source = new ArrayList<WebAppFragmentConfig>();
+      List<WebAppFragmentConfig> result = new ArrayList<WebAppFragmentConfig>();
+      Set<String> names = getOrderingNames(_webFragments);
+      
+      source.addAll(_webFragments);
+      
+      sortFragments(names, source, result);
+      
+      return result;
+    }
+  }
+  
+  private Set<String> getOrderingNames(List<WebAppFragmentConfig> fragments)
+  {
+    Set<String> names = new HashSet<String>();
+    
+    for (WebAppFragmentConfig fragment : fragments) {
+      Ordering ordering = fragment.getOrdering();
+      
+      if (ordering != null) {
+        addOrderingNames(names, fragment.getName(), ordering.getBefore());
+        addOrderingNames(names, fragment.getName(), ordering.getAfter());
+      }
+    }
+    
+    return names;
+  }
+  
+  private void addOrderingNames(Set<String> names,
+                                String selfName,
+                                Ordering ordering)
+  {
+    if (ordering == null)
+      return;
+    
+    for (Object order : ordering.getOrder()) {
+      if (order instanceof String) {
+        names.add((String) order);
+      }
+      else if (ordering.isOthers(order)) {
+        if (selfName != null)
+          names.add(selfName);
+      }
+    }
+  }
+  
+  
+  private void sortFragments(Set<String> names,
+                             List<WebAppFragmentConfig> sourceList,
+                             List<WebAppFragmentConfig> resultList)
+  {
+    while (sourceList.size() > 0) {
+      int sourceSize = sourceList.size();
+      
+      for (int i = 0; i < sourceList.size(); i++) {
+        WebAppFragmentConfig source = sourceList.get(i);
+
+        if (isFragmentInsertable(source, names, sourceList, resultList)) {
+          resultList.add(source);
+          sourceList.remove(source);
+        }
+      }
+      
+      if (sourceList.size() == sourceSize) {
+        throw new ConfigException(L.l("web-fragments at '{0}' appear to have circular dependency. Consider using <absolute-ordering> in web.xml.\n  {1}", 
+                                      this,
+                                      sourceList));
+        
+      }
+    }
+  }
+  
+  private boolean isFragmentInsertable(WebAppFragmentConfig source,
+                                       Set<String> names,
+                                       List<WebAppFragmentConfig> sourceList,
+                                       List<WebAppFragmentConfig> resultList)
+  {
+    if (isBeforeOrderingPresent(source, names, sourceList)) {
+      return false;
+    }
+    
+    if (! isBeforeOrderingValid(source, names, sourceList, resultList)) {
+      return false;
+    }
+    
+    if (! isAfterOrderingValid(source, names, sourceList, resultList)) {
+      return false;
+    }
+
+    return true;
+  }
+  
+  private boolean isAllOrderingPresent(List<WebAppFragmentConfig> list,
+                                       Ordering ordering)
+  {
+    if (ordering == null)
+      return true;
+    
+    for (Object key : ordering.getOrder()) {
+      if (key instanceof String) {
+        String keyName = (String) key;
+        
+        if (! isFragmentInList(list, keyName)) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+  
+  private boolean isBeforeOrderingValid(WebAppFragmentConfig source,
+                                        Set<String> names,
+                                        List<WebAppFragmentConfig> sourceList,
+                                        List<WebAppFragmentConfig> resultList)
+  {
+    for (WebAppFragmentConfig fragment : resultList) {
+      Ordering ordering = fragment.getOrdering();
+      
+      if (ordering != null) {
+        Ordering before = ordering.getBefore();
+        
+        if (! isBeforeOrderingValid(before, source, names, 
+                                    sourceList, resultList)) {
+          return false;
+        }
+      }
+    }
+    
+    return true;
+  }
+  
+  private boolean isBeforeOrderingPresent(WebAppFragmentConfig source,
+                                          Set<String> names,
+                                          List<WebAppFragmentConfig> sourceList)
+  {
+    for (WebAppFragmentConfig fragment : sourceList) {
+      if (fragment == source)
+        continue;
+      
+      Ordering ordering = fragment.getOrdering();
+      
+      if (ordering != null) {
+        Ordering before = ordering.getBefore();
+        
+        if (isBeforeOrderingPresent(before, source, names, sourceList)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean isBeforeOrderingValid(Ordering before,
+                                        WebAppFragmentConfig source,
+                                        Set<String> names,
+                                        List<WebAppFragmentConfig> sourceList,
+                                        List<WebAppFragmentConfig> resultList)
+  {
+    if (before == null)
+      return true;
+    
+    String name = source.getName();
+    
+    boolean isOthers = false;
+    
+    for (Object order : before.getOrder()) {
+      if (name != null && name.equals(order)) {
+        return ! isOthers;
+      }
+      
+      if (before.isOthers(order)) {
+        if (isOther(name, names)) {
+          return true;
+        }
+        
+        isOthers = isAnyOther(names, sourceList);
+      }
+      else if (order instanceof String) {
+        String key = (String) order;
+        
+        if (! isFragmentInList(resultList, key))
+          return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  private boolean isAfterOrderingValid(WebAppFragmentConfig source,
+                                       Set<String> names,
+                                       List<WebAppFragmentConfig> sourceList,
+                                       List<WebAppFragmentConfig> resultList)
+  {
+    Ordering ordering = source.getOrdering();
+    
+    if (ordering == null)
+      return true;
+    
+    Ordering after = ordering.getAfter();
+    
+    if (after == null)
+      return true;
+    
+    for (Object order : after.getOrder()) {
+      if (after.isOthers(order)) {
+        if (isAnyOther(names, sourceList))
+          return false;
+      }
+      else if (order instanceof String) {
+        String key = (String) order;
+        
+        if (! isFragmentInList(resultList, key))
+          return false;
+      }
+    }
+    
+    return true;
+  }
+  
+  private boolean isFragmentInList(List<WebAppFragmentConfig> list,
+                                   String keyName)
+  {
+    for (WebAppFragmentConfig config : list) {
+      if (keyName.equals(config.getName()))
+        return true;
+    }
+    
+    return false;
+  }
+  
+  private boolean isOther(String name, Set<String> names)
+  {
+    return name == null || ! names.contains(name);
+  }
+  
+  private boolean isBeforeOrderingPresent(Ordering before,
+                                          WebAppFragmentConfig source,
+                                          Set<String> names,
+                                          List<WebAppFragmentConfig> sourceList)
+  {
+    if (before == null)
+      return false;
+    
+    String name = source.getName();
+    
+    for (Object subOrder : before.getOrder()) {
+      if (name != null && name.equals(subOrder))
+        return true;
+      
+      if (before.isOthers(subOrder)) {
+        if (isOther(name, names))
+          return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean isOrderingPresent2(Ordering order,
+                                    String name,
+                                    Set<String> names,
+                                    List<WebAppFragmentConfig> sourceList)
+  {
+    for (Object subOrder : order.getOrder()) {
+      if (name != null && name.equals(subOrder))
+        return true;
+      
+      if (order.isOthers(subOrder)) {
+        if (isOther(name, names))
+          return true;
+        
+        // If an others fragment is still in the source list, add it.
+        if (isAnyOther(names, sourceList)) {
+          return false;
+        }
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean isAnyOther(Set<String> names,
+                             List<WebAppFragmentConfig> sourceList)
+  {
+    for (WebAppFragmentConfig fragment : sourceList) {
+      if (isOther(fragment.getName(), names)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean isAnyOther(String selfName,
+                             Set<String> names,
+                             List<WebAppFragmentConfig> sourceList)
+  {
+    for (WebAppFragmentConfig fragment : sourceList) {
+      if (selfName != null && selfName.equals(fragment.getName())) {
+        // server/1r20
+        continue;
+      }
+      
+      if (isOther(fragment.getName(), names)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  /*
       Map<WebAppFragmentConfig, Set<WebAppFragmentConfig>> parentsMap
         = new HashMap<WebAppFragmentConfig, Set<WebAppFragmentConfig>>();
 
@@ -2940,6 +3259,7 @@ public class WebApp extends ServletContextImpl
       return result;
     }
   }
+  */
 
   private List<WebAppFragmentConfig> getWebFragments(final WebAppFragmentConfig config,
                                                      Ordering ordering,

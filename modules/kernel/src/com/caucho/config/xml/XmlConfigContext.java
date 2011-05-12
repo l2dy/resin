@@ -90,7 +90,7 @@ public class XmlConfigContext {
   private final static Logger log
     = Logger.getLogger(XmlConfigContext.class.getName());
 
-  private final static QName TEXT = new QName("#text");
+  public final static QName TEXT = new QName("#text");
   private final static Object NULL = new Object();
 
   private static ThreadLocal<XmlConfigContext> _currentBuilder
@@ -347,33 +347,33 @@ public class XmlConfigContext {
    */
   public Object configureNode(Node node,
                               Object bean,
-                              ConfigType<?> type)
+                              ConfigType<?> beanType)
     throws LineConfigException
   {
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
 
     try {
-      type.beforeConfigure(this, bean, node);
-      type.beforeConfigureBean(this, bean, node);
+      beanType.beforeConfigure(this, bean, node);
+      beanType.beforeConfigureBean(this, bean, node);
 
       if (log.isLoggable(Level.ALL))
-        log.log(Level.ALL, "config begin " + type);
+        log.log(Level.ALL, "config begin " + beanType);
 
-      configureNodeAttributes(node, bean, type);
+      configureNodeAttributes(node, bean, beanType);
 
       for (Node childNode = node.getFirstChild();
            childNode != null;
            childNode = childNode.getNextSibling()) {
         QName qName = ((QAbstractNode) childNode).getQName();
 
-        configureChildNode(childNode, qName, bean, type, false);
+        configureChildNode(childNode, qName, bean, beanType, false);
       }
 
       if (log.isLoggable(Level.ALL))
-        log.log(Level.ALL, "config end " + type);
+        log.log(Level.ALL, "config end " + beanType);
 
-      type.afterConfigure(this, bean);
+      beanType.afterConfigure(this, bean);
     } catch (LineConfigException e) {
       throw e;
     } catch (Exception e) {
@@ -422,10 +422,16 @@ public class XmlConfigContext {
     }
   }
 
+  /**
+   * Configures a child node for a bean.
+   * 
+   * Properties and fields will be set.
+   * Flow will be invoked (like resin:if)
+   */
   private void configureChildNode(Node childNode,
                                   QName qName,
-                                  Object bean,
-                                  ConfigType<?> type,
+                                  Object parentBean,
+                                  ConfigType<?> parentType,
                                   boolean allowParam)
   {
     if (qName.getName().startsWith("xmlns")) {
@@ -435,27 +441,27 @@ public class XmlConfigContext {
     Attribute attrStrategy;
 
    try {
-      attrStrategy = getAttribute(type, qName, childNode);
+      attrStrategy = getAttribute(parentType, qName, childNode);
       
       if (attrStrategy == null) {
         if (qName.equals(TEXT)) {
-          validateEmptyText(bean, childNode);
+          validateEmptyText(parentBean, childNode);
         }
       }
       else if (attrStrategy.isProgram()) {
-        attrStrategy.setValue(bean, qName,
+        attrStrategy.setValue(parentBean, qName,
                               buildProgram(attrStrategy, childNode));
       }
       else if (attrStrategy.isNode()) {
-        attrStrategy.setValue(bean, qName, childNode);
+        attrStrategy.setValue(parentBean, qName, childNode);
       }
-      else if (configureInlineText(bean, childNode, qName, attrStrategy)) {
+      else if (configureInlineText(parentBean, childNode, qName, attrStrategy)) {
       }
-      else if (configureInlineBean(bean, childNode, attrStrategy)) {
+      else if (configureInlineBean(parentBean, childNode, attrStrategy)) {
       }
       else {
-        configureBeanProperties(childNode, qName, bean,
-                                type, attrStrategy,
+        configureBeanProperties(childNode, qName, parentBean,
+                                parentType, attrStrategy,
                                 allowParam);
       }
     } catch (LineConfigException e) {
@@ -485,12 +491,14 @@ public class XmlConfigContext {
     Attribute attrStrategy;
 
     attrStrategy = type.getAttribute(qName);
+    
     if (attrStrategy == null) {
       attrStrategy = type.getDefaultAttribute(qName);
     }
 
-    if (attrStrategy != null)
+    if (attrStrategy != null) {
       return attrStrategy;
+    }
 
     if (childNode instanceof Element || childNode instanceof Attr) {
       String localName = qName.getLocalName();
@@ -581,7 +589,8 @@ public class XmlConfigContext {
       return false;
   }
 
-  private boolean configureInlineBean(Object parent, Node node,
+  private boolean configureInlineBean(Object parent,
+                                      Node node,
                                       Attribute attrStrategy)
   {
     /* server/0219
@@ -596,9 +605,10 @@ public class XmlConfigContext {
       return false;
     }
     
-    QName qName = ((QNode) childNode).getQName();
+    QName parentQname = ((QNode) node).getQName();
+    QName childQname = ((QNode) childNode).getQName();
 
-    ConfigType<?> type = TypeFactory.getFactory().getEnvironmentType(qName);
+    ConfigType<?> type = TypeFactory.getFactory().getEnvironmentType(childQname);
 
     if (type == null || ! attrStrategy.isInlineType(type)) {
       // server/6500
@@ -616,7 +626,7 @@ public class XmlConfigContext {
       childBean = createNew(type, parent, childNew);
     else if (type.isQualifier()) {
       // ioc/04f8
-      Object qualifier = type.create(parent, qName);
+      Object qualifier = type.create(parent, childQname);
 
       ConfigType<?> qualifierType = TypeFactory.getType(qualifier);
 
@@ -637,7 +647,7 @@ public class XmlConfigContext {
       childBean = cdiManager.getReference(bean, attrType, cxt); 
     }
     else
-      childBean = type.create(parent, qName);
+      childBean = type.create(parent, childQname);
 
     if (childBean == null)
       return false;
@@ -648,7 +658,8 @@ public class XmlConfigContext {
     childBean = configureChildBean(childBean, childType,
                                    childNode, attrStrategy);
 
-    attrStrategy.setValue(parent, qName, childBean);
+    // ejb/7006
+    attrStrategy.setValue(parent, parentQname, childBean);
 
     return true;
   }
@@ -672,7 +683,9 @@ public class XmlConfigContext {
     childBean = configureChildBean(childBean, childBeanType,
                                    childNode, attrStrategy);
 
-    attrStrategy.setValue(bean, qName, childBean);
+    if (! childBeanType.isEnvBean()) {
+      attrStrategy.setValue(bean, qName, childBean);
+    }
   }
 
   private Object configureChildBean(Object childBean,

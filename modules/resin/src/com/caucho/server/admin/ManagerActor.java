@@ -47,20 +47,32 @@ import com.caucho.util.MemoryPoolAdapter;
 import com.caucho.util.ThreadDump;
 
 import javax.annotation.PostConstruct;
+import javax.management.Attribute;
+import javax.management.MBeanAttributeInfo;
+import javax.management.MBeanOperationInfo;
+import javax.management.MBeanParameterInfo;
 import javax.management.MBeanServer;
+import javax.management.MBeanServerFactory;
 import javax.management.ObjectName;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.management.ManagementFactory;
 import java.text.DateFormat;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -72,6 +84,7 @@ public class ManagerActor extends SimpleActor
 
   private static final L10N L = new L10N(ManagerActor.class);
   private static ClassLoader _systemClassLoader;
+  private static Map<String, Class> classMap = new HashMap<String, Class>();
 
   private Server _server;
   private MBeanServer _mBeanServer;
@@ -120,7 +133,7 @@ public class ManagerActor extends SimpleActor
 
     File file = new File(hprofDir);
 
-    if (! file.isAbsolute())
+    if (!file.isAbsolute())
       throw new ConfigException("hprof-dir must be an absolute path");
 
     _hprofDir = file;
@@ -179,7 +192,7 @@ public class ManagerActor extends SimpleActor
 
       final String fileName = base + "-" + suffix + ".hprof";
 
-      MemoryPoolAdapter memoryAdapter  = new MemoryPoolAdapter();
+      MemoryPoolAdapter memoryAdapter = new MemoryPoolAdapter();
       if (memoryAdapter.getEdenUsed() > hprofDir.getFreeSpace())
         return L.l("Not enough disk space for `{0}'", fileName);
 
@@ -193,8 +206,8 @@ public class ManagerActor extends SimpleActor
                           new String[]{String.class.getName(), boolean.class.getName()});
 
       final String result = L.l("Heap dump is written to `{0}'.\n"
-                      + "To view the file on the target machine use\n"
-                      + "jvisualvm --openfile {0}", file);
+                                + "To view the file on the target machine use\n"
+                                + "jvisualvm --openfile {0}", file);
 
       return result;
     } catch (Exception e) {
@@ -202,6 +215,397 @@ public class ManagerActor extends SimpleActor
 
       return e.getMessage();
     }
+  }
+
+  @Query
+  public String listJmx(long id, String to, String from, JmxListQuery query)
+  {
+    final List<MBeanServer> servers = new LinkedList<MBeanServer>();
+
+    String result;
+
+    try {
+      if (query.isPlatform()) {
+        servers.add(ManagementFactory.getPlatformMBeanServer());
+      }
+      else {
+        servers.addAll(MBeanServerFactory.findMBeanServer(null));
+      }
+
+      StringBuilder resultBuilder = new StringBuilder();
+
+      Set<ObjectName> beans = new HashSet<ObjectName>();
+
+      ObjectName nameQuery = null;
+      if (query.getPattern() != null)
+        nameQuery = ObjectName.getInstance(query.getPattern());
+      else if (query.isAllBeans())
+        nameQuery = ObjectName.WILDCARD;
+      else if (nameQuery == null && query.isPlatform())
+        nameQuery = ObjectName.getInstance("java.lang:*");
+      else
+        nameQuery = ObjectName.getInstance("resin:*");
+
+      for (final MBeanServer server : servers) {
+        Set<ObjectName> mbeans = server.queryNames(nameQuery, null);
+
+        for (final ObjectName mbean : mbeans) {
+          if (beans.contains(mbean))
+            continue;
+
+          beans.add(mbean);
+
+          resultBuilder.append(mbean).append('\n');
+          if (query.isPrintAttributes()) {
+            resultBuilder.append("  attributes:\n");
+            MBeanAttributeInfo []attributes = server.getMBeanInfo(mbean)
+                                                    .getAttributes();
+            for (MBeanAttributeInfo attribute : attributes) {
+              resultBuilder.append("    ").append(attribute);
+
+              if (query.isPrintValues()) {
+                resultBuilder.append('=');
+                Object value = server.getAttribute(mbean, attribute.getName());
+                resultBuilder.append('=').append(value);
+              }
+              resultBuilder.append('\n');
+            }
+          }
+
+          if (query.isPrintOperations()) {
+            resultBuilder.append("  operations:\n");
+            for (MBeanOperationInfo operation : server.getMBeanInfo(mbean)
+                                                      .getOperations()) {
+              resultBuilder.append("    ")
+                           .append(operation.getName());
+
+              MBeanParameterInfo []params = operation.getSignature();
+              if (params.length > 0) {
+                resultBuilder.append("\n      (\n");
+                for (int i = 0; i < params.length; i++) {
+                  MBeanParameterInfo param = params[i];
+
+                  resultBuilder.append("        ").append(i).append(":");
+                  resultBuilder.append(param.getType())
+                               .append(' ')
+                               .append(param.getName());
+                  if (param.getDescription() != null
+                      && ! param.getDescription().isEmpty())
+                    resultBuilder.append(" /*")
+                                 .append(param.getDescription())
+                                 .append("*/");
+
+                  resultBuilder.append('\n');
+                }
+                resultBuilder.append("      )");
+              } else {
+                resultBuilder.append("()");
+              }
+
+              if (operation.getDescription() != null
+                  && ! operation.getDescription().isEmpty()) {
+                resultBuilder.append("/*")
+                             .append(operation.getDescription())
+                             .append("*/");
+              }
+
+              resultBuilder.append('\n');
+            }
+          }
+        }
+      }
+
+      result = resultBuilder.toString();
+    } catch (Exception e) {
+      log.log(Level.SEVERE, e.getMessage(), e);
+
+      result = e.getMessage();
+    }
+
+    getBroker().queryResult(id, from, to, result);
+
+    return result;
+  }
+
+  @Query
+  public String setJmx(long id, String to, String from, JmxSetQuery query)
+  {
+    final List<MBeanServer> servers = new LinkedList<MBeanServer>();
+
+    String result;
+
+    try {
+      servers.addAll(MBeanServerFactory.findMBeanServer(null));
+
+      ObjectName nameQuery = ObjectName.getInstance(query.getPattern());
+
+      ObjectName subjectBean = null;
+      MBeanServer subjectBeanServer = null;
+
+      for (final MBeanServer server : servers) {
+        for (final ObjectName mbean : server.queryNames(nameQuery, null)) {
+          if (subjectBean != null) {
+            result = L.l("multiple beans match `{0}'",
+                         query.getPattern());
+
+            getBroker().queryResult(id, from, to, "");
+
+            return result;
+          }
+
+          subjectBean = mbean;
+          subjectBeanServer = server;
+        }
+      }
+
+      final String attributeName = query.getAttribute();
+      MBeanAttributeInfo attributeInfo = null;
+      if (subjectBean != null) {
+        for (MBeanAttributeInfo attribute : subjectBeanServer.getMBeanInfo(
+          subjectBean).getAttributes()) {
+          if (attribute.getName().equals(attributeName)) {
+            attributeInfo = attribute;
+
+            break;
+          }
+        }
+      }
+
+      if (subjectBean == null) {
+        result = L.l("no beans match `{0}'", query.getPattern());
+      }
+      else if (attributeInfo == null) {
+        result = L.l("bean at `{0}' does not appear to have attribute `{1}'",
+                     query.getPattern(),
+                     attributeName);
+      }
+      else {
+        Object oldValue = subjectBeanServer.getAttribute(subjectBean,
+                                                         attributeInfo.getName());
+
+        final Object value = toValue(attributeInfo.getType(), query.getValue());
+        final Attribute attribute = new Attribute(attributeName, value);
+
+        subjectBeanServer.setAttribute(subjectBean, attribute);
+
+        result = L.l(
+          "value for attribute `{0}' on bean `{1}' is changed from `{2}' to `{3}'",
+          attributeName,
+          subjectBean.getCanonicalName(),
+          oldValue,
+          value);
+      }
+    } catch (Exception e) {
+      log.log(Level.SEVERE, e.getMessage(), e);
+
+      result = e.toString();
+    }
+
+    getBroker().queryResult(id, from, to, result);
+
+    return result;
+  }
+
+  @Query
+  public String callJmx(long id, String to, String from, JmxCallQuery query)
+  {
+    final List<MBeanServer> servers = new LinkedList<MBeanServer>();
+
+    String result;
+
+    try {
+      servers.addAll(MBeanServerFactory.findMBeanServer(null));
+
+      ObjectName nameQuery = ObjectName.getInstance(query.getPattern());
+
+      ObjectName subjectBean = null;
+      MBeanServer subjectBeanServer = null;
+
+      for (final MBeanServer server : servers) {
+        for (final ObjectName mbean : server.queryNames(nameQuery, null)) {
+          if (subjectBean != null) {
+            result = L.l("multiple beans match `{0}'",
+                         query.getPattern());
+
+            getBroker().queryResult(id, from, to, result);
+
+            return result;
+          }
+
+          subjectBean = mbean;
+          subjectBeanServer = server;
+        }
+      }
+
+      final String operationName = query.getOperation();
+      final int operationIndex = query.getOperationIndex();
+
+      List<MBeanOperationInfo> operations = new ArrayList<MBeanOperationInfo>();
+      if (subjectBean != null) {
+        for (final MBeanOperationInfo operation : subjectBeanServer.getMBeanInfo(
+          subjectBean).getOperations()) {
+          if (operation.getName().equals(operationName)
+              && operation.getSignature().length == query.getParams().length) {
+            operations.add(operation);
+          }
+        }
+      }
+
+      if (subjectBean == null) {
+        result = L.l("no beans match `{0}'", query.getPattern());
+      }
+      else if (operations.isEmpty()) {
+        result = L.l("bean at `{0}' does not appear to have operation `{1}' accepting `{2}' arguments",
+                     query.getPattern(),
+                     operationName,
+                     query.getParams().length);
+      } else if (operations.size() > 1 && operationIndex == -1) {
+        sort(operations);
+        StringBuilder builder = new StringBuilder(L.l(
+          "Multiple operations match `{0}', please specify operation name with index e.g `{0}:0`\n",
+          operationName));
+
+        for (int i = 0; i < operations.size(); i++) {
+          MBeanOperationInfo operation = operations.get(i);
+          builder.append(operation.getName()).append(':').append(i).append('(');
+          MBeanParameterInfo[] params = operation.getSignature();
+          for (int j = 0; j < params.length; j++) {
+            MBeanParameterInfo param = params[j];
+            builder.append(param.getType());
+            if (j + 1 < params.length)
+              builder.append(", ");
+          }
+          builder.append(')');
+
+          if (i + 1 < operations.size())
+            builder.append('\n');
+        }
+
+        result = builder.toString();
+      }
+      else {
+        MBeanOperationInfo operationInfo;
+        sort(operations);
+        if (operationIndex > -1)
+          operationInfo = operations.get(operationIndex);
+        else
+          operationInfo = operations.get(0);
+
+        MBeanParameterInfo[] parameters = operationInfo.getSignature();
+        String[] signature = new String[parameters.length];
+        for (int i = 0; i < parameters.length; i++) {
+          signature[i] = parameters[i].getType();
+        }
+
+        String[] params = query.getParams();
+        Object[] paramValues = new Object[parameters.length];
+        for (int i = 0; i < params.length; i++) {
+          String param = params[i];
+          if ("__NULL__".equals(param))
+            continue;
+
+          String type = signature[i];
+          Object value = toValue(type, param);
+          paramValues[i] = value;
+        }
+
+        Object obj = subjectBeanServer.invoke(subjectBean,
+                                 operationName,
+                                 paramValues,
+                                 signature);
+
+        result = L.l(
+          "method `{0}' called on `{1}' returned `{2}'.",
+          getSignature(operationInfo),
+          subjectBean.getCanonicalName(),
+          obj);
+      }
+    } catch (Exception e) {
+      log.log(Level.SEVERE, e.getMessage(), e);
+
+      result = e.toString();
+    }
+
+    getBroker().queryResult(id, from, to, result);
+
+    return result;
+  }
+
+
+  private Object toValue(String typeName, String value)
+    throws ClassNotFoundException
+  {
+    Class type = classMap.get(typeName);
+
+    if (type == null)
+      type = Class.forName(typeName);
+
+    if (boolean.class.equals(type) || Boolean.class.equals(type)) {
+      return Boolean.parseBoolean(value);
+    }
+    else if (byte.class.equals(type) || Byte.class.equals(type)) {
+      return Byte.parseByte(value);
+    }
+    else if (short.class.equals(type) || Short.class.equals(type)) {
+      return Short.parseShort(value);
+    }
+    else if (char.class.equals(type) || Character.class.equals(type)) {
+      return new Character((char) Integer.parseInt(value));
+    }
+    else if (int.class.equals(type) || Integer.class.equals(type)) {
+      return Integer.parseInt(value);
+    }
+    else if (long.class.equals(type) || Long.class.equals(type)) {
+      return Long.parseLong(value);
+    }
+    else if (float.class.equals(type) || Float.class.equals(type)) {
+      return Float.parseFloat(value);
+    }
+    else if (double.class.equals(type) || Double.class.equals(type)) {
+      return Double.parseDouble(value);
+    }
+    else if (type.isEnum()) {
+      return Enum.valueOf(type, value);
+    }
+    else {
+      return value;
+    }
+  }
+
+  private void sort(List<MBeanOperationInfo> operations)
+  {
+    Collections.sort(operations, new Comparator<MBeanOperationInfo>()
+    {
+      @Override
+      public int compare(MBeanOperationInfo o1, MBeanOperationInfo o2)
+      {
+        String signature1 = getSignature(o1);
+        String signature2 = getSignature(o2);
+
+        return signature1.compareTo(signature2);
+      }
+    });
+  }
+
+  private String getSignature(MBeanOperationInfo operation)
+  {
+    StringBuilder builder = new StringBuilder();
+
+    builder.append(operation.getName()).append('(');
+
+    MBeanParameterInfo []params = operation.getSignature();
+
+    for (int i = 0; i < params.length; i++) {
+      MBeanParameterInfo param = params[i];
+      builder.append(param.getType());
+
+      if (i + 1 < params.length)
+        builder.append(", ");
+    }
+
+    builder.append(')');
+
+    return builder.toString();
   }
 
   @Query
@@ -282,7 +686,7 @@ public class ManagerActor extends SimpleActor
     StringWriter buffer = new StringWriter();
     PrintWriter out = new PrintWriter(buffer);
 
-    ProfileEntry[] entries = profile.getResults();
+    ProfileEntry []entries = profile.getResults();
 
     if (entries == null || entries.length == 0) {
       out.println("Profile returned no entries.");
@@ -314,7 +718,7 @@ public class ManagerActor extends SimpleActor
       out.println("   % time  |time self(s)|   % sum    | Method Call");
 
       for (ProfileEntry entry : entries) {
-        double timePercent = (double)100 * (double) entry.getCount()
+        double timePercent = (double) 100 * (double) entry.getCount()
                              / sampleTicks;
         double selfPercent = (double) 100 * (double) entry.getCount()
                              / totalTicks;
@@ -322,7 +726,7 @@ public class ManagerActor extends SimpleActor
 
         out.println(String.format("%10.3f | %10.3f | %10.3f | %s",
                                   timePercent,
-                                  (float)entry.getCount() * period * 0.001,
+                                  (float) entry.getCount() * period * 0.001,
                                   totalPercent,
                                   entry.getDescription()));
 
@@ -359,7 +763,8 @@ public class ManagerActor extends SimpleActor
     }
   }
 
-  private synchronized Level getLoggerLevel(String name) {
+  private synchronized Level getLoggerLevel(String name)
+  {
     Level level = _defaultLevels.get(name);
     if (level != null)
       return level;
@@ -403,5 +808,21 @@ public class ManagerActor extends SimpleActor
 
   static {
     _systemClassLoader = ClassLoader.getSystemClassLoader();
+
+    classMap.put("boolean", boolean.class);
+    classMap.put(Boolean.class.getName(), Boolean.class);
+    classMap.put("byte", byte.class);
+    classMap.put(Byte.class.getName(), Byte.class);
+    classMap.put("short", Short.class);
+    classMap.put(Short.class.getName(), Short.class);
+    classMap.put("int", int.class);
+    classMap.put(Integer.class.getName(), Integer.class);
+    classMap.put("long", long.class);
+    classMap.put(Long.class.getName(), Long.class);
+    classMap.put("float", long.class);
+    classMap.put(Float.class.getName(), Float.class);
+    classMap.put("double", long.class);
+    classMap.put(Double.class.getName(), Double.class);
+    classMap.put(String.class.getName(), String.class);
   }
 }

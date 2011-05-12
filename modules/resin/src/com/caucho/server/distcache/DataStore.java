@@ -50,7 +50,6 @@ import com.caucho.util.AlarmListener;
 import com.caucho.util.ConcurrentArrayList;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
-import com.caucho.util.Hex;
 import com.caucho.util.IoUtil;
 import com.caucho.util.JdbcUtil;
 import com.caucho.vfs.StreamSource;
@@ -143,8 +142,6 @@ public class DataStore {
     _validateQuery = ("VALIDATE " + _tableName);
 
     _countQuery = "SELECT count(*) FROM " + _tableName;
-
-    init();
   }
 
   DataSource getDataSource()
@@ -152,10 +149,9 @@ public class DataStore {
     return _dataSource;
   }
 
-  private void init()
+  protected void init()
     throws Exception
   {
-
     initDatabase();
 
     _alarm = new Alarm(new ExpireAlarm());
@@ -272,6 +268,58 @@ public class DataStore {
   }
 
   /**
+   * Reads the object from the data store.
+   *
+   * @param id the hash identifier for the data
+   * @param os the WriteStream to hold the data
+   *
+   * @return true on successful load
+   */
+  public boolean load(HashKey id, LoadDataCallback cb)
+  {
+    DataConnection conn = null;
+
+    try {
+      conn = getConnection();
+
+      PreparedStatement pstmt = conn.prepareLoad();
+      pstmt.setBytes(1, id.getHash());
+
+      ResultSet rs = pstmt.executeQuery();
+
+      if (rs.next()) {
+        InputStream is = rs.getBinaryStream(1);
+
+        if (is == null)
+          return false;
+
+        try {
+          cb.onLoad(id, is);
+        } finally {
+          is.close();
+        }
+
+        if (log.isLoggable(Level.FINER))
+          log.finer(this + " load " + id + " " + cb);
+
+        return true;
+      }
+
+      if (log.isLoggable(Level.FINER))
+        log.finer(this + " no data loaded for " + id);
+    } catch (SQLException e) {
+      log.log(Level.FINE, e.toString(), e);
+    } catch (IOException e) {
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      if (conn != null)
+        conn.close();
+    }
+
+    return false;
+  }
+
+  /**
    * Checks if we have the data
    *
    * @param id the hash identifier for the data
@@ -356,6 +404,30 @@ public class DataStore {
       return true;
     }
     else if (insert(id, source.openInputStream(), length)) {
+      return true;
+    }
+    else {
+      log.warning(this + " can't save data '" + id + "'");
+
+      return false;
+    }
+  }
+
+  /**
+   * Saves the data, returning true on success.
+   *
+   * @param id the object's unique id.
+   * @param is the input stream to the serialized object
+   * @param length the length object the serialized object
+   */
+  public boolean save(HashKey id, InputStream is, int length)
+    throws IOException
+  {
+    // try updating first to avoid the exception for an insert
+    if (updateExpires(id)) {
+      return true;
+    }
+    else if (insert(id, is, length)) {
       return true;
     }
     else {
@@ -551,40 +623,6 @@ public class DataStore {
   }
 
   /**
-   * Update used expire times.
-   */
-  private void selectOrphans()
-  {
-    System.out.println("ORPHANS:");
-    DataConnection conn = null;
-
-    try {
-      conn = getConnection();
-
-      PreparedStatement pstmt = conn.prepareSelectOrphan();
-
-      ResultSet rs = pstmt.executeQuery();
-
-      try {
-        while (rs.next()) {
-          byte []data = rs.getBytes(1);
-          System.out.println("D: " + Hex.toHex(data));
-        }
-      } finally {
-        rs.close();
-      }
-    } catch (SQLException e) {
-      e.printStackTrace();
-      log.log(Level.FINE, e.toString(), e);
-    } catch (Throwable e) {
-      e.printStackTrace();
-      log.log(Level.FINE, e.toString(), e);
-    } finally {
-      conn.close();
-    }
-  }
-
-  /**
    * Clears the expired data
    */
   public void validateDatabase()
@@ -598,7 +636,6 @@ public class DataStore {
 
       pstmt.executeUpdate();
     } catch (SQLException e) {
-      e.printStackTrace();
       log.log(Level.FINE, e.toString(), e);
     } finally {
       if (conn != null)

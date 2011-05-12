@@ -90,6 +90,7 @@ class WatchdogChildProcess
   private int _pid;
 
   private int _status = -1;
+  private String _exitMessage;
 
   WatchdogChildProcess(String id,
                        ResinSystem system,
@@ -121,9 +122,24 @@ class WatchdogChildProcess
       return null;
   }
   
+  /**
+   * General message to the Resin instance.
+   */
+  void message(Serializable payload)
+  {
+    if (_watchdogActor != null) {
+      _watchdogActor.message(payload);
+    }
+  }
+
   public int getStatus()
   {
     return _status;
+  }
+  
+  public String getExitMessage()
+  {
+    return _exitMessage;
   }
 
   public void run()
@@ -169,9 +185,12 @@ class WatchdogChildProcess
         ThreadPool.getCurrent().start(logThread);
 
         s = connectToChild(ss);
+        
+        message(new StartInfoMessage(_watchdog.isRestart(),
+                                     _watchdog.getRestartMessage()));
 
         _status = _process.waitFor();
-        
+
         logStatus(_status);
       }
     } catch (Exception e) {
@@ -223,13 +242,14 @@ class WatchdogChildProcess
   private void logStatus(int status)
   {
     String type = "unknown";
+    String code = " (exit code=" + status + ")";
     
     if (status == 0)
       type = "normal exit";
     else if (status >= 0 && status < ExitCode.values().length) {
       type = ExitCode.values()[status].toString();
     }
-    else if (status > 128 && status < 128 + 31) {
+    else if (status >= 128 && status < 128 + 32) {
       switch (status - 128) {
       case 1:
         type = "SIGHUP";
@@ -262,11 +282,17 @@ class WatchdogChildProcess
         type = "signal=" + (status - 128);
         break;
       }
+      
+      code = " (signal=" + (status - 128) + ")";
     }
+
+    String msg = ("Watchdog detected close of "
+                  + "Resin[" + _watchdog.getId() + ",pid=" + _pid + "]"
+                  + "\n  exit reason: " + type + code);
     
-    log.warning("Watchdog detected close of "
-                + "Resin[" + _watchdog.getId() + ",pid=" + _pid + "]"
-                + "\n  exit reason: " + type + " (exit code=" + status + ")");
+    log.warning(msg);
+    
+    _exitMessage = msg;
   }
 
   /**
@@ -527,8 +553,11 @@ class WatchdogChildProcess
 
     if (_watchdog.is64bit()) {
       WatchdogClient.appendEnvPath(env,
-                    "LD_LIBRARY_PATH",
-                    resinHome.lookup("libexec64").getNativePath());
+                                   "LD_LIBRARY_PATH",
+                                   resinHome.lookup("libexec64").getNativePath());
+      WatchdogClient.appendEnvPath(env,
+                                   "LD_LIBRARY_PATH_64",
+                                   resinHome.lookup("libexec64").getNativePath());
       WatchdogClient.appendEnvPath(env,
                     "DYLD_LIBRARY_PATH",
                     resinHome.lookup("libexec64").getNativePath());

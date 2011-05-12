@@ -142,10 +142,12 @@ public class ScopeAdapter {
     
   }
   
+  @SuppressWarnings("unchecked")
   public <X> X wrap(InjectManager.ReferenceFactory<X> factory)
   {
     try {
       Object v = _proxyCtor.newInstance(factory);
+      
       return (X) v;
     } catch (Exception e) {
       throw ConfigException.create(e);

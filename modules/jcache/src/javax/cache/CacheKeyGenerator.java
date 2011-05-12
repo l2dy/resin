@@ -24,24 +24,17 @@
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Alex Rojkov
+ * @author Scott Ferguson
  */
 
-package com.caucho.boot;
+package javax.cache;
 
-import com.caucho.util.L10N;
+import java.io.Serializable;
 
-public class JmxInvokeCommand extends JmxCommand
+import javax.interceptor.InvocationContext;
+
+public interface CacheKeyGenerator<T extends Serializable>
 {
-  private static final L10N L = new L10N(JmxInvokeCommand.class);
-
-  @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
-  {
-  }
-
-  @Override
-  public void usage()
-  {
-  }
+  T generateKey(InvocationContext invocationContext);
+  T generateKey(Object... parameters);
 }

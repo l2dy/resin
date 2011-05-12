@@ -54,6 +54,7 @@ import com.caucho.distcache.AbstractCache;
 import com.caucho.distcache.ByteStreamCache;
 import com.caucho.distcache.ClusterByteStreamCache;
 import com.caucho.distcache.ExtCacheEntry;
+import com.caucho.env.distcache.DistCacheSystem;
 import com.caucho.env.meter.AverageSensor;
 import com.caucho.env.meter.MeterService;
 import com.caucho.hessian.io.HessianDebugInputStream;
@@ -61,6 +62,7 @@ import com.caucho.hessian.io.SerializerFactory;
 import com.caucho.management.server.SessionManagerMXBean;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
+import com.caucho.server.distcache.AbstractCacheManager;
 import com.caucho.server.distcache.PersistentStoreConfig;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
@@ -156,6 +158,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   private boolean _isPersistenceEnabled = false;
   private boolean _isSaveTriplicate = true;
   private boolean _isSaveBackup = true;
+  private boolean _isDestroyOnLru = true;
 
   // If true, serialization errors should not be logged
   // XXX: changed for JSF
@@ -734,6 +737,16 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   {
     return _isPersistenceEnabled;
   }
+  
+  public void setDestroyOnLru(boolean isDestroy)
+  {
+    _isDestroyOnLru = isDestroy;
+  }
+  
+  public boolean isDestroyOnLru()
+  {
+    return _isDestroyOnLru || ! isPersistenceEnabled();
+  }
 
   public String getDistributionId()
   {
@@ -824,6 +837,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   }
 
   //SessionCookieConfig implementation (Servlet 3.0)
+  @Override
   public void setName(String name)
   {
     if (! _webApp.isInitializing())
@@ -832,11 +846,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     setCookieName(name);
   }
 
+  @Override
   public String getName()
   {
     return getCookieName();
   }
 
+  @Override
   public void setDomain(String domain)
   {
     if (! _webApp.isInitializing())
@@ -845,11 +861,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     setCookieDomain(domain);
   }
 
+  @Override
   public String getDomain()
   {
     return getCookieDomain();
   }
 
+  @Override
   public void setPath(String path)
   {
     if (! _webApp.isInitializing())
@@ -858,11 +876,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookiePath = path;
   }
 
+  @Override
   public String getPath()
   {
     return _cookiePath;
   }
 
+  @Override
   public void setComment(String comment)
   {
     if (! _webApp.isInitializing())
@@ -871,11 +891,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookieComment = comment;
   }
 
+  @Override
   public String getComment()
   {
     return _cookieComment;
   }
 
+  @Override
   public void setHttpOnly(boolean httpOnly)
   {
     if (! _webApp.isInitializing())
@@ -884,11 +906,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     setCookieHttpOnly(httpOnly);
   }
 
+  @Override
   public boolean isHttpOnly()
   {
     return isCookieHttpOnly();
   }
 
+  @Override
   public void setSecure(boolean secure)
   {
     if (! _webApp.isInitializing())
@@ -903,6 +927,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     return _isSecure;
   }
 
+  @Override
   public void setMaxAge(int maxAge)
   {
     if (! _webApp.isInitializing())
@@ -911,6 +936,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookieMaxAge = maxAge * 1000;
   }
 
+  @Override
   public int getMaxAge()
   {
     return (int) (_cookieMaxAge / 1000);
@@ -1087,6 +1113,8 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
         
       if (sessionCache == null) {
         sessionCache = new ClusterByteStreamCache();
+        
+        DistCacheSystem distCacheSystem = DistCacheSystem.getCurrent();
 
         sessionCache.setName("resin:session");
         sessionCache.setBackup(_isSaveBackup);
@@ -1644,8 +1672,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
         HessianDebugInputStream dis
           = new HessianDebugInputStream(is, new PrintWriter(writer));
 
-        int ch;
-        while ((ch = dis.read()) >= 0) {
+        while (dis.read() >= 0) {
         }
 
         return writer.toString();
@@ -1666,6 +1693,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
    *
    * @return number of live sessions for stats
    */
+  @Override
   public void handleAlarm(Alarm alarm)
   {
     try {

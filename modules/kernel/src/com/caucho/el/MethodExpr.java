@@ -40,6 +40,7 @@ import java.lang.reflect.Modifier;
 /**
  * Represents a named method call on an object.
  */
+@SuppressWarnings("serial")
 public class MethodExpr extends Expr {
   private Expr _expr;
   private String _methodName;
@@ -81,7 +82,7 @@ public class MethodExpr extends Expr {
       Method method = findMethod(aObj.getClass());
 
       if (method != null) {
-        Class []params = method.getParameterTypes();
+        Class<?> []params = method.getParameterTypes();
 
         for (int j = 0; j < params.length; j++) {
           objs[j] = evalArg(params[j], _args[j], env);
@@ -101,8 +102,26 @@ public class MethodExpr extends Expr {
       return invocationError(e);
     }
   }
+
+  /**
+   * Evaluates the expression, returning an object.
+   *
+   * @param env the variable environment
+   *
+   * @return the value of the expression as an object
+   */
+  @Override
+  public Object invoke(ELContext env, Class<?> []argTypes, Object []args)
+    throws ELException
+  {
+    if (args != null && args.length != 0)
+      throw new ELException(L.l("'{0}' is an illegal method invocation on {1}",
+                                toString(), getClass().getName()));
+    
+    return getValue(env);
+  }
   
-  private Method findMethod(Class type)
+  private Method findMethod(Class<?> type)
   {
     if (type == null)
       return null;
@@ -116,7 +135,7 @@ public class MethodExpr extends Expr {
         if (! Modifier.isPublic(method.getModifiers()))
           continue;
         
-        Class []params = method.getParameterTypes();
+        Class<?> []params = method.getParameterTypes();
         
         if (method.getName().equals(_methodName) &&
             params.length == _args.length)
@@ -124,7 +143,7 @@ public class MethodExpr extends Expr {
       }
     }
     
-    Class []interfaces = type.getInterfaces();
+    Class<?> []interfaces = type.getInterfaces();
     for (int i = 0; i < interfaces.length; i++) {
       Method method = findMethod(interfaces[i]);
       if (method != null)
@@ -134,7 +153,7 @@ public class MethodExpr extends Expr {
     return findMethod(type.getSuperclass());
   }
   
-  static Object evalArg(Class cl, Expr expr, ELContext env)
+  static Object evalArg(Class<?> cl, Expr expr, ELContext env)
     throws ELException
   {
     Marshall marshall = Marshall.create(cl);

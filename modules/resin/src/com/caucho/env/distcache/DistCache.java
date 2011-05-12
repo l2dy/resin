@@ -30,7 +30,7 @@
 package com.caucho.env.distcache;
 
 import com.caucho.distcache.AbstractCache;
-import com.caucho.distcache.CacheManager;
+import com.caucho.distcache.CacheManagerImpl;
 import com.caucho.server.distcache.AbstractCacheManager;
 
 /**
@@ -47,7 +47,7 @@ import com.caucho.server.distcache.AbstractCacheManager;
 class DistCache extends AbstractCache
 {
   DistCache(String name,
-            CacheManager cacheManager,
+            CacheManagerImpl cacheManager,
             AbstractCacheManager<?> manager)
   {
     if (name == null)
