@@ -30,15 +30,15 @@ install	:
 			echo "Installing Resin root directory $(resin_root)"; \
 			mkdir -p $(resin_root)/webapps; \
 			cp -r $(CP_U_FLAG) webapps/* $(resin_root)/webapps; \
-			mkdir -p $(resin_log); \
 		fi;\
+		mkdir -p $(resin_log); \
 		mkdir -p $(resin_root)/doc; \
 		cp -r $(CP_U_FLAG) doc/* $(resin_root)/doc; \
 		mkdir -p $(resin_root)/project-jars; \
 		cp -r $(CP_U_FLAG) project-jars/* $(resin_root)/project-jars; \
-		mkdir -p $(resin_root)/webapp-jars; \
-		cp -r $(CP_U_FLAG) webapp-jars/* $(resin_root)/webapp-jars; \
-		cp -r $(CP_U_FLAG) endorsed $(resin_root); \
+		mkdir -p $(resin_home)/webapp-jars; \
+		cp -r $(CP_U_FLAG) webapp-jars/* $(resin_home)/webapp-jars; \
+		cp -r $(CP_U_FLAG) endorsed $(resin_home); \
 	fi
 	@ echo "Installing Resin home directory $(resin_root)"
 	@ if test "$(resin_home)" != $(abs_builddir); then \

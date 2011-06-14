@@ -50,25 +50,23 @@ class AcceptTask extends ConnectionReadTask {
   @Override
   public void run()
   {
-    // SocketLinkListener listener = getListener();
     SocketLinkThreadLauncher launcher = getLauncher();
 
     Thread thread = Thread.currentThread();
-    String threadName = thread.getName();
+    String oldThreadName = thread.getName();
     thread.setName(getSocketLink().getDebugId());
-    
+
     try {
       launcher.onChildThreadBegin();
 
       if (log.isLoggable(Level.FINER))
         log.finer(getSocketLink() + " starting listen thread");
-      // listener.startConnection(getSocketLink());
       
       super.run();
     } finally {
       launcher.onChildThreadEnd();
       
-      thread.setName(threadName);
+      thread.setName(oldThreadName);
     }
   }
 
@@ -77,37 +75,55 @@ class AcceptTask extends ConnectionReadTask {
    */
   @Override
   RequestState doTask()
-  throws IOException
+    throws IOException
   {
     TcpSocketLink socketLink = getSocketLink();
     TcpSocketLinkListener listener = getListener();
     
     RequestState result = RequestState.EXIT;
-
+    SocketLinkThreadLauncher launcher = getLauncher();
+    
     while (! listener.isClosed()
            && ! socketLink.getState().isDestroyed()) {
       socketLink.toAccept();
+      
+      if (launcher.isIdleExpire())
+        return RequestState.EXIT;
 
       if (! accept()) {
         socketLink.close();
 
-        return RequestState.EXIT;
+        continue;
       }
 
       socketLink.toStartConnection();
 
       if (log.isLoggable(Level.FINER)) {
-        log.finer(socketLink + " accept");
+        log.finer(socketLink + " accept from "
+                  + socketLink.getRemoteHost() + ":" + socketLink.getRemotePort());
       }
 
       boolean isKeepalive = false;
       result = socketLink.handleRequests(isKeepalive);
 
-      if (result == RequestState.THREAD_DETACHED) {
+      switch (result) {
+      case REQUEST_COMPLETE:
+        socketLink.close();
+        break;
+        
+      case KEEPALIVE_SELECT:
+      case ASYNC:
         return result;
-      }
-      else if (result == RequestState.DUPLEX) {
+        
+      case EXIT:
+        socketLink.close();
+        return result;
+
+      case DUPLEX:
         return socketLink.doDuplex();
+
+      default:
+        throw new IllegalStateException(String.valueOf(result));
       }
 
       socketLink.close();
@@ -119,9 +135,6 @@ class AcceptTask extends ConnectionReadTask {
   private boolean accept()
   {
     SocketLinkThreadLauncher launcher = getLauncher();
-    
-    if (launcher.isIdleExpire())
-      return false;
     
     launcher.onChildIdleBegin();
     try {

@@ -385,6 +385,51 @@
     </sequential>
   </macrodef>
 
+  <macrodef name="generate-pdf2">
+    <attribute name="name"/>
+
+    <sequential>
+
+      <mkdir dir="${build}/pdf/@{name}"/>
+
+      <java classname="com.caucho.xtpdoc.Printer" fork="true" 
+            output="${build}/pdf/@{name}/@{name}.ad" logError="true"
+            dir="${resin.doc}">
+        <jvmarg value="-Djava.awt.headless=true"/>
+        <arg value="--new"/>
+        <arg file="${resin.doc}/@{name}.xml"/>
+        <classpath>
+          <pathelement location="${java.home}/../lib/tools.jar"/>
+          <dirset dir="${resin.modules}">
+            <include name="*/classes"/>
+          </dirset>
+          <fileset dir="${resin.modules}/ext">
+            <include name="**/*.jar"/>
+          </fileset>
+        </classpath>
+      </java>
+
+      <copy todir="${build}/pdf/@{name}/images"
+            preservelastmodified="true"
+            overwrite="true">
+        <fileset dir="${resin.doc}/images"/>
+      </copy>
+
+      <exec dir="${build}/pdf/@{name}" executable="a2x">
+	<arg value="--doctype=book"/>
+	<arg value="--format=pdf"/>
+	<arg value="--no-xmllint"/>
+	<arg value="--verbose"/>
+	<arg value="--icons"/>
+	<arg value="--resource=${resin.doc}"/>
+	<arg value="--asciidoc-opts=--attribute=include-dir='${resin.doc}'"/>
+	<arg value="--asciidoc-opts=--attribute=imagesdir='${resin.doc}'"/>
+        <arg value="@{name}.ad"/>
+      </exec>
+
+    </sequential>
+  </macrodef>
+
 <!--
   <target name="pdf" depends="init">
     <delete dir="${build}/pdf" />
@@ -1365,10 +1410,19 @@
       <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
     </exec>
 
+    <apply executable="ln"
+           dest="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
+           dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}">
+      <arg value="-s"/>
+      <mapper type="flatten"/>
+      <fileset dir="/home/caucho/git/download/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}" includes="*.deb"/>
+    </apply>
+
     <exec executable="dpkg-scanpackages"
           dir="${dist}/debian"
           output="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"
           logError="true">
+      <arg value="--multiversion"/>
       <arg value="dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
     </exec>
 

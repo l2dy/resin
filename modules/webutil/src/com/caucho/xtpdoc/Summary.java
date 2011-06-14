@@ -103,14 +103,14 @@ public class Summary implements ContentItem {
     if (_document.getNavigation() == null) {
     }
     else if (_isSkipDescription) {
-      out.writeStartElement("ol");
+      //out.writeStartElement("ol");
       _document.getNavigation().writeHtml(out, "", 1, 2, 5);
-      out.writeEndElement(); // ol
+      //out.writeEndElement(); // ol
     }
     else {
-      out.writeStartElement("ol");
+      //out.writeStartElement("ol");
       _document.getNavigation().writeHtml(out, "", 1, 0, 5);
-      out.writeEndElement(); // ol
+      //out.writeEndElement(); // ol
     }
   }
 
@@ -133,5 +133,11 @@ public class Summary implements ContentItem {
     throws IOException
   {
     throw new ConfigException("<summary> not allowed in a verbatim context");
+  }
+
+  @Override
+  public void writeAsciiDoc(PrintWriter out)
+    throws IOException
+  {
   }
 }

@@ -88,7 +88,7 @@ class DuplexReadTask extends ConnectionReadTask {
 
     ReadStream readStream = socketLink.getReadStream();
 
-    while ((result = socketLink.processKeepalive()) == RequestState.REQUEST) {
+    while ((result = socketLink.processKeepalive()) == RequestState.REQUEST_COMPLETE) {
       long position = readStream.getPosition();
 
       _duplex.serviceRead();

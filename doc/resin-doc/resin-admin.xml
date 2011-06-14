@@ -12,9 +12,16 @@
 
   <chapter title="Deployment">
     <linked-section link="admin/deploy.xtp" />
+    <linked-section link="admin/deploy-command-line.xtp" />
     <linked-section link="admin/deploy-git-overview.xtp" />
     <linked-section link="admin/deploy-tool-reference.xtp" />
+    <!--
     <linked-section link="admin/deploy-pomegranate.xtp" />
+    -->
+  </chapter>
+
+  <chapter title="Command-Line">
+    <linked-section link="admin/resin-admin-command-line.xtp" />
   </chapter>
 
   <chapter title="Configuration">
@@ -34,8 +41,16 @@
   <chapter title="HTTP">
     <linked-section link="admin/http-server.xtp" />
     <linked-section link="admin/http-virtual-hosts.xtp" />
-    <linked-section link="admin/http-rewrite.xtp" />
     <linked-section link="admin/http-proxy-cache.xtp" />
+  </chapter>
+  
+  <chapter title="URL Rewriting and Dispatching">
+    <linked-section link="admin/http-rewrite.xtp" />
+  </chapter>
+
+  <chapter title="Health Checks and Meters">
+    <linked-section link="admin/health-checking.xtp" />
+    <linked-section link="admin/health-meters.xtp" />
   </chapter>
 
   <chapter title="Security">
@@ -65,6 +80,6 @@
   </chapter>
 
   <chapter title="Reference">
-    <linked-section link="admin/reference.xtp" />
+    <linked-section link="reference.xtp" />
   </chapter>
 </book>

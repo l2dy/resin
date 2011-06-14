@@ -435,7 +435,6 @@ public class WebApp extends ServletContextImpl
   WebApp(WebAppController controller)
   {
     _controller = controller;
-
     _classLoader
       = EnvironmentClassLoader.create(controller.getParentClassLoader(),
                                       "web-app:" + getId());
@@ -4284,7 +4283,7 @@ public class WebApp extends ServletContextImpl
       webApp = (WebApp) getContext(fullURI);
 
       if (webApp == null)
-        return null;
+        webApp = this;
 
       String cp = webApp.getContextPath();
       tail = fullURI.substring(cp.length());

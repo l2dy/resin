@@ -551,6 +551,7 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   */
   
   @Override
+  @SuppressWarnings("deprecation")
   public boolean isRequestedSessionIdFromUrl()
   {
     return _request.isRequestedSessionIdFromUrl();
@@ -839,34 +840,14 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   }
   
   @Override
-  public boolean isKeepaliveAllowed()
+  public boolean isConnectionClosed()
   {
     CauchoRequest cRequest = getCauchoRequest();
 
     if (cRequest != null)
-      return cRequest.isKeepaliveAllowed();
+      return cRequest.isConnectionClosed();
     else
       return false;
-  }
-  
-  @Override
-  public boolean isClientDisconnect()
-  {
-    CauchoRequest cRequest = getCauchoRequest();
-
-    if (cRequest != null)
-      return cRequest.isClientDisconnect();
-    else
-      return false;
-  }
-  
-  @Override
-  public void clientDisconnect()
-  {
-    CauchoRequest cRequest = getCauchoRequest();
-
-    if (cRequest != null)
-      cRequest.clientDisconnect();
   }
 
   @Override

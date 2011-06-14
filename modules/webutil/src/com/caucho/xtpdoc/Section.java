@@ -124,15 +124,9 @@ public abstract class Section extends ContainerNode {
 
     for (int i = 0; i < href.length(); i++) {
       char ch = href.charAt(i);
-
-      switch (ch) {
-        case '<': case '>': case '(': case ')': case '?':
-          break;
-
-        default:
-          sb.append(ch);
-          break;
-      }
+      
+      if (Character.isLetterOrDigit(ch))
+        sb.append(ch);
     }
 
     return sb.toString();
@@ -346,4 +340,19 @@ public abstract class Section extends ContainerNode {
 
   abstract public void writeLaTeXEnclosed(PrintWriter out)
     throws IOException;
+
+  @Override
+  public void writeAsciiDoc(PrintWriter out)
+    throws IOException
+  {
+    if (isWebOnly())
+      return;
+        
+    super.writeAsciiDoc(out);
+  }
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + getTitle() + "]";
+  }
 }

@@ -543,11 +543,6 @@ public class RequestAdapter extends RequestWrapper
   public void killKeepalive()
   {
   }
-  
-  public boolean isKeepaliveAllowed()
-  {
-    return true;
-  }
 
   @Override
   public SocketLink getSocketLink()
@@ -558,7 +553,7 @@ public class RequestAdapter extends RequestWrapper
       return null;
   }
 
-  public boolean isClientDisconnect()
+  public boolean isConnectionClosed()
   {
     return false;
   }

@@ -53,6 +53,15 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
   {
     _listener = listener;
   }
+
+  @Override
+  protected boolean isEnable()
+  {
+    if (_listener.isClosed())
+      return false;
+    else
+      return super.isEnable();
+  }
   
   @Override
   protected String getThreadName()
@@ -65,11 +74,12 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
   {
     Thread thread = Thread.currentThread();
     ClassLoader loader = thread.getContextClassLoader();
+    TcpSocketLink startConn;
     
     try {
       thread.setContextClassLoader(_listener.getClassLoader());
       
-      TcpSocketLink startConn = _listener.allocateConnection();
+      startConn = _listener.allocateConnection();
 
       if (! _threadPool.schedule(startConn.getAcceptTask())) {
         log.severe(L.l("Schedule failed for {0}", startConn));

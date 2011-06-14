@@ -11,6 +11,49 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.19 - June 14, 2011">
+<ul>
+<li>command-line: resin-system-auth-key wasn't properly managed (#4602)</li>
+<li>deploy: git/war validation needs better error messages for the ant jar task duplicate file creation (#4606, rep by Jeff Schnitzer)</li>
+<li>logging: logger in &lt;resin> context needs to use system class loader to match command-line log-level (#4587, rep by William Au)</li>
+<li>resin-admin: added undeploy action for repository managed webapps</li>
+<li>command-line: authentication needs to understand {SSHA} configuration (#4593)</li>
+<li>eclipse-plugin: added auto-restart for redeployed apps (req. by hwellmann, Caucho forums)</li>
+<li>cache: lease changes for triad and cloud to reduce network traffic</li>
+<li>deploy: add expand-preserve-fileset to web-app-deploy to improve development (#4592, rep by Harald Wellmann)</li>
+<li>ejb: generic introspection/generation (#4590, rep by Harald Wellmann)</li>
+<li>cache: leasing must apply to cloud servers (#4588, rep by William Kong)</li>
+<li>cloud/bam: hmtp pool must be shared across server (#4588, rep by William Kong)</li>
+<li>cloud/bam: remote send must return error messages (#4588, rep by William Kong)</li>
+<li>eclipse-plugin: finishing server wizard early produces bad configuration (#4589, rep by hwellmann)</li>
+<li>dist: add multiversion for debian packages (#4314, rep by jlangevin)</li>
+<li>health: check MemUsage for max/committed to calculate free memory (#4507)</li>
+<li>install: Makefile needs to create /var/log/resin event if /var/www exists (#4574)</li>
+<li>cache: streaming cache update between clusters &lt;replication-source-cluster> (#4569)</li>
+<li>install: webapp-jars need to be copied to resin.home (#4575)</li>
+<li>jsp: c:set validation issue (#4586, rep by thihy)</li>
+<li>websocket: text buffer size issues with 8192 length values (#4584, rep by ihristov)</li>
+<li>ejb: EJBException serialization id needs generation (#4578, rep by cyttesen)</li>
+<li>watchdog: Unix systems should not have -Xrs on the command-line (#4585, rep by William Au)</li>
+<li>servlet/async: dispatch sync issues causing dispatches to be ignored (#4570, rep by Danny Yates)</li>
+<li>resin: moved app-default to resin.jar, changed resin.xml's resin:import to load from classpath</li>
+<li>php: fix for DOMDocument::saveXML($node) (#4563, rep by Lisa Stillwell)</li>
+<li>resin-cli: added disable and enable commands to Resin Pro (#3756, rep by Rob Lockstone, Jonas Kowall)</li>
+<li>async/comet: with Resin comet API, check for complete on suspend (#4534, rep by Brent Plump)</li>
+<li>ejb: with generics Class&lt;T> as argument and return (#4551, rep by dicr)</li>
+<li>servlet: finally handling for request needs to check for null (#4545)</li>
+<li>access-log: add rollover-check-time configuration (#4533, rep by peng yao)</li>
+<li>./configure: removed OPENSSL_LIB search instead using standard library (rep by Michael O'Dea)</li>
+<li>ejb: synthetic/bridge methods should not be reflected (#4555, rep by dicr)</li>
+<li>ejb: static methods for session beans should not be overridden (#4552, rep by dicr)</li>
+<li>config doc: clarified database init-param vs IoC-style configuration (#4550, rep by dicr)</li>
+<li>./configure: updated config.guess and config.sub (#4407, rep by GT500)</li>
+<li>db-store: free block scanning needs to test for store close (#4562, rep by S Francis)</li>
+<li>mod_caucho: allocation/free of locks needs to be locked (#4529, rep by remkodev)</li>
+<li>network: read/write timeout needs handling in Java layer (#4506, #4524, rep by Matthew Schmidt, Prabhu)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.18 - May 12, 2010">
 <ul>
 <li>watchdog: set the LD_LIBRARY_PATH_64 variable on 64-bit systems (#4536)</li>

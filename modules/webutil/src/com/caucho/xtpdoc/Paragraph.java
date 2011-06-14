@@ -33,8 +33,12 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.logging.Logger;
 
 public class Paragraph extends FormattedTextWithAnchors {
+  
+  private static Logger log = Logger.getLogger(Paragraph.class.getName());
+  
   public Paragraph(Document document)
   {
     super(document);
@@ -58,5 +62,24 @@ public class Paragraph extends FormattedTextWithAnchors {
     out.println();
 
     super.writeLaTeX(out);
+  }
+
+  @Override
+  public void writeAsciiDoc(PrintWriter out)
+    throws IOException
+  {
+    out.println();
+    out.println();
+
+    super.writeAsciiDoc(out);
+  }
+  
+  
+  @Override
+  public Example createExample()
+  {
+    //throw new IllegalStateException("Close block with </p> before <example>");
+    log.fine(getLocation() + "Close block with </p> before <example>");
+    return super.createExample();
   }
 }

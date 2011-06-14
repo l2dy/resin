@@ -1127,9 +1127,7 @@ following steps:</p>
 
 </s2>
 
-<s2 title="Compound types">
-
-<s3 title="list">
+<s2 title="list">
 
 <p>Setters taking a <code>List</code> or array argument can be configured
 with list values.</p>
@@ -1187,9 +1185,9 @@ with <code>addXXX</code>.</p>
 &lt;/my-bean>
 </example>
 
-</s3>
+</s2>
 
-<s3 title="map">
+<s2 title="map">
 
 <p>Generic maps can use an &lt;entry> syntax to define property values.</p>
 
@@ -1202,8 +1200,6 @@ with <code>addXXX</code>.</p>
   &lt;/values>
 &lt;/my-bean>
 </example>
-
-</s3>
 
 </s2>
 
@@ -1341,6 +1337,10 @@ to a field or property.  Typically, the resource will be stored in JNDI.</p>
 
 <deftable title="Known types">
 <tr>
+  <th>Type</th>
+  <th>Description</th>
+</tr>
+<tr>
   <td>DataSource</td>
   <td>Configured by &lt;<a config-tag="database">database</a>&gt;</td>
 </tr>
@@ -1402,7 +1402,7 @@ an application, even if your application does not use Resin to configure
 itself.  Following the Assembly Line pattern makes application code
 easier to understand, maintain, configure and test.</p>
 
-<figure src="assembler-eg1.gif"/>
+<figure src="assembler-eg1.gif" alt="Assembler(Resin),Registry(JNDI) -> (MovieLocator,MovieFinderImpl)" />
 
 </s1>
 

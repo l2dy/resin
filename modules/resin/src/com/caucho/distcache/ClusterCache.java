@@ -29,10 +29,10 @@
 
 package com.caucho.distcache;
 
-import com.caucho.config.Configurable;
-import com.caucho.util.HashKey;
-
+import javax.ejb.Startup;
 import javax.inject.Singleton;
+
+import com.caucho.config.Configurable;
 
 /**
  * Cache which stores consistent copies on the cluster segment.
@@ -47,8 +47,11 @@ import javax.inject.Singleton;
 
 @Singleton
 @Configurable
+@Startup
 public class ClusterCache extends AbstractCache
 {
+  private String _replicationSourceCluster;
+  
   public ClusterCache()
   {
   }
@@ -57,5 +60,15 @@ public class ClusterCache extends AbstractCache
   {
     setName(name);
     init();
+  }
+  
+  public void setReplicationSourceCluster(String clusterId)
+  {
+    _replicationSourceCluster = clusterId;
+  }
+  
+  public String getReplicationSourceCluster()
+  {
+    return _replicationSourceCluster;
   }
 }

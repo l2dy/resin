@@ -681,7 +681,7 @@ public class StringBuilderValue
   public Value put(Value index, Value value)
   {
     setCharValueAt(index.toLong(), value);
-
+    
     return value;
   }
 
@@ -1811,13 +1811,13 @@ public class StringBuilderValue
 
     for (int i = length - 1; i >= 0; i--) {
       int ch = toLower(buffer[i]);
-      
+
       hash = 65521 * hash + ch;
     }
 
     return hash;
   }
-  
+
   private int toLower(int ch)
   {
     if ('A' <= ch && ch <= 'Z')

@@ -261,6 +261,10 @@ public class ReflectionAnnotatedType<T>
       if (method.getDeclaringClass().equals(Object.class))
         continue;
       
+      if (method.isSynthetic() || method.isBridge()) {
+        continue;
+      }
+      
       // ejb/4018
       // ejb/8501
       // hasBeanAnnotation(method)
@@ -310,7 +314,8 @@ public class ReflectionAnnotatedType<T>
         if (superInterface instanceof Class<?>)
           introspectMethods((Class<?>) superInterface, null);
         else {
-          BaseType type = BaseType.create(superInterface, null, ClassFill.SOURCE);
+          BaseType type = BaseType.create(superInterface, null, null, 
+                                          ClassFill.SOURCE);
           
           introspectMethods(type.getRawClass(), type.getParamMap());
         }

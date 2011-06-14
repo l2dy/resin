@@ -29,8 +29,12 @@
 
 package com.caucho.xtpdoc;
 
+import javax.imageio.ImageIO;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+
+import java.awt.Toolkit;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 
@@ -42,6 +46,7 @@ public class Figure implements ContentItem {
   private String _source;
   private String _title;
   private Document _document;
+  private String _alt;
 
   public Figure(Document document)
   {
@@ -72,6 +77,11 @@ public class Figure implements ContentItem {
   {
     _title = title;
   }
+  
+  public void setAlt(String alt)
+  {
+    _alt = alt;
+  }
 
   public void writeHtml(XMLStreamWriter out)
     throws XMLStreamException
@@ -87,6 +97,15 @@ public class Figure implements ContentItem {
 
     if (_title != null)
       out.writeAttribute("title", _title);
+    
+    if (_alt != null)
+      out.writeAttribute("alt", _alt);
+    
+    if (_alt == null && _title != null)
+      out.writeAttribute("alt", _title);
+
+    if (_alt != null && _title == null)
+      out.writeAttribute("title", _alt);
 
     if (_width >= 0)
       out.writeAttribute("width", Integer.toString(_width));
@@ -133,5 +152,84 @@ public class Figure implements ContentItem {
     throws IOException
   {
     writeLaTeX(out);
+  }
+
+  @Override
+  public void writeAsciiDoc(PrintWriter out)
+    throws IOException
+  {
+    int dot = _source.lastIndexOf('.');
+
+    String baseName = _source.substring(0, dot);
+    
+    out.println();
+    out.println();
+
+    String pdfName = baseName + ".pdf";
+    boolean isPdf = false;
+
+    if (new File(pdfName).exists()) {
+      out.print("image::images/" + pdfName + "[alt=\"" + _source + "\"");
+      isPdf = true;
+    }
+    else {
+      out.print("image::images/" + _source + "[alt=\"" + _source + "\"");
+    }
+
+    // int width = getWidth(_source);
+    
+    /*
+    if (width > 0)
+      out.print(",width=" + width);
+    
+    int height = getHeight(_source);
+    
+    if (height > 0)
+      out.print(",height=" + height);
+
+      out.print(",align=center");
+    */
+    //if (width > 0)
+    //  out.print(",scaledwidth=" + width);
+    if (! isPdf) {
+	out.print(",scaledwidth=\"100%\"");
+	out.print(",height=\"100%\"");
+    }
+    out.print(",align=center");
+    out.println("]");
+  }
+  
+  public static int getWidth(String source)
+  {
+    try {
+      Toolkit toolkit = Toolkit.getDefaultToolkit();
+      
+      File file = new File("images/" + source);
+      
+      java.awt.Image image = ImageIO.read(file);
+        
+      return image.getWidth(null);
+    } catch (Exception e) {
+      // log.log(Level.FINER, e.toString(), e);
+      
+      return -1;
+    }
+  }
+  
+  public static int getHeight(String source)
+  {
+    try {
+      Toolkit toolkit = Toolkit.getDefaultToolkit();
+      
+      File file = new File("images/" + source);
+      
+      java.awt.Image image = ImageIO.read(file);
+        
+      return image.getHeight(null);
+    } catch (Exception e) {
+      // log.log(Level.FINER, e.toString(), e);
+      
+      return -1;
+    }
   }
 }

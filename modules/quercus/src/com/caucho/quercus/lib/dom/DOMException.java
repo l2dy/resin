@@ -29,19 +29,39 @@
 
 package com.caucho.quercus.lib.dom;
 
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusLanguageException;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
+
 public class DOMException
-  extends org.w3c.dom.DOMException
+  extends QuercusLanguageException
 {
   private DOMImplementation _impl;
   private org.w3c.dom.DOMException _delegate;
 
+  /*
+   This constructor gets called by env.createException("DOMException", "someMessage")
+  */
+  public DOMException(String message)
+  {
+      super(StringValue.create(message));
+  }
+
   public DOMException(DOMImplementation impl, org.w3c.dom.DOMException delegate)
   {
-    super(delegate.code, delegate.getMessage());
+    super(StringValue.create(delegate.getMessage()));
 
     _impl = impl;
     _delegate = delegate;
   }
 
-  // XXX:
+  /**
+   * Converts the exception to a Value.
+   */
+  @Override
+  public Value toValue(Env env)
+  {
+    return env.createException("DOMException", getValue().toString());
+  }
 }

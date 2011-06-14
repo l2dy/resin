@@ -34,8 +34,46 @@ package com.caucho.network.listen;
  */
 
 enum RequestState {
-  REQUEST,
-  THREAD_DETACHED,
-  DUPLEX,
-  EXIT
+  REQUEST_COMPLETE {
+    @Override
+    public boolean isRequestKeepalive() { return true; }
+  },
+  
+  KEEPALIVE_SELECT {
+    @Override
+    public boolean isDetach() { return true; }
+  },
+  
+  ASYNC {
+    @Override
+    public boolean isAsyncOrDuplex() { return true; }
+    
+    @Override
+    public boolean isDetach() { return true; }
+  },
+  
+  DUPLEX {
+    @Override
+    public boolean isAsyncOrDuplex() { return true; }
+    
+    @Override
+    public boolean isDetach() { return true; }
+  },
+  
+  EXIT;
+  
+  public boolean isAsyncOrDuplex()
+  {
+    return false;
+  }
+  
+  public boolean isDetach()
+  {
+    return false;
+  }
+  
+  public boolean isRequestKeepalive()
+  {
+    return false;
+  }
 }

@@ -58,6 +58,11 @@ public class DeployCommand extends AbstractRepositoryCommand {
 
     String name = args.getArg("-name");
     
+    String webapp = args.getArg("-web-app");
+    
+    if (webapp != null)
+      name = webapp;
+    
     String host = args.getArg("-host");
     
     if (host == null)
@@ -82,6 +87,12 @@ public class DeployCommand extends AbstractRepositoryCommand {
     }
     
     commit.tagKey(host + "/" + name);
+
+    /*
+    String tag = args.getArg("-tag");
+    if (tag != null)
+      commit.tagKey(tag);
+      */
     
     if (! path.isFile()) {
       throw new ConfigException(L.l("'{0}' is not a readable file.",
@@ -108,7 +119,7 @@ public class DeployCommand extends AbstractRepositoryCommand {
 
     deployClient.close();
     
-    System.out.println("Deployed " + commit.getId() + " as " + war + " to "
+    System.out.println("Deployed " + commit.getId() + " from " + war + " to "
                        + deployClient.getUrl());
   }
 

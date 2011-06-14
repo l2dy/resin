@@ -4,15 +4,25 @@
 <description>
 
 <p>
-When your traffic grows beyond the limitations of a single virtual-machine
-instance, Resin's clustering will manage your additional servers.
-With Resins' clustering, your servers gain the reliability of a
-triple-redundant hub, the "triad", which serves as the replicated
-backup of Resin's clustering system.
-The cluster provides automatic health checks and sensor statistics,
-reliable cluster-wise deployment, load-balancing, failover and
-distributed caching and session management.
-</p> 
+Resin's clustering is designed to support a straight-forward
+elastic-server private cloud: allowing servers to join and leave the
+cluster while maintaining uptime and reliability without needing
+configuration changes.
+</p>
+
+<p>To support the elastic-server cloud, Resin maintains the
+following when servers are added and removed:</p>
+
+<ul>
+<li>Data redundancy with a triad hub.</li>
+<li>Application deployment through a clustered transactional
+repository.</li>
+<li>Distributed caching and store for both servlet sessions and jCache
+caching.</li>
+<li>Load balancing to the elastic servers.</li>
+<li>Distributed management, sensing, and health checks.</li>
+<li>Elastic JMS message queues.</li>
+</ul>
 
 </description>
 </header>
@@ -31,6 +41,7 @@ management, triple redundancy, and distributed deployment.</p>
 
 <ul>
 <li>HTTP Load balancing and failover.</li>
+<li>Elastic servers: adding and removing servers dynamically.</li>
 <li>Distributed deployment and versioning of applications.</li>
 <li>A triple-redundant triad as the reliable cluster hub.</li>
 <li>Heartbeat monitoring of all servers in the cluster.</li>
@@ -114,6 +125,43 @@ fail-over and clustering, Resin also has support for a distributed
 caching API, clustered application deployment as well as tools for
 administering the cluster.</p>
 
+
+</s1>
+
+<s1 title="Elastic Servers">
+
+<p>Resin lets you add and remove servers dynamically to the system, and
+automatically adjusts the cluster to manage those servers.</p>
+
+<ul>
+<li>Deployed applications pushed to the new server automatically.</li>
+<li>Distributed caching updates replicated data with server adds and removes.</li>
+<li>Load balancing updates to include the new server or remove the old one.</li>
+<li>JMS queues update with the new server.</li>
+<li>Administration updates to the new server.</li>
+</ul>
+
+<s2 title="Starting an elastic server">
+
+<p>The new server requires a copy of the site's resin.xml, which must have
+at least one server configured, because the server needs the IP address of
+the core servers.</p>
+
+<p>The main operation is a "-join-cluster app-tier" which tells the
+new server which cluster to join.</p>
+
+<example title="Example: minimal command-line for dynamic server">
+unix> bin/resin.sh -join-cluster app-tier start \
+          -user my-admin -password my-password
+</example>
+
+<p>As usual, you can name the server with "-server my-name". By default, one
+is generated automatically.</p>
+
+<p>After the server shuts down, the cluster will remember it for 15 minutes,
+giving the server time to restart before removing it from the cluster.</p>
+
+</s2>
 
 </s1>
 
@@ -220,7 +268,7 @@ deployment repository, it is propagated to all the servers in the
 cluster - including any dynamic servers that are added to the cluster
 at a later point in time after initial propagation happens.</p>
 
-<figure src="deployment.png"/>
+<figure src="deployment.png" alt="Deployment unit -> Resin/Git(Instance1 <-> Instance2 <-> Instance 3)"/>
 
 <p>When you deploy an application, it's always a good idea to check that
 all servers in the cluster have received the correct web-app. Because
@@ -234,7 +282,7 @@ version (date) is in green to indicate that the hash validation matches
 for each server. If one server had a different content, the date would be
 marked with a red 'x'.</p>
 
-<figure src="webapp-deploy.png"/>
+<figure src="webapp-deploy.png" alt="/foo,Active,Red X,Timestamp  /hello1,Active,Red X,Timestamp  Deploy server list"/>
 
 <p> The details for each Ant and Maven based clustered deployment API
 is outlined <a href="clustering-deployment-ref.xtp">here</a>.  </p>
@@ -263,7 +311,7 @@ app-tier servers. Since Resin's clustering configuration already
 defines the servers in a cluster, the only additional configuration
 is to use the &lt;resin:LoadBalance> tag to forward request to the backend.</p>
 
-<figure src="cluster-load-balance.png"/>
+<figure src="cluster-load-balance.png" alt="web-tier(80:web-a) -> app-tier(6800:app-a(foo.com,bar.com), 6801:app-b(foo.com,bar.com))" />
 
 <p>Dispatching requests with load balancing in Resin is accomplished through
 the <a href="http-rewrite-ref.xtp">&lt;resin:LoadBalance></a> tag
@@ -349,9 +397,9 @@ the server-id as part of the command line: </p>
 
 
 <example title="Starting Servers">
-192.168.0.10> java -jar lib/resin.jar -server app-a start
-192.168.0.11> java -jar lib/resin.jar -server app-b start
-192.168.0.1> java -jar lib/resin.jar -server web-a start
+192.168.0.10> bin/resin.sh -server app-a start
+192.168.0.11> bin/resin.sh -server app-b start
+192.168.0.1> bin/resin.sh -server web-a start
 </example>
 
 <p> Since Resin lets you start multiple servers on the same machine, a
@@ -442,15 +490,15 @@ force the web-tier to use a particular server in the app-tier.  </p>
 
 <p> Since Resin uses the first character of the <var>jsessionid</var>
 to identify the server to use, starting with 'a' will resolve the
-request to app-a.  If wwww.example.com resolves to your web-tier, then
+request to app-a.  If www.example.com resolves to your web-tier, then
 you can use values like this for testing: </p>
 
 <ol>
-<li>http://www.example.com/proxooladmin;jsessionid=aaaXXXXX</li>
-<li>http://www.example.com/proxooladmin;jsessionid=baaXXXXX</li>
-<li>http://www.example.com/proxooladmin;jsessionid=caaXXXXX</li>
-<li>http://www.example.com/proxooladmin;jsessionid=daaXXXXX</li>
-<li>http://www.example.com/proxooladmin;jsessionid=eaaXXXXX</li>
+<li>http://www.example.com/test-servlet;jsessionid=aaaXXXXX</li>
+<li>http://www.example.com/test-servlet;jsessionid=baaXXXXX</li>
+<li>http://www.example.com/test-servlet;jsessionid=caaXXXXX</li>
+<li>http://www.example.com/test-servlet;jsessionid=daaXXXXX</li>
+<li>http://www.example.com/test-servlet;jsessionid=eaaXXXXX</li>
 <li>etc.</li>
 </ol>
 
@@ -489,7 +537,7 @@ load. Resin uses a set of timeout values to manage the socket pool and
 to handle any failures or freezes of the backend servers. The
 following diagram illustrates the main timeout values:</p>
 
-<figure src="load-balance-idle-time.png"/>
+<figure src="load-balance-idle-time.png" alt="web-a:connecty-timeout,app-a:socket-timeout,web-a:recover-time,app-a:keepalive-timeout,web-a:idle-time"/>
 <ul>
 <li><b>load-balance-connect-timeout</b>: the load balancer timeout
 for the <code>connect()</code> system call to complete to
@@ -630,7 +678,7 @@ new server only needs to speak to the triad, not all servers.</li>
 than 64-servers to maintain scalability.</li>
 </ul>
 
-<figure src="resin-cloud.jpg"/>
+<figure src="resin-cloud.jpg" alt="resin triad -> cloud(resin servers)"/>
 
 <s2 title="Cluster Heartbeat">
 
@@ -794,173 +842,6 @@ For details on the tags used for clustering, please refer to
 <a href="clustering-ref.xtp">this page</a>.
 </p>
 </s1>
-
-<!--
-<s1 title="Dynamic Server Addition and Removal">
-
-<p> For many organizations, user demand fluctuates significantly over
-time. For example, many eductational or government institutions do not
-have much user demand throughout most of the year but demand increases
-dramatically during periods before and after a deadline (such as
-admissions deadlines, tax deadlines, etc). Similarly many e-commerce
-sites experience dramatic increases in traffic around the
-holidays. For these situations, there is really no need to maintain a
-lot of server capacity throughout the year. What these organizations
-need is a flexible system that allows for dynamically adding and
-removing servers from the cluster as traffic fluctuates. This allows
-these organizations to save money by not having a lot of excess
-capacity in their server-farms that is not used most of the time. This
-is the central idea behind elastic computing. It is also a fundamental
-capability needed for private and public clouds that must allocate
-computing capacity on demand.  </p>
-
-<p> Resin has excellent support for elastic computing through the
-concept of dynamic servers and the triad. A dynamic server is a Resin
-instance that can be added to the cluster without being statically
-configured in resin.xml. Because these servers can also be taken
-off-line at any time, they are never used as a back-up server and
-never own session data. Rather, they retrieve, cache and synchronize
-session data from the "triad" servers. The triad on the other hand, is
-a set of three or more statically configured servers that basically
-function as the data store for the cluster. If you recall the
-"triplicate" concept from the TCP based clustering configuration
-section above, triplicate copies of the session are automacitally
-enabled in the dynamic server case for increased reliability. For
-dynamic clustering to work, ideally all the statically defined servers
-should be up and running, but in the least at least one statically
-defined server must be active at any given time. When dynamic servers
-join the cluster, they announce their availability to the statically
-defined servers and start synchronizing state with the triad. While
-dynamic servers synchronize data with the triad in real-time, they
-also maintain cached copies of frequently used data as an
-optimization. Each triad member keeps track of currently available
-dynamic servers.  The dynamic server information is shared and
-synchronized across the triad so that even if a daynamic server is
-added while a triad member was down, they are made aware of the
-dynamic server as soon as the triad member comes back on-line.  </p>
-
-<p>
-Adding a dynamic server to a cluster is a simple two-step process:
-</p>
-
-<ol>
-<li>Register the dynamic server with a triad server.</li>
-<li>Start the new dynamic server using the registration in the previous step.</li>
-</ol>
-
-<s2 title="Preliminaries">
-<p>
-Before adding a dynamic server, you must:
-</p>
-<ul>
-<li>Set up and start a cluster with at least one static server
-like the following example:
-
-<example title="Example: conf/resin.xml">
-&lt;resin xmlns="http://caucho.com/ns/resin">
-
-  &lt;cluster id="app-tier">
-    ...
-    &lt;server id="a" address="192.168.1.10" port="6800"/>
-    &lt;server id="b" address="192.168.1.11" port="6800"/>
-    &lt;server id="c" address="192.168.1.12" port="6800"/>
-</example>
-</li>
-
-<li>Install at least one admin password, usually in 
-<var>admin-users.xml</var></li>
-
-<li>Enable the RemoteAdminService for the cluster like this:
-<example>
-&lt;resin xmlns="http://caucho.com/ns/resin"
-         xmlns:resin="urn:java:com.caucho.resin">
-
-  &lt;cluster id="app-tier">
-    ...
-    &lt;resin:RemoteAdminService/>
-    ...
-</example>
-</li>
-<li>Enable the dynamic servers feature for the cluster like this:
-<example>
-&lt;resin xmlns="http://caucho.com/ns/resin">
-
-  &lt;cluster id="app-tier">
-    ...
-    &lt;dynamic-server-enable>true&lt;/dynamic-server-enable>
-    ...
-</example>
-</li>
-</ul>
-</s2>
-<s2 title="Registering A Dynamic Server">
-
-<p>
-For the first step of registration, you can use a JMX tool like jconsole or
-simply use the Resin administration web console.  We'll show how to do
-the latter method here. For registration, you'll specify three values:
-</p>
-
-<deftable title="Dynamic server deployment options">
-<tr>
-  <th>Name</th>
-  <th>Description</th>
-</tr>
-<tr>
-  <td>Server id</td>
-  <td>Symbolic identifier of the new dynamic server.</td>
-</tr>
-<tr>
-  <td>IP</td>
-  <td>The IP address of the new dynamic server. May also be host name.</td>
-</tr>
-<tr>
-  <td>Port</td>
-  <td>The server port of the new dynamic server. Usually 6800.</td>
-</tr>
-</deftable>
-
-<p> With these three values, browse to the Resin administration
-application's "cluster" tab. If you have enabled dynamic servers for
-your cluster, you should see a form allowing you to register the
-server in the "Cluster Overview" table.  </p>
-
-<figure src="dynamic-server-add.png"/>
-
-<p> Once you have entered the values and added the server, it should
-show up in the table as a dead server because we haven't started it
-yet.  The dynamic server's registration will be propagated to all the
-servers in the cluster.  </p>
-
-<figure src="dynamic-server-added.png"/>
-</s2>
-
-<s2 title="Starting a Dynamic Server">
-
-<p> Now that we've registered the dynamic server, we can start it and
-have it join the cluster.  In order for the new server to be
-recognized and accepted by the triad, it needs to start with the same
-resin.xml that the triad is using, the name of the cluster it is
-joining, and the values entered in the registration step.  These can
-all be specified on the command line when starting the server: </p>
-
-<example>
-dynamic-server> java -jar $RESIN_HOME/lib/resin.jar -conf /etc/resin/resin.xml \
-                     -dynamic-server app-tier:123.45.67.89:6800 start
-</example>
-
-<p> Specifying the configuration file allows the new server to
-configure itself using the &lt;server-default> options, to find the
-triad servers of the cluster it is joining, and to authenticate using
-the administration logins.  This command starts the server, which
-immediately contacts the triad to join the cluster. Once it has
-successfully joined, the "Cluster" tab of the administration
-application should look like this: </p>
-
-<figure src="dynamic-server-started.png"/>
-</s2>
-</s1>
--->
 
 <s1 title="Distributed Caching">
 

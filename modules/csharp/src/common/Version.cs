@@ -30,7 +30,7 @@ using System;
 namespace Caucho
 {
   public class Version {
-    public static String VERSION = "Resin/4.0.18";
-    public static String FULL_VERSION = "Resin-4.0.18 (built Thu, 12 May 2011 01:39:14 PDT)";
+    public static String VERSION = "Resin/4.0.19";
+    public static String FULL_VERSION = "Resin-4.0.19 (built Tue, 14 Jun 2011 02:12:39 PDT)";
   }
 }

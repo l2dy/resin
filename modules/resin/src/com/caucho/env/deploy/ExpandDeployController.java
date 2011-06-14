@@ -39,6 +39,7 @@ import java.util.jar.Manifest;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.config.ConfigException;
 import com.caucho.config.types.FileSetType;
 import com.caucho.env.repository.CommitBuilder;
 import com.caucho.env.repository.Repository;
@@ -205,9 +206,23 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   /**
    * Sets the archive auto-remove file set.
    */
-  public void setExpandCleanupFileSet(FileSetType fileSet)
+  public void addExpandCleanupFileSet(FileSetType fileSet)
   {
-    _expandCleanupFileSet = fileSet;
+    if (_expandCleanupFileSet == null)
+      _expandCleanupFileSet = fileSet;
+    else
+      _expandCleanupFileSet.add(fileSet);
+  }
+
+  /**
+   * Sets the archive auto-remove file set.
+   */
+  public void addExpandPreserveFileset(FileSetType fileSet)
+  {
+    if (_expandCleanupFileSet == null)
+      _expandCleanupFileSet = new FileSetType();
+    
+    _expandCleanupFileSet.addInverse(fileSet);
   }
 
   public String getAutoDeployStage()
@@ -332,12 +347,14 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     throws IOException
   {
     // adds any .war file to the server-specific repository
-    for (int i = 0; ! commitArchive() && i < 3; i++) {
+    for (int i = 0; ! commitArchiveIgnoreException() && i < 3; i++) {
       try {
         Thread.sleep(2000);
       } catch (InterruptedException e) {
       }
     }
+    
+    commitArchive();
     
     synchronized (_applicationExtractLock) {
       boolean isExtract = extractFromRepository();
@@ -412,6 +429,17 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     return (getAutoDeployStage() + "/" + getIdType() + "/" + getIdKey());
   }
   
+  private boolean commitArchiveIgnoreException()
+  {
+    try {
+      return commitArchive();
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+      
+      return false;
+    }
+  }
+
   /**
    * Adds any updated .war file to the server-specific repository. The 
    * application will be extracted as part of the usual repository system.
@@ -420,8 +448,8 @@ abstract public class ExpandDeployController<I extends DeployInstance>
    * if the war is in the process of updating.
    */
   private boolean commitArchive()
-    throws IOException
-  {
+  throws IOException
+{
     Path archivePath = getArchivePath();
 
     if (archivePath == null)
@@ -432,36 +460,30 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     
     String hash = Long.toHexString(archivePath.getCrc64());
 
-    try {
-      CommitBuilder commit = new CommitBuilder();
-      commit.stage(getAutoDeployStage());
-      commit.type(getIdType());
-      commit.tagKey(getIdKey());
-      
-      String commitId = commit.getId();
-      
-      RepositoryTagEntry tagEntry = _repositorySpi.getTagMap().get(commitId);
-      
-      if (tagEntry != null 
-          && hash.equals(tagEntry.getAttributeMap().get("archive-digest"))) {
-        return true;
-      }
+    CommitBuilder commit = new CommitBuilder();
+    commit.stage(getAutoDeployStage());
+    commit.type(getIdType());
+    commit.tagKey(getIdKey());
 
-      commit.attribute("archive-digest", hash);
-      commit.message(".war added to repository from "
-                     + archivePath.getNativePath());
-      
-      if (log.isLoggable(Level.FINE))
-        log.fine(this + " adding archive to repository from " + archivePath);
-      
-      _repository.commitArchive(commit, archivePath);
-      
+    String commitId = commit.getId();
+
+    RepositoryTagEntry tagEntry = _repositorySpi.getTagMap().get(commitId);
+
+    if (tagEntry != null 
+        && hash.equals(tagEntry.getAttributeMap().get("archive-digest"))) {
       return true;
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      
-      return false;
     }
+
+    commit.attribute("archive-digest", hash);
+    commit.message(".war added to repository from "
+                   + archivePath.getNativePath());
+
+    if (log.isLoggable(Level.FINE))
+      log.fine(this + " adding archive to repository from " + archivePath);
+
+    _repository.commitArchive(commit, archivePath);
+
+    return true;
   }
 
   /**
@@ -476,6 +498,13 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       
       String tag = getId();
       String treeHash = _repositorySpi.getTagContentHash(tag);
+      
+      Path archivePath = getArchivePath();
+
+      if (treeHash != null && archivePath != null && archivePath.canRead()) {
+        throw new ConfigException(L.l("{0} cannot be deployed from both an archive {1} and cluster deployment.",
+                                      this, archivePath.getNativePath()));
+      }
 
       if (treeHash == null) {
         tag = getAutoDeployTag();
@@ -508,6 +537,8 @@ abstract public class ExpandDeployController<I extends DeployInstance>
       _rootHash = treeHash;
 
       return true;
+    } catch (ConfigException e) {
+      throw e;
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
 

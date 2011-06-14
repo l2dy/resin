@@ -41,7 +41,7 @@ something like <code>/var/www</code>.</li>
 
 <li>On Unix, execute <code>./configure --prefix=`pwd`; make; make install</code></li>
 
-<li>Start in development mode by executing <code>java -jar lib/resin.jar console</code> on Unix or simply <code>resin.exe</code> on Windows</li>
+<li>Start in development mode by executing <code>bin/resin.sh console</code> on Unix or simply <code>resin.exe</code> on Windows</li>
 
 <li>Browse to <a href="http://localhost:8080">http://localhost:8080</a></li>
 </ol>
@@ -97,9 +97,9 @@ When running as a daemon, Resin detaches from the console and continues
 running until told to stop.</p>
 
 <ol>
-<li>Start resin with <code>java -jar lib/resin.jar start</code></li>
-<li>Stop resin with <code>java -jar lib/resin.jar stop</code></li>
-<li>Restart resin with <code>java -jar lib/resin.jar restart</code></li>
+<li>Start resin with <code>bin/resin.sh start</code></li>
+<li>Stop resin with <code>bin/resin.sh stop</code></li>
+<li>Restart resin with <code>bin/resin.sh restart</code></li>
 </ol>
 
 </s2>
@@ -125,7 +125,7 @@ links to some other ports of the JDK.</p>
 only web server.  This configuration provides a Java HTTP server. We recommend
 you start with this before trying any other configuration.</p>
 
-<figure src="httpd.gif"/>
+<figure src="httpd.gif" alt="browser <-> Resin httpd/servlets,beans <- html,jsp"/>
 
 <p>The server listens at port 8080 in the default configuration and
 can be changed to the HTTP port 80 during deployment.</p>
@@ -156,8 +156,8 @@ environment variable <var>JAVA_HOME</var>.</li>
 </li>
 <li><code>make</code></li>
 <li><code>make install</code></li>
-<li>Execute <code>java -jar lib/resin.jar console</code>
-  <ul><li>Or run <code>bin/resin.sh console</code></li></ul>
+<li>Execute <code>bin/resin.sh console</code>
+  <ul><li>Or run <code>java -jar lib/resin.jar console</code></li></ul>
 </li>
 <li>Browse to <a href="http://localhost:8080">http://localhost:8080</a></li>
 </ol>
@@ -180,7 +180,7 @@ Apache (<var>mod_caucho</var>) and Java program supporting servlets and
 JSP (<var>Resin</var>.)  The two pieces communicate with a special high-speed
 protocol.</p>
 
-<figure src="apache_srun.gif"/>
+<figure src="apache_srun.gif" alt="browser <-> (Apache/mod_caucho <- html) <-> Resin httpd/servlets,beans <- html,jsp"/>
 
 <p>To configure Apache with Resin, you must
 configure both Apache and Resin.  The Resin

@@ -181,8 +181,9 @@ Java_com_caucho_vfs_JniSocketImpl_writeNative(JNIEnv *env,
   int sublen;
   int write_length = 0;
 
-  if (! conn || conn->fd < 0 || ! buf)
+  if (! conn || conn->fd < 0 || ! buf) {
     return -1;
+  }
   
   conn->jni_env = env;
 
@@ -199,6 +200,11 @@ Java_com_caucho_vfs_JniSocketImpl_writeNative(JNIEnv *env,
     result = conn->ops->write(conn, buffer, sublen);
     
     if (result < 0) {
+      /*
+      fprintf(stdout, "write-ops: write result=%d errno=%d\n", 
+              result, errno);
+      fflush(stdout);
+      */
       return result;
     }
 
@@ -313,6 +319,11 @@ Java_com_caucho_vfs_JniSocketImpl_nativeCloseFd(JNIEnv *env,
   }
 
   if (fd >= 0) {
+    /*
+    fprintf(stdout, "CLOSE2 %d\n", fd);
+    fflush(stdout);
+    */
+    
     closesocket(fd);
   }
 }
@@ -474,7 +485,7 @@ Java_com_caucho_vfs_JniSocketImpl_nativeReadNonBlock(JNIEnv *env,
 #ifdef AI_NUMERICHOST
 
 static struct sockaddr_in *
-lookup_addr(JNIEnv *env, char *addr_name, int port,
+lookup_addr(JNIEnv *env, const char *addr_name, int port,
 	    char *buffer, int *p_family, int *p_protocol,
 	    int *p_sin_length)
 {
@@ -666,7 +677,14 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
     
     /* somewhat of a hack to clear the old connection. */
     while (result == 0 && i-- >= 0) {
+      int flags;
       int fd = socket(AF_INET, SOCK_STREAM, 0);
+
+#ifdef O_NONBLOCK
+      flags = fcntl(fd, F_GETFL);
+      fcntl(fd, F_SETFL, O_NONBLOCK|flags);
+#endif
+
       result = connect(fd, (struct sockaddr *) &sin, sizeof(sin));
       closesocket(fd);
     }
@@ -995,9 +1013,9 @@ Java_com_caucho_vfs_JniSocketImpl_nativeAccept(JNIEnv *env,
     return 0;
 
   if (conn->fd >= 0) {
-    conn->jni_env = env;
-
-    conn->ops->close(conn);
+    resin_throw_exception(env, "java/lang/IllegalStateException",
+                          "unclosed socket in accept");
+    return 0;
   }
 
   if (! ss->accept(ss, conn))
@@ -1025,18 +1043,19 @@ Java_com_caucho_vfs_JniSocketImpl_nativeConnect(JNIEnv *env,
   char sin_data[256];
   struct sockaddr_in *sin = (struct sockaddr_in *) sin_data;
   int sin_length = sizeof(sin_data);
+  struct timeval timeout;
 
   if (! conn || ! env || ! jhost)
     return 0;
 
   if (conn->fd >= 0) {
-    conn->jni_env = env;
-
-    conn->ops->close(conn);
+    resin_throw_exception(env, "java/lang/IllegalStateException",
+                          "unclosed socket in connect");
   }
 
+  memset(sin_data, 0, sin_length);
   addr_string = (*env)->GetStringUTFChars(env, jhost, 0);
-  
+
   if (addr_string) {
     sin = lookup_addr(env, addr_string, port, sin_data,
 		      &family, &protocol, &sin_length);
@@ -1056,12 +1075,30 @@ Java_com_caucho_vfs_JniSocketImpl_nativeConnect(JNIEnv *env,
     return 0;
   }
 
+  val = 1;
+  setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *) &val, sizeof(int));
+
   if (connect(sock, (struct sockaddr *) sin, sin_length) < 0) {
     return 0;
   }
 
   conn->fd = sock;
   conn->socket_timeout = 10000;
+
+#ifdef HAS_SOCK_TIMEOUT
+  timeout.tv_sec = conn->socket_timeout / 1000;
+  timeout.tv_usec = conn->socket_timeout % 1000 * 1000;
+  
+  if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
+                 (char *) &timeout, sizeof(timeout)) == 0) {
+    conn->is_recv_timeout = 1;
+  }
+
+  timeout.tv_sec = conn->socket_timeout / 1000;
+  timeout.tv_usec = conn->socket_timeout % 1000 * 1000;
+  setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO,
+	     (char *) &timeout, sizeof(timeout));
+#endif
 
   return 1;
 }

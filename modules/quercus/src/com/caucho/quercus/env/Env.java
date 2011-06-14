@@ -6953,10 +6953,13 @@ public class Env
 
   public void startDuplex(Object duplex)
   {
+    throw new UnsupportedOperationException(getClass().getName());
+    /*
     if (_duplex != null)
       return;
 
     _duplex = duplex;
+    */
   }
 
   public void closeDuplex()
@@ -6978,10 +6981,12 @@ public class Env
   {
     _quercus.completeEnv(this);
     
+    /*
     if (_duplex != null) {
       log.fine(this + " skipping close for duplex mode");
       return;
     }
+    */
 
     try {
       // php/1l0t

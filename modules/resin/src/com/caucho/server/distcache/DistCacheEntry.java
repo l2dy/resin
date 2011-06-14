@@ -53,7 +53,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   private final AtomicBoolean _isReadUpdate = new AtomicBoolean();
 
   private final AtomicReference<MnodeValue> _mnodeValue
-    = new AtomicReference<MnodeValue>();
+    = new AtomicReference<MnodeValue>(MnodeValue.NULL);
 
   public DistCacheEntry(Object key,
                         HashKey keyHash,
@@ -243,6 +243,7 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
     return getMnodeValue().getLeaseTimeout();
   }
 
+  @Override
   public int getLeaseOwner()
   {
     return getMnodeValue().getLeaseOwner();
@@ -300,6 +301,16 @@ abstract public class DistCacheEntry implements ExtCacheEntry {
   public Object setValue(Object value)
   {
     return getMnodeValue().setValue(value);
+  }
+  
+  //
+  // statistics
+  //
+  
+  @Override
+  public int getLoadCount()
+  {
+    return 0;
   }
 
   public String toString()

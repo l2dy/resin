@@ -56,7 +56,9 @@ public final class JniSocketImpl extends QSocket {
 
   private Object _readLock = new Object();
   private Object _writeLock = new Object();
-
+  
+  private long _socketTimeout;
+  
   private final AtomicBoolean _isClosed = new AtomicBoolean();
 
   public JniSocketImpl()
@@ -97,10 +99,16 @@ public final class JniSocketImpl extends QSocket {
   public boolean connectImpl(String host, int port)
     throws IOException
   {
-    return nativeConnect(_fd, host, port);
+    _socketTimeout = 10000;
+    
+    _isClosed.set(false);
+    
+    synchronized (_writeLock) {
+      return nativeConnect(_fd, host, port);
+    }
   }
 
-  boolean accept(long serverSocketFd)
+  boolean accept(long serverSocketFd, long socketTimeout)
   {
     _localName = null;
     _localAddr = null;
@@ -109,11 +117,13 @@ public final class JniSocketImpl extends QSocket {
     _remoteName = null;
     _remoteAddr = null;
     _remoteAddrLength = 0;
+    
+    _socketTimeout = socketTimeout;
 
     _isSecure = false;
     _isClosed.set(false);
 
-    synchronized (this) {
+    synchronized (_writeLock) {
       // initialize fields from the _fd
       return nativeAccept(serverSocketFd, _fd, _localAddrBuffer, _remoteAddrBuffer);
     }
@@ -293,7 +303,9 @@ public final class JniSocketImpl extends QSocket {
   @Override
   public String getCipherSuite()
   {
-    return getCipher(_fd);
+    synchronized (this) {
+      return getCipher(_fd);
+    }
   }
 
   /**
@@ -341,6 +353,7 @@ public final class JniSocketImpl extends QSocket {
   public boolean readNonBlock(int ms)
   {
     synchronized (_readLock) {
+      System.out.println("RNB: " + ms);
       return nativeReadNonBlock(_fd, ms);
     }
   }
@@ -352,15 +365,23 @@ public final class JniSocketImpl extends QSocket {
     throws IOException
   {
     synchronized (_readLock) {
-      long expires = timeout + Alarm.getCurrentTimeActual();
+      long expires;
+      
+      // gap is because getCurrentTimeActual() isn't exact
+      long gap = 20;
+      
+      if (timeout >= 0)
+        expires = timeout + Alarm.getCurrentTimeActual() - gap;
+      else
+        expires = _socketTimeout + Alarm.getCurrentTimeActual() - gap;
 
       int result = 0;
 
       do {
         result = readNative(_fd, buffer, offset, length, timeout);
       } while (result == JniStream.TIMEOUT_EXN
-               && Alarm.getCurrentTimeActual() <= expires);
-
+               && Alarm.getCurrentTimeActual() < expires);
+      
       return result;
     }
   }
@@ -371,15 +392,21 @@ public final class JniSocketImpl extends QSocket {
   public int write(byte []buffer, int offset, int length, boolean isEnd)
     throws IOException
   {
+    int result;
+    
     synchronized (_writeLock) {
-      if (! isEnd)
-        return writeNative(_fd, buffer, offset, length);
-      else {
-        _isClosed.set(true);
-
-        return writeCloseNative(_fd, buffer, offset, length);
-      }
+      long expires = _socketTimeout + Alarm.getCurrentTimeActual();
+      
+      do {
+        result = writeNative(_fd, buffer, offset, length);
+      } while (result == JniStream.TIMEOUT_EXN
+               && Alarm.getCurrentTimeActual() < expires);
     }
+    
+    if (isEnd) {
+      close();
+    }
+    return result;
   }
 
   /**
@@ -554,11 +581,11 @@ public final class JniSocketImpl extends QSocket {
   {
     if (_isClosed.getAndSet(true))
       return;
-
+    
     if (_stream != null)
       _stream.close();
 
-    // can't be locked because of shutdown
+    // XXX: can't be locked because of shutdown
     nativeClose(_fd);
   }
 
@@ -566,15 +593,15 @@ public final class JniSocketImpl extends QSocket {
   protected void finalize()
     throws Throwable
   {
+    long fd = _fd;
+    _fd = 0;
+    
     try {
       super.finalize();
 
-      close();
+      nativeClose(fd);
     } catch (Throwable e) {
     }
-
-    long fd = _fd;
-    _fd = 0;
 
     nativeFree(fd);
   }
@@ -608,9 +635,11 @@ public final class JniSocketImpl extends QSocket {
   private native int writeNative(long fd, byte []buf, int offset, int length)
     throws IOException;
 
+  /*
   private native int writeCloseNative(long fd,
                                       byte []buf, int offset, int length)
     throws IOException;
+    */
 
   native int writeNative2(long fd,
                           byte []buf1, int off1, int len1,

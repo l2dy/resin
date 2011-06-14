@@ -162,6 +162,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
                                             request.getAbstractHttpResponse());
   }
 
+  @Override
   public HttpServletResponseImpl getResponse()
   {
     return _response;
@@ -415,20 +416,19 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     AbstractHttpRequest request = _request;
 
-    if (request != null) {
-      WebApp webApp = request.getWebApp();
-      
-      if (webApp != null) {
-        Boolean isSecure = webApp.isRequestSecure();
-        
-        if (isSecure != null)
-          return isSecure;
-      }
-      
-      return request.isSecure();
-    }
-    else
+    if (request == null)
       return false;
+    
+    WebApp webApp = request.getWebApp();
+      
+    if (webApp != null) {
+      Boolean isSecure = webApp.isRequestSecure();
+        
+      if (isSecure != null)
+        return isSecure;
+    }
+      
+    return request.isSecure();
   }
 
   //
@@ -446,7 +446,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Object getAttribute(String name)
   {
     HashMapImpl<String,Object> attributes = _attributes;
-
+    
     if (attributes != null)
       return attributes.get(name);
     else if (isSecure()) {
@@ -481,7 +481,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     else
       return NullEnumeration.create();
   }
-
+  
   /**
    * Sets the value of the named request attribute.
    *
@@ -1626,19 +1626,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     _request.killKeepalive();
   }
 
-  public boolean isKeepaliveAllowed()
+  public boolean isConnectionClosed()
   {
-    return _request.isKeepaliveAllowed();
-  }
-
-  public boolean isClientDisconnect()
-  {
-    return _request.isClientDisconnect();
-  }
-
-  public void clientDisconnect()
-  {
-    _request.clientDisconnect();
+    return _request.isConnectionClosed();
   }
 
   public SocketLink getConnection()
@@ -1705,9 +1695,12 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public boolean isAsyncStarted()
   {
-    AbstractHttpRequest request = _request;
+    AsyncContextImpl asyncContext = _asyncContext;
+
+    if (asyncContext == null)
+      return false;
     
-    return request != null && request.isCometActive();
+    return asyncContext.isAsyncStarted();
   }
 
   /**
@@ -1975,7 +1968,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
         }
       }
     }
-
+    
     _request = null;
   }
 

@@ -425,6 +425,16 @@ public final class MnodeValue implements ExtCacheEntry {
     else
       return getValueHashKey().compareTo(mnode.getValueHashKey());
   }
+  
+  //
+  // statistics
+  //
+  
+  @Override
+  public int getLoadCount()
+  {
+    return 0;
+  }
 
   //
   // jcache stubs

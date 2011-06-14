@@ -40,6 +40,9 @@ r_access-log = element access-log {
 
      & (attribute shared-buffer { r_boolean-Type }
         | element shared-buffer { r_boolean-Type })?
+
+     & (attribute rollover-check-time { r_period-Type }
+        | element rollover-check-time { r_period-Type })?
   
     & r_init?)
 }
@@ -1108,7 +1111,9 @@ r_web-app-deploy = element web-app-deploy {
   & (attribute expand-suffix { string }
      | element expand-suffix { string })?
 
-  & r_expand-cleanup-fileset?
+  & r_expand-cleanup-fileset*
+
+  & r_expand-preserve-fileset*
 
   & r_lazy-init?
 
@@ -1177,6 +1182,8 @@ r_web-app-Basis =
   & r_error-page*
 
   & r_expand-cleanup-fileset*
+  
+  & r_expand-preserve-fileset*
 
   & r_filter*
 

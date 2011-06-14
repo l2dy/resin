@@ -65,7 +65,7 @@
     </web-app-default>
 
     <!-- standard servlet behavior, including .jsp, .php, and WEB-INF -->
-    <resin:import path="${__DIR__}/app-default.xml"/>
+    <resin:import path="classpath:META-INF/caucho/app-default.xml"/>
 
     <!-- enables development error pages -->
     <development-mode-error-page/>
@@ -84,6 +84,12 @@
        - Admin services
       -->
     <resin:DeployService/>
+
+    <!--
+       - Uncomment to allow remote administration services
+       -
+       - <resin:RemoteAdminService/>
+      -->
     
     <resin:if test="${resin.professional}">
       <resin:AdminServices/>
@@ -101,11 +107,12 @@
       -->
     <host-default>
       <access-log path="log/access.log" 
-                format='%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-Agent}i"'
-                rollover-period="1W"/>
+                 format='%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-Agent}i"'
+                 rollover-period="1W"/>
 
       <!-- creates the webapps directory for .war expansion -->
-      <web-app-deploy path="webapps" versioning="true"/>
+      <web-app-deploy path="webapps"
+                      expand-preserve-fileset="WEB-INF/work/**"/>
 
       <!--
          - Defaults applied to each web-app.

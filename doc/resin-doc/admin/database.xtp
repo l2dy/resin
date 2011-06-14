@@ -135,6 +135,7 @@ time.</p>
 
 <p>For a simple example, imagine a set of operations that reads a value,
 calculates a new value, and then updates the database.
+</p>
 
 <example title="Example: simple set of database operations">
 read value A=1 
@@ -146,8 +147,7 @@ calculate  A=A+1
 update     A=3
 </example>
 
-
-</p><p>Imagine if one thread is performing this operation, and in the middle of
+<p>Imagine if one thread is performing this operation, and in the middle of
 this read/calculate/update, another thread performs an update.  The data that
 the first thread obtained from the read and is using for the calculation and
 update is no longer valid.</p>
@@ -220,7 +220,7 @@ and provides connections to a database.</p>
       
 <deftable-childtags>
 <tr>
-  <th>attribute</th>
+  <th>Attribute</th>
   <th>Description</th>
   <th>Default</th>
 </tr>
@@ -424,9 +424,9 @@ of driver to use.  Resin can still pool database connections using these drivers
 
 <s2 name="init-param" title="Set driver properties with init-param">
 
-<p><var>init-param</var> is used to set properties of the database driver that are
-specific to the driver and are not generic enough for resin to provide a
-named configuration tag.</p>
+<p><var>init-param</var> is used to set properties for java.sql.Driver
+database drivers.  More modern drivers like ConnectionPoolDataSource will
+not use init-param, but will use IoC-style tags directly.</p>
 
 <p>For example, MySQL drivers accept the <code>useUnicode</code> parameter, if
 true the driver will use Unicode character encodings when handling
@@ -436,12 +436,27 @@ strings.</p>
 &lt;database&gt;
   &lt;jndi-name&gt;jdbc/mysql&lt;/jndi-name&gt;
   &lt;driver&gt;
-    &lt;type&gt;com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource&lt;/type&gt;
+    &lt;type&gt;com.mysql.jdbc.Driver&lt;/type&gt;
     &lt;url&gt;jdbc:mysql://localhost:3306/dbname&lt;/url&gt;
     &lt;user&gt;username&lt;/user&gt;
     &lt;password&gt;password&lt;/password&gt;
 
     <b>&lt;init-param useUnicode="true"/&gt;</b>
+  &lt;/driver&gt;
+  ...
+&lt;/database&gt;
+</example>
+
+<example title="Example: mysql ConnectionPoolDataSource">
+&lt;database&gt;
+  &lt;jndi-name&gt;jdbc/mysql&lt;/jndi-name&gt;
+  &lt;driver&gt;
+    &lt;type&gt;com.mysql.jdbc.jdbc2.optional.MysqlConnectionPoolDataSource&lt;/type&gt;
+    &lt;url&gt;jdbc:mysql://localhost:3306/dbname&lt;/url&gt;
+    &lt;user&gt;username&lt;/user&gt;
+    &lt;password&gt;password&lt;/password&gt;
+
+    <b>&lt;useUnicode/></b>
   &lt;/driver&gt;
   ...
 &lt;/database&gt;

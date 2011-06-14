@@ -1125,7 +1125,7 @@ AC_ARG_ENABLE(ssl,
 [AS_HELP_STRING([--enable-ssl], [Turn on ssl])],
 [case "${enableval}" in
  yes) ENABLE_SSL=true ;;
- no)  ENABLE_SSL="false" ;;
+ no)  ENABLE_SSL="" ;;
  *) AC_MSG_ERROR(bad value ${enableval} for --enable-ssl) ;;
  esac],[ENABLE_SSL=""])
 
@@ -1139,6 +1139,7 @@ AC_ARG_WITH(openssl,
 OPENSSL=${withval}
 OPENSSL_INCLUDE=${OPENSSL}/include	
 OPENSSL_LIB=${OPENSSL}/lib	
+ENABLE_SSL=true
 ])
 
 #
@@ -1149,6 +1150,7 @@ AC_ARG_WITH(openssl-include,
                 [Openssl include directory])], 
 [
 OPENSSL_INCLUDE=${withval}
+ENABLE_SSL=true
 
 if test ! -r "${OPENSSL_INCLUDE}/openssl/ssl23.h"; then
   AC_MSG_ERROR([Can't find valid OpenSSL include ${OPENSSL_INCLUDE}])
@@ -1163,6 +1165,7 @@ AC_ARG_WITH(openssl-lib,
                 [Openssl lib directory])], 
 [
 OPENSSL_LIB=${withval}
+ENABLE_SSL=true
 
 if test ! -r "${OPENSSL_LIB}/libssl.a" -a \
         ! -r "${OPENSSL_LIB}/libssl.dylib" -a \
@@ -1171,62 +1174,65 @@ if test ! -r "${OPENSSL_LIB}/libssl.a" -a \
 fi
 ])
 
-if test "${ENABLE_SSL}" = false; then	
+if test -n "${OPENSSL_INCLUDE}"; then
   foo=bar
-elif test -n "${OPENSSL_INCLUDE}"; then
-  foo=bar
-elif test -r ${OPENSSL}/include/openssl/ssl23.h; then
+elif test -r ${OPENSSL}/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=${OPENSSL}/include
-elif test -r /usr/include/openssl/ssl23.h; then
+  ENABLE_SSL=true
+elif test -r /usr/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/include
-elif test -r /usr/local/include/openssl/ssl23.h; then
+  ENABLE_SSL=true
+elif test -r /usr/local/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/local/include
-elif test -r /usr/local/ssl/include/openssl/ssl23.h; then
+  ENABLE_SSL=true
+elif test -r /usr/local/ssl/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/local/ssl/include
+  ENABLE_SSL=true
 fi
 
-if test "${ENABLE_SSL}" = false; then	
-  foo=bar
+#if test "${ENABLE_SSL}" = false; then	
+#  foo=bar
+#elif test -n "${OPENSSL_LIB}"; then
+#  foo=bar
+#elif test -n "${b64_jni}" -a -r /lib64/libcrypto.so; then
+#  OPENSSL_LIB=/lib64
+#elif test -n "${b64_jni}" -a -r /usr/lib64/libcrypto.so; then
+#  OPENSSL_LIB=/usr/lib64
   
-elif test -n "${OPENSSL_LIB}"; then
-  foo=bar
-  
-elif test -n "${b64_jni}" -a -r /lib64/libcrypto.so; then
-  OPENSSL_LIB=/lib64
-elif test -n "${b64_jni}" -a -r /usr/lib64/libcrypto.so; then
-  OPENSSL_LIB=/usr/lib64
-  
-elif test -r /lib/libcrypto.so; then
-  OPENSSL_LIB=/lib
-elif test -r /lib/libcrypto.dylib; then
-  OPENSSL_LIB=/lib
-  
-elif test -r /usr/lib/libcrypto.so; then
-  OPENSSL_LIB=/usr/lib
-elif test -r /usr/lib/libcrypto.dylib; then
-  OPENSSL_LIB=/usr/lib
-  
-elif test -r /usr/local/lib/libcrypto.so; then
-  OPENSSL_LIB=/usr/local/lib
-elif test -r /usr/lib/libcrypto.dylib; then
-  OPENSSL_LIB=/usr/local/lib
-  
-elif test -r /usr/local/ssl/lib/libcrypto.so; then
-  OPENSSL_LIB=/usr/local/ssl/lib
-elif test -r /usr/local/ssl/lib/libcrypto.dylib; then
-  OPENSSL_LIB=/usr/local/ssl/lib
-elif test -r ${OPENSSL}/lib/libcrypto.a; then
-  OPENSSL_LIB=${OPENSSL}/lib
-elif test -r /usr/local/ssl/lib/libcrypto.a; then
-  OPENSSL_LIB=/usr/local/ssl/lib
-elif test -r /usr/local/lib/libssl.a; then
-  OPENSSL_LIB=/usr/local/lib
-elif test -r /usr/lib/libssl.a; then
-  OPENSSL_LIB=/usr/lib
-fi
+#elif test -r /lib/libcrypto.so; then
+#  OPENSSL_LIB=/lib
+#elif test -r /lib/libcrypto.dylib; then
+#  OPENSSL_LIB=/lib
+#  
+#elif test -r /usr/lib/libcrypto.so; then
+#  OPENSSL_LIB=/usr/lib
+#elif test -r /usr/lib/libcrypto.dylib; then
+#  OPENSSL_LIB=/usr/lib
+#  
+#elif test -r /usr/local/lib/libcrypto.so; then
+#  OPENSSL_LIB=/usr/local/lib
+#elif test -r /usr/lib/libcrypto.dylib; then
+#  OPENSSL_LIB=/usr/local/lib
+#  
+#elif test -r /usr/local/ssl/lib/libcrypto.so; then
+#  OPENSSL_LIB=/usr/local/ssl/lib
+#elif test -r /usr/local/ssl/lib/libcrypto.dylib; then
+#  OPENSSL_LIB=/usr/local/ssl/lib
+#elif test -r ${OPENSSL}/lib/libcrypto.a; then
+#  OPENSSL_LIB=${OPENSSL}/lib
+#elif test -r /usr/local/ssl/lib/libcrypto.a; then
+#  OPENSSL_LIB=/usr/local/ssl/lib
+#elif test -r /usr/local/lib/libssl.a; then
+#  OPENSSL_LIB=/usr/local/lib
+#elif test -r /usr/lib/libssl.a; then
+#  OPENSSL_LIB=/usr/lib
+#fi
 
-if test -z "${OPENSSL_LIB}"; then	
+
+if test -z "${ENABLE_SSL}"; then	
   foo=bar
+elif test -z "${OPENSSL_LIB}"; then	
+  SSL_LIBS="${SSL_LIBS} -lssl"
 elif test -r "${OPENSSL_LIB}/libssl.so"; then	
   SSL_LIBS="${SSL_LIBS} -lssl"
 elif test -r "${OPENSSL_LIB}/libssl.dylib"; then	
@@ -1244,8 +1250,10 @@ else
   SSL_LIBS="${SSL_LIBS} -lssl"
 fi
 
-if test -z "${OPENSSL_LIB}"; then	
+if test -z "${ENABLE_SSL}"; then	
   foo=bar
+elif test -z "${OPENSSL_LIB}"; then	
+  SSL_LIBS="${SSL_LIBS} -lcrypto"
 elif test -r "${OPENSSL_LIB}/libcrypto.so"; then	
   SSL_LIBS="${SSL_LIBS} -lcrypto"
 elif test -r "${OPENSSL_LIB}/libcrypto.dylib"; then	
@@ -1259,14 +1267,14 @@ fi
 
 SSL_OBJ=ssl_stub.o
 
-if test "${ENABLE_SSL}" = false; then	
+if test -z "${ENABLE_SSL}"; then	
   echo "Openssl is not enabled"
-elif test -z "${OPENSSL_LIB}"; then
-  echo "Openssl library was not found"
-elif test ! -r "${OPENSSL_LIB}/libcrypto.so" -a \
-          ! -r "${OPENSSL_LIB}/libcrypto.dylib" -a \
-          ! -r "${OPENSSL_LIB}/libcrypto.a" ; then
-  AC_MSG_ERROR([Can't find valid OpenSSL library in ${OPENSSL_LIB}])
+#elif test -z "${OPENSSL_LIB}"; then
+#  echo "Openssl library was not found"
+#elif test ! -r "${OPENSSL_LIB}/libcrypto.so" -a \
+#          ! -r "${OPENSSL_LIB}/libcrypto.dylib" -a \
+#          ! -r "${OPENSSL_LIB}/libcrypto.a" ; then
+#  AC_MSG_ERROR([Can't find valid OpenSSL library in ${OPENSSL_LIB}])
 elif test ! -r "${OPENSSL_INCLUDE}/openssl/ssl23.h"; then
   AC_MSG_ERROR([Can't find valid OpenSSL include in ${OPENSSL_INCLUDE}])
 else
@@ -1299,7 +1307,9 @@ END
     INCLUDES="$INCLUDES -I${OPENSSL_INCLUDE}"
   fi
   SSL_OBJ=ssl.o
-  LDFLAGS_SHLIB="${LDFLAGS_SHLIB} -L${OPENSSL_LIB}"
+  if test -n "${OPENSSL_LIB}"; then
+    LDFLAGS_SHLIB="${LDFLAGS_SHLIB} -L${OPENSSL_LIB}"
+  fi
   # PROXY_LIBS="$PROXY_LIBS ${OPENSSL_LIB}/libssl.a ${OPENSSL_LIB}/libcrypto.a"
 fi
 

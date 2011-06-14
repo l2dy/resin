@@ -67,7 +67,6 @@ abstract public class ResponseStream extends ToByteResponseStream {
 
   private boolean _isAllowFlush = true;
   private boolean _isComplete;
-  private boolean _isNextDisconnect;
 
   public ResponseStream()
   {
@@ -110,7 +109,6 @@ abstract public class ResponseStream extends ToByteResponseStream {
     _isDisableAutoFlush = false;
     _cacheStream = null;
     _proxyCacheResponse = null;
-    _isNextDisconnect = false;
     _isComplete = false;
   }
 
@@ -518,7 +516,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
   private boolean lengthException(byte []buf, int offset, int length,
                                   long contentLengthHeader)
   {
-    if (_response.isClientDisconnect() || isHead() || isClosed()) {
+    if (_response.isConnectionClosed() || isHead() || isClosed()) {
     }
     else if (contentLengthHeader < _contentLength) {
       AbstractHttpRequest request = _response.getRequest();
@@ -770,6 +768,14 @@ abstract public class ResponseStream extends ToByteResponseStream {
   public void completeCache()
   {
     HttpServletResponseImpl res = _response.getRequest().getResponseFacade();
+    HttpServletRequestImpl req = _response.getRequest().getRequestFacade();
+    
+    if (req == null)
+      return;
+    
+    // server/1la7
+    if (req.isAsyncStarted())
+      return;
 
     try {
       _isComplete = true;
@@ -846,7 +852,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
 
   protected final boolean isNextValid()
   {
-    return ! _isNextDisconnect;
+    return ! _response.isConnectionClosed();
   }
   
   protected void clearNext()
@@ -872,13 +878,11 @@ abstract public class ResponseStream extends ToByteResponseStream {
       
       isValid = true;
     } catch (ClientDisconnectException e) {
-      _response.clientDisconnect();
-
       if (! _response.isIgnoreClientDisconnect())
         throw e;
     } finally {
       if (! isValid)
-        _isNextDisconnect = true;
+        _response.clientDisconnect();
     }
   }
 
@@ -896,15 +900,13 @@ abstract public class ResponseStream extends ToByteResponseStream {
       
       return buffer;
     } catch (ClientDisconnectException e) {
-      _response.clientDisconnect();
-
       if (! _response.isIgnoreClientDisconnect())
         throw e;
       
       return getNextBuffer();
     } finally {
       if (! isValid)
-        _isNextDisconnect = true;
+        _response.clientDisconnect();
     }
   }
 
@@ -921,13 +923,11 @@ abstract public class ResponseStream extends ToByteResponseStream {
       
       isValid = true;
     } catch (ClientDisconnectException e) {
-      _response.clientDisconnect();
-
       if (! _response.isIgnoreClientDisconnect())
         throw e;
     } finally {
       if (! isValid)
-        _isNextDisconnect = true;
+        _response.clientDisconnect();
     }
   }
 
@@ -943,8 +943,9 @@ abstract public class ResponseStream extends ToByteResponseStream {
       
       isValid = true;
     } finally {
-      if (! isValid)
-        _isNextDisconnect = true;
+      if (! isValid) {
+        _response.clientDisconnect();
+      }
     }
   }
 
@@ -961,7 +962,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
       isValid = true;
     } finally {
       if (! isValid)
-        _isNextDisconnect = true;
+        _response.clientDisconnect();
     }
   }
 

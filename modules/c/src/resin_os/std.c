@@ -182,7 +182,8 @@ std_read(connection_t *conn, char *buf, int len, int timeout)
 {
   int fd;
   int result;
-  int retry = 10;
+  int retry = 3;
+  int poll_result;
 
   if (! conn)
     return -1;
@@ -194,38 +195,60 @@ std_read(connection_t *conn, char *buf, int len, int timeout)
   }
 
   if (len == 0) {
-    int result = recv(fd, buf, 1, MSG_DONTWAIT);
+    int result;
+
+#ifdef MSG_DONTWAIT	
+	result = recv(fd, buf, 1, MSG_DONTWAIT);
+#else
+	result = recv(fd, buf, 0, 0);
+#endif
 
     if (result > 0)
       return 0;
     else if (result == 0)
       return -1;
     else if (errno == EAGAIN)
-      return 0;
+      return TIMEOUT_EXN;
     else
       return -1;
   }
 
-  if (timeout >= 0 && poll_read(fd, timeout) <= 0) {
+  if (timeout >= 0) {
+    poll_result = poll_read(fd, timeout);
+
+    if (poll_result <= 0) {
+      return TIMEOUT_EXN;
+    }
+  }
+  else if (! conn->is_recv_timeout
+           && poll_read(fd, conn->socket_timeout) <= 0) {
     return TIMEOUT_EXN;
   }
 
   do {
-    if (! conn->is_recv_timeout
-        && timeout < 0
-        && poll_read(fd, conn->socket_timeout) <= 0) {
-      return TIMEOUT_EXN;
-    }
-
+    /* recv returns 0 on end of file */
     result = recv(fd, buf, len, 0);
-  } while (result < 0
-	   && (errno == EINTR)
-	   && conn->fd == fd
-	   && retry-- >= 0
-           && len > 0);
 
-  /* EAGAIN is returned by a timeout */
-  /* recv returns 0 on end of file */
+    if (result > 0)
+      return result;
+    else if (result == 0)
+      return -1;
+
+    if (errno == EINTR) {
+      /* EAGAIN is returned by a timeout */
+      poll_result = poll_read(fd, conn->socket_timeout);
+
+      if (poll_result == 0) {
+	return TIMEOUT_EXN;
+      }
+      else if (poll_result < 0 && errno != EINTR) {
+        return read_exception_status(conn, errno);
+      }
+    }
+    else {
+      return read_exception_status(conn, errno);
+    }
+  } while (retry-- >= 0);
     
   if (result > 0) {
     return result;
@@ -243,7 +266,8 @@ std_write(connection_t *conn, char *buf, int len)
 {
   int fd;
   int result;
-  int retry = 10;
+  int retry = 5;
+  int poll_result;
   int error;
 
   if (! conn)
@@ -251,13 +275,14 @@ std_write(connection_t *conn, char *buf, int len)
 
   fd = conn->fd;
 
-  if (fd < 0)
+  if (fd < 0) {
     return -1;
+  }
 
   conn->sent_data = 1;
 
   if (! conn->is_recv_timeout && poll_write(fd, conn->socket_timeout) == 0) {
-    return -1;
+    return TIMEOUT_EXN;
   }
 
   do {
@@ -268,7 +293,12 @@ std_write(connection_t *conn, char *buf, int len)
     error = errno;
     
     if (errno == EINTR || errno == EAGAIN) {
-      if (poll_write(fd, conn->socket_timeout) == 0) {
+      poll_result = poll_write(fd, conn->socket_timeout);
+
+      if (poll_result == 0) {
+        return TIMEOUT_EXN;
+      }
+      else if (poll_result < 0 && errno != EINTR) {
 	return write_exception_status(conn, errno);
       }
     }
@@ -313,10 +343,9 @@ conn_close(connection_t *conn)
     return -1;
 
   fd = conn->fd;
-  
   conn->fd = -1;
 
-  if (fd >= 0) {
+  if (fd > 0) {
     closesocket(fd);
   }
 
@@ -343,6 +372,9 @@ std_accept(server_socket_t *ss, connection_t *conn)
   if (fd < 0)
     return 0;
 
+  if (conn->fd > 0)
+    return 0;
+
   memset(sin_data, 0, sizeof(sin_data));
   sin = (struct sockaddr *) &sin_data;
   sin_len = sizeof(sin_data);
@@ -355,22 +387,12 @@ std_accept(server_socket_t *ss, connection_t *conn)
     return 0;
   }
 #endif
-  /* pthread_mutex_lock(&ss->accept_lock); */
   
-  sock = -1;
-
-  /* XXX: no need to for the poll?  needs to match nonblock.
-  poll_result = poll_read(fd, 5000);
-
-  if (poll_result > 0)
-    sock = accept(fd, sin, &sin_len);
-  */
   sock = accept(fd, sin, &sin_len);
 
 #ifdef WIN32
   ReleaseMutex(ss->accept_lock);
 #endif
-  /* pthread_mutex_unlock(&ss->accept_lock); */
   
   if (sock < 0)
     return 0;
@@ -390,12 +412,12 @@ std_accept(server_socket_t *ss, connection_t *conn)
   if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO,
                  (char *) &timeout, sizeof(timeout)) == 0) {
     conn->is_recv_timeout = 1;
-  }
 
-  timeout.tv_sec = ss->conn_socket_timeout / 1000;
-  timeout.tv_usec = ss->conn_socket_timeout % 1000 * 1000;
-  setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO,
-	     (char *) &timeout, sizeof(timeout));
+    timeout.tv_sec = ss->conn_socket_timeout / 1000;
+    timeout.tv_usec = ss->conn_socket_timeout % 1000 * 1000;
+    setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO,
+               (char *) &timeout, sizeof(timeout));
+  }
 #endif
 
   conn->ss = ss;
@@ -447,10 +469,16 @@ std_close_ss(server_socket_t *ss)
     /* connect enough times to clear the threads waiting for a connection */
     for (retry = 20; retry >= 0; retry--) {
       int sock = socket(AF_INET, SOCK_STREAM, 0);
+      int flags;
       int result;
 
       if (sock < 0)
 	break;
+
+#ifdef O_NONBLOCK
+      flags = fcntl(sock, F_GETFL);
+      fcntl(sock, F_SETFL, O_NONBLOCK|flags);
+#endif
 
       result = connect(sock, server_sin, sin_len);
 

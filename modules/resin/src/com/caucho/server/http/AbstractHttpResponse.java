@@ -96,7 +96,6 @@ abstract public class AbstractHttpResponse {
   private HttpBufferStore _bufferStore;
 
   private boolean _isHeaderWritten;
-  private boolean _isClientDisconnect;
 
   protected long _contentLength;
   private boolean _isClosed;
@@ -128,11 +127,11 @@ abstract public class AbstractHttpResponse {
   }
 
   /**
-   * Return true if the client has disconnected
+   * Return true if the connection has disconnected
    */
-  public boolean isClientDisconnect()
+  public boolean isConnectionClosed()
   {
-    return _isClientDisconnect;
+    return _request.isConnectionClosed();
   }
 
   /**
@@ -140,9 +139,13 @@ abstract public class AbstractHttpResponse {
    */
   public void clientDisconnect()
   {
+    try {
+      _responseStream.close();
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
     _request.clientDisconnect();
-
-    _isClientDisconnect = true;
   }
 
   /**
@@ -199,7 +202,6 @@ abstract public class AbstractHttpResponse {
     _responseStream.start();
 
     _isHeaderWritten = false;
-    _isClientDisconnect = false;
 
     _contentLength = -1;
     _isClosed = false;
@@ -1011,7 +1013,6 @@ abstract public class AbstractHttpResponse {
       }
       else if (isClose) {
         _responseStream.close();
-        finishResponseStream(isClose);
       }
       else if (_request.getRequestFacade().isAsyncStarted()
                && _responseStream.getContentLength() == 0) {
@@ -1019,11 +1020,10 @@ abstract public class AbstractHttpResponse {
       }
       else {
         _responseStream.flush();
-        finishResponseStream(isClose);
       }
     } catch (ClientDisconnectException e) {
       _request.killKeepalive();
-      _isClientDisconnect = true;
+      clientDisconnect();
 
       if (isIgnoreClientDisconnect())
         log.fine(e.toString());
@@ -1031,17 +1031,12 @@ abstract public class AbstractHttpResponse {
         throw e;
     } catch (IOException e) {
       _request.killKeepalive();
-      _isClientDisconnect = true;
+      clientDisconnect();
 
       throw e;
     }
     
     // server/2600 - for _isClosed
-  }
-
-  protected void finishResponseStream(boolean isClose)
-    throws IOException
-  {
   }
 
   /**

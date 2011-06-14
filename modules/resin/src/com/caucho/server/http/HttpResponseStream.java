@@ -58,6 +58,12 @@ public class HttpResponseStream extends ResponseStream {
     _nextStream = next;
   }
 
+  @Override
+  public boolean isClosed()
+  {
+    return super.isClosed() || _nextStream.isClosed();
+  }
+
   /**
    * initializes the Response stream at the beginning of a request.
    */
@@ -69,7 +75,6 @@ public class HttpResponseStream extends ResponseStream {
     _isChunkedEncoding = false;
     _bufferStartOffset = 0;
   }
-
   //
   // implementations
   //
@@ -180,7 +185,7 @@ public class HttpResponseStream extends ResponseStream {
       AbstractHttpRequest req = _response.getRequest();
       if (req.isCometActive() || req.isDuplex()) {
       }
-      else if (! req.isKeepaliveAllowed()) {
+      else if (! req.isKeepalive()) {
         if (log.isLoggable(Level.FINE)) {
           log.fine(dbgId() + "close stream");
         }

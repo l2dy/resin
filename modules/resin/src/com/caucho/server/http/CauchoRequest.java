@@ -73,9 +73,7 @@ public interface CauchoRequest extends HttpServletRequest {
   public boolean isSuspend(); // XXX: isComplete()?
   public boolean isComet();
   public boolean isDuplex();
-  public boolean isKeepaliveAllowed();
-  public boolean isClientDisconnect();
-  public void clientDisconnect();
+  public boolean isConnectionClosed();
 
   public boolean isLoginRequested();
   public void requestLogin();

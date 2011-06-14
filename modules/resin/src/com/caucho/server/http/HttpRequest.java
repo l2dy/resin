@@ -54,6 +54,7 @@ import com.caucho.util.L10N;
 import com.caucho.vfs.ClientDisconnectException;
 import com.caucho.vfs.QSocket;
 import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.SocketTimeoutException;
 
 /**
  * Handles a new request from an HTTP connection.
@@ -771,15 +772,24 @@ public class HttpRequest extends AbstractHttpRequest
       startRequest(server.allocateHttpBuffer());
 
       if (! parseRequest()) {
-         return false;
+        if (log.isLoggable(Level.FINER)) {
+          log.finer(dbgId() + " empty request");
+        }
+        
+        return false;
       }
 
       CharSequence host = getInvocationHost();
 
       Invocation invocation = getInvocation(host, _uri, _uriLength);
 
-      if (invocation == null)
+      if (invocation == null) {
+        if (log.isLoggable(Level.FINER)) {
+          log.finer(dbgId() + " empty invocation");
+        }
+        
         return false;
+      }
 
       HttpServletRequestImpl requestFacade = getRequestFacade();
 
@@ -791,14 +801,22 @@ public class HttpRequest extends AbstractHttpRequest
 
       invocation.service(requestFacade, getResponseFacade());
     } catch (ClientDisconnectException e) {
-      getResponseFacade().killCache();
+      CauchoResponse response = getResponseFacade();
+      
+      if (response != null)
+        response.killCache();
+
       killKeepalive();
 
       throw e;
     } catch (Throwable e) {
       log.log(Level.FINE, e.toString(), e);
 
-      getResponseFacade().killCache();
+      CauchoResponse response = getResponseFacade();
+      
+      if (response != null)
+        response.killCache();
+      
       killKeepalive();
 
       sendRequestError(e);
@@ -848,6 +866,10 @@ public class HttpRequest extends AbstractHttpRequest
       return true;
     } catch (ClientDisconnectException e) {
       throw e;
+    } catch (SocketTimeoutException e) {
+      log.log(Level.FINER, e.toString(), e);
+      
+      return false;
     } catch (ArrayIndexOutOfBoundsException e) {
       log.log(Level.FINER, e.toString(), e);
       

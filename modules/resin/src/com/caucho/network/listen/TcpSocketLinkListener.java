@@ -55,6 +55,7 @@ import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.PortMXBean;
 import com.caucho.management.server.TcpConnectionInfo;
 import com.caucho.server.cluster.Server;
+import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.FreeList;
@@ -77,7 +78,10 @@ public class TcpSocketLinkListener
   private static final Logger log
     = Logger.getLogger(TcpSocketLinkListener.class.getName());
   
-  private static final int ACCEPT_IDLE_MAX = 32;
+  private static final int ACCEPT_IDLE_MIN = 4;
+  private static final int ACCEPT_IDLE_MAX = 16;
+  
+  private static final int KEEPALIVE_MAX = 256;
 
   private final AtomicInteger _connectionCount = new AtomicInteger();
 
@@ -118,7 +122,7 @@ public class TcpSocketLinkListener
 
   private InetAddress _socketAddress;
 
-  private int _acceptListenBacklog = 1000;
+  private int _acceptListenBacklog = 4000;
 
   private int _connectionMax = 1024 * 1024;
 
@@ -195,12 +199,13 @@ public class TcpSocketLinkListener
 
   public TcpSocketLinkListener()
   {
-    if ("64".equals(System.getProperty("sun.arch.data.model"))) {
+    if (CauchoSystem.is64Bit()) {
       // on 64-bit machines we can use more threads before parking in nio
       _keepaliveSelectThreadTimeout = 60000;
     }
     
     _launcher = new SocketLinkThreadLauncher(this);
+    _launcher.setIdleMin(ACCEPT_IDLE_MIN);
     _launcher.setIdleMax(ACCEPT_IDLE_MAX);
   }
 
@@ -1047,7 +1052,7 @@ public class TcpSocketLinkListener
       _keepaliveMax = _selectManager.getSelectMax();
 
     if (_keepaliveMax < 0)
-      _keepaliveMax = 256;
+      _keepaliveMax = KEEPALIVE_MAX;
 
     _admin.register();
   }
@@ -1222,14 +1227,17 @@ public class TcpSocketLinkListener
   public boolean accept(QSocket socket)
   {
     try {
-      while (_lifecycle.isActive()) {
+      while (! isClosed()) {
         Thread.interrupted();
+
         if (_serverSocket.accept(socket)) {
+          //System.out.println("REMOTE: " + socket.getRemotePort());
           if (_throttle.accept(socket)) {
             return true;
           }
-          else
+          else {
             socket.close();
+          }
         }
       }
     } catch (Throwable e) {
@@ -1372,7 +1380,7 @@ public class TcpSocketLinkListener
     conn.toCometSuspend();
     
     if (conn.isWakeRequested()) {
-      conn.toCometResume();
+      // conn.toCometResume();
       
       _threadPool.schedule(conn.getResumeTask());
     }
@@ -1398,7 +1406,7 @@ public class TcpSocketLinkListener
   boolean cometResume(TcpSocketLink conn)
   {
     if (_suspendConnectionSet.remove(conn)) {
-      conn.toCometResume();
+      // conn.toCometResume();
       
       _threadPool.schedule(conn.getResumeTask());
 
@@ -1421,7 +1429,7 @@ public class TcpSocketLinkListener
    */
   public boolean isClosed()
   {
-    return ! _lifecycle.getState().isRunnable();
+    return _lifecycle.getState().isDestroyed();
   }
 
   //
@@ -1534,9 +1542,16 @@ public class TcpSocketLinkListener
     TcpSocketLink startConn = _idleConn.allocate();
     
     if (startConn != null) {
-      startConn.toInit(); // change to the init/ready state
+      try {
+        startConn.toInit(); // change to the init/ready state
+      } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
+        
+        startConn = null;
+      }
     }
-    else {
+    
+    if (startConn == null) {
       int connId = _connectionCount.incrementAndGet();
       QSocket socket = _serverSocket.createSocket();
 
@@ -1753,6 +1768,9 @@ public class TcpSocketLinkListener
         _completeSet.clear();
 
         long now = Alarm.getCurrentTime();
+        
+        // wake the launcher in case of freeze
+        _launcher.wake();
 
         _suspendSet.addAll(_suspendConnectionSet);
         for (int i = _suspendSet.size() - 1; i >= 0; i--) {
