@@ -50,6 +50,8 @@ import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.VersionFactory;
 import com.caucho.config.LineException;
+import com.caucho.env.shutdown.ExitCode;
+import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.java.LineMap;
 import com.caucho.java.LineMapException;
@@ -276,6 +278,12 @@ public class ErrorPageManager {
 
       if (rootExn instanceof BadRequestException)
         badRequest = true;
+      
+      if (rootExn instanceof OutOfMemoryError) {
+        String msg = "TcpSocketLink OutOfMemory";
+
+        ShutdownSystem.shutdownOutOfMemory(msg);
+      }
 
       if (location != null || ! lookupErrorPage) {
       }
@@ -338,7 +346,7 @@ public class ErrorPageManager {
       badRequest = true;
 
       if (request instanceof CauchoRequest)
-        ((CauchoRequest) request).killKeepalive();
+        ((CauchoRequest) request).killKeepalive("bad request: " + rootExn);
 
       response.resetBuffer();
 

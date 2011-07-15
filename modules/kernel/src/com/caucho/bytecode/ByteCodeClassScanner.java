@@ -31,7 +31,6 @@ package com.caucho.bytecode;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -79,6 +78,8 @@ public class ByteCodeClassScanner {
     _is = is;
 
     _matcher = matcher;
+    
+    _charBufferOffset = 0;
   }
 
   public boolean scan()
@@ -168,9 +169,7 @@ public class ByteCodeClassScanner {
         }
       }
       
-      _matcher.finishScan();
-
-      return true;
+      return _matcher.finishScan();
     } catch (Exception e) {
       log.log(Level.WARNING,
               "failed scanning class " + _className + "\n" + e.toString(),
@@ -309,24 +308,27 @@ public class ByteCodeClassScanner {
     }
     
     char []buffer = _charBuffer;
+    boolean isIdentifier = true;
     
     while (length > 0) {
       int d1 = is.read();
+      
+      char ch;
 
       if (d1 == '/') {
-        buffer[offset++] = '.';
+        ch = '.';
         
         length--;
       }
       else if (d1 < 0x80) {
-        buffer[offset++] = (char) d1;
+        ch = (char) d1;
         
         length--;
       }
       else if (d1 < 0xe0) {
         int d2 = is.read() & 0x3f;
 
-        buffer[offset++] = (char) (((d1 & 0x1f) << 6) + (d2));
+        ch = (char) (((d1 & 0x1f) << 6) + (d2));
         
         length -= 2;
       }
@@ -334,13 +336,25 @@ public class ByteCodeClassScanner {
         int d2 = is.read() & 0x3f;
         int d3 = is.read() & 0x3f;
 
-        buffer[offset++] = (char) (((d1 & 0xf) << 12) + (d2 << 6) + d3);
+        ch = (char) (((d1 & 0xf) << 12) + (d2 << 6) + d3);
         
         length -= 3;
       }
       else
         throw new IllegalStateException();
+      
+      if (isIdentifier
+          && (Character.isJavaIdentifierPart(ch)
+              || ch == '.' || ch == ';')) {
+        buffer[offset++] = ch;
+      }
+      else {
+        isIdentifier = false;
+      }
     }
+    
+    if (! isIdentifier)
+      return 0;
 
     int charLength = offset - _charBufferOffset;
     
@@ -481,7 +495,7 @@ public class ByteCodeClassScanner {
     for (int i = 0; i < count; i++) {
       int annTypeIndex = scanAnnotation(is);
       
-      if (annTypeIndex > 0) {
+      if (annTypeIndex > 0 && _cpLengths[annTypeIndex] > 2) {
         _matcher.addClassAnnotation(_charBuffer, 
                                     _cpData[annTypeIndex] + 1, 
                                     _cpLengths[annTypeIndex] - 2);

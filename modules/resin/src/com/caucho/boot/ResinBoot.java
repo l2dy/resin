@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,6 +30,8 @@
 package com.caucho.boot;
 
 import java.util.HashMap;
+import java.util.logging.ConsoleHandler;
+import java.util.logging.Handler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -41,7 +43,9 @@ import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
+import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
+import com.caucho.loader.LibraryLoader;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -81,7 +85,8 @@ public class ResinBoot {
 
     Path resinHome = _args.getResinHome();
 
-    ClassLoader loader = ProLoader.create(resinHome);
+    ClassLoader loader = ProLoader.create(resinHome, _args.is64Bit());
+
     if (loader != null) {
       System.setProperty("resin.home", resinHome.getNativePath());
 
@@ -120,13 +125,17 @@ public class ResinBoot {
     
     Path rootDirectory = _args.getRootDirectory();
     Path dataDirectory = rootDirectory.lookup("watchdog-data");
-    
+
     ResinSystem system = new ResinSystem("watchdog",
-                                                rootDirectory,
-                                                dataDirectory);
+                                         rootDirectory,
+                                         dataDirectory);
 
     Thread thread = Thread.currentThread();
     thread.setContextClassLoader(system.getClassLoader());
+    
+    LibraryLoader libLoader = new LibraryLoader();
+    libLoader.setPath(rootDirectory.lookup("lib"));
+    libLoader.init();
 
     Config config = new Config();
     BootResinConfig bootManager = new BootResinConfig(system, _args);
@@ -159,6 +168,10 @@ public class ResinBoot {
     }
     
     if (_client == null && _args.isShutdown()) {
+      _client = bootManager.findShutdownClient();
+    }
+    
+    if (_client == null && ! (_args.isStart() || _args.isConsole())) {
       _client = bootManager.findShutdownClient();
     }
 
@@ -355,6 +368,14 @@ public class ResinBoot {
     if (System.getProperty("log.level") != null) {
       Logger.getLogger("").setLevel(Level.FINER);
     }
+    else {
+      for (Handler handler : Logger.getLogger("").getHandlers()) {
+        if (handler instanceof ConsoleHandler) {
+          handler.setLevel(Level.FINER);
+          Logger.getLogger("").removeHandler(handler);
+        }
+      }
+    }
 
     try {
       ResinBoot boot = new ResinBoot(argv);
@@ -411,10 +432,15 @@ public class ResinBoot {
     _commandMap.put(StartMode.JMX_LIST, new JmxListCommand());
     _commandMap.put(StartMode.JMX_SET, new JmxSetCommand());
     _commandMap.put(StartMode.JSPC, new JspcCommand());
+    _commandMap.put(StartMode.LIST_RESTARTS, new ListRestartsCommand());
     _commandMap.put(StartMode.LOG_LEVEL, new LogLevelCommand());
     _commandMap.put(StartMode.PROFILE, new ProfileCommand());
     _commandMap.put(StartMode.THREAD_DUMP, new ThreadDumpCommand());
 
     _commandMap.put(StartMode.UNDEPLOY, new UnDeployCommand());
+
+    _commandMap.put(StartMode.USER_ADD, new AddUserCommand());
+    _commandMap.put(StartMode.USER_LIST, new ListUsersCommand());
+    _commandMap.put(StartMode.USER_REMOVE, new RemoveUserCommand());
   }
 }

@@ -40,14 +40,14 @@ import com.caucho.inject.Module;
  * <p>Each TcpConnection has its own thread.
  */
 @Module
-class KeepaliveRequestTask extends ConnectionReadTask {
+class KeepaliveRequestTask extends ConnectionTask {
   KeepaliveRequestTask(TcpSocketLink socketLink)
   {
     super(socketLink);
   }
 
   @Override
-  public void run()
+  public final void run()
   {
     SocketLinkThreadLauncher launcher = getLauncher();
     
@@ -61,33 +61,11 @@ class KeepaliveRequestTask extends ConnectionReadTask {
   }
 
   @Override
-  public RequestState doTask()
-  throws IOException
+  final RequestState doTask()
+    throws IOException
   {
     TcpSocketLink socketLink = getSocketLink();
     
-    boolean isKeepalive = true;
-    RequestState result = socketLink.handleRequests(isKeepalive);
-
-    switch (result) {
-    case KEEPALIVE_SELECT:
-    case ASYNC:
-      return result;
-      
-    case DUPLEX:
-      return socketLink.doDuplex();
-      
-    case EXIT:
-      socketLink.close();
-      return result;
-      
-    case REQUEST_COMPLETE:
-      // acceptTask significantly faster than finishing
-      socketLink.close();
-      return socketLink.doAccept();
-      
-    default:
-      throw new IllegalStateException(String.valueOf(result));
-    }
+    return socketLink.handleKeepaliveTask();
   }
 }

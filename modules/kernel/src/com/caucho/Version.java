@@ -31,11 +31,11 @@ package com.caucho;
 
 final public class Version {
   public static final String COPYRIGHT =
-    "Copyright(c) 1998-2010 Caucho Technology.  All rights reserved.";
+    "Copyright(c) 1998-2011 Caucho Technology.  All rights reserved.";
 
-  public static String FULL_VERSION = "Resin-4.0.19 (built Tue, 14 Jun 2011 02:12:39 PDT)";
-  public static String VERSION = "4.0.19";
-  public static String VERSION_DATE = "20110614T021239";
+  public static String FULL_VERSION = "Resin-4.0.20 (built Fri, 15 Jul 2011 01:17:41 PDT)";
+  public static String VERSION = "4.0.20";
+  public static String VERSION_DATE = "20110715T011741";
 
   public static void main(String []argv)
   {

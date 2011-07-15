@@ -41,9 +41,10 @@ public class JmxSetCommand extends JmxCommand
   private static final L10N L = new L10N(JmxSetCommand.class);
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
-
     String pattern = args.getArg("-pattern");
 
     if (pattern == null)
@@ -70,9 +71,7 @@ public class JmxSetCommand extends JmxCommand
       throw new ConfigException(L.l(
         "jmx-set requires <value> parameter be specified"));
 
-    ManagerClient manager = getManagerClient(args, client);
-
-    String result = manager.setJmx(pattern, attribute, value);
+    String result = managerClient.setJmx(pattern, attribute, value);
 
     System.out.println(result);
   }
@@ -82,7 +81,7 @@ public class JmxSetCommand extends JmxCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] jmx-set -user <user> -password <password> -pattern <pattern> -attribute <attribute> value"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-set -user <user> -password <password> -pattern <pattern> -attribute <attribute> value"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   sets value on a MBeans attribute to <value>"));

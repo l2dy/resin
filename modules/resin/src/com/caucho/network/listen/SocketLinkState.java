@@ -29,6 +29,9 @@
 
 package com.caucho.network.listen;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.caucho.inject.Module;
 
 @Module
@@ -38,9 +41,18 @@ enum SocketLinkState {
    */
   INIT {
     @Override
-    SocketLinkState toInit() 
+    boolean isAllowIdle() { return true; }
+    
+    @Override
+    SocketLinkState toInit(TcpSocketLink conn) 
     { 
       return INIT; 
+    }
+    
+    @Override
+    SocketLinkState toIdle()
+    { 
+      return IDLE;
     }
 
     @Override
@@ -63,44 +75,6 @@ enum SocketLinkState {
       conn.getListener().keepaliveAllocate();
       
       return REQUEST_ACTIVE_KA;
-    }
-
-    @Override
-    SocketLinkState toActiveNoKeepalive(TcpSocketLink conn) 
-    { 
-      return REQUEST_ACTIVE_NKA;
-    }
-  },
-
-  /**
-   * Connection opened, waiting for the request.
-   */
-  REQUEST_READ {         // after accept, but before any data is read
-    @Override
-    boolean isActive() { return true; }
-
-    @Override
-    boolean isRequestActive() { return true; }
-
-    /**
-     * A slow initial read might go into the keepalive state.
-     * 
-     * XXX: qa
-     */
-    @Override
-    SocketLinkState toKeepalive(TcpSocketLink conn)
-    {
-      conn.getListener().keepaliveAllocate();
-      
-      return REQUEST_KEEPALIVE;
-    }
-    
-    @Override
-    SocketLinkState toActiveWithKeepalive(TcpSocketLink conn) 
-    { 
-      conn.getListener().keepaliveAllocate();
-      
-      return REQUEST_ACTIVE_KA; 
     }
 
     @Override
@@ -148,7 +122,7 @@ enum SocketLinkState {
     @Override
     SocketLinkState toKeepalive(TcpSocketLink conn)
     {
-      return REQUEST_KEEPALIVE;
+      return KEEPALIVE_THREAD;
     }
 
     @Override
@@ -197,7 +171,7 @@ enum SocketLinkState {
   /**
    * Waiting for a read from the keepalive connection.
    */
-  REQUEST_KEEPALIVE {   // waiting for keepalive data
+  KEEPALIVE_THREAD {   // waiting for keepalive data
     @Override
     boolean isKeepalive() { return true; }
 
@@ -221,7 +195,7 @@ enum SocketLinkState {
     @Override
     SocketLinkState toKeepaliveSelect()
     {
-      return REQUEST_KEEPALIVE_SELECT;
+      return KEEPALIVE_SELECT;
     }
 
     @Override
@@ -233,7 +207,7 @@ enum SocketLinkState {
     }
   },    
 
-  REQUEST_KEEPALIVE_SELECT {   // waiting for keepalive data (select)
+  KEEPALIVE_SELECT {   // waiting for keepalive data (select)
     @Override
     boolean isKeepalive() { return true; }
 
@@ -280,25 +254,13 @@ enum SocketLinkState {
     boolean isKeepaliveAllocated() { return true; }
 
     @Override
-    SocketLinkState toCometWake()
+    SocketLinkState toCometSuspend(TcpSocketLink conn)
     {
-      return COMET_WAKE_KA;
-    }
-
-    @Override
-    SocketLinkState toCometSuspend()
-    {
+      conn.getListener().cometSuspend(conn);
+      
       return COMET_SUSPEND_KA;
     }
     
-
-    /*
-    @Override
-    SocketLinkState toCometDispatch()
-    {
-      return REQUEST_ACTIVE_KA;
-    }
-    */
 
     @Override
     SocketLinkState toCometComplete()
@@ -323,48 +285,6 @@ enum SocketLinkState {
     }
   },
 
-  /**
-   * Comet request with a keepalive allocated.
-   */
-  COMET_WAKE_KA { // processing an active comet service with queued KA
-    @Override
-    boolean isComet() { return true; }
-
-    @Override
-    boolean isCometActive() { return true; }
-
-    @Override
-    boolean isKeepaliveAllocated() { return true; }
-
-    @Override
-    SocketLinkState toCometSuspend()
-    {
-      return COMET_SUSPEND_WAKE_KA;
-    }
-
-    @Override
-    SocketLinkState toCometComplete()
-    {
-      return COMET_COMPLETE_KA;
-    }
-
-    @Override
-    SocketLinkState toKillKeepalive(TcpSocketLink conn)
-    {
-      conn.getListener().keepaliveFree();
-      
-      return COMET_WAKE_NKA;
-    }
-    
-    @Override
-    SocketLinkState toClosed(TcpSocketLink conn)
-    {
-      conn.getListener().keepaliveFree();
-      
-      return CLOSED;
-    }
-  },
-
   COMET_NKA {            // processing an active comet service
     @Override
     boolean isComet() { return true; }
@@ -375,53 +295,12 @@ enum SocketLinkState {
     @Override
     boolean isAsyncStarted() { return true; }
 
-    /*
     @Override
-    SocketLinkState toCometDispatch() 
-    { 
-      return REQUEST_ACTIVE_NKA;
-    }
-    */
-
-    @Override
-    SocketLinkState toCometWake()
+    SocketLinkState toCometSuspend(TcpSocketLink conn)
     {
-      return COMET_WAKE_NKA;
-    }
-
-    @Override
-    SocketLinkState toCometSuspend()
-    {
+      conn.getListener().cometSuspend(conn);
+      
       return COMET_SUSPEND_NKA;
-    }
-
-    @Override
-    SocketLinkState toCometComplete()
-    {
-      return COMET_COMPLETE_NKA;
-    }
-  },
-
-  COMET_WAKE_NKA {   // processing an active comet service with queued wake
-    @Override
-    boolean isComet() { return true; }
-
-    @Override
-    boolean isCometActive() { return true; }
-
-    @Override
-    boolean isCometWake() { return true; }
-
-    @Override
-    SocketLinkState toCometDispatch() 
-    { 
-      return REQUEST_ACTIVE_NKA;
-    }
-
-    @Override
-    SocketLinkState toCometSuspend()
-    {
-      return COMET_SUSPEND_WAKE_NKA;
     }
 
     @Override
@@ -453,77 +332,27 @@ enum SocketLinkState {
     }
 
     @Override
-    SocketLinkState toCometWake()
+    SocketLinkState toCometResume(TcpSocketLink conn)
     {
-      return COMET_SUSPEND_WAKE_KA;
-    }
-
-    /*
-    @Override
-    SocketLinkState toCometResume()
-    {
-      return COMET_KA;
-    }
-    */
-    
-    @Override
-    SocketLinkState toClosed(TcpSocketLink conn)
-    {
-      throw new IllegalStateException();
-    }
-
-    @Override
-    SocketLinkState toDestroy(TcpSocketLink conn)
-    {
-      throw new IllegalStateException();
-    }
-  },
-
-  COMET_SUSPEND_WAKE_KA {  // suspended with queued wake
-    @Override
-    boolean isComet() { return true; }
-
-    @Override
-    boolean isCometSuspend() { return true; }
-
-    @Override
-    boolean isCometWake() { return true; }
-
-    @Override
-    boolean isKeepaliveAllocated() { return true; }
-
-    @Override
-    SocketLinkState toKillKeepalive(TcpSocketLink conn)
-    {
-      conn.getListener().keepaliveFree();
+      conn.getListener().cometDetach(conn);
       
-      return COMET_SUSPEND_WAKE_NKA;
-    }
-
-    @Override
-    SocketLinkState toCometDispatch() 
-    { 
       return REQUEST_ACTIVE_KA;
     }
-
-    /*
-    @Override
-    SocketLinkState toCometResume()
-    {
-      return COMET_KA;
-    }
-    */
-    
+        
     @Override
     SocketLinkState toClosed(TcpSocketLink conn)
     {
-      throw new IllegalStateException();
+      conn.getListener().cometDetach(conn);
+      
+      throw new IllegalStateException(this + " " + conn);
     }
 
     @Override
     SocketLinkState toDestroy(TcpSocketLink conn)
     {
-      throw new IllegalStateException();
+      conn.getListener().cometDetach(conn);
+      
+      throw new IllegalStateException(this + " " + conn);
     }
   },
 
@@ -537,67 +366,28 @@ enum SocketLinkState {
     @Override
     boolean isAsyncStarted() { return true; }
 
-    /*
     @Override
-    SocketLinkState toCometResume()
+    SocketLinkState toCometResume(TcpSocketLink conn)
     {
-      return COMET_NKA;
-    }
-    */
-
-    @Override
-    SocketLinkState toCometWake()
-    {
-      return COMET_SUSPEND_WAKE_NKA;
-    }
-    
-    @Override
-    SocketLinkState toClosed(TcpSocketLink conn)
-    {
-      throw new IllegalStateException(this + " " + conn);
-    }
-
-    @Override
-    SocketLinkState toDestroy(TcpSocketLink conn)
-    {
-      throw new IllegalStateException(this + " " + conn);
-    }
-  },
-
-  COMET_SUSPEND_WAKE_NKA {    // suspended waiting for a wake
-    @Override
-    boolean isComet() { return true; }
-
-    @Override
-    boolean isCometSuspend() { return true; }
-
-    @Override
-    boolean isCometWake() { return true; }
-
-    /*
-    @Override
-    SocketLinkState toCometResume()
-    {
-      return COMET_NKA;
-    }
-    */
-
-    @Override
-    SocketLinkState toCometDispatch() 
-    { 
+      conn.getListener().cometDetach(conn);
+      
       return REQUEST_ACTIVE_NKA;
     }
     
     @Override
     SocketLinkState toClosed(TcpSocketLink conn)
     {
-      throw new IllegalStateException();
+      conn.getListener().cometDetach(conn);
+      
+      throw new IllegalStateException(this + " " + conn);
     }
 
     @Override
     SocketLinkState toDestroy(TcpSocketLink conn)
     {
-      throw new IllegalStateException();
+      conn.getListener().cometDetach(conn);
+      
+      throw new IllegalStateException(this + " " + conn);
     }
   },
 
@@ -642,7 +432,7 @@ enum SocketLinkState {
     @Override
     SocketLinkState toKeepalive(TcpSocketLink conn)
     {
-      return REQUEST_KEEPALIVE;
+      return KEEPALIVE_THREAD;
     }
     
     @Override
@@ -695,6 +485,12 @@ enum SocketLinkState {
     boolean isKeepalive() { return true; }
 
     @Override
+    SocketLinkState toKeepaliveSelect()
+    {
+      return DUPLEX_KEEPALIVE;
+    }
+
+    @Override
     SocketLinkState toDuplexActive(TcpSocketLink conn)
     {
       conn.getListener().duplexKeepaliveEnd();
@@ -736,9 +532,21 @@ enum SocketLinkState {
     boolean isIdle() { return true; }
 
     @Override
-    SocketLinkState toInit() 
+    SocketLinkState toInit(TcpSocketLink conn) 
     { 
       return INIT; 
+    }
+
+    @Override
+    SocketLinkState toAccept()
+    { 
+      return ACCEPT;
+    }
+    
+    @Override
+    SocketLinkState toFree(TcpSocketLink conn)
+    {
+      return this;
     }
 
     @Override
@@ -756,12 +564,6 @@ enum SocketLinkState {
     boolean isDestroyed() { return true; }
 
     @Override
-    SocketLinkState toIdle()
-    {
-      return this;
-    }
-
-    @Override
     SocketLinkState toClosed(TcpSocketLink conn)
     {
       return this;
@@ -773,6 +575,11 @@ enum SocketLinkState {
       return this;
     }
   };
+  
+  // fields
+  
+  private static final Logger log
+    = Logger.getLogger(SocketLinkState.class.getName());
 
   //
   // predicates
@@ -869,9 +676,9 @@ enum SocketLinkState {
    * Convert from the idle (pooled) or closed state to the initial state
    * before accepting a connection.
    */
-  SocketLinkState toInit()
+  SocketLinkState toInit(TcpSocketLink conn)
   {
-    throw new IllegalStateException(this + " cannot switch to init");
+    throw new IllegalStateException(this + " cannot switch to init for " + conn);
   }
 
   /**
@@ -882,6 +689,20 @@ enum SocketLinkState {
     throw new IllegalStateException(this + " cannot switch to accept");
   }
 
+  /**
+   * Changes to the active state.
+   */
+  SocketLinkState toActive(TcpSocketLink conn, long connectionStartTime)
+  {
+    if (conn.getListener().isKeepaliveAllowed(connectionStartTime))
+      return toActiveWithKeepalive(conn);
+    else {
+      if (log.isLoggable(Level.FINE))
+        log.fine(conn + " keepalive disallowed");
+      
+      return toActiveNoKeepalive(conn);
+    }
+  }
   /**
    * Changes to the active state with the keepalive allocated.
    */
@@ -925,7 +746,7 @@ enum SocketLinkState {
     throw new IllegalStateException(this + " cannot switch to comet");
   }
 
-  SocketLinkState toCometSuspend()
+  SocketLinkState toCometSuspend(TcpSocketLink conn)
   {
     throw new IllegalStateException(this + " cannot suspend comet");
   }
@@ -937,9 +758,9 @@ enum SocketLinkState {
   }
   */
 
-  SocketLinkState toCometWake()
+  SocketLinkState toCometResume(TcpSocketLink conn)
   {
-    throw new IllegalStateException("dispatch is not valid outside of async: " + this);
+    throw new IllegalStateException(this + " cannot resume comet");
   }
   
   SocketLinkState toCometDispatch()
@@ -974,6 +795,11 @@ enum SocketLinkState {
   {
     throw new IllegalStateException(this + " is an illegal idle state");
   }
+  
+  SocketLinkState toFree(TcpSocketLink conn)
+  {
+    throw new IllegalStateException(this + " is an illegal free state for " + conn);
+  }
 
   SocketLinkState toClosed(TcpSocketLink conn)
   {
@@ -984,7 +810,7 @@ enum SocketLinkState {
   {
     toClosed(conn);
 
-    conn.getListener().destroy(conn);
+    conn.getListener().closeConnection(conn);
 
     return DESTROYED;
   }

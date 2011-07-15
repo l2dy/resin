@@ -321,9 +321,11 @@ public class Table extends BlockStore {
 
         table.init();
 
-        table.clearIndexes();
-        table.initIndexes();
-        table.rebuildIndexes();
+        //if (! table.validateIndexesSafe()) {
+          table.clearIndexes();
+          table.initIndexes();
+          table.rebuildIndexes();
+        //}
 
         return table;
       } catch (Exception e) {
@@ -517,6 +519,19 @@ public class Table extends BlockStore {
       throw new SQLExceptionWrapper(e);
     }
   }
+  
+  private boolean validateIndexesSafe()
+  {
+    try {
+      validateIndexes();
+      
+      return true;
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
+    
+    return false;
+  }
 
   /**
    * Rebuilds the indexes
@@ -527,8 +542,10 @@ public class Table extends BlockStore {
     DbTransaction xa = DbTransaction.create();
     xa.setAutoCommit(true);
 
+    TableIterator iter = null;
+    
     try {
-      TableIterator iter = createTableIterator();
+      iter = createTableIterator();
 
       iter.init(xa);
 
@@ -555,7 +572,11 @@ public class Table extends BlockStore {
         }
       }
     } finally {
+      if (iter != null)
+        iter.free();
+      
       xa.commit();
+      
     }
   }
 
@@ -928,7 +949,7 @@ public class Table extends BlockStore {
 
       try {
         clockBlockId = firstRowBlock(clockBlockId);
-
+        
         if (clockBlockId < 0) {
           _rowClockOffset = _rowClockTop;
           
@@ -991,6 +1012,9 @@ public class Table extends BlockStore {
   private boolean isRowBlockFree(long blockId)
     throws IOException
   {
+    if (isClosed())
+      return false;
+    
     Block block = readBlock(blockId);
 
     try {

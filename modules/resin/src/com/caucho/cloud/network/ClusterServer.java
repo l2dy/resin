@@ -29,8 +29,6 @@
 
 package com.caucho.cloud.network;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -66,18 +64,12 @@ public final class ClusterServer {
   private final NetworkClusterSystem _clusterService;
   private final CloudServer _cloudServer;
 
-  private boolean _isDynamic;
-
   // unique identifier for the server within the cluster
   private String _serverClusterId;
   // unique identifier for the server within all Resin clusters
   private String _serverDomainId;
   // the bam admin name
   private String _bamAddress;
-  
-  private String _address = "127.0.0.1";
-  private int _port = -1;
-  private boolean _isSSL;
   
   private boolean _isRemotePod;
 
@@ -132,21 +124,11 @@ public final class ClusterServer {
     
     if (_clusterService == null)
       throw new NullPointerException();
-
-    try {
-      setAddress(cloudServer.getAddress());
-    } catch (Exception e) {
-      throw ConfigException.create(e);
-    }
-    
-    setPort(cloudServer.getPort());
-    // _clusterPort = new ClusterPort(this);
-    // _ports.add(_clusterPort);
     
     // XXX: active isn't quite right here
     if (cloudServer.getPod() != networkService.getSelfServer().getPod()) {
       _isRemotePod = true;
-      _isHeartbeatActive.set(true);
+      // _isHeartbeatActive.set(true);
     }
     
     _stateTimestamp.set(Alarm.getCurrentTime());
@@ -253,35 +235,18 @@ public final class ClusterServer {
     return _cloudServer.getIndex();
   }
 
-  /**
-   * Sets the address
-   */
-  @Configurable
-  public void setAddress(String address)
-    throws UnknownHostException
-  {
-    if ("*".equals(address))
-      address = null;
-
-    _address = address;
-    
-    if (address != null) {
-      InetAddress.getByName(address);
-    }
-  }
-
  
   /**
    * Gets the address
    */
   public String getAddress()
   {
-    return _address;
+    return _cloudServer.getAddress();
   }
   
   public boolean isSSL()
   {
-    return _isSSL;
+    return _cloudServer.isSSL();
   }
 
   /**
@@ -296,17 +261,9 @@ public final class ClusterServer {
   /**
    * True for a dynamic server
    */
-  public void setDynamic(boolean isDynamic)
-  {
-    _isDynamic = isDynamic;
-  }
-
-  /**
-   * True for a dynamic server
-   */
   public boolean isDynamic()
   {
-    return _isDynamic;
+    return ! _cloudServer.isStatic();
   }
   
   //
@@ -569,19 +526,11 @@ public final class ClusterServer {
   }
 
   /**
-   * Sets a port.
-   */
-  public void setPort(int port)
-  {
-    _port = port;
-  }
-
-  /**
    * Gets the port.
    */
   public int getPort()
   {
-    return _port;
+    return getCloudServer().getPort();
   }
 
   /**

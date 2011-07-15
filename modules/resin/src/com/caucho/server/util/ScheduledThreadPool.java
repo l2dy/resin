@@ -420,11 +420,14 @@ public class ScheduledThreadPool implements ScheduledExecutorService,
   @SuppressWarnings("unchecked")
   void removeFuture(Future future)
   {
+    boolean isFuture;
+    
     synchronized (_futureSet) {
-      _futureSet.remove(future);
+      isFuture = _futureSet.remove(future);
     }
     
-    future.cancel(true);
+    if (isFuture)
+      future.cancel(true);
   }
 
   //
@@ -521,12 +524,12 @@ public class ScheduledThreadPool implements ScheduledExecutorService,
     public boolean cancel(boolean mayInterrupt)
     {
       synchronized (this) {
-        removeFuture(this);
-
         if (_isCancelled || _isDone)
           return false;
 
         _isCancelled = true;
+        
+        removeFuture(this);
 
         notifyAll();
       }
@@ -583,29 +586,33 @@ public class ScheduledThreadPool implements ScheduledExecutorService,
 
     public void run()
     {
-      _thread = Thread.currentThread();
-      ClassLoader oldLoader = _thread.getContextClassLoader();
+      Thread thread = Thread.currentThread(); 
+      _thread = thread;
+      ClassLoader oldLoader = thread.getContextClassLoader();
 
       try {
         if (_isCancelled || _isDone || _isShutdown)
           return;
 
-        _thread.setContextClassLoader(_loader);
+        thread.setContextClassLoader(_loader);
 
         if (_callable != null)
           _value = _callable.call();
-        else
+        else if (_runnable != null)
           _runnable.run();
       } catch (RuntimeException e) {
         throw e;
       } catch (Exception e) {
         _exception = e;
       } finally {
-        _thread.setContextClassLoader(oldLoader);
+        thread.setContextClassLoader(oldLoader);
         _thread = null;
         _isDone = true;
 
-        _threadPool.completeExecutorTask();
+        ThreadPool threadPool = _threadPool;
+        
+        if (threadPool != null)
+          threadPool.completeExecutorTask();
 
         // alarm
 

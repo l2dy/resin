@@ -44,7 +44,7 @@ abstract public class AbstractThreadLauncher extends AbstractTaskWorker {
   private static final long LAUNCHER_TIMEOUT = 60000L;
 
   private static final int DEFAULT_THREAD_MAX = 8192;
-  private static final int DEFAULT_IDLE_MIN = 1;
+  private static final int DEFAULT_IDLE_MIN = 2;
   private static final int DEFAULT_IDLE_MAX = Integer.MAX_VALUE / 2;
 
   private static final long DEFAULT_IDLE_TIMEOUT = 120000L;
@@ -135,7 +135,7 @@ abstract public class AbstractThreadLauncher extends AbstractTaskWorker {
       throw new ConfigException(L.l("IdleMin ({0}) must be greater than 0.", min));
 
     _idleMin = min;
-
+    
     update();
   }
 
@@ -230,6 +230,7 @@ abstract public class AbstractThreadLauncher extends AbstractTaskWorker {
 
     if (startCount < 0) {
       _startingCount.set(0);
+      
       new IllegalStateException().printStackTrace();
     }
 
@@ -280,9 +281,10 @@ abstract public class AbstractThreadLauncher extends AbstractTaskWorker {
     if (_idleMin < idleCount) {
       long nextIdleExpire = now + _idleTimeout;
 
-      if (_idleMax < idleCount && _idleMin < _idleMax) {
-        _threadIdleExpireTime.compareAndSet(idleExpire, nextIdleExpire);
-        
+      if (_idleMax < idleCount 
+          && _idleMin < _idleMax
+          && nextIdleExpire - idleExpire > 100
+          && _threadIdleExpireTime.compareAndSet(idleExpire, nextIdleExpire)) {
         return true;
       }
       else if (idleExpire < now

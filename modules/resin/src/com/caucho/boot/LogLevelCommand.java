@@ -55,7 +55,9 @@ public class LogLevelCommand extends AbstractManagementCommand
   }
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
     Level logLevel = null;
     
@@ -85,9 +87,7 @@ public class LogLevelCommand extends AbstractManagementCommand
       loggers[1] = "com.caucho";
     }
 
-    ManagerClient manager = getManagerClient(args, client);
-
-    String message = manager.setLogLevel(loggers, logLevel, period);
+    String message = managerClient.setLogLevel(loggers, logLevel, period);
 
     System.out.println(message);
   }
@@ -95,7 +95,7 @@ public class LogLevelCommand extends AbstractManagementCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] log-level -user <user> -password <password> -all|-finest|-finer|-fine|-config|-info|-warning|-severe|-off [-active-time <time-period>] [loggers...]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] log-level -user <user> -password <password> -all|-finest|-finer|-fine|-config|-info|-warning|-severe|-off [-active-time <time-period>] [loggers...]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   sets level for logger(s).  Defaults to root and `com.caucho' loggers."));

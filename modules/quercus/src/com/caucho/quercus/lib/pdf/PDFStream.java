@@ -106,6 +106,10 @@ public class PDFStream {
 
   public void setTextPos(double x, double y)
   {
+    if (_hasTextPos) {
+      flushToGraph();
+    }
+    
     _textX = x;
     _textY = y;
     _hasTextPos = false;
@@ -349,6 +353,17 @@ public class PDFStream {
     return true;
   }
 
+  public boolean fit_file_image(PDFFileImage img)
+  {
+    _procSet.add("/ImageB");
+    _procSet.add("/ImageC");
+    _procSet.add("/ImageI");
+
+    println("/I" + img.getId() + " Do");
+
+    return true;
+  }
+
   public void flushToGraph()
   {
     try {
@@ -378,6 +393,7 @@ public class PDFStream {
       if (_inText) {
         _out.println("ET");
         _inText = false;
+        _hasTextPos = false;
       }
 
       _out.flush();

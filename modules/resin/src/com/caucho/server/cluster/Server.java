@@ -39,13 +39,10 @@ import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.VersionFactory;
 import com.caucho.bam.actor.ActorSender;
-import com.caucho.bam.actor.SimpleActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.bam.manager.BamManager;
 import com.caucho.bam.stream.MessageStream;
-import com.caucho.bam.stream.NullActor;
-import com.caucho.bam.stream.NullMessageStream;
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterSystem;
@@ -70,6 +67,7 @@ import com.caucho.loader.EnvironmentLocal;
 import com.caucho.make.AlwaysModified;
 import com.caucho.management.server.EnvironmentMXBean;
 import com.caucho.management.server.ServerMXBean;
+import com.caucho.rewrite.DispatchRule;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.PermissionManager;
 import com.caucho.server.cache.AbstractProxyCache;
@@ -706,6 +704,11 @@ public class Server
   {
     return _hostContainer.createRewriteDispatch();
   }
+  
+  public void add(DispatchRule rewriteRule)
+  {
+    createRewriteDispatch().addRule(rewriteRule);
+  }
 
   public AbstractProxyCache getProxyCache()
   {
@@ -1234,6 +1237,10 @@ public class Server
       _lifecycle.toActive();
 
       logModules();
+
+      AdminAuthenticator adminAuth = getAdminAuthenticator();
+      if (adminAuth != null)
+        adminAuth.initStore();
     } catch (RuntimeException e) {
       log.log(Level.WARNING, e.toString(), e);
 
@@ -1281,12 +1288,13 @@ public class Server
       if (isModified()) {
         // XXX: message slightly wrong
         String msg = L.l("Resin restarting due to configuration change");
-
         ShutdownSystem.getCurrent().shutdown(ExitCode.MODIFIED, msg);
         return;
       }
     } finally {
-      alarm.queue(ALARM_INTERVAL);
+      if (_lifecycle.isActive()) {
+        alarm.queue(ALARM_INTERVAL);
+      }
     }
   }
 

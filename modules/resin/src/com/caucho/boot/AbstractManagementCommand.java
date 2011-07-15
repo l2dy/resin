@@ -38,8 +38,28 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
   private static final L10N L = new L10N(AbstractManagementCommand.class);
   
   @Override
-  public abstract void doCommand(WatchdogArgs args,
-                        WatchdogClient client);
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client) {
+    ManagerClient managerClient = null;
+
+    try {
+      managerClient = getManagerClient(args, client);
+
+      doCommand(args, client, managerClient);
+    } catch (Exception e) {
+      if (args.isVerbose())
+        e.printStackTrace();
+      else
+        System.out.println(e.toString());
+    } finally {
+      if (managerClient != null)
+        managerClient.close();
+    }
+  }
+
+  protected abstract void doCommand(WatchdogArgs args,
+                                    WatchdogClient client,
+                                    ManagerClient managerClient);
 
   protected ManagerClient getManagerClient(WatchdogArgs args,
                                            WatchdogClient client)
@@ -54,7 +74,7 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
     String portArg = args.getArg("-port");
 
     try {
-      if (portArg != null && !portArg.isEmpty())
+      if (portArg != null && ! portArg.isEmpty())
         port = Integer.parseInt(portArg);
     } catch (NumberFormatException e) {
       NumberFormatException e1 = new NumberFormatException(
@@ -63,14 +83,20 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
 
       throw e;
     }
+    
+    int httpPort = port;
+    
+    if (port < 0)
+      port = client.getConfig().getPort();
+    
+    if (httpPort < 0)
+      httpPort = findPort(client);
 
-    if (port == -1)
-      port = findPort(client);
-
+    /*
     if (port == 0) {
       throw new ConfigException(L.l("HTTP listener {0}:{1} was not found",
                                     address, port));
-    }
+    }*/
 
     String user = args.getArg("-user");
     String password = args.getArg("-password");
@@ -79,7 +105,9 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
       password = client.getResinSystemAuthKey();
     }
 
-    return new ManagerClient(address, port, user, password);
+    return new ManagerClient(address, port, httpPort, user, password);
+    
+    // return new ManagerClient(address, port, user, password);
   }
   
   private int findPort(WatchdogClient client)

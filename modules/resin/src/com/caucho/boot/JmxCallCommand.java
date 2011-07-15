@@ -44,7 +44,9 @@ public class JmxCallCommand extends JmxCommand
   private static final Set<String> options = new HashSet<String>();
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
     String []trailingArgs = args.getTrailingArgs(options);
 
@@ -73,11 +75,10 @@ public class JmxCallCommand extends JmxCommand
       operationIndex  = Integer.parseInt(index);
     }
 
-    ManagerClient manager = getManagerClient(args, client);
-    String result = manager.callJmx(pattern,
-                                    operation,
-                                    operationIndex,
-                                    trailingArgs);
+    String result = managerClient.callJmx(pattern,
+                                          operation,
+                                          operationIndex,
+                                          trailingArgs);
 
     System.out.println(result);
   }
@@ -85,7 +86,7 @@ public class JmxCallCommand extends JmxCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] jmx-call -user <user> -password <password> -pattern <pattern> -operation <operation> value..."));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-call -user <user> -password <password> -pattern <pattern> -operation <operation> value..."));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   calls method defined with option -operation on MBean using parameters specified at value..."));

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,7 @@ import com.caucho.VersionFactory;
 import com.caucho.config.ConfigException;
 import com.caucho.license.*;
 import com.caucho.server.resin.ResinELContext;
+import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -59,6 +60,7 @@ class WatchdogArgs
   private Path _javaHome;
   private Path _resinHome;
   private Path _rootDirectory;
+  private Path _dataDirectory;
   private String[] _argv;
   private Path _resinConf;
   private Path _logDirectory;
@@ -74,6 +76,8 @@ class WatchdogArgs
   private String _dynamicCluster;
   private String _dynamicAddress;
   private int _dynamicPort;
+  
+  private boolean _is64bit;
 
   WatchdogArgs(String[] argv)
   {
@@ -97,7 +101,9 @@ class WatchdogArgs
     _resinConf = _resinHome.lookup("conf/resin.conf");
     if (! _resinConf.canRead())
       _resinConf = _resinHome.lookup("conf/resin.xml");
-
+    
+    _is64bit = CauchoSystem.is64Bit();
+    
     parseCommandLine(_argv);
   }
 
@@ -119,6 +125,11 @@ class WatchdogArgs
   Path getRootDirectory()
   {
     return _rootDirectory;
+  }
+
+  Path getDataDirectory()
+  {
+    return _dataDirectory;
   }
 
   Path getLogDirectory()
@@ -198,6 +209,11 @@ class WatchdogArgs
   void setResinHome(Path resinHome)
   {
     _resinHome = resinHome;
+  }
+  
+  boolean is64Bit()
+  {
+    return _is64bit;
   }
 
   boolean isStatus()
@@ -398,6 +414,11 @@ class WatchdogArgs
         argv[i + 1] = _rootDirectory.getFullPath();
         i++;
       }
+      else if ("-data-directory".equals(arg) || "--data-directory".equals(arg)) {
+        _dataDirectory = Vfs.lookup(argv[i + 1]);
+        argv[i + 1] = _dataDirectory.getFullPath();
+        i++;
+      }
       else if ("-server".equals(arg) || "--server".equals(arg)) {
         _serverId = argv[i + 1];
         i++;
@@ -421,6 +442,12 @@ class WatchdogArgs
       else if (arg.startsWith("-J")
                || arg.startsWith("-D")
                || arg.startsWith("-X")) {
+      }
+      else if (arg.equals("-d64")) {
+        _is64bit = true;
+      }
+      else if (arg.equals("-d32")) {
+        _is64bit = false;
       }
       else if ("-debug-port".equals(arg) || "--debug-port".equals(arg)) {
         i++;
@@ -488,6 +515,9 @@ class WatchdogArgs
       else if ("kill".equals(arg)) {
         _startMode = StartMode.KILL;
       }
+      else if ("list-restarts".equals(arg)) {
+        _startMode = StartMode.LIST_RESTARTS;
+      }
       else if ("log-level".equals(arg)) {
         _startMode = StartMode.LOG_LEVEL;
       }
@@ -515,6 +545,15 @@ class WatchdogArgs
       else if ("undeploy".equals(arg)) {
         _startMode = StartMode.UNDEPLOY;
       }
+      else if ("user-add".equals(arg)) {
+        _startMode = StartMode.USER_ADD;
+      }
+      else if ("user-list".equals(arg)) {
+        _startMode = StartMode.USER_LIST;
+      }
+      else if ("user-remove".equals(arg)) {
+        _startMode = StartMode.USER_REMOVE;
+      }
       else if ("version".equals(arg)) {
         System.out.println(VersionFactory.getFullVersion());
         System.exit(0);
@@ -527,12 +566,14 @@ class WatchdogArgs
       }
       else if (_isHelp) {
       }
+/*
       else {
         System.out.println(L().l("unknown argument '{0}'", argv[i]));
         System.out.println();
         usage();
         System.exit(1);
       }
+*/  //#4605 (support before / after command option placement)
     }
 
     if (_isHelp
@@ -569,10 +610,14 @@ class WatchdogArgs
                                + "\n  heap-dump - produces a heap dump"
                                + "\n  thread-dump - produces a thread dump"
                                + "\n  profile - profiles the system"
+                               + "\n  list-restarts - lists server restart timestamps"
                                + "\n  log-level - sets a log level"
                                + "\n  jmx-list - lists MBeans, attributes, operations"
                                + "\n  jmx-set - sets value on MBean's attribute"
                                + "\n  jmx-call - invokes a method on MBean"
+                               + "\n  user-add - adds an admin user"
+                               + "\n  user-remove - removes an admin user"
+                               + "\n  user-list - lists admin users"
                                + "\n  help <command> - prints command usage message"
                                + "\n  version - prints version"));
       System.exit(1);
@@ -594,10 +639,11 @@ class WatchdogArgs
 
   private static void usage()
   {
-    System.err.println(L().l("usage: java -jar resin.jar [-options] [console | status | start | gui | stop | restart | kill | shutdown | version]"));
-    System.err.println(L().l("       java -jar resin.jar [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
-    System.err.println(L().l("       java -jar resin.jar [-options] [thread-dump | heap-dump | log-level | profile | jmx-list | jmx-call | jmx-set]"));
-    System.err.println(L().l("       java -jar resin.jar help <command>"));
+    System.err.println(L().l("usage: bin/resin.sh [-options] [console | status | start | gui | stop | restart | kill | shutdown | version]"));
+    System.err.println(L().l("       bin/resin.sh [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
+    System.err.println(L().l("       bin/resin.sh [-options] [thread-dump | heap-dump | log-level | profile | jmx-list | jmx-call | jmx-set]"));
+    System.err.println(L().l("       bin/resin.sh [-options] [user-add | user-list | user-remove]"));
+    System.err.println(L().l("       bin/resin.sh help <command>"));
     System.err.println(L().l(""));
     System.err.println(L().l("where options include:"));
     System.err.println(L().l("   -conf <file>          : select a configuration file"));
@@ -910,6 +956,7 @@ class WatchdogArgs
     JMX_SET,
     JSPC,
     KILL,
+    LIST_RESTARTS,
     LOG_LEVEL,
     PROFILE,
     RESTART,
@@ -919,6 +966,9 @@ class WatchdogArgs
     STATUS,
     STOP,
     UNDEPLOY,
+    USER_ADD,
+    USER_LIST,
+    USER_REMOVE,
     WATCHDOG,
   };
 }

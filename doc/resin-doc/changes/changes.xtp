@@ -11,6 +11,55 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.20 - Jul 15, 2011">
+<ul>
+<li>health: PdfReport added</li>
+<li>session: always-load-session needs to set local-read timeout to 0 (rep by Eric Kreiser)</li>
+<li>network: comet/network state maching/timing issues (#4669, rep by Adrian Sutton)</li>
+<li>cloud: heartbeat needed across clusters for global cache (#4657, rep by William Kong)</li>
+<li>cloud: heartbeat needs to retry every 5s on connection failure (#4601)</li>
+<li>network: keepalive housekeeping simplified (#4613, rep by Mark Cleveland)</li>
+<li>session: session timeout needs to be picked up on persistent load (#4473, rep by vicsanca)</li>
+<li>network: issues with too many CLOSE_WAIT connections (#4639, rep by Mark Price)</li>
+<li>jsf: conversation scope issues with classloading (#4656, marcin_gomulkiewicz)</li>
+<li>jpa: data-source lookup needs to check JNDI return type (#4591, rep by paru)</li>
+<li>cron: day-of-week calculation bug (#4560, rep by Tyson Weighs)</li>
+<li>health: add ShutdownService configuration to not restart on OOM (#4075, rep by Martin Thompson)</li>
+<li>cli: console libexec needs to use same is64Bit as watchdog (#4558)</li>
+<li>stat: add read/write byte statistics for http request (#4126, rep by Martin Thompson)</li>
+<li>jpa: check persistent-unit NPE for EntityManagerJtaProxy (#4564, rep by dicr)</li>
+<li>xa: recover/forget needs to check xid against current server (#4645)</li>
+<li>webapp: multipart-config needed in servlet tag (#4648)</li>
+<li>webapp: multiple-init issue with versioned controllers (#4637, rep by W. Au)</li>
+<li>cdi/ejb: issue with @Alternative working with EJBs (#4636, rep by ChrisC)</li>
+<li>jsp: NPE with trimDirectiveWhitespaces and empty scriptlet (#4651, rep by mnsh)</li>
+<li>resin-admin: added 60s ajax updates to summary graphs (#4577)</li>
+<li>quercus: DateTime NPE (#4596, rep by rmann)</li>
+<li>cdi: InjectionPoint on producer was overriding all other producers (#4649, rep by Max Bureck)</li>
+<li>command-line: add -data-directory to change location of resin-data (#4646, rep by Keith Fetterman)</li>
+<li>command-line: command-line now uses hmux servers when available (#4616)</li>
+<li>db/cache: Table.validateIndexes wasn't freeing its Block/TableIterator (#4624, rep by Michael O'Dea)</li>
+<li>ssl: ssl write needs poll/select on SSL_ERROR_WANT_WRITE (#4582, rep by Mike O'Dea)</li>
+<li>xa: failure during forget should be at finer logging, not warning (#4644, rep by Takahiro Fukuda)</li>
+<li>multipart-form: added parameter-length-max (#4638, rep by Daniel Kador)</li>
+<li>system: &lt;resin:LogService> needs to check for existing log system (rep by Adrian Sutton)</li>
+<li>install: --with-resin-log should update init.d/resin.in (#4640, rep by K Fetterman)</li>
+<li>health: added graph page configuration to health.xml (#4577)</li>
+<li>network: refactored networking to split thread-safe/and non-thread-safe state machines (#4633, by Danny Yates)</li>
+<li>resin: options on the command should be global (#4605)</li>
+<li>resin: command line user mgmt (#4603)</li>
+<li>jsf: allow JSF in WEB-INF/lib (will disables CDI) (#4573, rep by cyttesen)</li>
+<li>hessian: debug should not throw illegal state exceptions but should log</li>
+<li>database: allow numeric transaction-isolation values (#4627, rep by mnsh)</li>
+<li>jpa: javax.persistence.Persistence classloader leak (#4628, rep by Patric Rufflar)</li>
+<li>rewrite: CanDI-style rewrite rules in cluster were ignored (#4618, rep by Aaron Freeman)</li>
+<li>scheduled-task: scheduled task remove has stack overflow (#4523, rep by mnsh)</li>
+<li>security: JaasAuthenticator add support for Group/roles (#4621, rep by dicr)</li>
+<li>admin: summary/postmortem now show startup info from watchdog (#4595)</li>
+<li>db: row allocation must check for table close (#4599, rep by Steve Francis)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.19 - June 14, 2011">
 <ul>
 <li>command-line: resin-system-auth-key wasn't properly managed (#4602)</li>

@@ -56,7 +56,6 @@ import javax.servlet.http.HttpSessionListener;
 import com.caucho.distcache.ByteStreamCache;
 import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.security.Login;
-import com.caucho.server.cluster.Server;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.CacheListener;
@@ -146,6 +145,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   /**
    * Returns the time the session was created.
    */
+  @Override
   public long getCreationTime()
   {
     // this test forced by TCK
@@ -159,6 +159,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   /**
    * Returns the session identifier.
    */
+  @Override
   public String getId()
   {
     return _id;
@@ -318,6 +319,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   /**
    * Returns the named attribute from the session.
    */
+  @Override
   public Object getAttribute(String name)
   {
     if (! _isValid)
@@ -644,9 +646,20 @@ public class SessionImpl implements HttpSession, CacheListener {
       ExtCacheEntry entry = cache.getExtCacheEntry(_id);
       ExtCacheEntry cacheEntry = _cacheEntry;
 
+      if (entry != null) {
+        // server/01a1, #4419
+        _idleTimeout = entry.getIdleTimeout() * 4 / 5;
+        //_isIdleSet = true;
+      }
+      
       if (entry != null && cacheEntry != null
           && cacheEntry.getValueHashKey() != null
           && cacheEntry.getValueHashKey().equals(entry.getValueHashKey())) {
+        if (log.isLoggable(Level.FINE)) {
+          log.fine(this + " session load-same valueHash="
+                   + (entry != null ? entry.getValueHashKey() : null));
+        }
+        
         return true;
       }
 
@@ -673,6 +686,10 @@ public class SessionImpl implements HttpSession, CacheListener {
       }
       else {
         _cacheEntry = null;
+
+        if (log.isLoggable(Level.FINE)) {
+          log.fine(this + " session remove");
+        }
 
         if (cacheEntry == null)
           return true;

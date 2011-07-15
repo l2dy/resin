@@ -316,6 +316,10 @@ r_keepalive-select-max =
   attribute keepalive-select-max { r_int-Type }
   | element keepalive-select-max { r_int-Type }
 
+r_keepalive-thread-timeout =
+  attribute keepalive-thread-timeout { r_period-Type }
+  | element keepalive-thread-timeout { r_period-Type }
+
 r_listen =
   element listen {
     r_port-Content
@@ -501,6 +505,8 @@ r_port-Parameters =
 
    & r_keepalive-select-thread-timeout?
 
+   & r_keepalive-thread-timeout?
+
    & (attribute keepalive-timeout { r_period-Type }
       | element keepalive-timeout { r_period-Type })?
 
@@ -575,8 +581,6 @@ r_resin-Content =
 
   & r_module-repository?
 
-  & r_resin-data-directory?
-  
   & r_resin-system-auth-key?
 
   & r_root-directory?
@@ -600,10 +604,6 @@ r_resin-Content =
       element rcore:when|r:when { rcore_when-Args, r_resin-Content }+,
       element rcore:otherwise|r:otherwise { r_resin-Content }?
     }*
-
-r_resin-data-directory =
-  attribute resin-data-directory { r_path-Type }
-  | element resin-data-directory { r_path-Type }
 
 r_resin-system-auth-key =
   attribute resin-system-auth-key { string }
@@ -679,6 +679,8 @@ r_server-Content =
   & r_keepalive-select-max?
 
   & r_keepalive-select-thread-timeout?
+
+  & r_keepalive-thread-timeout?
 
   & r_keepalive-timeout?
   

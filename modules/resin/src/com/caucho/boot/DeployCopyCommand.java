@@ -39,10 +39,9 @@ public class DeployCopyCommand extends AbstractRepositoryCommand {
   
   @Override
   public void doCommand(WatchdogArgs args,
-                        WatchdogClient client)
+                        WatchdogClient client,
+                        WebAppDeployClient deployClient)
   {
-    WebAppDeployClient deployClient = getDeployClient(args, client);
-
     String sourceContext = args.getArg("-source");
     if (sourceContext == null)
       throw new ConfigException("must specify -source attribute");
@@ -101,17 +100,15 @@ public class DeployCopyCommand extends AbstractRepositoryCommand {
       fillInVersion(target, targetVersion);
 
     deployClient.copyTag(target, source);
-
-    deployClient.close();
-
-    System.out.println("copied " + source.getId() + " to " + target.getId());
+    
+    System.out.println(L.l("copied {0} to {1}", 
+                           source.getId(), target.getId()));
   }
-
 
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] deploy-copy -user <user> -password <password> [options]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] deploy-copy -user <user> -password <password> [options]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   copies a deployed application according to the given options"));

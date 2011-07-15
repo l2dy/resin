@@ -203,7 +203,7 @@ import com.caucho.vfs.Vfs;
 @SuppressWarnings("serial")
 public class WebApp extends ServletContextImpl
   implements Dependency, EnvironmentBean, SchemaBean, InvocationBuilder,
-             EnvironmentDeployInstance, ScanListener, JspConfigDescriptor,
+             EnvironmentDeployInstance, JspConfigDescriptor,
              java.io.Serializable
 {
   private static final L10N L = new L10N(WebApp.class);
@@ -500,6 +500,8 @@ public class WebApp extends ServletContextImpl
       
       EjbModule.replace(getModuleName(), _classLoader);
       EjbModule.setAppName(getModuleName(), _classLoader);
+
+      _classLoader.addScanListener(new WebFragmentScanner());
 
       // map.put("app", _appVar);
 
@@ -888,11 +890,13 @@ public class WebApp extends ServletContextImpl
   {
   }
 
-  public boolean isMetadataComplete() {
+  public boolean isMetadataComplete()
+  {
     return _metadataComplete;
   }
 
-  public void setMetadataComplete(boolean metadataComplete) {
+  public void setMetadataComplete(boolean metadataComplete)
+  {
     _metadataComplete = metadataComplete;
   }
 
@@ -2184,6 +2188,17 @@ public class WebApp extends ServletContextImpl
   }
 
   /**
+   * Returns the form upload max.
+   */
+  public long getFormParameterLengthMax()
+  {
+    if (_multipartForm != null)
+      return _multipartForm.getParameterLengthMax();
+    else
+      return -1;
+  }
+
+  /**
    * Returns the access log
    */
   public AbstractAccessLog getAccessLog()
@@ -2746,6 +2761,8 @@ public class WebApp extends ServletContextImpl
       _welcomeFile = welcomeFile;
       
       // add(welcomeFile);
+      
+      initCdiJsfContext();
 
       if (! _isCompileContext) {
         for (int i = 0; i < _resourceValidators.size(); i++) {
@@ -2756,6 +2773,22 @@ public class WebApp extends ServletContextImpl
       }
     } finally {
       _lifecycle.toInit();
+    }
+  }
+  
+  private void initCdiJsfContext()
+  {
+    try {
+      String handler = "com.caucho.server.webbeans.ConversationJsfViewHandler";
+      
+      Class<?> cl = Class.forName(handler, false, getClassLoader());
+      
+      if (cl != null) {
+        getEnvironmentClassLoader().putResourceAlias("META-INF/faces-config.xml",
+                                                     "META-INF/faces-config.xml.in");
+      }
+    } catch (Throwable e) {
+      log.log(Level.FINE, e.toString(), e);
     }
   }
 
@@ -2772,8 +2805,6 @@ public class WebApp extends ServletContextImpl
     }
 
     _isApplyingWebFragments = false;
-
-    _classLoader.addScanListener(this);
   }
 
   public boolean isApplyingWebFragments()
@@ -3513,7 +3544,8 @@ public class WebApp extends ServletContextImpl
 
       clearCache();
       
-      if (! getRootDirectory().canRead()) {
+      if (! getRootDirectory().canRead()
+          && ! getHost().getHostName().equals("admin.resin")) {
         log.warning(this + " cannot read root-directory " + getRootDirectory().getNativePath());
       }
 
@@ -4728,44 +4760,6 @@ public class WebApp extends ServletContextImpl
     return _status500LastTime;
   }
 
-  public int getScanPriority()
-  {
-    return 2;
-  }
-
-  @Override
-  public boolean isRootScannable(Path root, String packageRoot)
-  {
-    return true;
-  }
-
-  @Override
-  public ScanClass scanClass(Path root, String packageRoot,
-                             String name, int modifiers)
-  {
-    if (Modifier.isPublic(modifiers))
-      return new WebScanClass(name);
-    else
-      return null;
-  }
-
-  @Override
-  public boolean isScanMatchAnnotation(CharBuffer string)
-  {
-    if (string.startsWith("javax.servlet.annotation."))
-      return true;
-
-    return false;
-  }
-
-  @Override
-  public void classMatchEvent(EnvironmentClassLoader loader,
-                              Path root,
-                              String className)
-  {
-    _pendingClasses.add(className);
-  }
-
   /**
    * Serialize to a handle
    */
@@ -4874,7 +4868,47 @@ public class WebApp extends ServletContextImpl
       return _multipartConfig;
     }
   }
-  
+
+  class WebFragmentScanner implements ScanListener {
+    public int getScanPriority()
+    {
+      return 2;
+    }
+
+    @Override
+    public boolean isRootScannable(Path root, String packageRoot)
+    {
+      return true;
+    }
+
+    @Override
+    public ScanClass scanClass(Path root, String packageRoot,
+                               String name, int modifiers)
+    {
+      if (Modifier.isPublic(modifiers))
+        return new WebScanClass(name);
+      else
+        return null;
+    }
+
+    @Override
+    public boolean isScanMatchAnnotation(CharBuffer string)
+    {
+      if (string.startsWith("javax.servlet.annotation."))
+        return true;
+
+      return false;
+    }
+
+    @Override
+    public void classMatchEvent(EnvironmentClassLoader loader,
+                                Path root,
+                                String className)
+    {
+      _pendingClasses.add(className);
+    }
+  }
+
   class WebScanClass extends AbstractScanClass {
     private String _className;
     private boolean _isValid;
@@ -4902,12 +4936,15 @@ public class WebApp extends ServletContextImpl
      * Complete scan processing.
      */
     @Override
-    public void finishScan()
+    public boolean finishScan()
     {
       if (_isValid) {
         _pendingClasses.add(_className);
+        return true;
       }
-    }    
+      else
+        return false;
+    }
   }
   
   static class ClassComparator implements Comparator<Class<?>> {

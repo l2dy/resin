@@ -56,6 +56,8 @@ public class ShutdownSystem extends AbstractResinSubSystem
     = new AtomicReference<ShutdownSystem>();
   
   private long _shutdownWaitMax = 120000L;
+  
+  private boolean _isShutdownOnOutOfMemory = true;
 
   private WeakReference<ResinSystem> _resinSystemRef;
   private WarningService _warningService;
@@ -74,6 +76,7 @@ public class ShutdownSystem extends AbstractResinSubSystem
     _resinSystemRef = new WeakReference<ResinSystem>(ResinSystem.getCurrent());
     
     _warningService = ResinSystem.getCurrentService(WarningService.class);
+    
     if (_warningService == null) {
       throw new IllegalStateException(L.l("{0} requires an active {1}",
                                            ShutdownSystem.class.getSimpleName(),
@@ -111,6 +114,16 @@ public class ShutdownSystem extends AbstractResinSubSystem
     _shutdownWaitMax = shutdownTime;
   }
 
+  public void setShutdownOnOutOfMemory(boolean isShutdown)
+  {
+    _isShutdownOnOutOfMemory = isShutdown;
+  }
+
+  public boolean isShutdownOnOutOfMemory()
+  {
+    return _isShutdownOnOutOfMemory;
+  }
+  
   /**
    * Returns the current lifecycle state.
    */
@@ -119,6 +132,22 @@ public class ShutdownSystem extends AbstractResinSubSystem
     return _lifecycle.getState();
   }
   
+  /**
+   * Start the server shutdown
+   */
+  public static void shutdownOutOfMemory(String msg)
+  {
+    ShutdownSystem shutdown = _activeService.get();
+    
+    if (shutdown != null && ! shutdown.isShutdownOnOutOfMemory()) {
+      System.err.println(msg);
+      return;
+    }
+    else {
+      shutdownActive(ExitCode.MEMORY, msg);
+    }
+  }
+    
   /**
    * Start the server shutdown
    */
@@ -261,7 +290,8 @@ public class ShutdownSystem extends AbstractResinSubSystem
     _lifecycle.toActive();
     
     if (! _isEmbedded) {
-      _activeService.compareAndSet(null, this);
+      // _activeService.compareAndSet(null, this);
+      _activeService.set(this);
     }
     
     if (! Alarm.isTest() && ! _isEmbedded) {
@@ -269,9 +299,11 @@ public class ShutdownSystem extends AbstractResinSubSystem
       _failSafeHaltThread.start();
     }
 
-    _shutdownThread = new ShutdownThread();
-    _shutdownThread.setDaemon(true);
-    _shutdownThread.start();
+    if (! _isEmbedded) {
+      _shutdownThread = new ShutdownThread();
+      _shutdownThread.setDaemon(true);
+      _shutdownThread.start();
+    }
   }
   
   /**
@@ -282,7 +314,7 @@ public class ShutdownSystem extends AbstractResinSubSystem
   {
     _lifecycle.toDestroy();
     
-    _activeService.compareAndSet(this, null);
+    _activeService.set(null);
     
     FailSafeHaltThread failSafeThread = _failSafeHaltThread;
     
@@ -362,7 +394,9 @@ public class ShutdownSystem extends AbstractResinSubSystem
     @Override
     public void run()
     {
-      while (_shutdownExitCode.get() == null && _lifecycle.isActive()) {
+      while (_shutdownExitCode.get() == null 
+             && _lifecycle.isActive()
+             && _activeService.get() == ShutdownSystem.this) {
         try {
           Thread.interrupted();
           LockSupport.park();

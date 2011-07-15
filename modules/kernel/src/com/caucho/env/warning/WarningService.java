@@ -33,8 +33,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.env.service.*;
-import com.caucho.util.L10N;
+import com.caucho.env.service.AbstractResinSubSystem;
+import com.caucho.env.service.ResinSystem;
 
 /**
  * The WarningService is a general way to send warning and critical
@@ -46,13 +46,12 @@ public class WarningService extends AbstractResinSubSystem
 
   private static final Logger log = 
     Logger.getLogger(WarningService.class.getName());
-  private static final L10N L = new L10N(WarningService.class);
 
-  private final CopyOnWriteArrayList<WarningHandler> _priorityHandlers = 
-    new CopyOnWriteArrayList<WarningHandler>();
+  private final CopyOnWriteArrayList<WarningHandler> _priorityHandlers
+    = new CopyOnWriteArrayList<WarningHandler>();
   
-  private final CopyOnWriteArrayList<WarningHandler> _handlers = 
-    new CopyOnWriteArrayList<WarningHandler>();
+  private final CopyOnWriteArrayList<WarningHandler> _handlers
+    = new CopyOnWriteArrayList<WarningHandler>();
 
   public WarningService()
   {

@@ -31,25 +31,25 @@ package com.caucho.server.admin;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.ServiceUnavailableException;
 import com.caucho.bam.actor.ActorSender;
-import com.caucho.bam.broker.Broker;
-import com.caucho.boot.JmxCallCommand;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.cluster.Server;
 import com.caucho.util.L10N;
 
 import java.io.Serializable;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Deploy Client API
  */
 public class ManagerClient
 {
+  private static final Logger log
+    = Logger.getLogger(ManagerClient.class.getName());
   private static final L10N L = new L10N(ManagerClient.class);
 
   private static final long MANAGER_TIMEOUT = 600 * 1000L;
 
-  private Broker _broker;
   private ActorSender _bamClient;
   private String _managerAddress;
 
@@ -79,10 +79,59 @@ public class ManagerClient
     _managerAddress = "manager@" + serverId + ".resin.caucho";
   }
 
-  public ManagerClient(String host, int port,
+  /*
+  public ManagerClient(String serverId, String userName, String password)
+  {
+    try {
+      _bamClient 
+        = new HmuxClientFactory(serverId, userName, password).create();
+    
+      _managerAddress = "manager@resin.caucho";
+    } catch (RemoteConnectionFailedException e) {
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote admin. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    serverId, e.getMessage()),
+                                                    e);
+    }
+    
+    if (_bamClient == null) {
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote admin. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n",
+                                                    serverId));
+    }
+  }
+  */
+
+  public ManagerClient(String host, int serverPort, int httpPort,
                        String userName, String password)
   {
-    String url = "http://" + host + ":" + port + "/hmtp";
+    RuntimeException exn = null;
+    
+    try {
+      if (serverPort > 0)
+        _bamClient 
+          = new HmuxClientFactory(host, serverPort, userName, password).create();
+    
+      _managerAddress = "manager@resin.caucho";
+      
+      if (_bamClient != null)
+        return;
+    } catch (RemoteConnectionFailedException e) {
+      exn = new RemoteConnectionFailedException(L.l("Connection to '{0}:{1}' failed for remote admin. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    host, serverPort,
+                                                    e.getMessage()),
+                                                    e);
+      
+      if (httpPort == 0)
+        throw exn;
+    }
+    
+    /*
+    if (_bamClient == null) {
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}:{1}' failed for remote admin. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n",
+                                                    host, serverPort));
+    }
+    */
+    
+    String url = "http://" + host + ":" + httpPort + "/hmtp";
     
     _url = url;
     
@@ -105,6 +154,32 @@ public class ManagerClient
   public String getUrl()
   {
     return _url;
+  }
+
+  public ActorSender getSender()
+  {
+    return _bamClient;
+  }
+  
+  public String addUser(String user, char []password, String []roles)
+  {
+    AddUserQuery query = new AddUserQuery(user, password, roles);
+
+    return (String) query(query);
+  }
+
+  public String removeUser(String user)
+  {
+    RemoveUserQuery query = new RemoveUserQuery(user);
+
+    return (String) query(query);
+  }
+
+  public String listUsers()
+  {
+    ListUsersQuery query = new ListUsersQuery();
+
+    return (String) query(query);
   }
 
   public String doThreadDump()
@@ -168,7 +243,14 @@ public class ManagerClient
   public String profile(long activeTime, long period, int depth) {
     ProfileQuery query = new ProfileQuery(activeTime, period, depth);
 
-    return (String)query(query);
+    return (String) query(query);
+  }
+
+  public String listRestarts(long period)
+  {
+     ListRestartsQuery query = new ListRestartsQuery(period);
+
+    return (String) query(query);
   }
 
   protected Serializable query(Serializable query)
@@ -189,10 +271,7 @@ public class ManagerClient
   @Override
   public String toString()
   {
-    if (_broker != null)
-      return getClass().getSimpleName() + "[" + _managerAddress + "]";
-    else
-      return getClass().getSimpleName() + "[" + _bamClient + "]";
+    return getClass().getSimpleName() + "[" + _bamClient + "]";
   }
 }
 

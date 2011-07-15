@@ -39,18 +39,15 @@ public class DeployListCommand extends AbstractRepositoryCommand
   
   @Override
   public void doCommand(WatchdogArgs args,
-                        WatchdogClient client)
+                        WatchdogClient client,
+                        WebAppDeployClient deployClient)
   {
-    WebAppDeployClient deployClient = getDeployClient(args, client);
-
     String pattern = args.getDefaultArg();
     if (pattern == null)
       pattern = ".*";
 
     TagResult[] tags = deployClient.queryTags(pattern);
 
-    deployClient.close();
-    
     for (TagResult tag : tags) {
       System.out.println(tag.getTag());
     }
@@ -59,7 +56,7 @@ public class DeployListCommand extends AbstractRepositoryCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] deploy-list -user <user> -password <password> [options] [pattern]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] deploy-list -user <user> -password <password> [options] [pattern]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   lists all applications deployed on the server or those that match the [pattern]"));

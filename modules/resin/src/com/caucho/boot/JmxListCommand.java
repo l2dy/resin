@@ -44,9 +44,11 @@ public class JmxListCommand extends JmxCommand
   private static final Set<String> options = new HashSet<String>();
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
-    String[] trailingArgs = args.getTrailingArgs(options);
+    String []trailingArgs = args.getTrailingArgs(options);
 
     String pattern = null;
     if (trailingArgs.length > 0)
@@ -70,14 +72,12 @@ public class JmxListCommand extends JmxCommand
     boolean isAll = args.hasOption("-all");
     boolean isPlatform = args.hasOption("-platform");
 
-    ManagerClient manager = getManagerClient(args, client);
-
-    String jmxResult = manager.listJmx(pattern,
-                                       isPrintAttributes,
-                                       isPrintValues,
-                                       isPrintOperations,
-                                       isAll,
-                                       isPlatform);
+    String jmxResult = managerClient.listJmx(pattern,
+                                             isPrintAttributes,
+                                             isPrintValues,
+                                             isPrintOperations,
+                                             isAll,
+                                             isPlatform);
 
     System.out.print(jmxResult);
   }
@@ -85,7 +85,7 @@ public class JmxListCommand extends JmxCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] jmx-list -user <user> -password <password> [-attributes] [-values] [-operations] [-all] [-platform] [<pattern>]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-list -user <user> -password <password> [-attributes] [-values] [-operations] [-all] [-platform] [<pattern>]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   lists beans registered with JMX and matching <pattern>. <pattern> is optional and adheres\n"

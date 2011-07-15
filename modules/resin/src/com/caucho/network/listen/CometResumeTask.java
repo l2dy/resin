@@ -6,7 +6,7 @@
  * Each copy or derived work must preserve the copyright notice and this
  * notice unmodified.
  *
- * Resin Open Source is free software; you can redistribute it and/or modify
+ * Resin Open Source is software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
@@ -29,37 +29,34 @@
 
 package com.caucho.network.listen;
 
-import java.io.IOException;
-
 import com.caucho.inject.Module;
 
-
 /**
- * Application handler for a bidirectional tcp stream
- *
- * The read stream should only be read by the <code>onRead</code> thread.
- * 
- * The write stream must be synchronized if it's every written by a thread
- * other than the <code>serviceRead</code>
+ * Connection task handling a comet resume.
  */
 @Module
-public interface TcpDuplexHandler
-{
-  /**
-   * Called when read data is available
-   */
-  public void onRead(TcpDuplexController controller)
-    throws IOException;
+class CometResumeTask extends ConnectionTask {
+  CometResumeTask(TcpSocketLink socketLink)
+  {
+    super(socketLink);
+  }
   
-  /**
-   * Called when the connection closes
-   */
-  public void onComplete(TcpDuplexController controller)
-    throws IOException;
+  @Override
+  public final void run()
+  {
+    SocketLinkThreadLauncher launcher = getLauncher();
+    
+    launcher.onChildThreadResume();
+    try {
+      super.run();
+    } finally {
+      launcher.onChildThreadEnd();
+    }
+  }
   
-  /**
-   * Called when the connection times out
-   */
-  public void onTimeout(TcpDuplexController controller)
-    throws IOException;
+  @Override
+  protected final RequestState doTask()
+  {
+    return getSocketLink().handleResumeTask();
+  }
 }

@@ -33,8 +33,8 @@ import java.lang.reflect.Constructor;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -88,6 +88,8 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   // server/306i  - can't be weak reference, instead create WeakStopListener
   private ArrayList<EnvironmentListener> _listeners
     = new ArrayList<EnvironmentListener>();
+  
+  private Map<String,String> _resourceAliasMap;
 
   private WeakStopListener _stopListener;
 
@@ -305,7 +307,32 @@ public class EnvironmentClassLoader extends DynamicClassLoader
     else
       return _attributes.remove(name);
   }
-
+  
+  //
+  // resource aliases
+  //
+  
+  public void putResourceAlias(String name, String actualName)
+  {
+    if (_resourceAliasMap == null)
+      _resourceAliasMap = new ConcurrentHashMap<String,String>();
+    
+    _resourceAliasMap.put(name, actualName);
+  }
+  
+  @Override
+  public String getResourceAlias(String name)
+  {
+    if (_resourceAliasMap != null) {
+      String actualName = _resourceAliasMap.get(name);
+      
+      if (actualName != null)
+        return actualName;
+    }
+    
+    return null;
+  }
+  
   /**
    * Adds a listener to detect environment lifecycle changes.
    */

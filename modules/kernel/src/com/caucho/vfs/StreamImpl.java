@@ -111,12 +111,12 @@ public class StreamImpl {
    * @param offset starting offset into the array.
    * @param length number of bytes to read.
    *
-   * @return the number of bytes read or -1 on end of file.
+   * @return the number of bytes read, -1 on end of file, or 0 on timeout.
    */
   public int readNonBlock(byte []buffer, int offset, int length)
     throws IOException
   {
-    return 0;
+    return readTimeout(buffer, offset, length, 0);
   }
 
   /**
@@ -126,7 +126,7 @@ public class StreamImpl {
    * @param offset starting offset into the array.
    * @param length number of bytes to read.
    *
-   * @return the number of bytes read or -1 on end of file.
+   * @return the number of bytes read, -1 on end of file, or 0 on timeout.
    */
   public int readTimeout(byte []buffer, int offset, int length,
                          long timeout)

@@ -41,6 +41,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -59,6 +60,7 @@ import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.FreeList;
+import com.caucho.util.Friend;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JsseSSLFactory;
 import com.caucho.vfs.QJniServerSocket;
@@ -81,7 +83,7 @@ public class TcpSocketLinkListener
   private static final int ACCEPT_IDLE_MIN = 4;
   private static final int ACCEPT_IDLE_MAX = 16;
   
-  private static final int KEEPALIVE_MAX = 256;
+  private static final int KEEPALIVE_MAX = 65536;
 
   private final AtomicInteger _connectionCount = new AtomicInteger();
 
@@ -179,12 +181,12 @@ public class TcpSocketLinkListener
 
   // statistics
 
-  private volatile long _lifetimeRequestCount;
-  private volatile long _lifetimeKeepaliveCount;
-  private volatile long _lifetimeClientDisconnectCount;
-  private volatile long _lifetimeRequestTime;
-  private volatile long _lifetimeReadBytes;
-  private volatile long _lifetimeWriteBytes;
+  private final AtomicLong _lifetimeRequestCount = new AtomicLong();
+  private final AtomicLong _lifetimeKeepaliveCount = new AtomicLong();
+  private final AtomicLong _lifetimeClientDisconnectCount = new AtomicLong();
+  private final AtomicLong _lifetimeRequestTime = new AtomicLong();
+  private final AtomicLong _lifetimeReadBytes = new AtomicLong();
+  private final AtomicLong _lifetimeWriteBytes = new AtomicLong();
 
   // total keepalive
   private AtomicInteger _keepaliveAllocateCount = new AtomicInteger();
@@ -717,7 +719,6 @@ public class TcpSocketLinkListener
   
   public void setKeepaliveSelectMax(int max)
   {
-    
   }
 
   public long getKeepaliveSelectThreadTimeout()
@@ -725,7 +726,17 @@ public class TcpSocketLinkListener
     return _keepaliveSelectThreadTimeout;
   }
 
+  public long getKeepaliveThreadTimeout()
+  {
+    return _keepaliveSelectThreadTimeout;
+  }
+
   public void setKeepaliveSelectThreadTimeout(Period period)
+  {
+    setKeepaliveSelectThreadTimeoutMillis(period.getPeriod());
+  }
+
+  public void setKeepaliveThreadTimeout(Period period)
   {
     setKeepaliveSelectThreadTimeoutMillis(period.getPeriod());
   }
@@ -771,6 +782,11 @@ public class TcpSocketLinkListener
   SocketLinkThreadLauncher getLauncher()
   {
     return _launcher;
+  }
+  
+  ThreadPool getThreadPool()
+  {
+    return _threadPool;
   }
 
   //
@@ -1035,18 +1051,7 @@ public class TcpSocketLinkListener
       if (pollService != null && isKeepaliveSelectEnabled()) {
         _selectManager = pollService.getSelectManager();
       }
-      
-      /*
-      if (_selectManager == null) {
-        throw new IllegalStateException(L.l("Cannot load select manager"));
-      }
-      */
     }
-
-    /*
-    if (_keepaliveMax < 0)
-      _keepaliveMax = _server.getKeepaliveMax();
-    */
 
     if (_keepaliveMax < 0 && _selectManager != null)
       _keepaliveMax = _selectManager.getSelectMax();
@@ -1375,45 +1380,19 @@ public class TcpSocketLinkListener
    *
    * @return true if the connection was added to the suspend list
    */
+  @Friend(SocketLinkState.class)
   void cometSuspend(TcpSocketLink conn)
   {
-    conn.toCometSuspend();
-    
-    if (conn.isWakeRequested()) {
-      // conn.toCometResume();
-      
-      _threadPool.schedule(conn.getResumeTask());
-    }
-    else {
-      _suspendConnectionSet.add(conn);
-
-      if (conn.isWakeRequested())
-        cometResume(conn);
-    }
+    _suspendConnectionSet.add(conn);
   }
 
   /**
    * Remove from suspend list.
    */
+  @Friend(SocketLinkState.class)
   boolean cometDetach(TcpSocketLink conn)
   {
     return _suspendConnectionSet.remove(conn);
-  }
-
-  /**
-   * Resumes the controller (for comet-style ajax)
-   */
-  boolean cometResume(TcpSocketLink conn)
-  {
-    if (_suspendConnectionSet.remove(conn)) {
-      // conn.toCometResume();
-      
-      _threadPool.schedule(conn.getResumeTask());
-
-      return true;
-    }
-    else
-      return false;
   }
 
   void duplexKeepaliveBegin()
@@ -1462,62 +1441,62 @@ public class TcpSocketLinkListener
 
   void addLifetimeRequestCount()
   {
-    _lifetimeRequestCount++;
+    _lifetimeRequestCount.incrementAndGet();
   }
 
   public long getLifetimeRequestCount()
   {
-    return _lifetimeRequestCount;
+    return _lifetimeRequestCount.get();
   }
 
   void addLifetimeKeepaliveCount()
   {
-    _lifetimeKeepaliveCount++;
+    _lifetimeKeepaliveCount.incrementAndGet();
   }
 
   public long getLifetimeKeepaliveCount()
   {
-    return _lifetimeKeepaliveCount;
+    return _lifetimeKeepaliveCount.get();
   }
 
   void addLifetimeClientDisconnectCount()
   {
-    _lifetimeClientDisconnectCount++;
+    _lifetimeClientDisconnectCount.incrementAndGet();
   }
 
   public long getLifetimeClientDisconnectCount()
   {
-    return _lifetimeClientDisconnectCount;
+    return _lifetimeClientDisconnectCount.get();
   }
 
   void addLifetimeRequestTime(long time)
   {
-    _lifetimeRequestTime += time;
+    _lifetimeRequestTime.addAndGet(time);
   }
 
   public long getLifetimeRequestTime()
   {
-    return _lifetimeRequestTime;
+    return _lifetimeRequestTime.get();
   }
 
   void addLifetimeReadBytes(long bytes)
   {
-    _lifetimeReadBytes += bytes;
+    _lifetimeReadBytes.addAndGet(bytes);
   }
 
   public long getLifetimeReadBytes()
   {
-    return _lifetimeReadBytes;
+    return _lifetimeReadBytes.get();
   }
 
   void addLifetimeWriteBytes(long bytes)
   {
-    _lifetimeWriteBytes += bytes;
+    _lifetimeWriteBytes.addAndGet(bytes);
   }
 
   public long getLifetimeWriteBytes()
   {
-    return _lifetimeWriteBytes;
+    return _lifetimeWriteBytes.get();
   }
 
   /**
@@ -1541,16 +1520,6 @@ public class TcpSocketLinkListener
   {
     TcpSocketLink startConn = _idleConn.allocate();
     
-    if (startConn != null) {
-      try {
-        startConn.toInit(); // change to the init/ready state
-      } catch (Exception e) {
-        log.log(Level.WARNING, e.toString(), e);
-        
-        startConn = null;
-      }
-    }
-    
     if (startConn == null) {
       int connId = _connectionCount.incrementAndGet();
       QSocket socket = _serverSocket.createSocket();
@@ -1565,36 +1534,30 @@ public class TcpSocketLinkListener
   }
 
   /**
+   * Closes the stats for the connection.
+   */
+  @Friend(TcpSocketLink.class)
+  void closeConnection(TcpSocketLink conn)
+  {
+    if (_activeConnectionSet.remove(conn)) {
+      _activeConnectionCount.decrementAndGet();
+    }
+    else if (! isClosed()){
+      Thread.dumpStack();
+    }
+
+    _launcher.wake();
+  }
+
+  /**
    * Frees the connection to the idle pool.
    *
    * only called from ConnectionState
    */
+  @Friend(TcpSocketLink.class)
   void free(TcpSocketLink conn)
   {
-    closeConnection(conn);
-
     _idleConn.free(conn);
-  }
-
-  /**
-   * Destroys the connection.
-   *
-   * only called from ConnectionState
-   */
-  void destroy(TcpSocketLink conn)
-  {
-    closeConnection(conn);
-  }
-
-  /**
-   * Closes the stats for the connection.
-   */
-  private void closeConnection(TcpSocketLink conn)
-  {
-    _activeConnectionSet.remove(conn);
-    _activeConnectionCount.decrementAndGet();
-
-    _launcher.wake();
   }
 
   /**
@@ -1667,7 +1630,7 @@ public class TcpSocketLinkListener
 
     for (TcpSocketLink conn : activeSet) {
       try {
-        conn.destroy();
+        conn.requestDestroy();
       }
       catch (Exception e) {
         log.log(Level.FINEST, e.toString(), e);
@@ -1706,7 +1669,7 @@ public class TcpSocketLinkListener
 
     TcpSocketLink conn;
     while ((conn = _idleConn.allocate()) != null) {
-      conn.destroy();
+      conn.requestDestroy();
     }
 
     log.finest(this + " closed");
@@ -1796,7 +1759,11 @@ public class TcpSocketLinkListener
           if (log.isLoggable(Level.FINE))
             log.fine(this + " suspend idle timeout " + conn);
 
-          conn.toCometTimeout();
+          try {
+            conn.requestCometTimeout();
+          } catch (Exception e) {
+            log.log(Level.WARNING, conn + ": " + e.getMessage(), e);
+          }
         }
 
         for (int i = _completeSet.size() - 1; i >= 0; i--) {
@@ -1805,7 +1772,11 @@ public class TcpSocketLinkListener
           if (log.isLoggable(Level.FINE))
             log.fine(this + " async end-of-file " + conn);
 
-          conn.toCometComplete();
+          try {
+            conn.requestCometComplete();
+          } catch (Exception e) {
+            log.log(Level.WARNING, conn + ": " + e.getMessage(), e);
+          }
           /*
           AsyncController async = conn.getAsyncController();
 
@@ -1820,8 +1791,9 @@ public class TcpSocketLinkListener
       } catch (Throwable e) {
         e.printStackTrace();
       } finally {
-        if (! isClosed())
+        if (! isClosed()) {
           alarm.queue(_suspendReaperTimeout);
+        }
       }
     }
   }

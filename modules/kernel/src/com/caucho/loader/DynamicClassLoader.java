@@ -40,6 +40,7 @@ import java.security.CodeSource;
 import java.security.Permission;
 import java.security.PermissionCollection;
 import java.security.ProtectionDomain;
+import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -136,7 +137,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     = new ArrayList<ClassLoaderListener>();
 
   // The security manager for the loader
-  private SecurityManager _securityManager;
+  // private SecurityManager _securityManager;
 
   // List of permissions allowed in this context
   private ArrayList<Permission> _permissions;
@@ -181,7 +182,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     parent = getParent();
 
-    _securityManager = System.getSecurityManager();
+    // _securityManager = System.getSecurityManager();
 
     _isEnableDependencyCheck = enableDependencyCheck;
 
@@ -192,7 +193,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
         DynamicClassLoader loader = (DynamicClassLoader) parent;
 
         loader.init();
-
+        
         addPermissions(loader.getPermissions());
 
         // loader.addNotificationListener(this);
@@ -715,10 +716,12 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   /**
    * Returns the security manager.
    */
+  /*
   public SecurityManager getSecurityManager()
   {
     return _securityManager;
   }
+  */
 
   /**
    * Set true if the loader should use the servlet spec's hack.
@@ -921,10 +924,11 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   protected PermissionCollection getPermissions(CodeSource codeSource)
   {
     PermissionCollection perms = super.getPermissions(codeSource);
-
+    
     ArrayList<Permission> permissions = _permissions;
 
-    for (int i = 0; permissions != null && i < permissions.size(); i++) {
+    int size = permissions != null ? permissions.size() : 0;
+    for (int i = 0; i < size; i++) {
       Permission permission = permissions.get(i);
 
       perms.add(permission);
@@ -953,11 +957,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     return _classFileTransformerList;
   }
 
-  public String getHash()
-  {
-    return String.valueOf(Crc64.generate(getClassPath()));
-  }
-  
   public static final String getHash(ClassLoader loader)
   {
     if (! (loader instanceof DynamicClassLoader))
@@ -967,7 +966,22 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     
     return dynLoader.getHash();
   }
-  
+
+  public String getHash()
+  {
+    ArrayList<String> list = new ArrayList<String>();
+    
+    buildClassPath(list);
+
+    long crc64 = 0;
+    
+    for (int i = 0; i < list.size(); i++) {
+      crc64 = Crc64.generate(crc64, list.get(i));
+    }
+    
+    return String.valueOf(crc64);
+  }
+    
   /**
    * Fill data for the class path.  fillClassPath() will add all
    * .jar and .zip files in the directory list.
@@ -1350,7 +1364,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   }
 
   @Override
-  public Class<?> loadClass(String name) throws ClassNotFoundException
+  public Class<?> loadClass(String name)
+    throws ClassNotFoundException
   {
     // the Sun JDK implementation of ClassLoader delegates this call
     // to loadClass(name, false), but there is no guarantee that other
@@ -1444,6 +1459,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
           cl = findSystemClass(name);
       } catch (ClassNotFoundException e) {
       }
+      
 
       if (cl == null) {
         // osgi imports
@@ -1791,6 +1807,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (name.startsWith("/"))
       name = name.substring(1);
 
+    String alias = getResourceAlias(name);
+
     /*
     if (name.endsWith("/"))
       name = name.substring(0, name.length() - 1);
@@ -1833,6 +1851,11 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     _resourceCache.put(name, NULL_URL);
 
+    return null;
+  }
+  
+  protected String getResourceAlias(String name)
+  {
     return null;
   }
 
@@ -1890,6 +1913,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     if (name.endsWith("/"))
       name = name.substring(0, name.length() - 1);
+    
+    // String alias = getResourceAlias(name);
+    // System.out.println("GRAS: " + alias + " " + name);
 
     boolean isNormalJdkOrder = isNormalJdkOrder(name);
     InputStream is = null;
@@ -1943,6 +1969,50 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     return null;
   }
+  
+  @Override
+  public Enumeration<URL> getResources(String name)
+    throws IOException
+  {
+    Vector<URL> resources = new Vector<URL>();
+    
+    getResources(resources, name);
+    
+    if (name.startsWith("/"))
+      name = name.substring(1);
+    
+    String alias = getResourceAlias(name);
+    
+    if (alias != null)
+      getResources(resources, alias);
+
+    return resources.elements();
+  }
+  
+  private void getResources(Vector<URL> resources, String name)
+    throws IOException
+  {
+    ClassLoader parent = getParent();
+    
+    if (parent == null) {
+    }
+    else if (parent instanceof DynamicClassLoader) {
+      DynamicClassLoader dynParent = (DynamicClassLoader) parent;
+      
+      dynParent.getResources(resources, name);
+    }
+    else {
+      Enumeration<URL> parentResources = parent.getResources(name);
+      
+      while (parentResources.hasMoreElements()) {
+        URL url = parentResources.nextElement();
+        
+        resources.add(url);
+      }
+    }
+    
+    fillResources(resources, name);
+  }
 
   /**
    * Returns an enumeration of matching resources.
@@ -1958,9 +2028,24 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (name.endsWith("/"))
       name = name.substring(0, name.length() - 1);
       */
-
+    
     Vector<URL> resources = new Vector<URL>();
 
+    fillResources(resources, name);
+    
+    String alias = getResourceAlias(name);
+    
+    if (alias != null)
+      fillResources(resources, alias);
+
+    return resources.elements();
+  }
+  
+  private void fillResources(Vector<URL> resources, String name)
+  {
+    if (name.startsWith("/"))
+      name = name.substring(1);
+    
     ArrayList<Loader> loaders = getLoaders();
     if (loaders != null) {
       for (int i = 0; i < loaders.size(); i++) {
@@ -1969,8 +2054,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
         loader.getResources(resources, name);
       }
     }
-
-    return resources.elements();
   }
 
   /**
@@ -2134,7 +2217,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       _makeList = null;
 
       _listeners = null;
-      _securityManager = null;
+      // _securityManager = null;
       _permissions = null;
       _codeSource = null;
 
@@ -2203,7 +2286,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       source._listeners.clear();
     }
 
-    _securityManager = source._securityManager;
+    // _securityManager = source._securityManager;
     if (source._permissions != null) {
       if (_permissions == null)
         _permissions = new ArrayList<Permission>();

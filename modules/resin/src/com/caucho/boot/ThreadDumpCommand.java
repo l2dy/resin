@@ -43,11 +43,11 @@ public class ThreadDumpCommand extends AbstractManagementCommand
   private static final L10N L = new L10N(ThreadDumpCommand.class);
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
-    ManagerClient manager = getManagerClient(args, client);
-
-    String dump = manager.doThreadDump();
+    String dump = managerClient.doThreadDump();
 
     String fileName = args.getArg("-file");
 
@@ -80,7 +80,7 @@ public class ThreadDumpCommand extends AbstractManagementCommand
   public void usage()
   {
     System.err.println(L.l(
-      "usage: java -jar resin.jar [-conf <file>] thread-dump -user <user> -password <password> [-file <file>]"));
+      "usage: bin/resin.sh [-conf <file>] thread-dump -user <user> -password <password> [-file <file>]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   prints a thread dump taken on remote server"));

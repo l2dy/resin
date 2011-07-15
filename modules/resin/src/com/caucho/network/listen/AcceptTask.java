@@ -30,8 +30,6 @@
 package com.caucho.network.listen;
 
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 import com.caucho.inject.Module;
 
@@ -39,9 +37,7 @@ import com.caucho.inject.Module;
  * The thread task to handle a newly accepted request.
  */
 @Module
-class AcceptTask extends ConnectionReadTask {
-  private static final Logger log = Logger.getLogger(AcceptTask.class.getName());
-  
+class AcceptTask extends ConnectionTask {
   AcceptTask(TcpSocketLink socketLink)
   {
     super(socketLink);
@@ -58,9 +54,7 @@ class AcceptTask extends ConnectionReadTask {
 
     try {
       launcher.onChildThreadBegin();
-
-      if (log.isLoggable(Level.FINER))
-        log.finer(getSocketLink() + " starting listen thread");
+      launcher.onChildIdleEnd();
       
       super.run();
     } finally {
@@ -74,73 +68,9 @@ class AcceptTask extends ConnectionReadTask {
    * Loop to accept new connections.
    */
   @Override
-  RequestState doTask()
+  final RequestState doTask()
     throws IOException
   {
-    TcpSocketLink socketLink = getSocketLink();
-    TcpSocketLinkListener listener = getListener();
-    
-    RequestState result = RequestState.EXIT;
-    SocketLinkThreadLauncher launcher = getLauncher();
-    
-    while (! listener.isClosed()
-           && ! socketLink.getState().isDestroyed()) {
-      socketLink.toAccept();
-      
-      if (launcher.isIdleExpire())
-        return RequestState.EXIT;
-
-      if (! accept()) {
-        socketLink.close();
-
-        continue;
-      }
-
-      socketLink.toStartConnection();
-
-      if (log.isLoggable(Level.FINER)) {
-        log.finer(socketLink + " accept from "
-                  + socketLink.getRemoteHost() + ":" + socketLink.getRemotePort());
-      }
-
-      boolean isKeepalive = false;
-      result = socketLink.handleRequests(isKeepalive);
-
-      switch (result) {
-      case REQUEST_COMPLETE:
-        socketLink.close();
-        break;
-        
-      case KEEPALIVE_SELECT:
-      case ASYNC:
-        return result;
-        
-      case EXIT:
-        socketLink.close();
-        return result;
-
-      case DUPLEX:
-        return socketLink.doDuplex();
-
-      default:
-        throw new IllegalStateException(String.valueOf(result));
-      }
-
-      socketLink.close();
-    }
-
-    return RequestState.EXIT;
-  }
-
-  private boolean accept()
-  {
-    SocketLinkThreadLauncher launcher = getLauncher();
-    
-    launcher.onChildIdleBegin();
-    try {
-      return getListener().accept(getSocketLink().getSocket());
-    } finally {
-      launcher.onChildIdleEnd();
-    }
+    return getSocketLink().handleAcceptTask();
   }
 }

@@ -421,7 +421,7 @@ abstract public class AbstractHttpResponse {
 
     case HEADER_CONNECTION:
       if ("close".equalsIgnoreCase(value))
-        _request.killKeepalive();
+        _request.killKeepalive("client connection: close");
       return true;
 
     case HEADER_CONTENT_TYPE:
@@ -775,7 +775,7 @@ abstract public class AbstractHttpResponse {
   {
     if (isHeaderWritten())
       return false;
-
+    
     HttpServletRequestImpl req = _request.getRequestFacade();
     HttpServletResponseImpl res = _request.getResponseFacade();
 
@@ -1022,7 +1022,8 @@ abstract public class AbstractHttpResponse {
         _responseStream.flush();
       }
     } catch (ClientDisconnectException e) {
-      _request.killKeepalive();
+      _request.killKeepalive("client disconnect: " + e);
+      
       clientDisconnect();
 
       if (isIgnoreClientDisconnect())
@@ -1030,7 +1031,8 @@ abstract public class AbstractHttpResponse {
       else
         throw e;
     } catch (IOException e) {
-      _request.killKeepalive();
+      _request.killKeepalive("client ioexception: " + e);
+
       clientDisconnect();
 
       throw e;

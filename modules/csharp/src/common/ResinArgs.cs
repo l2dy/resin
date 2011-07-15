@@ -313,6 +313,7 @@ namespace Caucho
                      || "jmx-set".Equals(arguments[argsIdx])
                      || "kill".Equals(arguments[argsIdx])
                      || "list".Equals(arguments[argsIdx])
+                     || "list-restarts".Equals(arguments[argsIdx])
                      || "log-level".Equals(arguments[argsIdx])
                      || "profile".Equals(arguments[argsIdx])
                      || "restart".Equals(arguments[argsIdx])
@@ -324,7 +325,12 @@ namespace Caucho
                      || "stop".Equals(arguments[argsIdx])
                      || "stop-webapp".Equals(arguments[argsIdx])
                      || "thread-dump".Equals(arguments[argsIdx])
-                     || "undeploy".Equals(arguments[argsIdx])))
+                     || "undeploy".Equals(arguments[argsIdx])
+                     || "user-add".Equals(arguments[argsIdx])
+                     || "user-list".Equals(arguments[argsIdx])
+                     || "user-remove".Equals(arguments[argsIdx])
+                     || "version".Equals(arguments[argsIdx])
+                     || "watchdog".Equals(arguments[argsIdx])))
         {
           Command = arguments[argsIdx];
 

@@ -11,7 +11,7 @@
     <enabled>true</enabled>
     <startup-delay>15m</startup-delay>
     <period>5m</period>
-    <recheck-period>15s</recheck-period>
+    <recheck-period>30s</recheck-period>
     <recheck-max>5</recheck-max>
   </health:HealthSystem>
   
@@ -23,7 +23,7 @@
      - Restart on critical if the problem persists for 5 min.
     -->
   <health:Restart>
-    <health:IfCriticalRechecked time="5m"/>
+    <health:IfCriticalRechecked/>
   </health:Restart>
 
   <!--
@@ -53,7 +53,7 @@
       <health:IfHealthCritical healthCheck="${memoryTenuredHealthCheck}"/>
       <health:IfHealthCritical healthCheck="${memoryPermGenHealthCheck}"/>
     </health:Or>
-    <health:IfRechecked/>
+    <health:IfNotRecent time="30m"/>
   </health:DumpHeap>
   
   <!--
@@ -69,7 +69,7 @@
   
   <health:DumpThreads>
     <health:IfHealthCritical healthCheck="${cpuHealthCheck}"/>
-    <health:IfRechecked/>
+    <health:IfNotRecent time="15m"/>
   </health:DumpThreads>
   
   <!--
@@ -278,5 +278,73 @@
     <objectName>resin:type=BlockManager</objectName>
     <attribute>MissCountTotal</attribute>
   </health:JmxDeltaMeter>
+
+  <!-- meter graphs -->
+  
+  <health:MeterGraphPage>
+    <name>Summary</name>
+    <period>6h</period>
+    <columns>3</columns>
+      
+    <graph name="Request Count">
+      <meter>Resin|Http|Request Count</meter>
+    </graph>
+      
+    <graph name="Request Time">
+      <meter>Resin|Http|Request Time</meter>
+      <meter>Resin|Http|Request Time Max</meter>
+    </graph>
+      
+    <graph name="Threads">
+      <meter>JVM|Thread|JVM Thread Count</meter>
+      <meter>Resin|Thread|Thread Count</meter>
+      <meter>Resin|Thread|Thread Idle Count</meter>
+      <meter>JVM|Thread|JVM Runnable Count</meter>
+      <meter>JVM|Thread|JVM Blocked Count</meter>
+      <meter>JVM|Thread|JVM Native Count</meter>
+      <meter>JVM|Thread|JVM Waiting Count</meter>
+    </graph>
+
+    <!-- row 2 -->
+      
+    <graph name="Database Connection Active">
+      <meter>Resin|Database|Connection Active</meter>
+    </graph>
+      
+    <graph name="Database Query Time">
+      <meter>Resin|Database|Query Time</meter>
+      <meter>Resin|Database|Query Time Max</meter>
+    </graph>
+      
+    <graph name="CPU">
+      <meter>OS|CPU|CPU Active</meter>
+    </graph>
+
+    <!-- row 3 -->
+      
+    <graph name="Memory">
+      <meter>JVM|Memory|Heap Memory Used</meter>
+      <meter>JVM|Memory|Heap Memory Free</meter>
+      <meter>JVM|Memory|Tenured Memory Used</meter>
+      <meter>JVM|Memory|PermGen Memory Used</meter>
+    </graph>
+      
+    <graph name="GC Time">
+      <meter>JVM|Memory|GC Time|PS MarkSweep</meter>
+      <meter>JVM|Memory|GC Time|PS Scavenge</meter>
+    </graph>
+      
+    <graph name="Netstat">
+      <meter>OS|Network|tcp-established</meter>
+      <meter>OS|Network|tcp-listen</meter>
+      <meter>OS|Network|tcp-close</meter>
+      <meter>OS|Network|tcp-close-wait</meter>
+      <meter>OS|Network|tcp-fin-wait1</meter>
+      <meter>OS|Network|tcp-fin-wait2</meter>
+      <meter>OS|Network|tcp-last-ack</meter>
+      <meter>OS|Network|tcp-syn-recv</meter>
+      <meter>OS|Network|tcp-syn-sent</meter>
+    </graph>
+  </health:MeterGraphPage>
 
 </cluster>

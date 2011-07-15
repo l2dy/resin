@@ -59,7 +59,8 @@ class MultipartForm {
                             HttpServletRequestImpl request,
                             String javaEncoding,
                             long uploadMax,
-                            long fileUploadMax)
+                            long fileUploadMax,
+                            long lengthMax)
     throws IOException
   {
     MultipartStream ms = new MultipartStream(rawIs, boundary);
@@ -164,9 +165,23 @@ class MultipartForm {
       } else {
         CharBuffer value = new CharBuffer();
         int ch;
+        long totalLength = 0;
 
-        for (ch = is.readChar(); ch >= 0; ch = is.readChar())
+        for (ch = is.readChar(); ch >= 0; ch = is.readChar()) {
           value.append((char) ch);
+          totalLength++;
+          
+          if (lengthMax < totalLength) {
+            String msg = L.l("multipart form upload failed because field '{0}' exceeds max length {1}",
+                             name, lengthMax);
+
+            request.setAttribute("caucho.multipart.form.error", msg);
+            request.setAttribute("caucho.multipart.form.error.size",
+                                 new Long(totalLength));
+            
+            throw new IOException(msg);
+          }
+        }
       
         if (log.isLoggable(Level.FINE))
           log.fine("mp-form: " + name + "=" + value);
@@ -206,12 +221,18 @@ class MultipartForm {
       return null;
     
     int length = attr.length();
-    int i = attr.toLowerCase().indexOf(name);
+    
+    int i = findAttribute(attr, name);
     if (i < 0)
       return null;
 
+    if (length <= i || attr.charAt(i) != '=')
+      return null;
+    
+    /*
     for (i += name.length(); i < length && attr.charAt(i) != '='; i++) {
     }
+    */
     
     for (i++; i < length && attr.charAt(i) == ' '; i++) {
     }
@@ -232,5 +253,39 @@ class MultipartForm {
     }
 
     return value.close();
+  }
+  
+  private static int findAttribute(String attribute, String name)
+  {
+    int length = attribute.length();
+    int nameLength = name.length();
+    
+    for (int i = 0; i < length - nameLength; i++) {
+      if (attribute.regionMatches(true, i, name, 0, nameLength)) {
+        char ch;
+        
+        if (i > 0
+            && (ch = attribute.charAt(i - 1)) != ' '
+            && ch != ';'
+            && ch != '\t') {
+          continue;
+        }
+        
+        int j = i + nameLength;
+        
+        for (; j < length; j++) {
+          ch = attribute.charAt(j);
+          
+          if (ch == '=')
+            return j;
+          else if (ch == ' ' || ch == '\t')
+            continue;
+          else
+            break;
+        }
+      }
+    }
+    
+    return -1;
   }
 }

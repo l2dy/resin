@@ -41,10 +41,9 @@ public class DeployCommand extends AbstractRepositoryCommand {
   
   @Override
   public void doCommand(WatchdogArgs args,
-                        WatchdogClient client)
+                        WatchdogClient client,
+                        WebAppDeployClient deployClient)
   {
-    WebAppDeployClient deployClient = getDeployClient(args, client);
-    
     String war = args.getDefaultArg();
     
     if (war == null) {
@@ -117,8 +116,6 @@ public class DeployCommand extends AbstractRepositoryCommand {
 
     deployClient.commitArchive(commit, path);
 
-    deployClient.close();
-    
     System.out.println("Deployed " + commit.getId() + " from " + war + " to "
                        + deployClient.getUrl());
   }
@@ -126,7 +123,7 @@ public class DeployCommand extends AbstractRepositoryCommand {
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] deploy -user <user> -password <password> [options] <war-file>"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] deploy -user <user> -password <password> [options] <war-file>"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   deploys application specified in a <war-file> to resin server"));

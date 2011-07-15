@@ -109,8 +109,10 @@ class TcpAsyncController extends AsyncController {
   {
     TcpSocketLink conn = _conn;
 
-    if (conn != null)
-      return conn.wake();
+    if (conn != null) {
+      conn.requestWakeComet();
+      return true;
+    }
     else
       return false;
   }
@@ -248,17 +250,19 @@ class TcpAsyncController extends AsyncController {
     if (_conn instanceof TcpSocketLink)
       tcpConn = (TcpSocketLink) _conn;
 
+    /*
     if (tcpConn != null && tcpConn.isCometComplete())
+      sb.append(",complete");
+      */
+    
+    if (_isCompleteRequested)
       sb.append(",complete");
 
     if (_isTimeout)
       sb.append(",timeout");
 
-    if (tcpConn != null && tcpConn.isCometSuspend())
-      sb.append(",suspended");
-
-    if (tcpConn != null && tcpConn.isWakeRequested())
-      sb.append(",wake");
+    if (tcpConn != null)
+      sb.append("," + tcpConn.getRequestState());
 
     sb.append("]");
 

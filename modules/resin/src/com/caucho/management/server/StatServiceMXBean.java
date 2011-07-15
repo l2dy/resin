@@ -55,6 +55,15 @@ public interface StatServiceMXBean extends ManagedObjectMXBean
    * Returns the most recent value.
    */
   public double getLastValue(String name);
+  
+  /**
+   * Returns the best available value of the given timeframe less 1 week, or 
+   * 1 day, or 1 hour.
+   */
+  public BaselineQueryResult getBaseline(String name,
+                                         long beginTime,
+                                         long endTime,
+                                         int minSampleSize);
 
   /**
    * Returns the strings
@@ -65,4 +74,14 @@ public interface StatServiceMXBean extends ManagedObjectMXBean
    * Returns the start times for the given server.
    */
   public long []getStartTimes(int serverIndex, long startTime, long endTime);
+  
+  /**
+   * Returns predefined meter graphs.
+   */
+  public MeterGraphInfo []getMeterGraphs();
+  
+  /**
+   * Returns predefined meter graph pages.
+   */
+  public MeterGraphPageInfo []getMeterGraphPages();
 }

@@ -70,6 +70,7 @@ import com.caucho.env.git.GitSystem;
 import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
 import com.caucho.env.lock.*;
+import com.caucho.env.log.LogSystem;
 import com.caucho.env.repository.AbstractRepository;
 import com.caucho.env.repository.LocalRepositoryService;
 import com.caucho.env.repository.RepositoryService;
@@ -90,11 +91,13 @@ import com.caucho.management.server.ResinMXBean;
 import com.caucho.management.server.ThreadPoolMXBean;
 import com.caucho.naming.Jndi;
 import com.caucho.server.admin.Management;
+import com.caucho.server.admin.StatSystem;
+import com.caucho.server.cache.TempFileService;
 import com.caucho.server.cluster.ClusterPod;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.cluster.ServerConfig;
 import com.caucho.server.cluster.ServletContainerConfig;
-import com.caucho.server.cluster.ServletService;
+import com.caucho.server.cluster.ServletSystem;
 import com.caucho.server.distcache.FileCacheManager;
 import com.caucho.server.resin.ResinArgs.BoundPort;
 import com.caucho.server.webbeans.ResinCdiProducer;
@@ -143,6 +146,7 @@ public class Resin
   private Path _rootDirectory;
 
   private Path _resinDataDirectory;
+  private Path _logDirectory;
   
   private final ResinSystem _resinSystem;
   
@@ -393,13 +397,19 @@ public class Resin
     _isRestart = isRestart;
     _restartMessage = startMessage;
     
-    for (StartInfoListener listener : _startInfoListeners)
+    for (StartInfoListener listener : _startInfoListeners) {
       listener.setStartInfo(isRestart, startMessage);
+    }
   }
   
   public boolean isRestart()
   {
     return _isRestart;
+  }
+  
+  public void setDataDirectory(Path path)
+  {
+    _resinDataDirectory = path;
   }
   
   public String getRestartMessage()
@@ -463,7 +473,10 @@ public class Resin
 
         if (_args.getRootDirectory() != null)
           setRootDirectory(_args.getRootDirectory());
-        
+
+        if (_args.getDataDirectory() != null)
+          setDataDirectory(_args.getDataDirectory());
+
         _pingSocket = _args.getPingSocket();
         
         setJoinCluster(_args.getJoinCluster());
@@ -560,6 +573,8 @@ public class Resin
   
   protected void addServices()
   {
+    TempFileService.createAndAddService();
+    
     LockService.createAndAddService(createLockManager());
   }
   
@@ -798,6 +813,14 @@ public class Resin
   {
     return _rootDirectory;
   }
+  
+  public Path getLogDirectory()
+  {
+    if (_logDirectory != null)
+      return _logDirectory;
+    else
+      return _rootDirectory.lookup("log");
+  }
 
   /**
    * Returns the resin-data directory
@@ -806,12 +829,15 @@ public class Resin
   {
     Path path;
 
+    Path root = getRootDirectory();
+    
     if (_resinDataDirectory != null)
-      path = _resinDataDirectory;
-    else if (_isWatchdog)
-      path = getRootDirectory().lookup("watchdog-data");
+      root = _resinDataDirectory;
+
+    if (_isWatchdog)
+      path = root.lookup("watchdog-data");
     else
-      path = getRootDirectory().lookup("resin-data");
+      path = root.lookup("resin-data");
 
     if (path instanceof MemoryPath) { // QA
       path = WorkDir.getTmpWorkDir().lookup("qa/resin-data");
@@ -995,6 +1021,10 @@ public class Resin
                              port.getServerSocket());
         }
       }
+      
+      if (_management != null)
+        _management.init();
+      
 
       _resinSystem.start();
 
@@ -1004,7 +1034,6 @@ public class Resin
         _serverId));
         }
       */
-      
 
       log().info(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
     } finally {
@@ -1199,12 +1228,7 @@ public class Resin
   private void configureRoot(BootResinConfig bootConfig) 
     throws IOException
   {
-    Path dataDirectory;
-  
-    if (isWatchdog())
-      dataDirectory = _rootDirectory.lookup("watchdog-data");
-    else
-      dataDirectory = _rootDirectory.lookup("resin-data");
+    Path dataDirectory = getResinDataDirectory();
   
     String serverName = _serverId;
   
@@ -1212,7 +1236,7 @@ public class Resin
       serverName = "default";
   
     dataDirectory = dataDirectory.lookup("./" + serverName);
-    
+
     RootDirectorySystem.createAndAddService(_rootDirectory, dataDirectory);
   }
   
@@ -1305,7 +1329,7 @@ public class Resin
       addServices();
     }
      
-    ServletService.createAndAddService(_servletContainer);
+    ServletSystem.createAndAddService(_servletContainer);
     
     ResinConfig resinConfig = new ResinConfig(this);
     
@@ -1336,7 +1360,7 @@ public class Resin
   
   protected CloudServer joinCluster(CloudSystem system)
   {
-    throw new ConfigException(L().l("-join requires Resin Professional"));
+    throw new ConfigException(L().l("-join-cluster requires Resin Professional"));
   }
   
   public ServletContainerConfig getServletContainerConfig()
@@ -1361,7 +1385,15 @@ public class Resin
 
     return _management;
   }
+
+  public StatSystem createStatSystem() {
+    throw new ConfigException("StatSystem is available with Resin Professional");
+  }
   
+  public LogSystem createLogSystem() {
+    throw new ConfigException("LogSystem is available with Resin Professional");
+  }
+
   private void addRandom()
   {
   }

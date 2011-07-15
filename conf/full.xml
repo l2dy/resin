@@ -71,7 +71,7 @@
 
   <cluster-default>
     <!-- standard servlet behavior, including .jsp, .php, and WEB-INF -->
-    <resin:import path="${__DIR__}/app-default.xml"/>
+    <resin:import path="classpath:META-INF/caucho/app-default.xml"/>
     
     <!--
        - Admin services
@@ -141,7 +141,7 @@
       <memory-free-min>1M</memory-free-min>
 
       <!-- Maximum number of threads. -->
-      <thread-max>256</thread-max>
+      <thread-max>4096</thread-max>
 
       <!-- Configures the socket timeout -->
       <socket-timeout>65s</socket-timeout>

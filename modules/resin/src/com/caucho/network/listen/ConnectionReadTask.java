@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownSystem;
 
 /**
@@ -93,17 +92,25 @@ abstract class ConnectionReadTask implements Runnable {
     RequestState result = RequestState.EXIT;
 
     _socketLink.startThread(thread);
-
+    Throwable e1 = null;
+    
     try {
       result = doTask();
     } catch (OutOfMemoryError e) {
       String msg = "TcpSocketLink OutOfMemory";
 
-      ShutdownSystem.shutdownActive(ExitCode.MEMORY, msg); 
+      ShutdownSystem.shutdownOutOfMemory(msg); 
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);
+      e1 = e;
     } finally {
-      _socketLink.finishThread(result);
+      try {
+        _socketLink.finishThread(result);
+      } catch (RuntimeException e) {
+        e.printStackTrace();
+        System.out.println("FINISH: " + result + " " + _socketLink + " " + this + "\n  " + e1 + "\n  " + e);
+        throw e;
+      }
       
       thread.setName(oldThreadName);
     }

@@ -28,16 +28,10 @@
 
 package com.caucho.ejb.cfg;
 
-import com.caucho.util.L10N;
-
-import java.util.ArrayList;
-
 /**
  * Configuration for interceptors.
  */
 public class InterceptorsConfig {
-  private static final L10N L = new L10N(InterceptorsConfig.class);
-
   private final EjbConfig _config;
 
   public InterceptorsConfig(EjbConfig config)

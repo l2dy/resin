@@ -6,7 +6,7 @@
  * Each copy or derived work must preserve the copyright notice and this
  * notice unmodified.
  *
- * Resin Open Source is software; you can redistribute it and/or modify
+ * Resin Open Source is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
@@ -27,39 +27,47 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.network.listen;
+package com.caucho.admin;
 
-import com.caucho.inject.Module;
+import javax.annotation.PostConstruct;
+import javax.ejb.Startup;
+import javax.inject.Singleton;
 
-/**
- * A protocol-independent TcpConnection.  TcpConnection controls the
- * TCP Socket and provides buffered streams.
- *
- * <p>Each TcpConnection has its own thread.
- */
-@Module
-class ResumeTask extends ConnectionReadTask {
-  ResumeTask(TcpSocketLink socketLink)
+import com.caucho.config.Configurable;
+import com.caucho.server.admin.*;
+import com.caucho.server.admin.StatSystem.JmxItem;
+import com.caucho.server.resin.Resin;
+import com.caucho.util.L10N;
+
+@Startup
+@Singleton
+@Configurable
+public class StatService
+{
+  private static final L10N L = new L10N(StatService.class);
+  
+  private StatSystem _statSystem;
+  
+  public StatService()
   {
-    super(socketLink);
+    _statSystem = Resin.getCurrent().createStatSystem();
+  }
+
+  @PostConstruct
+  public void init()
+  {
+    _statSystem.init();
   }
   
-  @Override
-  public void run()
+  @Configurable
+  public void addJmx(JmxItem item)
   {
-    SocketLinkThreadLauncher launcher = getLauncher();
-    
-    launcher.onChildThreadResume();
-    try {
-      super.run();
-    } finally {
-      launcher.onChildThreadEnd();
-    }
+    _statSystem.addJmx(item);
   }
-  
-  @Override
-  public RequestState doTask()
+
+  @Configurable
+  public void addJmxDelta(JmxItem item)
   {
-    return getSocketLink().doResume();
-  }
+    _statSystem.addJmxDelta(item);
+  }  
 }

@@ -41,13 +41,13 @@ public class HeapDumpCommand extends AbstractManagementCommand
   private static final L10N L = new L10N(HeapDumpCommand.class);
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public void doCommand(WatchdogArgs args,
+                        WatchdogClient client,
+                        ManagerClient managerClient)
   {
-    ManagerClient manager = getManagerClient(args, client);
-
     boolean raw = args.hasOption("-raw");
 
-    String data = manager.doHeapDump(raw);
+    String data = managerClient.doHeapDump(raw);
 
     System.out.println(data);
   }
@@ -55,7 +55,7 @@ public class HeapDumpCommand extends AbstractManagementCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: java -jar resin.jar [-conf <file>] heap-dump -user <user> -password <password> [-raw]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] heap-dump -user <user> -password <password> [-raw]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   prints heap summary taken on remote server"));

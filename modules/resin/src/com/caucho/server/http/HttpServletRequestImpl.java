@@ -208,7 +208,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public String getServerName()
   {
-    return _request.getServerName();
+    AbstractHttpRequest request = _request;
+
+    return request != null ? request.getServerName() : null;
   }
 
   /**
@@ -226,7 +228,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public int getServerPort()
   {
-    return _request.getServerPort();
+    AbstractHttpRequest request = _request;
+
+    return request != null ? request.getServerPort() : 0;
   }
 
   /**
@@ -1087,10 +1091,18 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
           return form;
 
         long formUploadMax = getWebApp().getFormUploadMax();
+        long parameterLengthMax = getWebApp().getFormParameterLengthMax();
+        
+        if (parameterLengthMax < 0)
+          parameterLengthMax = Long.MAX_VALUE / 2;
 
         Object uploadMax = getAttribute("caucho.multipart.form.upload-max");
         if (uploadMax instanceof Number)
           formUploadMax = ((Number) uploadMax).longValue();
+
+        Object paramMax = getAttribute("caucho.multipart.form.parameter-length-max");
+        if (paramMax instanceof Number)
+          parameterLengthMax = ((Number) paramMax).longValue();
 
         // XXX: should this be an error?
         if (formUploadMax >= 0 && formUploadMax < contentLength) {
@@ -1147,7 +1159,8 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
                                       this,
                                       javaEncoding,
                                       formUploadMax,
-                                      fileUploadMax);
+                                      fileUploadMax,
+                                      parameterLengthMax);
         } catch (IOException e) {
           log.log(Level.FINE, e.toString(), e);
           setAttribute("caucho.multipart.form.error", e.getMessage());
@@ -1621,9 +1634,10 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     return _request.isDuplex();
   }
 
-  public void killKeepalive()
+  @Override
+  public void killKeepalive(String reason)
   {
-    _request.killKeepalive();
+    _request.killKeepalive(reason);
   }
 
   public boolean isConnectionClosed()

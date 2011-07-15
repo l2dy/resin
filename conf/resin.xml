@@ -5,7 +5,8 @@
    - balancing and database configuration.
   -->
 <resin xmlns="http://caucho.com/ns/resin"
-       xmlns:resin="urn:java:com.caucho.resin">
+       xmlns:resin="urn:java:com.caucho.resin"
+       xmlns:health="urn:java:com.caucho.health">
 
   <!--
      - Logging configuration for the JDK logging API.
@@ -100,6 +101,11 @@
       -->
     <resin:if test="${resin.professional}">
       <resin:import path="${__DIR__}/health.xml" optional="true"/>
+
+      <health:PdfReport>
+        <report>Summary</report>
+        <health:IfCron value="0 0 * * 0"/>
+      </health:PdfReport>
     </resin:if>
 
     <!--

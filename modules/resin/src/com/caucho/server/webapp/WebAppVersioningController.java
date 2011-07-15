@@ -195,6 +195,17 @@ public class WebAppVersioningController extends WebAppController {
     */
   }
 
+  /**
+   * Initialize the controller.
+   */
+  @Override
+  protected void initEnd()
+  {
+    /*
+    super.initBegin();
+    */
+  }
+
   @Override
   public boolean isModified()
   {
@@ -259,6 +270,9 @@ public class WebAppVersioningController extends WebAppController {
             && oldPrimaryController != newPrimaryController) {
           _controllerList.add(oldPrimaryController);
         }
+        
+        // server/1h20
+        newPrimaryController.init();
 
         newPrimaryController.setVersionAlias(true);
         // server/12ab
@@ -268,7 +282,9 @@ public class WebAppVersioningController extends WebAppController {
         for (DeployControllerApi<WebApp> newController : _mergeList) {
           newPrimaryController.merge(newController);
         }
+        
         _primaryController = newPrimaryController;
+        
         _primaryVersion = version;
 
         _controllerList.remove(newPrimaryController);
