@@ -115,7 +115,12 @@
     
     <property name="version" value="4.0.s${snapshotdate}"/>
     <property name="dist.name" value="${shortproduct}-${version}"/>
+    <property name="resin.dist.name" value="resin-${version}"/>
     <property name="dist.build" location="${dist}/${dist.name}"/>
+
+    <condition property="bits" value="64">
+      <equals arg1="${sun.arch.data.model}" arg2="64"/>
+    </condition>
 
     <mkdir dir="${build}"/>
     <mkdir dir="${build}/webapps"/>
@@ -496,7 +501,7 @@
   </target>
 	  
   <target name="resin.dist.jar"
-          depends="compile,junit">
+          depends="init,compile,junit">
     <mkdir dir="${dist.build}/lib"/>
     <mkdir dir="${dist.build}/compat"/>
 
@@ -775,6 +780,7 @@
       <fileset dir="${dist.build}">
         <include name="configure"/>
         <include name="bin/resin.sh"/>
+        <include name="bin/resinctl.in"/>
         <include name="bin/start.bat"/>
         <include name="bin/stop.bat"/>
         <include name="automake/missing"/>
@@ -850,7 +856,9 @@
       <include name="${dist.name}/**/*.dll"/>
       <include name="${dist.name}/**/*.exe"/>
       <include name="${dist.name}/bin/*.sh"/>
+      <include name="${dist.name}/bin/*.in"/>
       <include name="${dist.name}/bin/*.pl"/>
+      <include name="${dist.name}/bin/*.bat"/>
       <include name="${dist.name}/configure"/>
       <include name="${dist.name}/configure.ac"/>
     </patternset>
@@ -1160,7 +1168,7 @@
     -->
   
   <target name="debian-libexec" depends="init">
-    <property name="libexec" value="${dist.build}/libexec"/>
+    <property name="libexec" value="${dist.build}/libexec${bits}"/>
     
     <delete dir="${libexec}"/>
     <mkdir dir="${libexec}"/>
@@ -1175,12 +1183,10 @@
 	<include name="aclocal.m4"/>
 
 	<include name="init.d/resin.in"/>
+        
+	<include name="bin/resinctl.in"/>
 	
 	<include name="modules/c/src/Makefile.in"/>
-	
-	<include name="modules/c/src/apache1/*.c"/>
-	<include name="modules/c/src/apache1/*.h"/>
-	<include name="modules/c/src/apache1/Makefile.in"/>
 	
 	<include name="modules/c/src/apache2/*.c"/>
 	<include name="modules/c/src/apache2/*.h"/>
@@ -1198,11 +1204,14 @@
 	<include name="modules/c/src/resinssl/Makefile.in"/>
       </fileset>
 
-      <fileset dir="${install}">
+      <fileset dir="${basedir}">
 	<include name="modules/c/src/resin/*.c"/>
 	<include name="modules/c/src/resin/*.h"/>
 	<include name="modules/c/src/resinssl/*.c"/>
 	<include name="modules/c/src/resinssl/*.h"/>
+        
+	<include name="modules/c/src/resin/Makefile.in"/>
+	<include name="modules/c/src/resinssl/Makefile.in"/>
       </fileset>
 
     </copy>
@@ -1226,7 +1235,7 @@
     </exec>
   </target>
 
-  <target name="debian" depends="debian-libexec,debian-perm">
+  <target name="debian" depends="init,configure,dist,debian-libexec,debian-perm">
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
     </exec>
@@ -1246,6 +1255,7 @@
         <include name="admin-users.xml"/>
         -->
         <include name="app-default.xml"/>
+        <include name="health.xml"/>
       </fileset>
     </copy>
     
@@ -1292,29 +1302,52 @@
         <include name="lib/jaxstream-15.jar"/>
         -->
         <include name="lib/eclipselink.jar"/>
+        <!--
         <include name="lib/hibernate-validate-4.0.2.GA.jar.jar"/>
+        -->
         <include name="lib/javaee-16.jar"/>
         <include name="lib/javamail-141.jar"/>
         <include name="lib/jaxrpc-15.jar"/>
         <include name="lib/jsf-api.jar"/>
         <include name="lib/jsf-impl.jar"/>
-        <include name="lib/pro.jar"/>
+
         <include name="lib/resin.jar"/>
+        <include name="lib/resin-eclipselink.jar"/>
+        <!--
         <include name="lib/slf4j-api-1.6.1.jar"/>
+        -->
         <include name="lib/validation-api-1.0.0.GA.jar"/>
         <include name="lib/webutil.jar"/>
         <include name="lib/webservices-api.jar"/>
         <include name="lib/webservices-extra-api.jar"/>
         <include name="lib/webservices.LICENSE"/>
+        
+        <include name="lib/license.jar"/>
+        <include name="lib/pro.jar"/>
+
+        <include name="webapp-jars/**"/>
       </fileset>
       
       <fileset dir="${resindir}">
         <include name="bin/resin.sh"/>
-        <include name="bin/start.bat"/>
-        <include name="bin/stop.bat"/>
+        <include name="bin/resinctl.in"/>
       </fileset>
       
-      <fileset dir="${dist.build}/libexec">
+      <fileset dir="${dist.build}/libexec${bits}">
+        <include name="**"/>
+        <exclude name="aclocal.m4"/>
+        <exclude name="automake"/>
+        <exclude name="automake/**"/>
+        <exclude name="*config*"/>
+        <exclude name="init.d"/>
+        <exclude name="init.d/**"/>
+        <exclude name="libtool"/>
+        <exclude name="Makefile*"/>
+        <exclude name="modules"/>
+        <exclude name="modules/**"/>
+      </fileset>
+      
+      <fileset dir="${dist.build}/libexec64">
         <include name="**"/>
         <exclude name="aclocal.m4"/>
         <exclude name="automake"/>
@@ -1337,6 +1370,7 @@
       <fileset dir="dist-debian/usr/share/${shortproduct}-${version}">
         <include name="configure"/>
         <include name="bin/resin.sh"/>
+        <include name="bin/resinctl.in"/>
       </fileset>
     </chmod>
 

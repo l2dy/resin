@@ -29,8 +29,21 @@
 
 package com.caucho.boot;
 
+import java.util.Set;
+
 public interface BootCommand {
-  public void doCommand(WatchdogArgs args, WatchdogClient client);
+  public String getName();
+
+  public int doCommand(WatchdogArgs args, WatchdogClient client)
+    throws BootArgumentException;
+
+  public boolean isRetry();
+
+  public Set<String> getOptions();
+
+  public Set<String> getValueKeys();
+
+  public Set<String> getIntValueKeys();
 
   public void usage();
 }

@@ -41,13 +41,14 @@ abstract public class LoadBalanceManager {
    */
   public ClientSocket open()
   {
-    return openSticky(null, null);
+    return openSticky(null, null, null);
   }
   
   /**
    * Opens the next available server, using a sticky session if available.
    */
-  abstract public ClientSocket openSticky(String sessionId, 
+  abstract public ClientSocket openSticky(String sessionId,
+                                          Object requestInfo,
                                           ClientSocketFactory oldClient);
 
   public void close()

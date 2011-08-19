@@ -3155,9 +3155,10 @@ individually.</p>
 <javadoc class="com.caucho.health.action.DumpHeap"/>
 
 <description>
-<p>Create a memory heap dump.  The heap dump will be logged to the resin 
-log file using <code>com.caucho.health.action.DumpHeap</code> as the class, at 
-the <var>info</var> level.</p>
+<p>Create a memory heap dump.  The heap dump will be logged to the internal log 
+database and to the resin log file using 
+<code>com.caucho.health.action.DumpHeap</code> as the class at 
+<var>info</var> level.</p>
 <p>Note: Creating a heap dump can also be performed on-demand using the 
 <var>heap-dump</var> command line, and from /resin-admin.</p>
 </description>
@@ -3170,7 +3171,29 @@ the <var>info</var> level.</p>
     <th>Default</th>
   </tr>
   <tr>
-    <td colspan="4">None</td>
+    <td>hprof</td>
+    <td>Creates an HPROF format dump instead of human readable type.</td>
+    <td>boolean</td>
+    <td>false</td>
+  </tr>
+  <tr>
+    <td>hprof-path</td>
+    <td>Output path write HPROF files, if hprof = true</td>
+    <td>String</td>
+    <td>log/heap.hprof</td>
+  </tr>
+  <tr>
+    <td>hprof-path-format</td>
+    <td>Selects a format for generating dynamic path names using timestamp tokens.</td>
+    <td>String</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>log</td>
+    <td>If true, JMX dump is written to the server log in addition to 
+    being stored in the internal Resin database</td> 
+    <td>boolean</td>
+    <td>true</td>
   </tr>
 </attributes>
 
@@ -3185,6 +3208,76 @@ the <var>info</var> level.</p>
 &lt;/cluster>
 </example>
 
+<example title="Example: &lt;health:DumpHeap> in health.xml with hprof-path-format">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:DumpHeap>
+    &lt;hprof>true&lt;/hprof>
+    &lt;hprof-path-format>${resin.home}/log/dump-%H:%M:%S.%s.hprof&lt;/hprof-path-format>
+    &lt;health:OnAbnormalStop/>
+  &lt;/health:DumpHeap>
+
+&lt;/cluster>
+</example>
+
+
+</defun>
+
+<defun title="&lt;health:DumpHprofHeap>" name="health:DumpHprofHeap">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.DumpHprofHeap"/>
+
+<description>
+<p>Shortcut for &lt;health:DumpHeap hprof='true'/></p>
+</description>
+
+</defun>
+
+<defun title="&lt;health:DumpJmx>" name="health:DumpJmx">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.DumpJmx"/>
+
+<description>
+<p>Health action to create a dump of all JMX attributes and values.  The JMX 
+dump will be logged to the internal log database and to the resin log file 
+using <code>com.caucho.health.action.DumpJmx</code> as the class at 
+<var>info</var> level.</p>
+<p>Note: Creating a JMX dump can also be performed on-demand using the 
+<var>jmx-dump</var> command line.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>log</td>
+    <td>If true, JMX dump is written to the server log in addition to 
+    being stored in the internal Resin database</td> 
+    <td>boolean</td>
+    <td>false</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:DumpJmx> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:DumpJmx/>
+
+&lt;/cluster>
+</example>
+
 </defun>
 
 <defun title="&lt;health:DumpThreads>" name="health:DumpThreads">
@@ -3193,9 +3286,9 @@ the <var>info</var> level.</p>
 <javadoc class="com.caucho.health.action.DumpThreads"/>
 
 <description>
-<p>Create a thread dump.  The thread dump will be logged to the resin 
-log file using <code>com.caucho.server.admin.AdminThreadDump</code> as the 
-class, at the <var>info</var> level.</p>
+<p>Create a thread dump.  The thread dump will be logged to the internal log 
+database and log file using <code>com.caucho.health.action.DumpThreads</code> 
+as the class at <var>info</var> level.</p>
 <p>Note: Creating a thread dump can also be performed on-demand using the 
 <var>thread-dump</var> command line.</p>
 </description>
@@ -3212,6 +3305,13 @@ class, at the <var>info</var> level.</p>
     <td>Output only currently active threads (<var>RUNNABLE</var> state)</td>
     <td>boolean</td>
     <td>false</td>
+  </tr>
+  <tr>
+    <td>log</td>
+    <td>If true, JMX dump is written to the server log in addition to 
+    being stored in the internal Resin database</td> 
+    <td>boolean</td>
+    <td>true</td>
   </tr>
 </attributes>
 
@@ -4706,6 +4806,46 @@ heap memory on JVMs where there is no tenured pool.</p>
 
 </defun>
 
+<defun title="&lt;health:OnAbnormalStop>" name="health:OnAbnormalStop">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.predicate.OnAbnormalStop"/>
+
+<description>
+<p>Qualifies an action to match only when Resin is stopping with an non-OK 
+exit code.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>normal-exit-code</td>
+    <td>Add an OK exit code; one that will not trigger this condition.</td>
+    <td><a javadoc="com.caucho.env.shutdown.ExitCode"/></td>
+    <td>[OK,MODIFIED,WATCHDOG_EXIT]</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:OnAbnormalStop> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+
+  &lt;health:PdfReport snapshot='true'>
+    &lt;health:OnAbnormalStop/>
+  &lt;/health:PdfReport 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
 <defun title="&lt;health:OnRestart>" name="health:OnRestart">
 
 <parents>cluster</parents>
@@ -4852,6 +4992,66 @@ OnStart</a> will fire during this event also.</p>
       &lt;health:IfHealthCritical health-check="${memoryPermGenHealthCheck}"/>      
     &lt;/health:Or>
   &lt;/health:Restart> 
+
+&lt;/cluster>
+</example>
+
+</defun>
+
+<defun title="&lt;health:PdfReport>" name="health:PdfReport">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.PdfReport"/>
+
+<description>
+<p>Health action to generate a PDF report from a PHP script.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>path</td>
+    <td>Path to a PDF generating .php file</td>
+    <td>String</td>
+    <td>${resin.home}/doc/admin/pdf-gen.php</td>
+  </tr>
+  <tr>
+    <td>report</td>
+    <td>Report type key</td>
+    <td>String</td>
+    <td>Summary</td>
+  </tr>
+  <tr>
+    <td>period</td>
+    <td>Report look back period of time</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>7D</td>
+  </tr>
+  <tr>
+    <td>log-path</td>
+    <td>PDF output directory</td>
+    <td>String</td>
+    <td>${resin.logDirectory}</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:PdfReport> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:PdfReport>
+    &lt;path>${resin.home}/doc/admin/pdf-gen.php&lt;/path>
+    &lt;report>Summary&lt;/report>
+    &lt;period>7D&lt;/report>
+    &lt;health:IfCron value="0 0 * * 0"/>
+  &lt;/health:PdfReport>
 
 &lt;/cluster>
 </example>
@@ -5032,14 +5232,75 @@ System properties can be used to configure a different SMTP server.</p>
 
 </defun>
 
+<defun title="&lt;health:Snapshot>" name="health:Snapshot">
+
+<parents>cluster</parents>
+<javadoc class="com.caucho.health.action.Snapshot"/>
+
+<description>
+<p>A specific sequence of health actions: thread dump, heap dump, jmx dump, 
+and pdf report.  This is intended to generate a permanent representation, or 
+"snapshot" of the system at a point in time that includes all the 
+information necessary to debug server issues.  It is usually intended to run 
+in response to a unexpected issue.</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>log</td>
+    <td>Output to server log in addition to pdf report</td>
+    <td>Boolean</td>
+    <td>false</td>
+  </tr>
+  <tr>
+    <td>path</td>
+    <td>Path to a PDF generating .php file</td>
+    <td>String</td>
+    <td>${resin.home}/doc/admin/pdf-gen.php</td>
+  </tr>
+  <tr>
+    <td>report</td>
+    <td>Report type key</td>
+    <td>String</td>
+    <td>Summary</td>
+  </tr>
+  <tr>
+    <td>period</td>
+    <td>Report look back period of time</td>
+    <td><a javadoc="com.caucho.config.types.Period">Period</a></td>
+    <td>7D</td>
+  </tr>
+</attributes>
+
+<example title="Example: &lt;health:Snapshot> in health.xml">
+&lt;cluster xmlns="http://caucho.com/ns/resin"
+         xmlns:resin="urn:java:com.caucho.resin"
+         xmlns:health="urn:java:com.caucho.health"
+         xmlns:ee="urn:java:ee">
+         
+  &lt;health:Snapshot>
+    &lt;health:OnAbnormalStop/>
+  &lt;/health:Snapshot>
+  
+&lt;/cluster>
+</example>
+
+</defun>
+
 <defun title="&lt;health:StartProfiler>" name="health:StartProfiler">
 
 <parents>cluster</parents>
 <javadoc class="com.caucho.health.action.StartProfiler"/>
 
 <description>
-<p>Starts a profiler session.  Results are logged to the server log file 
-at the INFO level.</p>
+<p>Starts a profiler session.  Results are logged to the internal database 
+and the Resin log file at INFO level.</p>
 <p>Note: Starting the profiler can also be performed on-demand using the 
 <var>profile</var> command line, and from /resin-admin.</p>
 </description>

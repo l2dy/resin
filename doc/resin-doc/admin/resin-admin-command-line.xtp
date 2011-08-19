@@ -100,6 +100,10 @@ the /resin-admin page.</p>
       <td>lists MBeans, attributes and operations</td>
     </tr>
     <tr>
+      <td>jmx-dump</td>
+      <td>dump all MBean attributes and values</td>
+    </tr>
+    <tr>
       <td>jmx-set</td>
       <td>sets value of a jmx attribute</td>
     </tr>
@@ -110,6 +114,10 @@ the /resin-admin page.</p>
     <tr>
       <td>log-level</td>
       <td>changes log-level</td>
+    </tr>
+    <tr>
+      <td>pdf-report</td>
+      <td>generates pdf report</td>
     </tr>
   </deftable>
   <p>
@@ -154,13 +162,13 @@ the /resin-admin page.</p>
 <s1 title="heap-dump: producing JVM memory heap dump">
 <p>To produce a heap dump resin provides <code>heap-dump</code> command. With
 Resin Open Source, <code>heap-dump</code> will produce a standard heap dump
-file and put it into a temporary directory on a remote machine.</p>
+file and put it into the Resin log directory on the remote machine.</p>
 <p><code>bin/resin.sh [-conf &lt;file>] heap-dump -user &lt;user> -password &lt;password> [-raw]</code></p>
 <example title="Example: producing a heap dump on Resin Open Source">bin/resin.sh -conf conf/resin.conf heap-dump -user foo -password test -raw
 
-Heap dump is written to `/tmp/hprof-default-2011-04-08-02-51-31.hprof'.
+Heap dump is written to `/var/log/resin/heap.hprof'.
 To view the file on the target machine use
-jvisualvm --openfile /tmp/hprof-default-2011-04-08-02-51-31.hprof
+jvisualvm --openfile /var/log/resin/heap.hprof
 
 </example>
 
@@ -399,6 +407,36 @@ com.acme:type=Foo
     javax.management.MBeanAttributeInfo[description=, name=Boolean, type=boolean, read-only, descriptor={}]==false
 
 </example>
+</s1>
+
+<s1 title="jmx-dump: dump all MBean attributes and values">
+<p>Command<code>jmx-dump</code> produces a complete listing of a MBeans with
+current attribute values.  The output is usually lengthy and can be directed to 
+a file rather than stdout using the -file parameter.</p>
+<p><code>bin/resin.sh [-conf &lt;file>] jmx-dump -user &lt;user> -password &lt;password> [-file &lt;file>]</code></p>
+
+<deftable title="jmx-list options">
+  <tr>
+    <th>Argument/Option</th>
+    <th>Meaning</th>
+    <th>Default</th>
+  </tr>
+  <tr>
+    <td>-file</td>
+    <td>if specified, writes output to file</td>
+    <td></td>
+  </tr>
+</deftable>
+
+<example title="Example: dumping JMX">bin/resin.sh -conf conf/resin.conf jmx-dump -user foo -password test
+JMX Dump:
+java.lang:type=MemoryPool,name=CMS Old Gen {
+  Name=CMS Old Gen
+  Type=HEAP
+...
+
+</example>
+
 </s1>
 
 <s1 title="jmx-set: setting attribute value on MBeans">
@@ -671,6 +709,40 @@ Undeployed foo from http://127.0.0.1:8080/hmtp</example>
       <td>-version</td>
       <td>version of application formatted as &lt;major.minor.micro.qualifier></td>
       <td>none</td>
+    </tr>
+  </deftable>
+</s1>
+<s1 title="pdf-report: pdf report generation">
+<p>The <code>pdf-report</code> command triggers generation of a PDF report from a .php template.</p>
+<p><code>bin/resin.sh [-conf &lt;file>] pdf-report -user &lt;user> -password &lt;password> [-path &lt;php path>] [-report &lt;report name>] [-period &lt;period>] [-logdir &lt;log path>]</code></p>
+<example title="Example: generate the default post-mortem summary PDF report">bin/resin.sh pdf-report -user admin -password secret
+generated /usr/local/resin/log/default-Summary-20110801T0251.pdf
+</example>
+  <deftable title="pdf-report options">
+    <tr>
+      <th>Argument</th>
+      <th>Meaning</th>
+      <th>Default</th>
+    </tr>
+    <tr>
+      <td>-path</td>
+      <td>Path to a PDF generating .php file</td>
+      <td>${resin.home}/doc/admin/pdf-gen.php</td>
+    </tr>
+    <tr>
+      <td>-report</td>
+      <td>Report type key</td>
+      <td>Summary</td>
+    </tr>
+    <tr>
+      <td>-period</td>
+      <td>Report look back period of time</td>
+      <td>7D</td>
+    </tr>
+    <tr>
+      <td>-logdir</td>
+      <td>PDF output directory</td>
+      <td>Resin log directory</td>
     </tr>
   </deftable>
 </s1>

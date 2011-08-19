@@ -29,69 +29,68 @@
 package com.caucho.admin.action;
 
 import java.io.*;
-import java.text.DecimalFormat;
-import java.util.*;
-import java.util.logging.*;
 
 import javax.management.*;
 
 import com.caucho.config.ConfigException;
 import com.caucho.jmx.Jmx;
 import com.caucho.profile.HeapDump;
-import com.caucho.util.*;
+import com.caucho.server.resin.Resin;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 public class HeapDumpAction implements AdminAction
 {
   private static final L10N L = new L10N(HeapDumpAction.class);
   
-  public String execute(boolean raw, String serverId, File hprofDir)
+  public String execute(boolean isJvmHprof, String serverId, Path hprofPath)
     throws ConfigException, JMException, IOException
   {
-    if (raw)
-      return doRawHeapDump(serverId, hprofDir);
+    if (isJvmHprof)
+      return doJvmHprofHeapDump(serverId, hprofPath);
     else
       return doProHeapDump();
   }
   
-  private String doRawHeapDump(String serverId, File hprofDir)
+  private String doJvmHprofHeapDump(String serverId, Path hprofPath)
     throws ConfigException, JMException, IOException
   {
     ObjectName name = new ObjectName(
       "com.sun.management:type=HotSpotDiagnostic");
+    
+    if (hprofPath == null) {
+      Resin resin = Resin.getCurrent();
+      
+      if (resin == null)
+        hprofPath = Vfs.lookup(System.getProperty("java.io.tmpdir"));
+      else
+        hprofPath = resin.getLogDirectory();
+      
+      hprofPath = hprofPath.lookup("heap.hprof");
+    } else if (hprofPath.isDirectory()) {
+      hprofPath = hprofPath.lookup("heap.hprof");
+    }
 
-    final String base = "hprof-" + serverId;
-    final Calendar date = new GregorianCalendar();
-    date.setTimeInMillis(Alarm.getCurrentTime());
-    DecimalFormat f = new DecimalFormat("00");
-    String suffix = f.format(date.get(Calendar.YEAR)) + "-" +
-                    f.format(date.get(Calendar.MONTH)) + "-" +
-                    f.format(date.get(Calendar.DAY_OF_MONTH)) + "-" +
-                    f.format(date.get(Calendar.HOUR_OF_DAY)) + "-" +
-                    f.format(date.get(Calendar.MINUTE)) + "-" +
-                    f.format(date.get(Calendar.SECOND));
+    hprofPath.getParent().mkdirs();
 
-    if (hprofDir == null)
-      hprofDir = new File(System.getProperty("java.io.tmpdir"));
+    //MemoryPoolAdapter memoryAdapter = new MemoryPoolAdapter();
+    //if (memoryAdapter.getEdenUsed() > hprofPath.getDiskSpaceFree())
+    //  throw new ConfigException(L.l("Not enough disk space for `{0}'", fileName));
 
-    final String fileName = base + "-" + suffix + ".hprof";
-
-    MemoryPoolAdapter memoryAdapter = new MemoryPoolAdapter();
-    if (memoryAdapter.getEdenUsed() > hprofDir.getFreeSpace())
-      throw new ConfigException(L.l("Not enough disk space for `{0}'", fileName));
-
-    File file = new File(hprofDir, fileName);
-    if (file.exists())
-      throw new ConfigException(L.l("File `{0}' exists.", file));
+    // dumpHeap fails if file exists, it will not overwrite, so we have to delete
+    if (hprofPath.exists() && hprofPath.isFile())
+      hprofPath.remove();
 
     MBeanServer mBeanServer = Jmx.getGlobalMBeanServer();
     mBeanServer.invoke(name,
                        "dumpHeap",
-                       new Object[]{file.getCanonicalPath(), Boolean.TRUE},
+                       new Object[]{hprofPath.getPath(), Boolean.TRUE},
                        new String[]{String.class.getName(), boolean.class.getName()});
 
     final String result = L.l("Heap dump is written to `{0}'.\n"
                               + "To view the file on the target machine use\n"
-                              + "jvisualvm --openfile {0}", file);
+                              + "jvisualvm --openfile {0}", hprofPath.getPath());
 
     return result;
   }
@@ -107,5 +106,13 @@ public class HeapDumpAction implements AdminAction
     writer.flush();
     
     return buffer.toString();
+  }
+  
+  public String executeJson()
+    throws IOException
+  {
+    HeapDump dump = HeapDump.create();
+   
+    return dump.jsonHeapDump();
   }
 }

@@ -20,11 +20,35 @@
   </health:Restart>
 
   <!--
+     - save jmx information on start.
+    -->
+  <health:DumpJmx>
+    <health:OnStart/>
+  </health:DumpJmx>
+
+  <!--
+     - take snapshot on abnormal stop
+    -->
+  <health:Snapshot>
+    <health:OnAbnormalStop/>
+  </health:Snapshot>
+    
+
+  <!--
      - Restart on critical if the problem persists for 5 min.
     -->
-  <health:Restart>
-    <health:IfCriticalRechecked/>
-  </health:Restart>
+  <health:ActionSequence>
+    <health:IfHealthCritical time="2m"/>
+
+    <health:FailSafeRestart timeout="10m"/>
+    <health:DumpJmx/>
+    <health:DumpThreads/>
+    <health:DumpHeap/>
+    <health:DumpHeap hprof="true"
+                     hprof-path="${resin.logDirectory}/heap.hprof"/>
+    <health:StartProfiler active-time="2m" wait="true"/>
+    <health:Restart/>
+  </health:ActionSequence>
 
   <!--
      - Checks for JVM-detected deadlocks.
@@ -68,7 +92,7 @@
   </health:CpuHealthCheck>
   
   <health:DumpThreads>
-    <health:IfHealthCritical healthCheck="${cpuHealthCheck}"/>
+    <health:IfHealthWarning healthCheck="${cpuHealthCheck}" time="2m"/>
     <health:IfNotRecent time="15m"/>
   </health:DumpThreads>
   

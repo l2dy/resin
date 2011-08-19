@@ -42,10 +42,11 @@ public class JarScheme extends FilesystemPath {
   /**
    * Lookup the path, handling windows weirdness
    */
-  protected Path schemeWalk(String userPath,
-                            Map<String,Object> attributes,
-                            String filePath,
-                            int offset)
+  @Override
+  public Path schemeWalk(String userPath,
+                         Map<String,Object> attributes,
+                         String filePath,
+                         int offset)
   {
     int p = filePath.indexOf('!', offset);
     String backingPath;

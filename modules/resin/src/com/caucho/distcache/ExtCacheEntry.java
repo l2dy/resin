@@ -29,14 +29,14 @@
 
 package com.caucho.distcache;
 
-import javax.cache.CacheEntry;
+import javax.cache.Cache;
 
 import com.caucho.util.HashKey;
 
 /**
  * Provides additional information about an entry in a {@link javax.cache.Cache}.
  */
-public interface ExtCacheEntry extends CacheEntry
+public interface ExtCacheEntry<K,V> extends Cache.Entry<K,V>
 {
   /**
    * Returns the key hash for the current entry.
@@ -51,8 +51,7 @@ public interface ExtCacheEntry extends CacheEntry
   /**
    * Returns the item's value
    */
-  @Override
-  public Object getValue();
+  public V getValue();
 
   /**
    * Returns the value key
@@ -74,11 +73,22 @@ public interface ExtCacheEntry extends CacheEntry
    */
   public int getLeaseOwner();
 
-  @Override
   public boolean isValid();
   
   /**
    * Returns the load count.
    */
   public int getLoadCount();
+
+  public long getLastUpdateTime();
+
+  /**
+   * @return
+   */
+  public long getVersion();
+
+  /**
+   * @return
+   */
+  public long getLastAccessTime();
 }

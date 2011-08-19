@@ -159,7 +159,7 @@ public class TcpSocketLink extends AbstractSocketLink
   /**
    * For QA only, set the current request.
    */
-  public static void qaSetCurrentRequest(ProtocolConnection request)
+  public static void setCurrentRequest(ProtocolConnection request)
   {
     _currentRequest.set(request);
   }
@@ -307,6 +307,13 @@ public class TcpSocketLink extends AbstractSocketLink
   public boolean isAsyncStarted()
   {
     return _requestStateRef.get().isAsyncStarted();
+  }
+
+  public boolean isAsyncComplete()
+  {
+    TcpAsyncController async = _async;
+    
+    return async != null && async.isCompleteRequested();
   }
 
   @Override
@@ -595,12 +602,15 @@ public class TcpSocketLink extends AbstractSocketLink
     try {
       StreamImpl s = socket.getStream();
 
-      int len = s.readNonBlock(_testBuffer, 0, 0);
+      return s.isEof();
+      /*
+      int len = s.getAvailable();
 
-      if (len >= 0 || len == ReadStream.READ_TIMEOUT)
+      if (len > 0 || len == ReadStream.READ_TIMEOUT)
         return false;
       else
         return true;
+        */
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
 
@@ -784,7 +794,6 @@ public class TcpSocketLink extends AbstractSocketLink
     }
     
     if (_thread != null) {
-      Thread.dumpStack();
       throw new IllegalStateException("old: " + _thread
                                       + " current: " + thread);
     }
@@ -874,23 +883,19 @@ public class TcpSocketLink extends AbstractSocketLink
     TcpSocketLinkListener listener = getListener();
     
     RequestState result = RequestState.REQUEST_COMPLETE;
-    SocketLinkThreadLauncher launcher = _listener.getLauncher();
-    
+
     while (result == RequestState.REQUEST_COMPLETE
            && ! listener.isClosed()
            && ! getState().isDestroyed()) {
-      
-      if (launcher.isIdleExpire()) {
-        return RequestState.EXIT;
-      }
       
       setStatState("accept");
       _state = _state.toAccept();
 
       if (! accept()) {
+        setStatState("close");
         close();
 
-        continue;
+        return RequestState.EXIT;
       }
 
       toStartConnection();
@@ -910,7 +915,9 @@ public class TcpSocketLink extends AbstractSocketLink
   {
     SocketLinkThreadLauncher launcher = _listener.getLauncher();
     
-    launcher.onChildIdleBegin();
+    if (! launcher.childIdleBegin())
+      return false;
+    
     try {
       return getListener().accept(getSocket());
     } finally {
@@ -958,20 +965,25 @@ public class TcpSocketLink extends AbstractSocketLink
         TcpAsyncController async = getAsyncController();
 
         if (async == null) {
+          // network/0290
+          close();
           return RequestState.EXIT;
         }
         // _state = _state.toCometWake();
         // _state = _state.toCometDispatch();
       
-      
         if (async.isTimeout()) {
           async.timeout();
+          close();
           return RequestState.EXIT;
         }
 
         async.toResume();
 
+        // server/1lb5, #4697
+        // if (! async.isCompleteRequested()) {
         getRequest().handleResume();
+        // }
 
         if (_state.isComet()) {
           if (toSuspend())
@@ -980,8 +992,8 @@ public class TcpSocketLink extends AbstractSocketLink
             continue;
         }
         else if (isKeepaliveAllocated()) {
-          // server/1l81
-          _state = _state.toKeepalive(this);
+          // server/1l81, network/0291
+          //_state = _state.toKeepalive(this);
           _async = null;
 
           async.onClose();
@@ -1022,6 +1034,8 @@ public class TcpSocketLink extends AbstractSocketLink
     ReadStream readStream = getReadStream();
 
     while ((result = processKeepalive()) == RequestState.REQUEST_COMPLETE) {
+      toDuplexActive();
+      
       long position = readStream.getPosition();
 
       duplex.serviceRead();
@@ -1034,6 +1048,9 @@ public class TcpSocketLink extends AbstractSocketLink
         return RequestState.EXIT;
       }
     }
+    
+    if (result == RequestState.EXIT)
+      close();
 
     return result;
   }
@@ -1051,8 +1068,11 @@ public class TcpSocketLink extends AbstractSocketLink
     try {
       // clear the interrupted flag
       Thread.interrupted();
+      
+      // boolean isKeepalive = false; // taskType == Task.KEEPALIVE;
+      boolean isKeepalive = taskType == Task.KEEPALIVE && ! _state.isKeepalive();
 
-      result = handleRequestsImpl(taskType == Task.KEEPALIVE);
+      result = handleRequestsImpl(isKeepalive);
     } catch (ClientDisconnectException e) {
       _listener.addLifetimeClientDisconnectCount();
 
@@ -1159,8 +1179,9 @@ public class TcpSocketLink extends AbstractSocketLink
     if (_state.isCometActive()) {
       if (toSuspend())
         return RequestState.ASYNC;
-      else
+      else {
         return handleResumeTask();
+      }
     }
    
     return RequestState.REQUEST_COMPLETE;
@@ -1221,8 +1242,18 @@ public class TcpSocketLink extends AbstractSocketLink
   {
     TcpSocketLinkListener port = _listener;
 
+    _idleStartTime = Alarm.getCurrentTimeActual();
+    _idleExpireTime = _idleStartTime + _idleTimeout;
+    
     // quick timed read to see if data is already available
-    int available = port.keepaliveThreadRead(getReadStream());
+    int available;
+    
+    if (_listener.getSelectManager() != null) {
+      available = port.keepaliveThreadRead(getReadStream());
+    }
+    else {
+      available = 0;
+    }
     
     if (available > 0) {
       return RequestState.REQUEST_COMPLETE;
@@ -1231,16 +1262,15 @@ public class TcpSocketLink extends AbstractSocketLink
       if (log.isLoggable(Level.FINER))
         log.finer(this + " keepalive read failed: " + available);
       
+      killKeepalive("process-keepalive eof");
+      
       setStatState(null);
-      close();
+      // close();
       
       return RequestState.EXIT;
     }
     
     getListener().addLifetimeKeepaliveCount();
-
-    _idleStartTime = Alarm.getCurrentTime();
-    _idleExpireTime = _idleStartTime + _idleTimeout;
 
     _state = _state.toKeepalive(this);
 
@@ -1279,7 +1309,7 @@ public class TcpSocketLink extends AbstractSocketLink
         long delta = expires - Alarm.getCurrentTimeActual();
         if (delta < 0)
           delta = 0;
-        
+
         if (getReadStream().fillWithTimeout(delta) > 0) {
           return RequestState.REQUEST_COMPLETE;
         }
@@ -1292,8 +1322,9 @@ public class TcpSocketLink extends AbstractSocketLink
       }
     } while (Alarm.getCurrentTimeActual() < expires);
 
-    close();
-
+    // close();
+    killKeepalive("thread-keepalive timeout");
+    
     return RequestState.EXIT;
   }
 
@@ -1336,6 +1367,16 @@ public class TcpSocketLink extends AbstractSocketLink
     }
   }
   
+  @Override
+  public void clientDisconnect()
+  {
+    killKeepalive("client disconnect");
+    
+    TcpAsyncController async = _async;
+    
+    if (async != null)
+      async.complete();
+  }
   /**
    * Kills the keepalive, so the end of the request is the end of the
    * connection.
@@ -1350,12 +1391,11 @@ public class TcpSocketLink extends AbstractSocketLink
                                           this,
                                           _thread,
                                           thread));
-    
     SocketLinkState state = _state;
     
     _state = state.toKillKeepalive(this);
     
-    if (log.isLoggable(Level.FINE)) {
+    if (log.isLoggable(Level.FINE) && state.isKeepaliveAllocated()) {
       log.fine(this + " keepalive disabled from "
                + state +", reason=" + reason);
     }

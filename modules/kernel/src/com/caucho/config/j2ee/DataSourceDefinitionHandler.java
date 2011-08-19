@@ -132,6 +132,7 @@ public class DataSourceDefinitionHandler extends JavaeeInjectionHandler {
     String name = def.name();
     
     ValueGenerator gen = bindGenerator(location, def);
+
     if (name != null && ! "".equals(name)) {
       bindJndi(name, gen, name);
     }

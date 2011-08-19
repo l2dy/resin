@@ -132,7 +132,11 @@ AC_ARG_WITH(java-home,
                 [java home])], 
 [JAVA_HOME=${withval}])
 
-if test -z "$JAVA_HOME"; then
+if test -n "$JAVA_HOME"; then
+  a=b
+elif test -x "/usr/libexec/java_home"; then
+  JAVA_HOME=`/usr/libexec/java_home`
+else
   java=`which java 2>/dev/null`
   if test $? = "0"; then
     while test -h "$java"
@@ -150,7 +154,9 @@ if test -z "$JAVA_HOME"; then
     JAVA_HOME=`cd $javabin/..; pwd`
 
     # we're in $JAVA_HOME/jre
-    if test -f "$JAVA_HOME/lib/rt.jar"; then
+    if test -f "$JAVA_HOME/../include/jni.h"; then
+      JAVA_HOME=`cd $JAVA_HOME/..; pwd`
+    elif test -f "$JAVA_HOME/lib/rt.jar"; then
       JAVA_HOME=`cd $JAVA_HOME/..; pwd`
     elif test -d "/usr/java"; then
       JAVA_HOME=/usr/java
@@ -754,8 +760,10 @@ if test -z "${LD_SHLIB}"; then
     linux*)
       LD_SHLIB=${CC}
 
+      CFLAGS="$CFLAGS -pthread -fPIC -fno-omit-frame-pointer -O2"
+
       if test -n "$b64"; then
-        CFLAGS="$CFLAGS -m64 -fPIC"
+        CFLAGS="$CFLAGS -m64"
         LDFLAGS_SHLIB="-shared -fPIC"
       fi
       if test -n "$b64_jni"; then
@@ -765,34 +773,37 @@ if test -z "${LD_SHLIB}"; then
       ;;
 
     *solaris*)
+      LDFLAGS_SHLIB=""
       if test -n "$is_gcc"; then
         CFLAGS_SHLIB="-fPIC"
-        CFLAGS="$CFLAGS -fPIC"
-        CFLAGS_JNI="$CFLAGS_JNI -fPIC"
+
+        CFLAGS="$CFLAGS -fPIC -G -fno-omit-frame-pointer"
+        CFLAGS_JNI="$CFLAGS_JNI -fPIC -G -fno-omit-frame-pointer"
 
         if test -n "$b64"; then
-          CFLAGS="$CFLAGS -m64 -G"
-          LDFLAGS_SHLIB="-m64 -R/usr/sfw/lib/64 -R/usr/local/lib/sparcv9"
+          CFLAGS="$CFLAGS -m64"
+          LDFLAGS_SHLIB="-m64 -R /usr/sfw/lib/64 -R /usr/local/lib/sparcv9"
         fi
         if test -n "$b64_jni"; then
-          CFLAGS_JNI="$CFLAGS_JNI -m64 -G"
-          LDFLAGS_SHLIB="-m64 -R/usr/sfw/lib/64 -R/usr/local/lib/sparcv9"
+          CFLAGS_JNI="$CFLAGS_JNI -m64"
+          LDFLAGS_SHLIB="-m64 -R /usr/sfw/lib/64 -R /usr/local/lib/sparcv9"
         fi
-      else
-        CFLAGS_SHLIB="-KPIC"
 
-        if test -n "$b64"; then
-          CFLAGS="$CFLAGS -xarch=v9"
-        fi
-        if test -n "$b64_jni"; then
-          CFLAGS_JNI="$CFLAGS_JNI -xarch=v9"
-        fi
-      fi
-
-      if test -n "$is_gnu_ld"; then
         LDFLAGS_SHLIB="$LDFLAGS_SHLIB -shared"
       else
-        LDFLAGS_SHLIB="$LDFLAGS_SHLIB -shared -fPIC"
+        CFLAGS="-mt -KPIC -xO2"
+        CFLAGS_SHLIB="-mt -KPIC -xO2"
+
+        if test -n "$b64"; then
+          CFLAGS="$CFLAGS -m64"
+        fi
+        if test -n "$b64_jni"; then
+          CFLAGS_JNI="$CFLAGS_JNI -m64"
+          LDFLAGS_SHLIB="$LDFLAGS_SHLIB -m64 -G -mt -z defs -z text"
+          LDFLAGS_SHLIB="$LDFLAGS_SHLIB -R/usr/lib/64:/usr/sfw/lib/64:/usr/local/lib/sparcv9 -YP,/usr/lib/64:/usr/sfw/lib/64:/usr/local/lib/sparcv9"
+        fi
+
+        LDFLAGS_SHLIB="$LDFLAGS_SHLIB -G -mt -z defs -z text"
       fi
       ;;
 
@@ -837,7 +848,9 @@ if test -z "${LD_SHLIB}"; then
     x86_64)
            if test -z "$b64_jni"; then
   	     CFLAGS_JNI="$CFLAGS_JNI -m32"
-  	     LDFLAGS_SHLIB="$LDFLAGS_SHLIB -melf_i386"
+#  	     LDFLAGS_SHLIB="$LDFLAGS_SHLIB -melf_i386"
+  	     LDFLAGS_SHLIB="$LDFLAGS_SHLIB -m32"
+#             target_cpu="i386"
    	   fi
 	;;
   esac	
@@ -959,7 +972,7 @@ case "$target_os" in
   *solaris*)
 	jni_os=solaris
 	CFLAGS="$CFLAGS -D__SOLARIS__"
-	PROXY_LIBS='-lnsl -lsocket -lthread'
+	PROXY_LIBS='-lnsl -lsocket -lthread -lc'
 	;;
 
   *freebsd*)
@@ -1410,6 +1423,7 @@ modules/c/src/common/Makefile
 modules/c/src/apache2/Makefile
 modules/c/src/resin_os/Makefile
 init.d/resin
+bin/resinctl
 ], [])
 
 if test -n "${resin_pro_plugins}"; then

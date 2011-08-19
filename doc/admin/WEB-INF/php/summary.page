@@ -21,15 +21,25 @@ $report = "Summary";
 $stat = $g_mbean_server->lookup("resin:type=StatService");
 
 if ($stat) {
+  $snapshot = "&amp;snapshot=true";
+  $ss_profile = "&amp;snapshot=true&amp;profile_time=60&amp;profile_tick=10";
+  
   echo " <br /> ";
-  echo "<a href='pdf-gen.php?report=$report'>PDF</a> (";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=1800'>30 minutes</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=3600'>1 hour</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=7200'>2 hours</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=14400'>4 hours</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=28800'>8 hours</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=86400'>1 day</a>, ";
-  echo "<a href='pdf-gen.php?report=$report&amp;period=604800'>1 week</a>)";
+  echo "PDF (";
+  
+  echo "<a href='pdf-gen.php?report=$report$snapshot&amp;period=1800'>30 minutes</a> ";
+  echo " [<a href='pdf-gen.php?report=$report$ss_profile&amp;period=1800'>profile</a>]";
+  
+  echo ", <a href='pdf-gen.php?report=$report$snapshot&amp;period=3600'>1 hour</a>";
+  echo " [<a href='pdf-gen.php?report=$report$ss_profile&amp;period=3600'>profile</a>]";
+  
+  echo ", <a href='pdf-gen.php?report=$report$snapshot&amp;period=14400'>4 hours</a>";
+  
+  echo ", <a href='pdf-gen.php?report=$report$snapshot&amp;period=28800'>8 hours</a>";
+  
+  echo ", <a href='pdf-gen.php?report=$report$snapshot&amp;period=86400'>1 day</a>";
+  
+  echo ", <a href='pdf-gen.php?report=$report$snapshot&amp;period=604800'>1 week</a>)";
 
   echo " <br /> ";
 }      
@@ -255,20 +265,18 @@ function print_overview_graphs()
 
   if (! $stat_service)
     return;
-
-  $period = 6 * 60 * 60;
-  $end = time();
-  $start = $end - $period;
-
+    
+  $width = 250;
   $height = 150;
-  $width = 240;
+  $end = time();
+  $period = 6 * 60 * 60;
 
   echo "<h3>Graphs</h3>\n";
 
   echo "<table summary='Graphs' border='0' cellspacing='0' cellpadding='5'>\n";
   echo "<tr valign='top'><td>\n";
 
-  stat_graph("sum-threads", $width, $height, $start, $end, 
+  stat_graph("sum-threads", $width, $height, $end, $period,  
              array("$si|JVM|Thread|JVM Thread Count",
                    "$si|Resin|Thread|Thread Idle Count",
                    "$si|JVM|Thread|JVM Runnable Count",
@@ -281,7 +289,7 @@ function print_overview_graphs()
                
   echo "</td><td>\n";
   
-  stat_graph("sum-memory", $width, $height, $start, $end,
+  stat_graph("sum-memory", $width, $height, $end, $period,
              array("$si|JVM|Memory|Heap Memory Used",
                    "$si|JVM|Memory|Heap Memory Free",
                    "$si|JVM|Memory|Tenured Memory Free",
@@ -291,7 +299,7 @@ function print_overview_graphs()
                               
   echo "</td><td>\n";
                
-  stat_graph("sum-cpu", $width, $height, $start, $end,
+  stat_graph("sum-cpu", $width, $height, $end, $period,
              array("$si|OS|CPU|CPU Active"),
              "A line graph representing the active CPU usage over the last 6 hours.",
              'bottom', null, null, 'CPU');
@@ -314,32 +322,31 @@ function print_graphs()
   $stat_service = $mbean_server->lookup("resin:type=StatService");
 
   if ($stat_service) {
-    echo "<h2>Graphs</h2>\n";
 
-    $period = 6 * 60 * 60;
-    $end = time();
-    $start = $end - $period;
-
-    $height = 150;
-    $width = 240;
-
+  	$width = 250;
+  	$height = 150;
+  	$end = time();
+  	$period = 6 * 60 * 60;
+  	
+		echo "<h2>Summary Graphs</h2>\n";
+  	
     echo "<table summary='Graphs' border='0' cellspacing='0' cellpadding='5'>";
 
     echo "<tr valign='top'><td>";
-    stat_graph("request", $width, $height, $start, $end,
+    stat_graph("request", $width, $height, $end, $period,
                array("$si|Resin|Http|Request Count"),
                "A line graph representing the number HTTP requests received over the last 6 hours.",
              'bottom', null, null, 'Request Count');
                
     echo "</td><td>";
-    stat_graph("request_time", $width, $height, $start, $end,
+    stat_graph("request_time", $width, $height, $end, $period,
                array("$si|Resin|Http|Request Time",
                      "$si|Resin|Http|Request Time Max"),
                "A line graph representing the amount of time spent processing HTTP requests over the last 6 hours.",
              'bottom', null, null, 'Request Time');
                
     echo "</td><td>";
-    stat_graph("threads", $width, $height, $start, $end, 
+    stat_graph("threads", $width, $height, $end, $period, 
                array("$si|JVM|Thread|JVM Thread Count",
                      "$si|Resin|Thread|Thread Count",
                      "$si|Resin|Thread|Thread Idle Count",
@@ -351,7 +358,7 @@ function print_graphs()
              'bottom', null, null, 'Threads');
                
 /*
-    stat_graph("thread", $width, $height, $start, $end,
+    stat_graph("thread", $width, $height, $end, $period,
                array("$si|JVM|Thread|JVM Thread Count",
                      "$si|Resin|Thread|Thread Count",
                      "$si|Resin|Thread|Thread Active Count",
@@ -363,27 +370,27 @@ function print_graphs()
                
     echo "</td></tr>";
     echo "<tr valign='top'><td>";
-    stat_graph("database", $width, $height, $start, $end,
+    stat_graph("database", $width, $height, $end, $period,
                array("$si|Resin|Database|Connection Active"),
                "A line graph representing the amout of time the database connection was active over the last 6 hours.",
              'bottom', null, null, 'Database Connection Active');
                
     echo "</td><td>";
-    stat_graph("database_time", $width, $height, $start, $end,
+    stat_graph("database_time", $width, $height, $end, $period,
                array("$si|Resin|Database|Query Time",
                      "$si|Resin|Database|Query Time Max"),
                "A line graph representing the amout of time spent querying the database over the last 6 hours.",
              'bottom', null, null, 'Database Query Time');
                
     echo "</td><td>";
-    stat_graph("cpu", $width, $height, $start, $end,
+    stat_graph("cpu", $width, $height, $end, $period,
                array("$si|OS|CPU|CPU Active"),
                "A line graph representing the active CPU usage over the last 6 hours.",
              'bottom', null, null, 'CPU');
                
     echo "</td></tr>";
     echo "<tr valign='top'><td>";
-    stat_graph("memory", $width, $height, $start, $end,
+    stat_graph("memory", $width, $height, $end, $period,
                array("$si|JVM|Memory|Heap Memory Used",
                      "$si|JVM|Memory|Heap Memory Free",
                      "$si|JVM|Memory|Tenured Memory Used",
@@ -392,13 +399,13 @@ function print_graphs()
              'bottom', null, null, 'Memory');
                
     echo "</td><td>";
-    stat_graph_regexp("memory_gc", $width, $height, $start, $end,
+    stat_graph_regexp("memory_gc", $width, $height, $end, $period,
                       "/$si\|JVM\|Memory\|GC Time/",
   										"A line graph representing the amount of time spent perfoming garbage collection over the last 6 hours.",
              'bottom', null, null, 'GC Time');
     
     echo "</td><td>";
-    stat_graph_regexp("netstat", $width, $height, $start, $end,
+    stat_graph_regexp("netstat", $width, $height, $end, $period,
                       "/$si\|OS\|Network\|(?!tcp-time)/",
   										"A line graph representing network activity over the last 6 hours.",
              'bottom', null, null, 'Netstat');
@@ -680,7 +687,7 @@ function print_load_balance()
   <tr class='<?= $count++ % 2 == 0 ? "ra" : "rb" ?>'>
     <td class='item' headers="cluster-server <?=$cluster->Name?>"><?= $client->Name ?></td>
     <td headers="cluster-address <?=$cluster->Name?>"><?= $client->Address ?>:<?= $client->Port ?></td>
-    <td headers="cluster-status <?=$cluster->Name?>" class="<?= $client->State ?>"><?= $client->State ?></td>
+    <td headers="cluster-status <?=$cluster->Name?>" class="<?= $client->ClusterState ?>"><?= $client->ClusterState ?></td>
     <td headers="cluster-active <?=$cluster->Name?>"><?= $client->ConnectionActiveCount ?></td>
     <td headers="cluster-idle <?=$cluster->Name?>"><?= $client->ConnectionIdleCount ?></td>
     <td headers="cluster-conn_miss <?=$cluster->Name?>"><?= format_miss_ratio($client->ConnectionKeepaliveCountTotal,

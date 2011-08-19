@@ -42,6 +42,9 @@ public final class MnodeValue implements ExtCacheEntry {
   public static final MnodeValue NULL
     = new MnodeValue(null, null, null, 0, 0, 0, 0, 0, 0, 0, 0, false, true);
   
+  public static final HashKey NULL_KEY = new HashKey(new byte[32]);
+  public static final HashKey ANY_KEY = createAnyKey(32);
+  
   private final HashKey _valueHash;
   private final HashKey _cacheHash;
   private final int _flags;
@@ -144,7 +147,6 @@ public final class MnodeValue implements ExtCacheEntry {
   /**
    * Returns the last access time.
    */
-  @Override
   public long getLastAccessTime()
   {
     return _lastAccessTime;
@@ -186,7 +188,6 @@ public final class MnodeValue implements ExtCacheEntry {
   /**
    * Returns the expiration time
    */
-  @Override
   public final long getExpirationTime()
   {
     return _lastUpdateTime + _expireTimeout;
@@ -454,13 +455,11 @@ public final class MnodeValue implements ExtCacheEntry {
    * Implements a method required by the interface that should never be
    * called>
    */
-  @Override
   public Object setValue(Object value)
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
 
-  @Override
   public long getCreationTime()
   {
     throw new UnsupportedOperationException(getClass().getName());
@@ -472,16 +471,28 @@ public final class MnodeValue implements ExtCacheEntry {
     return (! isEntryExpired(Alarm.getCurrentTime()));
   }
 
+  /*
   @Override
   public long getCost()
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
+  */
   
-  @Override
   public int getHits()
   {
     return _hits;
+  }
+  
+  private static HashKey createAnyKey(int len)
+  {
+    byte []value = new byte[len];
+    
+    for (int i = 0; i < len; i++) {
+      value[i] = (byte) 0xff;
+    }
+    
+    return new HashKey(value); 
   }
 
   @Override

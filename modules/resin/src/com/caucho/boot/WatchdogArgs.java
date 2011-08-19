@@ -76,7 +76,7 @@ class WatchdogArgs
   private String _dynamicCluster;
   private String _dynamicAddress;
   private int _dynamicPort;
-  
+
   private boolean _is64bit;
 
   WatchdogArgs(String[] argv)
@@ -101,9 +101,9 @@ class WatchdogArgs
     _resinConf = _resinHome.lookup("conf/resin.conf");
     if (! _resinConf.canRead())
       _resinConf = _resinHome.lookup("conf/resin.xml");
-    
+
     _is64bit = CauchoSystem.is64Bit();
-    
+
     parseCommandLine(_argv);
   }
 
@@ -210,7 +210,7 @@ class WatchdogArgs
   {
     _resinHome = resinHome;
   }
-  
+
   boolean is64Bit()
   {
     return _is64bit;
@@ -258,7 +258,7 @@ class WatchdogArgs
 
   boolean isWatchdogConsole()
   {
-    return _startMode == StartMode.WATCHDOG;
+    return _startMode == StartMode.START_WITH_FOREGROUND;
   }
 
   StartMode getStartMode()
@@ -470,6 +470,9 @@ class WatchdogArgs
       else if ("deploy".equals(arg)) {
         _startMode = StartMode.DEPLOY;
       }
+      else if ("deploy-config".equals(arg)) {
+        _startMode = StartMode.DEPLOY_CONFIG;
+      }
       else if ("deploy-copy".equals(arg) || "copy".equals(arg)) {
         _startMode = StartMode.DEPLOY_COPY;
       }
@@ -491,6 +494,9 @@ class WatchdogArgs
       else if ("disable".equals(arg)) {
         _startMode = StartMode.DISABLE;
       }
+      else if ("disable-soft".equals(arg)) {
+        _startMode = StartMode.DISABLE_SOFT;
+      }
       else if ("enable".equals(arg)) {
         _startMode = StartMode.ENABLE;
       }
@@ -506,6 +512,9 @@ class WatchdogArgs
       else if ("jmx-list".equals(arg)) {
         _startMode = StartMode.JMX_LIST;
       }
+      else if ("jmx-dump".equals(arg)) {
+        _startMode = StartMode.JMX_DUMP;
+      }
       else if ("jmx-set".equals(arg)) {
         _startMode = StartMode.JMX_SET;
       }
@@ -520,6 +529,9 @@ class WatchdogArgs
       }
       else if ("log-level".equals(arg)) {
         _startMode = StartMode.LOG_LEVEL;
+      }
+      else if ("pdf-report".equals(arg)) {
+        _startMode = StartMode.PDF_REPORT;
       }
       else if ("profile".equals(arg)) {
         _startMode = StartMode.PROFILE;
@@ -561,6 +573,9 @@ class WatchdogArgs
       else if ("watchdog".equals(arg)) {
         _startMode = StartMode.WATCHDOG;
       }
+      else if ("start-with-foreground".equals(arg)) {
+        _startMode = StartMode.START_WITH_FOREGROUND;
+      }
       else if (_startMode != null) {
         _tailArgs.add(arg);
       }
@@ -576,18 +591,9 @@ class WatchdogArgs
 */  //#4605 (support before / after command option placement)
     }
 
-    if (_isHelp
-        && (_startMode == null
-            || _startMode == StartMode.CONSOLE
-            || _startMode == StartMode.STATUS
-            || _startMode == StartMode.START
-            || _startMode == StartMode.GUI
-            || _startMode == StartMode.STOP
-            || _startMode == StartMode.RESTART
-            || _startMode == StartMode.KILL
-            || _startMode == StartMode.SHUTDOWN
-            || _startMode == StartMode.WATCHDOG)) {
+    if (_isHelp && _startMode == null) {
       usage();
+
       System.exit(1);
     }
     else if (_startMode == null) {
@@ -595,6 +601,7 @@ class WatchdogArgs
                                + "\n  console - start Resin in console mode"
                                + "\n  status - watchdog status"
                                + "\n  start - start a Resin server"
+                               + "\n  start-with-foreground - start Resin server keeping parent JVM (OSX)"
                                + "\n  gui - start a Resin server with a GUI"
                                + "\n  stop - stop a Resin server"
                                + "\n  restart - restart a Resin server"
@@ -609,10 +616,12 @@ class WatchdogArgs
                                + "\n  undeploy - undeploys an application"
                                + "\n  heap-dump - produces a heap dump"
                                + "\n  thread-dump - produces a thread dump"
+                               + "\n  pdf-report - generates pdf report (Pro version only)"
                                + "\n  profile - profiles the system"
                                + "\n  list-restarts - lists server restart timestamps"
                                + "\n  log-level - sets a log level"
                                + "\n  jmx-list - lists MBeans, attributes, operations"
+                               + "\n  jmx-dump - dumps all MBean attributes and values"
                                + "\n  jmx-set - sets value on MBean's attribute"
                                + "\n  jmx-call - invokes a method on MBean"
                                + "\n  user-add - adds an admin user"
@@ -639,15 +648,16 @@ class WatchdogArgs
 
   private static void usage()
   {
-    System.err.println(L().l("usage: bin/resin.sh [-options] [console | status | start | gui | stop | restart | kill | shutdown | version]"));
+    System.err.println(L().l("usage: bin/resin.sh [-options] [console | status | start | gui | stop | restart | kill | shutdown | version | start-with-foreground]"));
     System.err.println(L().l("       bin/resin.sh [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
-    System.err.println(L().l("       bin/resin.sh [-options] [thread-dump | heap-dump | log-level | profile | jmx-list | jmx-call | jmx-set]"));
+    System.err.println(L().l("       bin/resin.sh [-options] [thread-dump | heap-dump | pdf-report | log-level | profile | jmx-list | jmx-dump | jmx-call | jmx-set]"));
     System.err.println(L().l("       bin/resin.sh [-options] [user-add | user-list | user-remove]"));
     System.err.println(L().l("       bin/resin.sh help <command>"));
     System.err.println(L().l(""));
     System.err.println(L().l("where options include:"));
     System.err.println(L().l("   -conf <file>          : select a configuration file"));
-    System.err.println(L().l("   -dynamic-server <cluster:address:port> : initialize a dynamic server"));
+    System.err.println(L().l("   -data-directory <dir> : select a resin-data directory"));
+    System.err.println(L().l("   -join <cluster>       : join a cluster as a dynamic server"));
     System.err.println(L().l("   -log-directory <dir>  : select a logging directory"));
     System.err.println(L().l("   -resin-home <dir>     : select a resin home directory"));
     System.err.println(L().l("   -root-directory <dir> : select a root directory"));
@@ -885,6 +895,12 @@ class WatchdogArgs
     }
 
     @Override
+    public Path getLogDirectory()
+    {
+      return WatchdogArgs.this.getLogDirectory();
+    }
+
+    @Override
     public Path getResinConf()
     {
       return WatchdogArgs.this.getResinConf();
@@ -942,27 +958,32 @@ class WatchdogArgs
   enum StartMode {
     CONSOLE,
     DEPLOY,
+    DEPLOY_CONFIG,
     DEPLOY_COPY,
     DEPLOY_LIST,
     DEPLOY_RESTART,
     DEPLOY_START,
     DEPLOY_STOP,
     DISABLE,
+    DISABLE_SOFT,
     ENABLE,
     GUI,
     HEAP_DUMP,
     JMX_CALL,
+    JMX_DUMP,
     JMX_LIST,
     JMX_SET,
     JSPC,
     KILL,
     LIST_RESTARTS,
     LOG_LEVEL,
+    PDF_REPORT,
     PROFILE,
     RESTART,
     THREAD_DUMP,
     SHUTDOWN,
     START,
+    START_WITH_FOREGROUND,
     STATUS,
     STOP,
     UNDEPLOY,

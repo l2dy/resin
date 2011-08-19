@@ -51,6 +51,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPOutputStream;
@@ -61,7 +64,9 @@ import java.util.zip.ZipOutputStream;
  * Abstract class for a log that rolls over based on size or period.
  */
 public class AbstractRolloverLog {
-  protected static final L10N L = new L10N(AbstractRolloverLog.class);
+  private static final L10N L = new L10N(AbstractRolloverLog.class);
+  private static final Logger log
+    = Logger.getLogger(AbstractRolloverLog.class.getName());
 
   // Milliseconds in an hour
   private static final long HOUR = 3600L * 1000L;
@@ -92,8 +97,7 @@ public class AbstractRolloverLog {
   private long _rolloverSize = DEFAULT_ROLLOVER_SIZE;
 
   // How often the rolloverSize should be checked
-  //private long _rolloverCheckPeriod = DEFAULT_ROLLOVER_CHECK_PERIOD;
-  private long _rolloverCheckPeriod = 120 * 1000;
+  private long _rolloverCheckPeriod = DEFAULT_ROLLOVER_CHECK_PERIOD;
 
   // How many archives are allowed.
   private int _rolloverCount;
@@ -105,10 +109,12 @@ public class AbstractRolloverLog {
   protected String _pathFormat;
 
   // private String _format;
+  
+  private volatile boolean _isInit;
 
   // The time of the next period-based rollover
   private long _nextPeriodEnd = -1;
-  private long _nextRolloverCheckTime = -1;
+  private final AtomicLong _nextRolloverCheckTime = new AtomicLong();
 
   // private long _lastTime;
 
@@ -122,9 +128,16 @@ public class AbstractRolloverLog {
   private WriteStream _os;
   private WriteStream _zipOut;
 
-  private boolean _isClosed;
-  private RolloverAlarm _rolloverListener;
+  private volatile boolean _isClosed;
+  private final RolloverAlarm _rolloverListener;
   private WeakAlarm _rolloverAlarm;
+  
+  protected AbstractRolloverLog()
+  {
+    _rolloverListener = new RolloverAlarm();
+    _rolloverAlarm = new WeakAlarm(_rolloverListener);
+  }
+
 
   /**
    * Returns the access-log's path.
@@ -275,6 +288,13 @@ public class AbstractRolloverLog {
       _rolloverCheckPeriod = period;
     else if (period > 0)
       _rolloverCheckPeriod = 1000;
+    
+    if (DAY < _rolloverCheckPeriod) {
+      log.info(this + " rollover-check-period "
+               + _rolloverCheckPeriod + "ms is longer than 24h");
+      
+      _rolloverCheckPeriod = DAY;
+    }
   }
 
   /**
@@ -335,15 +355,6 @@ public class AbstractRolloverLog {
       _nextPeriodEnd = nextRolloverTime(now);
     }
     
-    long nextDay = now + DAY;
-    
-    if (_nextPeriodEnd < _nextRolloverCheckTime && _nextPeriodEnd > 0) {
-      if (_nextPeriodEnd < nextDay)
-        _nextRolloverCheckTime = _nextPeriodEnd;
-      else
-        _nextRolloverCheckTime = nextDay;
-    }
-
     if (_archiveFormat != null || getRolloverPeriod() <= 0) {
     }
     else if (_rolloverCron != null)
@@ -354,50 +365,22 @@ public class AbstractRolloverLog {
       _archiveFormat = _rolloverPrefix + ".%Y%m%d.%H";
     else
       _archiveFormat = _rolloverPrefix + ".%Y%m%d.%H%M";
-
-    rolloverLog();
     
-    _rolloverListener = new RolloverAlarm();
-    _rolloverAlarm = new WeakAlarm(_rolloverListener);
-    
-    if (_nextPeriodEnd < 0 || nextDay < _nextPeriodEnd) {
-      _rolloverAlarm.queue(DEFAULT_ROLLOVER_CHECK_PERIOD);
-    }
-    else if (_nextPeriodEnd <= now) {
-      _rolloverAlarm.queue(0);
-    }
-    else {
-      _rolloverAlarm.queueAt(_nextPeriodEnd);
-    }
-  }
-  
-  private long nextRolloverTime(long time)
-  {
-    if (_rolloverCron != null)
-      return _rolloverCron.nextTime(time);
-    else
-      return Period.periodEnd(time, getRolloverPeriod());
-  }
+    _isInit = true;
 
-  public long getNextRolloverCheckTime()
-  {
-    if (_nextPeriodEnd < _nextRolloverCheckTime)
-      return _nextPeriodEnd;
-    else
-      return _nextRolloverCheckTime;
-  }
-
-  public boolean isRollover()
-  {
-    long now = Alarm.getCurrentTime();
-
-    return _nextPeriodEnd <= now || _nextRolloverCheckTime <= now;
+    _rolloverListener.requeue(_rolloverAlarm);
+    rollover();
   }
 
   public boolean rollover()
   {
-    if (isRollover()) {
-      rolloverLog();
+    long now = Alarm.getCurrentTime();
+
+    if (_nextPeriodEnd <= now || _nextRolloverCheckTime.get() <= now) {
+      _nextRolloverCheckTime.set(now + _rolloverCheckPeriod);
+
+      _rolloverWorker.wake();
+
       return true;
     }
     else
@@ -469,29 +452,23 @@ public class AbstractRolloverLog {
   }
 
   /**
-   * Check to see if we need to rollover the log.
-   *
-   * @param now current time in milliseconds.
-   */
-  protected void rolloverLog()
-  {
-    long now = Alarm.getCurrentTime();
-
-    if (_nextRolloverCheckTime <= now) {
-      _nextRolloverCheckTime = now + _rolloverCheckPeriod;
-
-      _rolloverWorker.wake();
-    }
-  }
-
-  /**
    * Called from rollover worker
    */
-  void rolloverLogImpl()
+  private void rolloverLogTask()
   {
     try {
-      _isRollingOver = true;
+      if (_isInit)
+        flush();
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
 
+    _isRollingOver = true;
+    
+    try {
+      if (! _isInit)
+        return;
+      
       Path savedPath = null;
 
       long now = Alarm.getCurrentTime();
@@ -503,7 +480,9 @@ public class AbstractRolloverLog {
       Path path = getPath();
 
       synchronized (_logLock) {
-        if (lastPeriodEnd <= now) {
+        flushTempStream();
+
+        if (lastPeriodEnd <= now && lastPeriodEnd > 0) {
           closeLogStream();
 
           savedPath = getSavedPath(lastPeriodEnd - 1);
@@ -513,11 +492,8 @@ public class AbstractRolloverLog {
 
           savedPath = getSavedPath(now);
         }
-
-        _nextRolloverCheckTime 
-          = Math.min(_nextRolloverCheckTime, _nextPeriodEnd);
       }
-
+      
       // archiving of path is outside of the synchronized block to
       // avoid freezing during archive
       if (savedPath != null) {
@@ -528,6 +504,8 @@ public class AbstractRolloverLog {
         _isRollingOver = false;
         flushTempStream();
       }
+      
+      _rolloverListener.requeue(_rolloverAlarm);
     }
   }
   
@@ -840,6 +818,14 @@ public class AbstractRolloverLog {
   {
     EnvironmentStream.logStderr(msg, e);
   }
+  
+  private long nextRolloverTime(long time)
+  {
+    if (_rolloverCron != null)
+      return _rolloverCron.nextTime(time);
+    else
+      return Period.periodEnd(time, getRolloverPeriod());
+  }
 
   /**
    * Closes the log, flushing the results.
@@ -849,7 +835,7 @@ public class AbstractRolloverLog {
   {
     _isClosed = true;
     
-    rolloverLog();
+    _rolloverWorker.wake();
     
     _rolloverWorker.destroy();
 
@@ -922,12 +908,18 @@ public class AbstractRolloverLog {
       _logLock.notifyAll();
     }
   }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _path + "]";
+  }
 
   class RolloverWorker extends TaskWorker {
     @Override
     public long runTask()
     {
-      rolloverLogImpl();
+      rolloverLogTask();
       
       return -1;
     }
@@ -941,14 +933,31 @@ public class AbstractRolloverLog {
         return;
 
       try {
-        rolloverLog();
+        _rolloverWorker.wake();
       } finally {
-        long nextDay = Alarm.getCurrentTime() + DAY;
+        alarm.queue(_rolloverCheckPeriod);
+      }
+    }
+    
+    void requeue(Alarm alarm)
+    {
+      if (isClosed() || alarm == null)
+        return;
+      
+      long now = Alarm.getCurrentTime();
+      
+      long nextCheckTime;
+      
+      if (getRolloverSize() <= 0 || _rolloverCheckPeriod <= 0)
+        nextCheckTime = now + DAY;
+      else
+        nextCheckTime = now + _rolloverCheckPeriod;
 
-        if (_nextPeriodEnd > 0 && _nextPeriodEnd < nextDay)
-          alarm.queueAt(_nextPeriodEnd);
-        else
-          alarm.queueAt(nextDay);
+      if (_nextPeriodEnd <= nextCheckTime) {
+        alarm.queueAt(_nextPeriodEnd);
+      }
+      else {
+        alarm.queueAt(nextCheckTime);
       }
     }
   }

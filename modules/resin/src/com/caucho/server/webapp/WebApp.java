@@ -174,6 +174,8 @@ import com.caucho.server.dispatch.SubInvocation;
 import com.caucho.server.dispatch.UrlMap;
 import com.caucho.server.dispatch.VersionInvocation;
 import com.caucho.server.host.Host;
+import com.caucho.server.http.StubServletRequest;
+import com.caucho.server.http.StubSessionContextRequest;
 import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
@@ -408,6 +410,8 @@ public class WebApp extends ServletContextImpl
   private long _activeWaitTime = 15000L;
 
   private long _idleTime = 2 * 3600 * 1000L;
+  
+  private boolean _isStartDisabled;
 
   private final Lifecycle _lifecycle;
 
@@ -423,7 +427,7 @@ public class WebApp extends ServletContextImpl
   private long _status500LastTime;
 
   //servlet 3.0
-  private boolean _metadataComplete = false;
+  private boolean _isMetadataComplete = false;
   private List<String> _pendingClasses = new ArrayList<String>();
   private Ordering _absoluteOrdering;
   private List<WebAppFragmentConfig> _webFragments;
@@ -889,15 +893,20 @@ public class WebApp extends ServletContextImpl
   public void setSchemaLocation(String location)
   {
   }
+  
+  public void setDisableStart(boolean isDisable)
+  {
+    _isStartDisabled = isDisable;
+  }
 
   public boolean isMetadataComplete()
   {
-    return _metadataComplete;
+    return _isMetadataComplete;
   }
 
   public void setMetadataComplete(boolean metadataComplete)
   {
-    _metadataComplete = metadataComplete;
+    _isMetadataComplete = metadataComplete;
   }
 
   @Configurable
@@ -2724,7 +2733,7 @@ public class WebApp extends ServletContextImpl
                             new AnnotationLiteral<Initialized>() {});
       */
 
-      if (! _metadataComplete)
+      if (! _isMetadataComplete)
         initWebFragments();
 
       WebAppController parent = null;
@@ -2783,9 +2792,12 @@ public class WebApp extends ServletContextImpl
       
       Class<?> cl = Class.forName(handler, false, getClassLoader());
       
-      if (cl != null) {
+      if (cl != null && cl.getMethods() != null) {
         getEnvironmentClassLoader().putResourceAlias("META-INF/faces-config.xml",
                                                      "META-INF/faces-config.xml.in");
+        
+        getEnvironmentClassLoader().putResourceAlias("META-INF/services/com.sun.faces.spi.injectionprovider",
+                                                     "META-INF/services/com.sun.faces.spi.injectionprovider.in");
       }
     } catch (Throwable e) {
       log.log(Level.FINE, e.toString(), e);
@@ -3350,8 +3362,13 @@ public class WebApp extends ServletContextImpl
 
     List<Class<?>> filters = new ArrayList<Class<?>>();
 
-    List<String> pendingClasses = new ArrayList<String>(_pendingClasses);
-    _pendingClasses.clear();
+    List<String> pendingClasses = new ArrayList<String>();
+    
+    // server/121e
+    if (! _isMetadataComplete) {
+      pendingClasses = new ArrayList<String>(_pendingClasses);
+      _pendingClasses.clear();
+    }
 
     for (String className : pendingClasses) {
       Class<?> cl = _classLoader.loadClass(className);
@@ -3482,6 +3499,11 @@ public class WebApp extends ServletContextImpl
       
       if (serverId != null)
         setAttribute("caucho.server-id", serverId);
+      
+      if (_isStartDisabled) {
+        isOkay = true;
+        return;
+      }
 
       _classLoader.start();
 
@@ -4577,7 +4599,8 @@ public class WebApp extends ServletContextImpl
       return 0;
   }
 
-  public String generateCookieDomain(HttpServletRequest request) {
+  public String generateCookieDomain(HttpServletRequest request)
+  {
     String serverName = request.getServerName();
 
     if (_cookieDomainPattern == null)
@@ -4602,6 +4625,32 @@ public class WebApp extends ServletContextImpl
                         boolean isClientDisconnect)
   {
     _controller.updateStatistics(time, readBytes, writeBytes, isClientDisconnect);
+  }
+  
+  //
+  // thread/cdi
+  //
+  
+  /**
+   * Runs a thread in a session context
+   */
+  public void runInSessionContext(String sessionId, Runnable task)
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader oldClassLoader = thread.getContextClassLoader();
+    ProtocolConnection serverRequest = TcpSocketLink.getCurrentRequest();
+    StubSessionContextRequest stubRequest;
+    
+    try {
+      stubRequest = new StubSessionContextRequest(this, sessionId);
+      
+      TcpSocketLink.setCurrentRequest(stubRequest);
+      
+      task.run();
+    } finally {
+      thread.setContextClassLoader(oldClassLoader);
+      TcpSocketLink.setCurrentRequest(serverRequest);
+    }
   }
 
   /**
@@ -4696,7 +4745,11 @@ public class WebApp extends ServletContextImpl
   @Override
   public void destroy()
   {
-    stop();
+    try {
+      stop();
+    } catch (Throwable e) {
+      log.log(Level.WARNING, e.toString(), e);
+    }
     
     if (! _lifecycle.toDestroy()) {
       return;

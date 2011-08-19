@@ -73,11 +73,12 @@ import com.caucho.env.lock.*;
 import com.caucho.env.log.LogSystem;
 import com.caucho.env.repository.AbstractRepository;
 import com.caucho.env.repository.LocalRepositoryService;
-import com.caucho.env.repository.RepositoryService;
+import com.caucho.env.repository.RepositorySystem;
 import com.caucho.env.repository.RepositorySpi;
 import com.caucho.env.service.*;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownSystem;
+import com.caucho.env.vfs.RepositoryScheme;
 import com.caucho.env.warning.WarningService;
 import com.caucho.java.WorkDir;
 import com.caucho.license.LicenseCheck;
@@ -506,6 +507,7 @@ public class Resin
       ResinVar resinVar = new ResinVar(getServerId(),
                                        getResinHome(),
                                        getRootDirectory(),
+                                       getLogDirectory(),
                                        getResinConf(),
                                        isProfessional(),
                                        null);
@@ -1051,7 +1053,16 @@ public class Resin
     RepositorySpi localRepository = localRepositoryService.getRepositorySpi();
 
     AbstractRepository repository = createRepository(localRepository);
-    RepositoryService.createAndAddService(repository);
+    RepositorySystem.createAndAddService(repository);
+    
+    // add the cluster repository
+    try {
+      RepositoryScheme.create("cluster-config", 
+                              getStage() + "/config/resin",
+                              RootDirectorySystem.getCurrentDataDirectory().lookup("config"));
+    } catch (Exception e) {
+      log().log(Level.WARNING, e.toString(), e);
+    }
   }
   
   protected AbstractRepository createRepository(RepositorySpi localRepository)
@@ -1444,7 +1455,7 @@ public class Resin
   {
     try {
       Environment.init();
-
+      
       validateEnvironment();
       
       ResinArgs args = new ResinArgs(argv);

@@ -49,6 +49,7 @@ import com.caucho.resin.WebAppEmbed;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webapp.WebApp;
+import com.caucho.server.webapp.WebAppContainer;
 import com.caucho.server.webapp.WebAppController;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -342,11 +343,14 @@ public class JspCompiler implements EnvironmentBean {
         rootDirectory = getAppDir();
 
       _resin = new ResinEmbed();
+      _resin.setRootDirectory(rootDirectory.getURL());
       
       WebAppEmbed webAppEmbed = new WebAppEmbed();
       webAppEmbed.setRootDirectory(rootDirectory.getURL());
+      webAppEmbed.setDisableStart(true);
       
       _resin.addWebApp(webAppEmbed);
+      // jsp/193h, #4397
       _resin.start();
       
       _webApp = webAppEmbed.getWebApp();
@@ -681,9 +685,11 @@ public class JspCompiler implements EnvironmentBean {
         if (args[i].equals("-app-dir")) {
           Path appDir = Vfs.lookup(args[i + 1]);
 
-          WebApp app = createWebApp(appDir);
+          WebApp webApp = createWebApp(appDir);
 
-          setWebApp(app);
+          if (webApp != null)
+            setWebApp(webApp);
+
           setAppDir(appDir);
 
           i += 2;
@@ -708,12 +714,12 @@ public class JspCompiler implements EnvironmentBean {
         else
           break;
       }
+      
+      WebApp webApp = getWebApp();
+      if (webApp != null && ! hasConf) {
+        Path appDir = webApp.getRootDirectory();
 
-      WebApp app = getWebApp();
-      if (app != null && ! hasConf) {
-        Path appDir = app.getRootDirectory();
-
-        DynamicClassLoader dynLoader = app.getEnvironmentClassLoader();
+        DynamicClassLoader dynLoader = webApp.getEnvironmentClassLoader();
         dynLoader.addLoader(new CompilingLoader(dynLoader, appDir.lookup("WEB-INF/classes")));
         dynLoader.addLoader(new DirectoryLoader(dynLoader, appDir.lookup("WEB-INF/lib")));
 
@@ -721,7 +727,7 @@ public class JspCompiler implements EnvironmentBean {
 
         if (webXml.canRead()) {
           try {
-            new Config().configureBean(app, webXml);
+            new Config().configureBean(webApp, webXml);
           } catch (Exception e) {
             log.log(Level.WARNING, e.toString(), e);
           }
@@ -730,18 +736,18 @@ public class JspCompiler implements EnvironmentBean {
 
       Path appDir = null;
 
-      if (app == null && getAppDir() != null) {
-        app = createWebApp(null);
+      if (webApp == null && getAppDir() != null) {
+        webApp = createWebApp(null);
 
-        if (app != null)
-          app.setRootDirectory(getAppDir());
-        setWebApp(app);
+        if (webApp != null)
+          webApp.setRootDirectory(getAppDir());
+        setWebApp(webApp);
       }
 
-      if (app != null) {
-        app.setCompileContext(true);
+      if (webApp != null) {
+        webApp.setCompileContext(true);
         
-        app.init();
+        webApp.init();
 
         appDir = getWebApp().getRootDirectory();
         setClassLoader(getWebApp().getClassLoader());
@@ -752,7 +758,7 @@ public class JspCompiler implements EnvironmentBean {
 
         if (getAppDir() == null && getWebApp() == null) {
           System.err.println(L.l("-app-dir must be specified for JspCompiler"));
-          return -1;
+          return 0;
         }
       }
 
@@ -884,6 +890,10 @@ public class JspCompiler implements EnvironmentBean {
       throws Exception
     {
       WebApp webApp = createWebApp(_rootDir);
+      
+      if (webApp == null)
+        throw new NullPointerException();
+      
       _program.configure(webApp);
       Config.init(webApp);
 

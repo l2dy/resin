@@ -709,6 +709,10 @@ table.data {
   border-collapse: collapse;
   empty-cells: hide;
 }
+
+table.sortable {
+
+}
 /*
 tr.ra {
   background: #f4f4f4;
@@ -726,6 +730,25 @@ tr.ra {
 tr.rb {
   background: #f0ece0;
 }
+/*
+tr.rta {
+  background: #b9b9b9;
+}
+
+tr.rtb {
+  background: #909090;
+}
+*/
+
+tr.rta {
+  background: #f6f2e8;
+}
+
+/*  background: #f0ece0; */
+tr.rtb {
+  background: #ece8dc;
+}
+
 .data td {
   padding: 3px 4px 3px 4px;
   border: thin solid grey;

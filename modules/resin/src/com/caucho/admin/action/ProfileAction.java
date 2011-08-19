@@ -31,6 +31,7 @@ package com.caucho.admin.action;
 import java.io.*;
 import java.text.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
 import com.caucho.config.ConfigException;
@@ -44,6 +45,34 @@ public class ProfileAction implements AdminAction
 
   private static final L10N L = new L10N(ProfileAction.class);
   
+  private AtomicLong _cancelledTime = new AtomicLong(-1);
+  
+  public void cancel()
+  {
+    _cancelledTime.compareAndSet(-1, Alarm.getCurrentTime());
+    
+    synchronized(this) {
+      this.notify();
+    }
+
+    Profile profile = Profile.createProfile();
+    
+    if (profile != null)
+      profile.stop();
+  }
+  
+  public void start(long period, int depth)
+  {
+    Profile profile = Profile.createProfile();
+
+    profile.stop();
+
+    profile.setPeriod(period);
+    profile.setDepth(depth);
+
+    profile.start();
+  }
+  
   public String execute(long activeTime, long period, int depth)
     throws ConfigException
   {
@@ -52,20 +81,17 @@ public class ProfileAction implements AdminAction
     if (profile.isActive()) {
       throw new ConfigException(L.l("Profile is still active"));
     }
-
-    profile.setPeriod(period);
-    profile.setDepth(depth);
-
+    
     long startedAt = Alarm.getCurrentTime();
-
-    profile.start();
-
-    long interruptedAt = -1;
-
+    
+    start(period, depth);
+    
     try {
-      Thread.sleep(activeTime);
+      synchronized (this) {
+        this.wait(activeTime);
+      }
     } catch (InterruptedException e) {
-      interruptedAt = Alarm.getCurrentTime();
+      _cancelledTime.compareAndSet(-1, Alarm.getCurrentTime());
     }
 
     profile.stop();
@@ -80,19 +106,21 @@ public class ProfileAction implements AdminAction
     }
     else {
       DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS");
+      
+      long cancelledTime = _cancelledTime.get();
 
-      if (interruptedAt < 0) {
+      if (cancelledTime < 0) {
         out.print(L.l("Profile started at {0}. Active for a total of {1}ms.",
                       dateFormat.format(new Date(startedAt)),
                       activeTime));
       }
       else {
         
-        long et = interruptedAt - startedAt;
+        long et = cancelledTime - startedAt;
         
-        out.print(L.l("Profile started at {0}, interrupted at {1}. Active for a total of {2}ms.",
+        out.print(L.l("Profile started at {0}, cancelled at {1}. Active for a total of {2}ms.",
                       dateFormat.format(new Date(startedAt)),
-                      dateFormat.format(new Date(interruptedAt)),
+                      dateFormat.format(new Date(cancelledTime)),
                       et));
       }
 
@@ -137,5 +165,117 @@ public class ProfileAction implements AdminAction
     out.flush();
 
     return buffer.toString();
+  }
+
+  /**
+   * @return
+   */
+  public String jsonProfile()
+  {
+    Profile profile = Profile.createProfile();
+    
+    if (profile == null)
+      return null;
+    
+    ProfileEntry []entries = profile.getResults();
+
+    if (entries == null || entries.length == 0) {
+      return null;
+    }
+    
+    StringBuilder sb = new StringBuilder();
+    sb.append("{");
+    
+    sb.append("\n  \"total_time\" : " + profile.getRunTime());
+    sb.append(",\n  \"ticks\" : " + profile.getTicks());
+    sb.append(",\n  \"depth\" : " + profile.getDepth());
+    sb.append(",\n  \"period\" : " + profile.getPeriod());
+    sb.append(",\n  \"end_time\" : " + profile.getEndTime());
+    
+    sb.append(",\n  \"profile\" :  [\n");
+    
+    for (int i = 0; i < entries.length; i++) {
+      if (i != 0)
+        sb.append(",\n");
+     
+      jsonEntry(sb, entries[i]);
+    }
+    sb.append("\n]");
+    
+    sb.append("}");
+ 
+    return sb.toString();
+  }
+  
+  private void jsonEntry(StringBuilder sb, ProfileEntry entry)
+  {
+    sb.append("{"
+              );
+    sb.append("\n  \"name\" : \"");
+    escapeString(sb, entry.getDescription());
+    sb.append("\"");
+    
+    sb.append(",\n  \"ticks\" : " + entry.getCount());
+    sb.append(",\n  \"state\" : \"" + entry.getState() + "\"");
+    
+    if (entry.getStackTrace() != null && entry.getStackTrace().size() > 0) {
+      jsonStackTrace(sb, entry.getStackTrace());
+    }
+
+    sb.append("\n}");
+  }
+  
+  private void jsonStackTrace(StringBuilder sb, 
+                              ArrayList<? extends StackEntry> stack)
+  {
+    sb.append(",\n  \"stack\" : ");
+    sb.append("[\n");
+    
+    int size = stack.size();
+    
+    for (int i = 0; i < size; i++) {
+      StackEntry entry = stack.get(i);
+      
+      if (i != 0)
+        sb.append(",\n");
+      
+      sb.append("  {");
+      
+      sb.append("\n    \"class\" : \"" + entry.getClassName() + "\"");
+      sb.append(",\n    \"method\" : \"" + entry.getMethodName() + "\"");
+      
+      if (entry.getArg() != null && ! "".equals(entry.getArg())) {
+        sb.append(",\n    \"arg\" : \"");
+        escapeString(sb, entry.getArg());
+        sb.append("\"");
+        
+      }
+      sb.append("\n  }");
+    }
+    sb.append("\n  ]");
+  }
+  
+  private void escapeString(StringBuilder sb, String value)
+  {
+    if (value == null)
+      return;
+    
+    int len = value.length();
+    
+    for (int i = 0; i < len; i++) {
+      char ch = value.charAt(i);
+      
+      switch (ch) {
+      case '"':
+        sb.append("\\\"");
+        break;
+      case '\\':
+        sb.append("\\\\");
+        break;
+      default:
+        sb.append(ch);
+        break;
+      }
+    }
   }
 }

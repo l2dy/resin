@@ -43,7 +43,6 @@ import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
-import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.Environment;
 import com.caucho.loader.LibraryLoader;
 import com.caucho.server.resin.ResinELContext;
@@ -181,177 +180,31 @@ public class ResinBoot {
     }
   }
 
+  BootCommand getCommand() {
+    return _commandMap.get(_args.getStartMode());
+  }
+
   boolean start()
     throws Exception
   {
-    if (_args.isStatus()) {
-      try {
-        String status = _client.statusWatchdog();
-
-        System.out.println(L().l("Resin/{0} status for watchdog at {1}:{2}",
-                                 VersionFactory.getVersion(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-        System.out.println(status);
-      } catch (Exception e) {
-        System.out.println(L().l("Resin/{0} can't retrieve status of -server '{1}' for watchdog at {2}:{3}.\n{4}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort(),
-                                 e.toString()));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isStart()) {
-      try {
-        _client.startWatchdog(_args.getArgv());
-
-        System.out.println(L().l("Resin/{0} started -server '{1}' for watchdog at {2}:{3}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-      } catch (Exception e) {
-        String eMsg;
-
-        if (e instanceof ConfigException)
-          eMsg = e.getMessage();
-        else
-          eMsg = e.toString();
-
-        System.out.println(L().l("Resin/{0} can't start -server '{1}' for watchdog at {2}:{3}.\n  {4}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort(),
-                                 eMsg));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isStop()) {
-      try {
-        _client.stopWatchdog();
-
-        System.out.println(L().l("Resin/{0} stopped -server '{1}' for watchdog at {2}:{3}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-      } catch (Exception e) {
-        System.out.println(L().l("Resin/{0} can't stop -server '{1}' for watchdog at {2}:{3}.\n{4}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort(),
-                                 e.toString()));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isKill()) {
-      try {
-        _client.killWatchdog();
-
-        System.out.println(L().l("Resin/{0} killed -server '{1}' for watchdog at {2}:{3}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-      } catch (Exception e) {
-        System.out.println(L().l("Resin/{0} can't kill -server '{1}' for watchdog at {2}:{3}.\n{4}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort(),
-                                 e.toString()));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isRestart()) {
-      try {
-        _client.restartWatchdog(_args.getArgv());
-
-        System.out.println(L().l("Resin/{0} restarted -server '{1}' for watchdog at {2}:{3}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-      } catch (Exception e) {
-        System.out.println(L().l("Resin/{0} can't restart -server '{1}'.\n{2}",
-                                 VersionFactory.getVersion(), _client.getId(),
-                                 e.toString()));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isShutdown()) {
-      try {
-        _client.shutdown();
-
-        System.out.println(L().l("Resin/{0} shutdown watchdog at {1}:{2}",
-                                 VersionFactory.getVersion(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort()));
-      } catch (Exception e) {
-        System.out.println(L().l("Resin/{0} can't shutdown watchdog at {1}:{2}.\n{3}",
-                                 VersionFactory.getVersion(),
-                                 _client.getWatchdogAddress(),
-                                 _client.getWatchdogPort(),
-                                 e.toString()));
-
-        log().log(Level.FINE, e.toString(), e);
-
-        System.exit(1);
-      }
-
-      return false;
-    }
-    else if (_args.isConsole()) {
-      return _client.startConsole() != 0;
-    }
-    else if (_args.isWatchdogConsole()) {
-      WatchdogManager.main(_args.getRawArgv());
-    }
-    else if (_args.isGui()) {
-      if (_ui != null && _ui.isVisible())
-        return true;
-      else if (_ui != null)
-        return false;
-
-      _ui = new ResinGUI(this, _client);
-      _ui.setVisible(true);
-
-      return true;
-    }
-    
     BootCommand command = _commandMap.get(_args.getStartMode());
-    
+
     if (command != null && _args.isHelp()) {
       command.usage();
-      
-      return false;
-    } else if (command != null) {
-      command.doCommand(_args, _client);
 
       return false;
     }
-    
+    else if (command != null && command.isRetry()) {
+      int code = command.doCommand(_args, _client);
+
+      return code != 0;
+    }
+    else if (command != null) {
+      int code = command.doCommand(_args, _client);
+
+      System.exit(code);
+    }
+
     throw new IllegalStateException(L().l("Unknown start mode"));
   }
 
@@ -377,19 +230,30 @@ public class ResinBoot {
       }
     }
 
+    ResinBoot boot = null;
+    BootCommand command = null;
     try {
-      ResinBoot boot = new ResinBoot(argv);
+      boot = new ResinBoot(argv);
+
+      command = boot.getCommand();
 
       while (boot.start()) {
         try {
-          synchronized (boot) {
-            boot.wait(5000);
+          synchronized (command) {
+            command.wait(5000);
           }
         } catch (Exception e) {
         }
       }
       
       System.exit(ExitCode.OK.ordinal());
+    } catch (BootArgumentException e) {
+      System.out.println(e.getMessage());
+
+      if (command != null)
+        command.usage();
+
+      System.exit(ExitCode.UNKNOWN_ARGUMENT.ordinal());
     } catch (ConfigException e) {
       System.out.println(e.getMessage());
 
@@ -418,23 +282,36 @@ public class ResinBoot {
   }
   
   static {
+    _commandMap.put(StartMode.CONSOLE, new ConsoleCommand());
     _commandMap.put(StartMode.DEPLOY_COPY, new DeployCopyCommand());
     _commandMap.put(StartMode.DEPLOY, new DeployCommand());
+    _commandMap.put(StartMode.DEPLOY_CONFIG, new DeployConfigCommand());
     _commandMap.put(StartMode.DEPLOY_LIST, new DeployListCommand());
     _commandMap.put(StartMode.DEPLOY_RESTART, new DeployRestartCommand());
-    _commandMap.put(StartMode.THREAD_DUMP, new DeployStartCommand());
     _commandMap.put(StartMode.DEPLOY_START, new DeployStartCommand());
     _commandMap.put(StartMode.DEPLOY_STOP, new DeployStopCommand());
     _commandMap.put(StartMode.DISABLE, new DisableCommand());
+    _commandMap.put(StartMode.DISABLE_SOFT, new DisableSoftCommand());
+    _commandMap.put(StartMode.THREAD_DUMP, new DeployStartCommand());
     _commandMap.put(StartMode.ENABLE, new EnableCommand());
+    _commandMap.put(StartMode.GUI, new GuiCommand());
     _commandMap.put(StartMode.HEAP_DUMP, new HeapDumpCommand());
     _commandMap.put(StartMode.JMX_CALL, new JmxCallCommand());
+    _commandMap.put(StartMode.JMX_DUMP, new JmxDumpCommand());
     _commandMap.put(StartMode.JMX_LIST, new JmxListCommand());
     _commandMap.put(StartMode.JMX_SET, new JmxSetCommand());
     _commandMap.put(StartMode.JSPC, new JspcCommand());
+    _commandMap.put(StartMode.KILL, new KillCommand());
     _commandMap.put(StartMode.LIST_RESTARTS, new ListRestartsCommand());
     _commandMap.put(StartMode.LOG_LEVEL, new LogLevelCommand());
+    _commandMap.put(StartMode.PDF_REPORT, new PdfReportCommand());
     _commandMap.put(StartMode.PROFILE, new ProfileCommand());
+    _commandMap.put(StartMode.RESTART, new RestartCommand());
+    _commandMap.put(StartMode.SHUTDOWN, new ShutdownCommand());
+    _commandMap.put(StartMode.START, new StartCommand());
+    _commandMap.put(StartMode.START_WITH_FOREGROUND, new StartWithForegroundCommand());
+    _commandMap.put(StartMode.STATUS, new StatusCommand());
+    _commandMap.put(StartMode.STOP, new StopCommand());
     _commandMap.put(StartMode.THREAD_DUMP, new ThreadDumpCommand());
 
     _commandMap.put(StartMode.UNDEPLOY, new UnDeployCommand());
@@ -442,5 +319,7 @@ public class ResinBoot {
     _commandMap.put(StartMode.USER_ADD, new AddUserCommand());
     _commandMap.put(StartMode.USER_LIST, new ListUsersCommand());
     _commandMap.put(StartMode.USER_REMOVE, new RemoveUserCommand());
+
+    _commandMap.put(StartMode.WATCHDOG, new WatchdogCommand());
   }
 }

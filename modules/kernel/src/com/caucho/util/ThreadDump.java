@@ -29,58 +29,91 @@
 
 package com.caucho.util;
 
-import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadInfo;
-import java.lang.management.ThreadMXBean;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.concurrent.atomic.AtomicLong;
+import java.lang.management.*;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
+import com.caucho.config.ConfigException;
+
 /**
- * Configuration for management.
+ * Generate a thread dump
  */
 public class ThreadDump
 {
   private static Logger log = Logger.getLogger(ThreadDump.class.getName());
 
-  private static final ThreadDump _threadDump = new ThreadDump();
-  private final AtomicLong _lastDump = new AtomicLong();
-
-  private ThreadDump()
+  private static AtomicReference<ThreadDump> _threadDumpRef = 
+    new AtomicReference<ThreadDump>();
+  
+  /**
+   * Returns the singleton instance, creating if necessary.   An instance of 
+   * com.caucho.server.admin.ProThreadDump will be returned if available and 
+   * licensed.  ProThreadDump includes the URI of the request the thread is
+   * processing, if applicable.
+   */
+  public static ThreadDump create()
   {
+    ThreadDump threadDump = _threadDumpRef.get();
+    
+    if (threadDump == null) {
+      try {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Class<?> threadDumpClass = 
+          Class.forName("com.caucho.server.admin.ProThreadDump", false, loader);
+        threadDump = (ThreadDump) threadDumpClass.newInstance();
+      } catch (ClassNotFoundException e) {
+        threadDump = new ThreadDump();
+      } catch (ConfigException e) {
+        threadDump = new ThreadDump();
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+      
+      _threadDumpRef.compareAndSet(null, threadDump);
+      threadDump = _threadDumpRef.get();
+    }
+    
+    return threadDump;
+  }
+  
+  protected ThreadDump()
+  {
+    
+  }
+  
+  /**
+   * Log all threads to com.caucho.util.ThreadDump at info level.  Uses cached 
+   * dump if recent (30s).
+   */
+  public void dumpThreads()
+  {
+    log.info(getThreadDump());
+  }
+  
+  /**
+   * Returns dump of all threads.  Uses cached dump if recent (30s).
+   */
+  public String getThreadDump()
+  {
+    return getThreadDump(false);
   }
 
   /**
-   * This method should only be called by a ManagerActor in
-   * response to a remote request for thread dump
-   *
-   * @return String representation of thread dump
+   * Log threads to com.caucho.util.ThreadDump at info level.  Optionally 
+   * uses cached dump.
+   * @param onlyActive if true only running threads are logged
    */
-  public static String getThreadDump()
+  public void dumpThreads(boolean onlyActive)
   {
-    return _threadDump.threadDumpImpl();
+    log.info(getThreadDump(onlyActive));
   }
 
-  public static void dumpThreads()
-  {
-    long timeout = 3600L * 1000L;
-
-    _threadDump.threadDump(timeout);
-  }
-
-  private void threadDump(long timeout)
-  {
-    long now = Alarm.getCurrentTime();
-    long lastDump = _lastDump.get();
-
-    if (lastDump + timeout < now
-        && _lastDump.compareAndSet(lastDump, now)) {
-      threadDumpImpl();
-    }
-  }
-
-  private String threadDumpImpl()
+  /**
+   * Returns dump of threads.  Optionally uses cached dump.
+   * @param onlyActive if true only running threads are logged
+   */
+  public String getThreadDump(boolean onlyActive)
   {
     ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
 
@@ -88,31 +121,34 @@ public class ThreadDump
     ThreadInfo []info = threadBean.getThreadInfo(ids, 32);
 
     StringBuilder sb = new StringBuilder();
-    sb.append("Thread Dump:\n");
+    sb.append("Thread Dump generated " + new Date(Alarm.getCurrentTime()));
 
     Arrays.sort(info, new ThreadCompare());
+    
     buildThreads(sb, info, Thread.State.RUNNABLE, false);
     buildThreads(sb, info, Thread.State.RUNNABLE, true);
-    buildThreads(sb, info, Thread.State.BLOCKED, false);
-    buildThreads(sb, info, Thread.State.WAITING, false);
-    buildThreads(sb, info, Thread.State.TIMED_WAITING, false);
-    buildThreads(sb, info, null, false);
+    if (! onlyActive) {
+      buildThreads(sb, info, Thread.State.BLOCKED, false);
+      buildThreads(sb, info, Thread.State.WAITING, false);
+      buildThreads(sb, info, Thread.State.TIMED_WAITING, false);
+      buildThreads(sb, info, null, false);
+    }
 
-    String threadDump = sb.toString();
-
-    log.info(threadDump);
-
-    return threadDump;
+    return sb.toString();
   }
 
-  private void buildThreads(StringBuilder sb,
-                            ThreadInfo []infoArray,
-                            Thread.State matchState,
-                            boolean isNative)
+  protected void buildThreads(StringBuilder sb,
+                              ThreadInfo []infoArray,
+                              Thread.State matchState,
+                              boolean isNative)
   {
-    for (ThreadInfo info : infoArray) {
+    for (int i = 0; i < infoArray.length; i++) {
+      ThreadInfo info = infoArray[i];
+
       if (info == null)
         continue;
+      
+      ThreadInfo nextInfo = i + 1 < infoArray.length ? infoArray[i + 1] : null;
 
       Thread.State state = info.getThreadState();
 
@@ -121,19 +157,22 @@ public class ThreadDump
         continue;
       }
 
-      if (state == matchState)
-        buildThread(sb, info);
+      if (state == matchState) {
+        buildThread(sb, info, nextInfo);
+      }
       else if (state == null
                && matchState != Thread.State.RUNNABLE
                && matchState != Thread.State.BLOCKED
                && matchState != Thread.State.WAITING
                && matchState != Thread.State.TIMED_WAITING) {
-        buildThread(sb, info);
+        buildThread(sb, info, nextInfo);
       }
     }
   }
 
-  private void buildThread(StringBuilder sb, ThreadInfo info)
+  protected void buildThread(StringBuilder sb, 
+                             ThreadInfo info,
+                             ThreadInfo nextInfo)
   {
     sb.append("\n\"");
     sb.append(info.getThreadName());
@@ -159,22 +198,10 @@ public class ThreadDump
     }
 
     sb.append("\n");
-
-    /*
-    Server server = Server.getCurrent();
-
-    if (server != null) {
-      TcpConnection conn = server.findConnectionByThreadId(info.getThreadId());
-
-      if (conn != null && conn.getRequest() instanceof AbstractHttpRequest) {
-        AbstractHttpRequest req = (AbstractHttpRequest) conn.getRequest();
-
-        if (req.getRequestURI() != null) {
-          sb.append("   ").append(req.getRequestURI()).append("\n");
-        }
-      }
-    }
-    */
+    
+    if (nextInfo != null
+        && threadCmpString(info).equals(threadCmpString(nextInfo)))
+      return;
 
     StackTraceElement []stackList = info.getStackTrace();
     if (stackList == null)
@@ -203,6 +230,197 @@ public class ThreadDump
     }
   }
 
+  public String jsonThreadDump()
+  {
+    StringBuilder sb = new StringBuilder();
+    
+    sb.append("{");
+    sb.append("\"thread_dump\" : {\n");
+    
+    ThreadMXBean threadBean = ManagementFactory.getThreadMXBean();
+
+    long []ids = threadBean.getAllThreadIds();
+    ThreadInfo []infoList = threadBean.getThreadInfo(ids, true, true);
+    
+    boolean isFirst = true;
+
+    for (ThreadInfo threadInfo : infoList) {
+      if (threadInfo == null)
+        continue;
+      
+      if (! isFirst) {
+        sb.append(",\n");
+      }
+      isFirst = false;
+      
+      jsonDumpThread(sb, threadInfo);
+    }
+    
+    sb.append("\n}");
+    sb.append("\n}");
+
+    return sb.toString();
+  }
+  
+  private void jsonDumpThread(StringBuilder sb, ThreadInfo info)
+  {
+    sb.append("\"" + info.getThreadId() + "\" : {");
+    
+    sb.append("\n  \"id\" : " + info.getThreadId());
+    
+    sb.append(",\n  \"name\" : \"");
+    escapeString(sb, info.getThreadName());
+    sb.append("\"");
+    
+    /*
+    sb.append(",\n  \"description\" : \"");
+    escapeString(sb, info.getDescription());
+    sb.append("\"");
+    */
+    
+    sb.append(",\n  \"state\" : \"" + info.getThreadState() + "\"");
+    
+    if (info.isInNative()) {
+      sb.append(",\n  \"native\" : true");
+    }
+    
+    if (info.getLockName() != null) {
+      sb.append(",\n  \"lock\" : {");
+      
+      sb.append("\n    \"name\" : \"");
+      escapeString(sb, info.getLockName());
+      sb.append("\"");
+      
+      sb.append(",\n    \"owner_id\" : " + info.getLockOwnerId());
+      
+      if (info.getLockOwnerName() != null) {
+        sb.append(",\n    \"owner_name\" : \"");
+        escapeString(sb, info.getLockOwnerName());
+        sb.append("\"");
+      }
+      
+      sb.append("\n  }");
+    }
+    
+    jsonDumpStackTrace(sb, info.getStackTrace());
+    jsonDumpMonitors(sb, info.getLockedMonitors())
+    ;
+    sb.append("\n}");
+  }
+
+  private void jsonDumpStackTrace(StringBuilder sb,
+                                  StackTraceElement []stackTrace)
+  {
+    if (stackTrace == null)
+      return;
+    
+    sb.append(",\n  \"stack\" : [\n");
+    
+    for (int i = 0; i < stackTrace.length; i++) {
+      StackTraceElement elt = stackTrace[i];
+      
+      if (i != 0)
+        sb.append(",\n");
+      
+      sb.append("  {");
+      
+      sb.append("\n    \"class\" : \"" + elt.getClassName() + "\"");
+      sb.append(",\n    \"method\" : \"" + elt.getMethodName() + "\"");
+      
+      if (elt.getFileName() != null) {
+        sb.append(",\n    \"file\" : \"" + elt.getFileName() + "\"");
+        sb.append(",\n    \"line\" : \"" + elt.getLineNumber() + "\"");
+      }
+      
+      if (elt.isNativeMethod())
+        sb.append(",\n    \"native\" : true");
+      
+      sb.append("\n  }");
+    }
+    
+    sb.append("]");
+  }
+  
+  private void jsonDumpMonitors(StringBuilder sb, 
+                                MonitorInfo[] lockedMonitors)
+  {
+    if (lockedMonitors == null || lockedMonitors.length == 0)
+      return;
+    
+    sb.append(",\n  \"monitors\" : [\n");
+    
+    for (int i = 0; i < lockedMonitors.length; i++) {
+      MonitorInfo info = lockedMonitors[i];
+      
+      if (i != 0)
+        sb.append(",\n");
+      
+      sb.append("  {\n");
+      
+      sb.append("    \"depth\" : " + info.getLockedStackDepth());
+      sb.append(",\n    \"class\" : \"" + info.getClassName() + "\"");
+      sb.append(",\n    \"hash\" : \"" + info.getIdentityHashCode() + "\"");
+      
+      sb.append("  }");
+    }
+    
+    sb.append("\n  ]");
+  }
+  
+  private void escapeString(StringBuilder sb, String value)
+  {
+    int len = value.length();
+    
+    for (int i = 0; i < len; i++) {
+      char ch = value.charAt(i);
+      
+      switch (ch) {
+      case '"':
+        sb.append("\\\"");
+        break;
+      case '\\':
+        sb.append("\\\\");
+        break;
+      default:
+        sb.append(ch);
+      }
+    }
+  }
+  
+  static String threadCmpString(ThreadInfo info)
+  {
+    if (info == null)
+      return "";
+    
+    StackTraceElement []stackList = info.getStackTrace();
+    
+    if (stackList == null)
+      return "";
+    
+    StringBuilder sb = new StringBuilder();
+    
+    if (info.getThreadState() == Thread.State.RUNNABLE)
+      sb.append("A-RUNNABLE");
+    else
+      sb.append(info.getThreadState());
+    
+    sb.append(" " + info.isInNative());
+    
+    for (int i = stackList.length - 1; i >= 0; i--) {
+      sb.append("\n").append(stackList[i].getClassName());
+      sb.append(".").append(stackList[i].getMethodName());
+      
+      if (stackList[i].getFileName() != null) {
+        sb.append("(").append(stackList[i].getFileName());
+        sb.append(".").append(stackList[i].getLineNumber());
+        sb.append(")");
+      }
+    }
+    
+    return sb.toString();
+    
+  }
+
   static class ThreadCompare implements Comparator<ThreadInfo> {
     public int compare(ThreadInfo a, ThreadInfo b)
     {
@@ -212,14 +430,16 @@ public class ThreadDump
         return -1;
       else if (b == null)
         return 1;
-      else if (a.getThreadState() != b.getThreadState())
-        return a.getThreadState().ordinal() - b.getThreadState().ordinal();
-      else if (a.isInNative() && ! b.isInNative())
-        return 1;
-      else if (b.isInNative() && ! a.isInNative())
-        return -1;
-      else
-        return a.getThreadName().compareTo(b.getThreadName());
+      
+      String cmpA = threadCmpString(a);
+      String cmpB = threadCmpString(b);
+      
+      int cmp = cmpA.compareTo(cmpB);
+      
+      if (cmp != 0)
+        return cmp;
+      
+      return a.getThreadName().compareTo(b.getThreadName());
     }
   }
 }

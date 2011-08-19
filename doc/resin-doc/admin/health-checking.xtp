@@ -427,17 +427,25 @@ once per period.</p>
 
 <include-defun name="health:DumpHeap"/>
 
+<include-defun name="health:DumpHprofHeap"/>
+
+<include-defun name="health:DumpJmx"/>
+
 <include-defun name="health:DumpThreads"/>
 
 <include-defun name="health:ExecCommand"/>
 
 <include-defun name="health:FailSafeRestart"/>
 
+<include-defun name="health:PdfReport"/>
+
 <include-defun name="health:Restart"/>
 
 <include-defun name="health:SendMail"/>
 
 <include-defun name="health:SetJmxAttribute"/>
+
+<include-defun name="health:Snapshot"/>
 
 <include-defun name="health:StartProfiler"/>
 
@@ -520,6 +528,8 @@ to execute only during a Resin lifecycle state change.</p>
 <include-defun name="health:OnStart"/>
 
 <include-defun name="health:OnStop"/>
+
+<include-defun name="health:OnAbnormalStop"/>
 
 <include-defun name="health:OnRestart"/>
 

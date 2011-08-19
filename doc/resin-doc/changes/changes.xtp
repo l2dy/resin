@@ -11,6 +11,55 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.21 - Aug 19, 2011">
+<ul>
+<li>env: data-source-definition ordering with JPA (#4712, rep by stoty)</li>
+<li>ssl: extra debugging output for openssl with disconnecting client (#4709, rep by Keith Fetterman)</li>
+<li>eclipse-plugin: install resin into version specific directory (#4693, rep by manishdevraj)</li>
+<li>resin-cli: introduced new command start-with-foreground (see launchd restrictions)</li>
+<li>resin-cli: unknown argument should fail resin start (#4689, rep alex)</li>
+<li>log: log rotation alarm refactor (#4680, rep by Steve Francis)</li>
+<li>rewrite: added &lt;resin:NotFound> (#4705, rep by Aaron Freeman)</li>
+<li>git: corrupted .git on startup (#4701, rep by Bill Au)</li>
+<li>cloud: added deploy-config and cluster-config: scheme (#4604)</li>
+<li>i18n: utf8writer issues with surrogate pairs (#4700, rep by SHinomiya Nobuaki)</li>
+<li>install: ./configure changes for Solaris cc (#4678, rep by nits4resin)</li>
+<li>logging: Resin logging was not working properly in IBM JDK (#4695, rep by Steve Francis)</li>
+<li>async: complete() should not dispatch a following GET (#4697, rep by Adrian Sutton)</li>
+<li>servlet: sendRedirect from filter needs to escape redirect URL (#4699, rep by jyung)</li>
+<li>session: maxInactiveInterval issues with persistent sessions and includes (#4692, rep by mnsh)</li>
+<li>jni: changed crc64/readdir code to user readdir_r (#4698, rep by Peter Mei)</li>
+<li>jsp: tag compilation issues with @Inject (#4690, rep by mnsh)</li>
+<li>cdi: @Disposes introspection needs to be lazy on binding (#4681, rep by Dirk Mahler)</li>
+<li>debian: updated resin/lib and resin/libexec64 (#4548, rep by dicr)</li>
+<li>health: change health.xml to dump snapshot (rep by Bill Au).</li>
+<li>servlet: added CsrfFilter (#4497, rep by Myeung Kyu Jang)</li>
+<li>cdi/ejb: DataSourceDefinition timing with JPA (#4488)</li>
+<li>vhost: i18n/idna parsing issues (#4583, rep by gfranz)</li>
+<li>cdi/servlet: add WebApp.runInSessionContext to support threads using session scope (#4049, rep by sweigersf)</li>
+<li>network: timeout issues with keepalive (#4683, rep by Amir Langer)</li>
+<li>jsp: incorrect jsp:param encoding of '&amp;' (#4685, rep by dicr)</li>
+<li>ejb/cdi: stateless decorators (#4630, rep by Chris)</li>
+<li>install: check for /usr/libexec/java_home in ./configure (#4572)</li>
+<li>servlet: request.getReader() mark/reset support (#3350, rep by karlgold)</li>
+<li>loader: added ClassLoader.getResource and ClassLoader.getResourceAsStream cache (#4082)</li>
+<li>logging: &lt;log-handler> needs to check for missing 'name' attribute (#4682)</li>
+<li>health: PdfReport needs to require the &lt;path> parameter (#4679, rep by Bill Au)</li>
+<li>jsf: jsf/resin integration when replacing jsf libraries in WEB-INF/lib (#4676, rep by cyttesen)</li>
+<li>ScheduledTask: add validation of ScheduledThreadPool (#4668, rep by Wesley Wu)</li>
+<li>servlet: add ThrottleFilter.getCurrent().addPoisonedIP(addr) (#4133, rep by Aaron Freeman)</li>
+<li>install: add resinctl.in which will be filled in with configured location from ./configure (#4579)</li>
+<li>jsp: JspCompiler should not start the web-app for compilation (#4397)</li>
+<li>load-balance: add StickyHost for sticky load balancing (#2969, rep Daniel Bjuhr)</li>
+<li>mod_caucho: restore 'backup' option for mod_caucho (#4673, rep by Halvor Utby)</li>
+<li>resin-admin: profile needs better message when JNI not compiled (#4652)</li>
+<li>install: ./configure changes for --disable-64bit to compile 32bit on a 64bit system (#4675, rep by nits4resin)</li>
+<li>load-balance: add disable-soft to disable round-robin, but not session dispatching (#3365, rep by Cameron Stokes)</li>
+<li>debian: resin-eclipselink was not added to debian files (#4547, rep by dicr)</li>
+<li>cache/db: mmap synchronization updates</li>
+</ul>
+</s2>
+
 <s2 title="4.0.20 - Jul 15, 2011">
 <ul>
 <li>health: PdfReport added</li>

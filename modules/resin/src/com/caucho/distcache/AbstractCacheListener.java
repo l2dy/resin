@@ -29,7 +29,7 @@
 
 package com.caucho.distcache;
 
-import javax.cache.CacheListener;
+import javax.cache.event.CacheEntryListener;
 
 /**
  * Provides a base class that can extended to override the method or methods of
@@ -39,11 +39,12 @@ import javax.cache.CacheListener;
  *       leased.
  */
 
-public abstract class AbstractCacheListener<K> implements CacheListener {
+public abstract class AbstractCacheListener<K> implements CacheEntryListener {
   protected AbstractCacheListener()
   {
   }
 
+  /*
   @Override
   public void onLoad(Object key)
   {
@@ -69,4 +70,5 @@ public abstract class AbstractCacheListener<K> implements CacheListener {
   public void onRemove(Object key)
   {
   }
+  */
 }

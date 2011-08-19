@@ -39,17 +39,21 @@ public class EnableCommand extends AbstractScalingCommand
   private static final L10N L = new L10N(EnableCommand.class);
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public int doCommand(WatchdogArgs args, WatchdogClient client)
+    throws BootArgumentException
   {
     if (! isPro()) {
-      System.out.println("command `enable' is only available with Resin Pro");
+      System.out.println("command 'enable' is only available with Resin Pro");
 
-      return;
+      return 3;
     }
 
     ResinScalingClient scalingClient = getScalingClient(args, client);
 
     String server = args.getDefaultArg();
+    
+    if (server == null)
+      server = args.getServerId();
 
     if (server == null)
       throw new ConfigException("server is not specified");
@@ -60,11 +64,13 @@ public class EnableCommand extends AbstractScalingCommand
 
     String message;
     if (state == null)
-      message = L.l("server `{0}' is not found", server);
+      message = L.l("server '{0}' is not found", server);
     else
-      message = L.l("server `{0}' state: {1}", server, state);
+      message = L.l("server '{0}' state: {1}", server, state);
 
     System.out.println(message);
+
+    return 0;
   }
 
   @Override

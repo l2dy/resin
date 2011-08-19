@@ -42,7 +42,8 @@ public class JspcCommand extends AbstractBootCommand
     = Logger.getLogger(JspcCommand.class.getName());
 
   @Override
-  public void doCommand(WatchdogArgs args, WatchdogClient client)
+  public int doCommand(WatchdogArgs args, WatchdogClient client)
+    throws BootArgumentException
   {
     List<String> jspcArgs = new ArrayList<String>();
 
@@ -86,8 +87,12 @@ public class JspcCommand extends AbstractBootCommand
       }
 
       System.out.println("resin jspc finished compiling " + builder.toString());
+
+      return 0;
     } catch (Exception e) {
       log.log(Level.SEVERE, e.getMessage(), e);
+
+      return 3;
     }
   }
 

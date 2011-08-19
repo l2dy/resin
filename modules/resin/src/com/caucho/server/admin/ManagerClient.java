@@ -196,6 +196,13 @@ public class ManagerClient
     return (String) query(query);
   }
 
+  public String doJmxDump()
+  {
+    JmxDumpQuery query = new JmxDumpQuery();
+
+    return (String) query(query);
+  }
+
   public String setLogLevel(String[] loggers, Level logLevel, long period)
   {
     LogLevelQuery query = new LogLevelQuery(loggers, logLevel, period);
@@ -239,8 +246,35 @@ public class ManagerClient
 
     return (String) query(query);
   }
+  
+  public String pdfReport(String path, 
+                          String report, 
+                          long period, 
+                          String logDirectory,
+                          long profileTime,
+                          long samplePeriod,
+                          boolean isSnapshot)
+  {
+    PdfReportQuery query = new PdfReportQuery(path, 
+                                              report, 
+                                              period, 
+                                              logDirectory,
+                                              profileTime,
+                                              samplePeriod,
+                                              isSnapshot);
+    
+    long timeout;
+    
+    if (profileTime > 0)
+      timeout = profileTime + 60000L;
+    else
+      timeout = 60000L;
+      
+    return (String) query(query, timeout);
+  } 
 
-  public String profile(long activeTime, long period, int depth) {
+  public String profile(long activeTime, long period, int depth) 
+  {
     ProfileQuery query = new ProfileQuery(activeTime, period, depth);
 
     return (String) query(query);
@@ -257,6 +291,16 @@ public class ManagerClient
   {
     try {
       return _bamClient.query(_managerAddress, query);
+    } catch (ServiceUnavailableException e) {
+      throw new ServiceUnavailableException("Manager service is not available, possibly because the resin.xml is missing a <resin:ManagerService> tag\n  " + e.getMessage(),
+                                            e);
+    }
+  }
+
+  protected Serializable query(Serializable query, long timeout)
+  {
+    try {
+      return _bamClient.query(_managerAddress, query, timeout);
     } catch (ServiceUnavailableException e) {
       throw new ServiceUnavailableException("Manager service is not available, possibly because the resin.xml is missing a <resin:ManagerService> tag\n  " + e.getMessage(),
                                             e);

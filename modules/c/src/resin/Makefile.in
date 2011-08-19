@@ -33,7 +33,7 @@ std.o		: resin.h Makefile
 boot.o		: resin.h Makefile
 profile.o	: resin.h Makefile
 symbol.o	: resin.h Makefile
-symbol.o	: resin.h Makefile
+crc64.o		: resin.h Makefile
 mmap_file.o	: resin.h Makefile
 heap.o	: resin.h Makefile
 stat.o	: resin.h Makefile

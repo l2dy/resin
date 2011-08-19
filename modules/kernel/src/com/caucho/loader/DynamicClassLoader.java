@@ -40,7 +40,6 @@ import java.security.CodeSource;
 import java.security.Permission;
 import java.security.PermissionCollection;
 import java.security.ProtectionDomain;
-import java.security.SecureClassLoader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -101,6 +100,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
   private JarLoader _jarLoader;
   private PathLoader _pathLoader;
+  
+  private boolean _isDirectoryLoader;
 
   private ArrayList<Path> _nativePath = new ArrayList<Path>();
 
@@ -157,7 +158,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   
   // marker for a closed classloader to help heap dumps
   @SuppressWarnings("unused")
-  private ZombieMarker _zombieMarker;
+  private ZombieClassLoaderMarker _zombieMarker;
 
   private boolean _hasNewLoader = true;
 
@@ -308,6 +309,23 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   {
     return _lifecycle.isDestroyed();
   }
+  
+  /**
+   * Returns true for a class-loader that contains a WEB-INF/classes
+   * style directory.
+   */
+  public boolean isDirectoryLoader()
+  {
+    if (_isDirectoryLoader)
+      return true;
+    
+    ClassLoader parent = getParent();
+
+    if (parent instanceof DynamicClassLoader)
+      return ((DynamicClassLoader) parent).isDirectoryLoader();
+    else
+      return false;
+  }
 
   /**
    * Adds a resource loader to the end of the list.
@@ -376,6 +394,10 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
     if (loader instanceof ClassLoaderListener)
       addListener(new WeakLoaderListener((ClassLoaderListener) loader));
+    
+    if (loader.isDirectoryLoader()) {
+      _isDirectoryLoader = true;
+    }
 
     _hasNewLoader = true;
   }
@@ -678,7 +700,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void addDependency(Dependency dependency)
   {
-    _dependencies.add(dependency);
+    if (_dependencies != null)
+      _dependencies.add(dependency);
   }
 
   public void addPermission(String path, String actions)
@@ -969,17 +992,34 @@ public class DynamicClassLoader extends java.net.URLClassLoader
 
   public String getHash()
   {
+    return String.valueOf(getHashCrc());
+  }
+
+  public long getHashCrc()
+  {
+    long crc64 = getParentHashCrc();
+    
     ArrayList<String> list = new ArrayList<String>();
     
-    buildClassPath(list);
-
-    long crc64 = 0;
+    buildSelfClassPath(list);
     
     for (int i = 0; i < list.size(); i++) {
       crc64 = Crc64.generate(crc64, list.get(i));
     }
     
-    return String.valueOf(crc64);
+    return crc64;
+  }
+  
+  private long getParentHashCrc()
+  {
+    ClassLoader parent = getParent();
+    
+    if (parent == null)
+      return 0;
+    else if (parent instanceof DynamicClassLoader)
+      return ((DynamicClassLoader) parent).getHashCrc();
+    else
+      return parent.hashCode();
   }
     
   /**
@@ -1000,6 +1040,13 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    * .jar and .zip files in the directory list.
    */
   public final void buildClassPath(ArrayList<String> cp)
+  {
+    buildParentClassPath(cp);
+   
+    buildSelfClassPath(cp);
+  }
+  
+  private void buildParentClassPath(ArrayList<String> cp)
   {
     ClassLoader parent = getParent();
 
@@ -1024,7 +1071,10 @@ public class DynamicClassLoader extends java.net.URLClassLoader
         }
       }
     }
-
+  }
+  
+  private void buildSelfClassPath(ArrayList<String> cp)
+  {
     buildImportClassPath(cp);
 
     ArrayList<Loader> loaders = getLoaders();
@@ -1807,7 +1857,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (name.startsWith("/"))
       name = name.substring(1);
 
-    String alias = getResourceAlias(name);
+    // String alias = getResourceAlias(name);
 
     /*
     if (name.endsWith("/"))
@@ -2140,6 +2190,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void stop()
   {
+    if (_zombieMarker == null)
+      _zombieMarker = new ZombieClassLoaderMarker();
   }
 
   /**
@@ -2147,8 +2199,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void destroy()
   {
-    _zombieMarker = new ZombieMarker();
-    
     try {
       stop();
     } catch (Throwable e) {

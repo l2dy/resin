@@ -73,6 +73,7 @@ class WatchdogClient
   private ActorSender _conn;
 
   private Boot _jniBoot;
+  private ResinGUI _ui;
 
   WatchdogClient(ResinSystem system,
                  BootResinConfig bootManager,
@@ -188,6 +189,19 @@ class WatchdogClient
     _watchdog.stop();
   }
 
+  public int startGui(GuiCommand command) throws IOException
+  {
+    if (_ui != null && _ui.isVisible())
+      return 1;
+    else if (_ui != null)
+      return 0;
+
+    _ui = new ResinGUI(command, this);
+    _ui.setVisible(true);
+
+    return 1;
+  }
+
   //
   // watchdog commands
   //
@@ -218,7 +232,7 @@ class WatchdogClient
     }
   }
 
-  public void startWatchdog(String []argv)
+  public Process startWatchdog(String []argv)
     throws ConfigException, IOException
   {
     if (getUserName() != null && ! hasBoot()) {
@@ -248,7 +262,7 @@ class WatchdogClient
         conn.query(WATCHDOG_ADDRESS, new WatchdogStartQuery(argv), BAM_TIMEOUT);
 
       if (status.isSuccess())
-        return;
+        return null;
 
       throw new ConfigException(L.l("{0}: watchdog start failed because of '{1}'",
                                     this, status.getMessage()));
@@ -261,7 +275,7 @@ class WatchdogClient
         conn.close();
     }
 
-    launchManager(argv);
+    return launchManager(argv);
   }
 
   public void stopWatchdog()
@@ -363,7 +377,7 @@ class WatchdogClient
     return _conn;
   }
 
-  public void launchManager(String []argv)
+  public Process launchManager(String []argv)
     throws IOException
   {
     System.out.println(L.l("Resin/{0} launching watchdog at {1}:{2}",
@@ -500,6 +514,8 @@ class WatchdogClient
 
     // stdIs.close();
     stdOs.close();
+
+    return process;
   }
 
   public static void appendEnvPath(Map<String,String> env,
