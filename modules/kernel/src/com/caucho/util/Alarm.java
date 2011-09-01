@@ -30,6 +30,8 @@
 package com.caucho.util;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLongFieldUpdater;
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -50,6 +52,9 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     = Logger.getLogger(Alarm.class.getName());
 
   private static final ClassLoader _systemLoader;
+  
+  private static AtomicReferenceFieldUpdater<Alarm,Alarm> _nextUpdater;
+  private static AtomicLongFieldUpdater<Alarm> _wakeTimeUpdater;
 
   private static final AlarmThread _alarmThread;
   private static final CoordinatorThread _coordinatorThread;
@@ -59,7 +64,8 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   private static volatile boolean _isCurrentTimeUsed;
   private static volatile boolean _isSlowTime;
 
-  private static final AlarmHeap _heap = new AlarmHeap();
+  // private static final AlarmHeap _heap = new AlarmHeap();
+  private static final AlarmClock _clock = new AlarmClock();
 
   private static final AtomicInteger _runningAlarmCount
     = new AtomicInteger();
@@ -69,17 +75,20 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   private static long _testTime;
   private static long _testNanoDelta;
   
-  private long _wakeTime;
+  private volatile Alarm _next;
+  private volatile long _wakeTime;
+  
   private AlarmListener _listener;
   private ClassLoader _contextLoader;
   private String _name;
 
   private boolean _isPriority = true;
 
-  private int _heapIndex = 0;
+  // private int _heapIndex = 0;
+  private int _bucket = -1;
 
   private volatile boolean _isRunning;
-
+  
   /**
    * Create a new wakeup alarm with a designated listener as a callback.
    * The alarm is not scheduled.
@@ -193,7 +202,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   {
     return _testTime == 0 && _alarmThread != null;
   }
-
+  
   /**
    * Returns the approximate current time in milliseconds.
    * Convenient for minimizing system calls.
@@ -284,19 +293,50 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     return _wakeTime;
   }
   
-  void setWakeTime(long wakeTime)
+  boolean setWakeTime(long prevWakeTime, long wakeTime)
   {
-    _wakeTime = wakeTime;
+    return _wakeTimeUpdater.compareAndSet(this, prevWakeTime, wakeTime);
+  }
+  
+  long getAndSetWakeTime(long wakeTime)
+  {
+    return _wakeTimeUpdater.getAndSet(this, wakeTime);
   }
   
   int getHeapIndex()
   {
-    return _heapIndex;
+    // return _heapIndex;
+    return 0;
+  }
+  
+  int getBucket()
+  {
+    return _bucket;
+  }
+  
+  void setBucket(int bucket)
+  {
+    _bucket = bucket;
   }
   
   void setHeapIndex(int index)
   {
-    _heapIndex = index;
+    // _heapIndex = index;
+  }
+  
+  Alarm getNext()
+  {
+    return _next;
+  }
+  
+  boolean setNext(Alarm prevNext, Alarm next)
+  {
+    return _nextUpdater.compareAndSet(this, prevNext, next);
+  }
+  
+  void setNext(Alarm next)
+  {
+    _next = next;
   }
 
   /**
@@ -336,7 +376,9 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
    */
   public boolean isQueued()
   {
-    return _heapIndex != 0;
+    // return _heapIndex != 0;
+    // return _wakeTime != 0;
+    return _bucket != 0;
   }
 
   /**
@@ -380,7 +422,9 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
   {
     long now = getCurrentTime();
     
-    boolean isNotify = _heap.queueAt(this, now + delta);
+    // boolean isNotify = _heap.queueAt(this, now + delta);
+    
+    boolean isNotify = _clock.queueAt(this, now + delta);
 
     if (isNotify) {
       _coordinatorThread.wake();
@@ -394,7 +438,9 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
    */
   public void queueAt(long wakeTime)
   {
-    boolean isNotify = _heap.queueAt(this, wakeTime);
+    // boolean isNotify = _heap.queueAt(this, wakeTime);
+    
+    boolean isNotify = _clock.queueAt(this, wakeTime);
 
     if (isNotify) {
       _coordinatorThread.wake();
@@ -406,8 +452,11 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
    */
   public void dequeue()
   {
+    /*
     if (_heapIndex > 0)
       _heap.dequeue(this);
+      */
+    _clock.dequeue(this);
   }
 
   /**
@@ -486,7 +535,8 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
 
   static void testClear()
   {
-    _heap.testClear();
+    // _heap.testClear();
+    _clock.testClear();
   }
   
   static void setTestTime(long time)
@@ -504,7 +554,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
       _currentTime = System.currentTimeMillis();
     }
 
-    Alarm alarm;
+    // Alarm alarm;
 
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -512,6 +562,8 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     try {
       long now = getCurrentTime();
       
+      _clock.extractAlarm(now, true);
+      /*
       while ((alarm = _heap.extractAlarm(now)) != null) {
 
         try {
@@ -520,6 +572,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
           e.printStackTrace();
         }
       }
+      */
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -601,14 +654,21 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     @Override
     public long runTask()
     {
+      if (isTest())
+        return -1;
+      
       _lastTime = getCurrentTime();
       
       while (true) {
-        dispatchAlarm();
-
-        long next = _heap.nextAlarmTime();
-        // #3548 - getCurrentTime for consistency
         long now = getCurrentTime();
+        
+        _clock.extractAlarm(now, false);
+        
+        long next = _clock.getNextAlarmTime();
+        
+        // long next = _heap.nextAlarmTime();
+        // #3548 - getCurrentTime for consistency
+        // long now = getCurrentTime();
 
         if (next < 0)
           return 120000L;
@@ -617,6 +677,7 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
       }
     }
 
+    /*
     private void dispatchAlarm()
     {
       try {
@@ -654,12 +715,14 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
         log.log(Level.WARNING, e.toString(), e);
       }
     }
+    */
   }
 
   static {
     ClassLoader systemLoader = null;
     AlarmThread alarmThread = null;
     CoordinatorThread coordinator = null;
+    ClassLoader loader = Alarm.class.getClassLoader();
 
     try {
       systemLoader = ClassLoader.getSystemClassLoader();
@@ -667,8 +730,6 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
     }
 
     try {
-      ClassLoader loader = Alarm.class.getClassLoader();
-      
       boolean isAlarmStart = System.getProperty("caucho.alarm.enable") != null;
 
       if (isAlarmStart
@@ -686,8 +747,14 @@ public class Alarm implements ThreadTask, ClassLoaderListener {
       // should display for security manager issues
       log.fine("Alarm not started: " + e);
     }
+    
+    _nextUpdater
+      = AtomicReferenceFieldUpdater.newUpdater(Alarm.class, Alarm.class, "_next");
+    _wakeTimeUpdater
+      = AtomicLongFieldUpdater.newUpdater(Alarm.class, "_wakeTime");
 
-    _systemLoader = systemLoader;
+    // _systemLoader = systemLoader;
+    _systemLoader = loader;
     _alarmThread = alarmThread;
     _coordinatorThread = coordinator;
 

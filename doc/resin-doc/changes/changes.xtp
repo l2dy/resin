@@ -7,9 +7,26 @@
 <s1 title="Resin Change Log">
 
 <ul>
-<li><a href="changes-2.xtp">Resin 2.1 changes</a></li>
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
+
+<s2 title="4.0.22 - Sep 1, 2011">
+<ul>
+<li>cluster deploy: .war issue on non-triad servers (#4743, rep by James Meyer)</li>
+<li>servlet/cache: added range limits</li>
+<li>webapp: add alias-url-regexp to match multiple context-paths to a web-app (#4720, rep by Sachidanand Shukla)</li>
+<li>command-line: added uptime to "status" command"
+<li>alarm: Alarm's base classloader needs to be Alarm not system classloader (#4707, rep by M Schmidt)</li>
+<li>snmp: added snmpwalk support (#3721, rep by D. Devota)</li>
+<li>jndi: EnvironmentModel dynamic copy needs ConcurrentHashMap (#4721)</li>
+<li>servlet: getAvailable() issue with POST (#4726, rep by Olaf Krische)</li>
+<li>install: --disable-64bit changes to ./configure and CFLAGS (#4714, rep by S. Patil)</li>
+<li>ejb: @Async needs to propagage security principal (#4710, rep by ddalessa)</li>
+<li>jsp: jsp:include/jsp:param parameter order issues (#4719, rep by Brandon Kearby)</li>
+<li>distribution: unbundled resin-eclipselink.jar from resin.jar (#4722, rep by Steffen Busch)</li>
+<li>async: request end needs to clear AsyncContext link (#4723, rep by Mark Price)</li>
+</ul>
+</s2>
 
 <s2 title="4.0.21 - Aug 19, 2011">
 <ul>

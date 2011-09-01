@@ -810,7 +810,7 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
    * Sets a cache entry
    */
   final MnodeValue saveUpdateTime(E entryKey,
-                            MnodeValue mnodeValue)
+                                  MnodeValue mnodeValue)
   {
     MnodeValue newEntryValue = saveLocalUpdateTime(entryKey, mnodeValue);
 
@@ -1332,8 +1332,9 @@ abstract public class AbstractCacheManager<E extends DistCacheEntry>
   public void close()
   {
     _isClosed = true;
-    
-    getDataBacking().close();
+
+    if (getDataBacking() != null)
+      getDataBacking().close();
   }
   
   public boolean isClosed()
