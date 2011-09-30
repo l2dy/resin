@@ -27,19 +27,19 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import javax.interceptor.InvocationContext;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
+import java.util.Set;
 
-public class DefaultCacheKeyGenerator implements CacheKeyGenerator
+public interface CacheMethodDetails<A extends Annotation>
 {
-  @Override
-  public CacheKey generateCacheKey(InvocationContext ic)
-  {
-    Object []parameters = ic.getParameters();
-    Object []paramCopy = new Object[parameters.length];
-    System.arraycopy( parameters, 0, paramCopy, 0, parameters.length);
-    
-    return new DefaultCacheKey(paramCopy);
-  }
+  public Method getMethod();
+  
+  public Set<Annotation> getAnnotations();
+  
+  public A getCacheAnnotation();
+  
+  public String getCacheName();
 }

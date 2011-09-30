@@ -278,17 +278,19 @@ class WatchdogClient
     return launchManager(argv);
   }
 
-  public void stopWatchdog()
+  public void stopWatchdog(String serverId)
   {
     ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, new WatchdogStopQuery(getId()), BAM_TIMEOUT);
+        conn.query(WATCHDOG_ADDRESS, 
+                   new WatchdogStopQuery(serverId),
+                   BAM_TIMEOUT);
 
       if (! status.isSuccess())
-        throw new RuntimeException(L.l("{0}: watchdog stop failed because of '{1}'",
-                                       this, status.getMessage()));
+        throw new RuntimeException(L.l("{0}: watchdog '{1}' stop failed because of '{2}'",
+                                       this, serverId, status.getMessage()));
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -296,14 +298,14 @@ class WatchdogClient
     }
   }
 
-  public void killWatchdog()
+  public void killWatchdog(String serverId)
     throws IOException
   {
     ActorSender conn = getConnection();
 
     try {
       ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, new WatchdogKillQuery(getId()), BAM_TIMEOUT);
+        conn.query(WATCHDOG_ADDRESS, new WatchdogKillQuery(serverId), BAM_TIMEOUT);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog kill failed because of '{1}'",
@@ -319,7 +321,7 @@ class WatchdogClient
     throws IOException
   {
     try {
-      stopWatchdog();
+      stopWatchdog(getId());
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
     }

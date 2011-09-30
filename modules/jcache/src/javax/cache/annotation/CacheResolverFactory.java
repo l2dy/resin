@@ -27,13 +27,13 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
 import java.lang.reflect.Method;
 
 import javax.cache.Cache;
 
-public interface CacheResolver
+public interface CacheResolverFactory
 {
   <K,V> Cache<K,V> resolveCacheManager(String cacheName, Method method);
 }

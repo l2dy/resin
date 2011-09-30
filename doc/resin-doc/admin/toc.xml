@@ -35,6 +35,9 @@
 
       <item link="cluster-server.xtp" title="Server"
             description="Server (JVM) configuration"/>
+
+      <item link="cluster-cloud.xtp" title="Cloud"
+            description="Dynamic Server (Cloud) configuration"/>
       
       <item link="clustering-deployment-ref.xtp" title="Clustered Deployment Reference"
         description="ANT and Maven clustered deployment API reference"/>
@@ -66,13 +69,18 @@
             description="Using the webapps/ directory for deployment"/>
       -->
     
+      <item link="deploy-cloud.xtp" title="cloud"
+            description="deploying .wars to the cluster/cloud"/>
+    
       <item link="deploy-command-line.xtp" title="command-line"
             description="deploying .wars using the Resin command line"/>
+
+      <!--
+      <item link="deploy-git-architecture.xtp" title=".git architecture"
+            description="Architecture of the clustered .git deployment"/>
+      -->
     
-      <item link="deploy-git-overview.xtp" title=".git overview"
-            description="Overview of the clustered .git deployment"/>
-    
-      <item link="deploy-tool-reference.xtp" title="ant/maven"
+      <item link="deploy-ant-maven.xtp" title="ant/maven"
             description="ant and maven deployment reference"/>
     </item>
     
@@ -81,8 +89,15 @@
     
       <item link="health-checking.xtp" title="Health Checking"
             description="Health checks, conditions, and remediation actions"/>
+      
       <item link="health-meters.xtp" title="Meters"
             description="Statistic graphing with meters"/>
+      
+      <item link="health-report.xtp" title="Report"
+            description="Health Reporting"/>
+      
+      <item link="health-watchdog.xtp" title="Watchdog"
+            description="Resin's watchdog process manages Resin servers and checks status for reliability."/>
             
     </item>
     
@@ -97,9 +112,6 @@
       <!--
       <item link="starting-resin-server-stages.xtp" title="Server Stages"/>
       -->
-      
-      <item link="starting-resin-watchdog.xtp" title="Watchdog"
-            description="Resin's watchdog process manages Resin servers and checks status for reliability."/>
 
       <item link="starting-resin-apache.xtp" title="Apache HTTPd"
             description="Using Apache HTTPd with Resin"/>

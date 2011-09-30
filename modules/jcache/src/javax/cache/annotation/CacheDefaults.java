@@ -27,11 +27,27 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import javax.interceptor.InvocationContext;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public interface CacheKeyGenerator
+import javax.enterprise.util.Nonbinding;
+
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface CacheDefaults
 {
-  public CacheKey generateCacheKey(InvocationContext invocationContext);
+  @Nonbinding
+  String cacheName() default "";
+  
+  @Nonbinding
+  Class<? extends CacheResolverFactory> cacheResolverFactory() 
+    default CacheResolverFactory.class;
+  
+  @Nonbinding
+  Class<? extends CacheKeyGenerator> cacheKeyGenerator()
+    default CacheKeyGenerator.class;
 }

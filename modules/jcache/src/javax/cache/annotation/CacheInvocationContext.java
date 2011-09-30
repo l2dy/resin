@@ -27,36 +27,17 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import java.lang.reflect.Method;
+import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import javax.cache.Cache;
-import javax.cache.CacheBuilder;
-import javax.cache.CacheManager;
+import javax.enterprise.util.Nonbinding;
 
-public class DefaultCacheResolver implements CacheResolver
+public interface CacheInvocationContext<A extends Annotation>
+  extends CacheMethodDetails<A>
 {
-  private final CacheManager cacheManager;
-  
-  public DefaultCacheResolver(CacheManager manager)
-  {
-    this.cacheManager = manager;
-  }
-  
-  @Override
-  @SuppressWarnings("unchecked")
-  public <K,V> Cache<K,V> resolveCacheManager(String cacheName,
-                                              Method method)
- {
-    Cache<K,V> cache = (Cache<K,V>) this.cacheManager.getCache(cacheName);
-    
-    if (cache != null)
-      return cache;
-    else {
-      CacheBuilder<K,V> cb = cacheManager.createCacheBuilder(cacheName);
-      
-      return cb.build();
-    }
- }
 }

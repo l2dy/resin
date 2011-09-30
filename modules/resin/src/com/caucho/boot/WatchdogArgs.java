@@ -274,11 +274,43 @@ class WatchdogArgs
   public String getArg(String arg)
   {
     for (int i = 0; i + 1 < _argv.length; i++) {
-      if (_argv[i].equals(arg) || _argv[i].equals("-" + arg))
+      if (_argv[i].equals(arg)
+          || _argv[i].equals("-" + arg))
         return _argv[i + 1];
     }
 
     return null;
+  }
+
+  public String getArgFlag(String arg)
+  {
+    for (int i = 0; i < _argv.length; i++) {
+      if (_argv[i].equals(arg)
+          || _argv[i].equals("-" + arg))
+        return _argv[i];
+      
+      else if (_argv[i].startsWith(arg + "=")) {
+        return _argv[i].substring(arg.length() + 1);
+      }
+      else if (_argv[i].startsWith("-" + arg + "=")) {
+        return _argv[i].substring(arg.length() + 2);
+      }
+    }
+
+    return null;
+  }
+  
+  public boolean getArgBoolean(String arg, boolean defaultValue)
+  {
+    String value = getArgFlag(arg);
+
+    if (value == null)
+      return defaultValue;
+    
+    if ("no".equals(value) || "false".equals(value))
+      return false;
+    else
+      return true;
   }
 
   public boolean hasOption(String option)

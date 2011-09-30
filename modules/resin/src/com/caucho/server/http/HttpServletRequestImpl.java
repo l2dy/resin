@@ -69,6 +69,7 @@ import com.caucho.network.listen.SocketLink;
 import com.caucho.network.listen.SocketLinkDuplexController;
 import com.caucho.remote.websocket.MaskedFrameInputStream;
 import com.caucho.remote.websocket.UnmaskedFrameInputStream;
+import com.caucho.remote.websocket.WebSocketConstants;
 import com.caucho.security.AbstractLogin;
 import com.caucho.security.Login;
 import com.caucho.server.cluster.Server;
@@ -1823,7 +1824,8 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
                                           getRemoteAddr()));
     }
 
-    if (! "Upgrade".equalsIgnoreCase(connection)) {
+    if (connection == null 
+        || connection.toLowerCase().indexOf("upgrade") < 0) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
       
       throw new IllegalStateException(L.l("HTTP Connection header '{0}' must be 'Upgrade', because the WebSocket protocol requires a Connection: Upgrade header.\n  remote-IP: {1}",
@@ -1849,7 +1851,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     String version = getHeader("Sec-WebSocket-Version");
 
-    String requiredVersion = "8";
+    String requiredVersion = WebSocketConstants.VERSION;
     if (! requiredVersion.equals(version)) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
       

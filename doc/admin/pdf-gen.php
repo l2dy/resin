@@ -7,6 +7,17 @@ define("STEP", 1);
 define("HOUR", 3600);
 define("DAY", 24 * HOUR);
 
+if (! $g_report)
+  $g_report = $_REQUEST["report"];
+
+if (! $g_title) {
+  $g_title = $_REQUEST["title"];
+}
+
+if (! $g_title) {
+  $g_title = $g_report;
+}  
+
 if ($g_is_snapshot || $_REQUEST["snapshot"]) {
   $snapshot = $g_mbean_server->lookup("resin:type=SnapshotService");
 
@@ -15,21 +26,24 @@ if ($g_is_snapshot || $_REQUEST["snapshot"]) {
     $snapshot->snapshotHeap();
     $snapshot->snapshotThreadDump();
 
-    if (! $profile_time)
-      $profile_time = $_REQUEST["profile_time"];
+    if ($profile_time || $_REQUEST["profile_time"]) {
+      
+      if (! $profile_time)
+        $profile_time = $_REQUEST["profile_time"];
+      
+      if (! $profile_depth)
+        $profile_depth = $_REQUEST["profile_depth"];
+      
+      if (! $profile_tick)
+        $profile_tick = $_REQUEST["profile_tick"];
 
-    if (! $profile_tick)
-      $profile_tick = $_REQUEST["profile_tick"];
+      if (! $profile_depth)
+        $profile_depth = 16;
+      
+      if (! $profile_tick)
+        $profile_tick = 100;
 
-    if (! $profile_tick)
-      $profile_tick = 100;
-
-    if ($profile_time > 0 && $profile_time <= 120) {
-      $snapshot->startProfile($profile_tick, 16);
-      sleep($profile_time);
-      $snapshot->stopProfile();
-
-      $snapshot->snapshotProfile();
+      $snapshot->snapshotProfile(($profile_time*1000), $profile_tick, $profile_depth);
     }
 
     sleep(2);
@@ -39,26 +53,32 @@ if ($g_is_snapshot || $_REQUEST["snapshot"]) {
 initPDF();
 startDoc();
 
+$pdf_name = $g_report;
+
 if (! $pdf_name) {
   $pdf_name = $_REQUEST["report"];
   
   if (! $pdf_name) {
-    $pdf_name = "Summary";
+    $pdf_name = "Snapshot";
   }
 }
 
 $mPage = getMeterGraphPage($pdf_name);
 
 if (! $mPage) {
-  $mPage = getMeterGraphPage("Summary");
-  $pageName = $pdf_name;
+  $mPage = getMeterGraphPage("Snapshot");
 }
-else {
-  $pageName = $mPage->name;
 
-  if (! $pageName)
-    $pageName = $pdf_name;
-}    
+$title = $g_title;
+
+if (! $title && $mPage)
+  $title = $mPage->name;
+
+if (! $title)
+  $title = $pdf_name;
+
+if (! $title)
+  $title = "Snapshot";
 
 $columns = $mPage->columns;
 
@@ -84,7 +104,7 @@ if ($columns==1) {
 	define("GRAPH_SIZE", new Size(200, 125));
 }
 
-$g_canvas->set_header_center("Report: $pageName");
+$g_canvas->set_header_center("Report: $g_title");
 
 if (! $period) {
   $period = $_REQUEST['period'] ? (int) $_REQUEST['period'] : ($mPage->period/1000);
@@ -127,7 +147,12 @@ $g_canvas->set_header_left("$si - " . $g_server->SelfServer->Name);
 $time = $_REQUEST["time"];
 
 if (! $time) {
-  $time = time() + 5;
+  if ($g_is_watchdog) {
+    $time = $g_server->StartTime->getTime() / 1000;
+  }
+  else {
+    $time = time() + 5;
+  }
 }  
 
 $g_end = $time;
@@ -147,7 +172,7 @@ $g_canvas->set_footer_left(date("Y-m-d H:i", $g_end));
 // $g_canvas->writeText(new Point(175,775), "Time at " . date("Y-m-d H:i", $time));
 
 
-$g_canvas->write_section("Report: $pageName");
+$g_canvas->write_section("Report: $g_title");
 
 if ($mPage->isSummary()) {
   admin_pdf_summary();
@@ -157,6 +182,22 @@ $g_canvas->setDataFontAndSize(8);
 $g_canvas->write_text_newline();
 $g_canvas->writeTextLine("Data from " . date("Y-m-d H:i", $g_start)
                          . " to " . date("Y-m-d H:i", $g_end));
+
+$start_message = $g_resin->getWatchdogStartMessage();
+
+$g_canvas->write_text_newline();
+$g_canvas->writeTextLine("Start message: " . $start_message);
+
+admin_pdf_log_messages($g_canvas,
+                       "Anomalies",
+                       "/^com.caucho.health.analysis/",
+                       $g_start, $g_end);
+
+admin_pdf_log_messages($g_canvas,
+                       "Log Messages",
+                       "//",
+                       $g_end - 30 * 60, $g_end,
+                       15);
 
 $full_names = $stat->statisticsNames();
 
@@ -201,27 +242,15 @@ $g_pdf->end_document();
 $document = $g_pdf->get_buffer();
 $length = strlen($document);
 
-$filename = "$pageName" . "_" . date("Ymd_Hi", $g_end) . ".pdf";
+$filename = "$g_title" . "_" . date("Ymd_Hi", $g_end) . ".pdf";
 
 header("Content-Type:application/pdf");
-
-
-
 header("Content-Length:" . $length);
-
-
-
 header("Content-Disposition:inline; filename=" . $filename);
-
-
 
 echo($document);
 
-
-
 unset($document);
-
-
 
 pdf_delete($g_pdf);
 

@@ -46,7 +46,6 @@ import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
 import javax.annotation.PostConstruct;
-import java.io.File;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
@@ -341,6 +340,7 @@ public class ManagerActor extends SimpleActor
       action.setPeriod(query.getPeriod());
 
     action.setSnapshot(query.isSnapshot());
+    action.setWatchdog(query.isWatchdog());
 
     if (query.getProfileTime() > 0)
       action.setProfileTime(query.getProfileTime());

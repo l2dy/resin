@@ -27,7 +27,7 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -35,23 +35,24 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 import javax.enterprise.util.Nonbinding;
-import javax.interceptor.InterceptorBinding;
+
 
 @Target({ElementType.METHOD, ElementType.TYPE })
 @Retention(RetentionPolicy.RUNTIME)
-@InterceptorBinding
-public @interface CacheRemoveEntry
+public @interface CacheResult
 {
   @Nonbinding
   String cacheName() default "";
   
   @Nonbinding
-  boolean afterInvocation() default true;
+  boolean skipGet() default false;
   
   @Nonbinding
-  Class<? extends CacheResolver> cacheResolver() default CacheResolver.class;
+  Class<? extends CacheResolverFactory> cacheResolverFactory()
+    default CacheResolverFactory.class;
   
   @Nonbinding
   Class<? extends CacheKeyGenerator> cacheKeyGenerator()
-    default DefaultCacheKeyGenerator.class;
+    default CacheKeyGenerator.class;
+
 }

@@ -27,18 +27,32 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 
-import javax.inject.Qualifier;
+import javax.cache.Cache;
+import javax.cache.CacheBuilder;
+import javax.cache.CacheManager;
 
-@Target({ElementType.TYPE })
-@Retention(RetentionPolicy.RUNTIME)
-@Qualifier
-public @interface CustomKeyGen
+public class DefaultCacheResolver implements CacheResolver
 {
+  private final CacheManager cacheManager;
+  
+  public DefaultCacheResolver(CacheManager manager)
+  {
+    this.cacheManager = manager;
+  }
+
+  /* (non-Javadoc)
+   * @see javax.cache.annotation.CacheResolver#resolveCache(javax.cache.annotation.CacheInvocationContext)
+   */
+  @Override
+  public <K, V> Cache<K, V> resolveCache(
+                                         CacheInvocationContext<Annotation> cacheInvocationContext)
+  {
+    // TODO Auto-generated method stub
+    return null;
+  }
 }

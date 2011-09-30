@@ -39,6 +39,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.db.lock.DatabaseLock;
 import com.caucho.util.FreeList;
 import com.caucho.util.L10N;
 import com.caucho.util.SyncCacheListener;
@@ -57,13 +58,13 @@ public final class Block implements SyncCacheListener {
   private static final FreeList<byte[]> _freeBuffers
     = new FreeList<byte[]>(256);
     
-  private static final FreeList<ReentrantReadWriteLock> _freeLocks
-    = new FreeList<ReentrantReadWriteLock>(256);
+  private static final FreeList<ReadWriteLock> _freeLocks
+    = new FreeList<ReadWriteLock>(256);
     
   private final BlockStore _store;
   private final long _blockId;
 
-  private ReentrantReadWriteLock _rwLock;
+  private ReadWriteLock _rwLock;
   private final Lock _readLock;
   private final Lock _writeLock;
   
@@ -75,6 +76,8 @@ public final class Block implements SyncCacheListener {
   private final AtomicInteger _useCount = new AtomicInteger(1);
 
   private final AtomicLong _dirtyRange = new AtomicLong(INIT_DIRTY);
+  
+  private volatile boolean _isFreeBuffer = true;
   
   private boolean _isFlushDirtyOnCommit;
   
@@ -103,12 +106,14 @@ public final class Block implements SyncCacheListener {
       log.log(Level.ALL, this + " create");
   }
   
-  private static ReentrantReadWriteLock allocateReadWriteLock()
+  private static ReadWriteLock allocateReadWriteLock()
   {
-    ReentrantReadWriteLock lock = _freeLocks.allocate();
+    ReadWriteLock lock = _freeLocks.allocate();
     
-    if (lock == null)
+    if (lock == null) {
       lock = new ReentrantReadWriteLock();
+      // lock = new DatabaseLock("block"); 
+    }
     
     return lock;
   }
@@ -238,7 +243,8 @@ public final class Block implements SyncCacheListener {
 
     synchronized (this) {
       if (_state.get().isValid()) {
-      } else if (_store.getBlockManager().copyDirtyBlock(this)) {
+      } 
+      else if (_store.getBlockManager().copyDirtyBlock(this)) {
         clearDirty();
         toValid();
       } else {
@@ -378,7 +384,7 @@ public final class Block implements SyncCacheListener {
   @Override
   public final void syncLruRemoveEvent()
   {
-    releaseUse();
+    syncRemoveEvent();
   }
   
   /**
@@ -387,6 +393,11 @@ public final class Block implements SyncCacheListener {
   @Override
   public final void syncRemoveEvent()
   {
+    if ((_useCount.get() > 1 || _dirtyRange.get() != INIT_DIRTY)
+        && toWriteQueued()) {
+      _store.getWriter().addDirtyBlockNoWake(this);
+    }
+    
     releaseUse();
   }
 
@@ -458,12 +469,17 @@ public final class Block implements SyncCacheListener {
   {
     if (block == this)
       return true;
+    
+    // For timing reasons, the buffer cannot be freed if it's also
+    // copied.
+    _isFreeBuffer = false;
       
     byte []buffer = _buffer;
+    byte []targetBuffer = block.getBuffer();
 
     // XXX: need to allocate state
-    boolean isValid = isValid();
-
+    boolean isValid = isValid() && buffer != null && targetBuffer != null;
+    
     if (isValid) {
       System.arraycopy(buffer, 0, block.getBuffer(), 0, buffer.length);
       block.toValid();
@@ -493,19 +509,22 @@ public final class Block implements SyncCacheListener {
       byte []buffer = _buffer;
       _buffer = null;
       
-      if (buffer != null) {
+      if (buffer != null && _isFreeBuffer) {
         _freeBuffers.free(buffer);
       }
       
-      ReentrantReadWriteLock lock = _rwLock;
+      ReadWriteLock lock = _rwLock;
       _rwLock = null;
       
       if (lock != null) {
+        /*
         if (lock.getReadLockCount() == 0
             && lock.getReadHoldCount() == 0
             && ! lock.isWriteLocked()) {
           _freeLocks.free(lock);
         }
+        */
+        _freeLocks.free(lock);
       }
     }
   }

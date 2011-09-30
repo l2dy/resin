@@ -64,12 +64,8 @@ public class PdfReportCommand extends AbstractManagementCommand
     if (samplePeriodArg != null)
       samplePeriod = Period.toPeriod(samplePeriodArg, 1);
 
-    boolean isSnapshot = true;
-
-    String snapshotArg = args.getArg("-snapshot");
-
-    if ("no".equals(snapshotArg) || "false".equals(snapshotArg))
-      isSnapshot = false;
+    boolean isSnapshot = args.getArgBoolean("-snapshot", true);
+    boolean isWatchdog = args.getArgBoolean("-watchdog", false);
 
     String result = managerClient.pdfReport(path,
                                             report,
@@ -77,7 +73,8 @@ public class PdfReportCommand extends AbstractManagementCommand
                                             logDirectory,
                                             profileTime,
                                             samplePeriod,
-                                            isSnapshot);
+                                            isSnapshot,
+                                            isWatchdog);
 
     System.out.println(result);
 
@@ -87,7 +84,7 @@ public class PdfReportCommand extends AbstractManagementCommand
   @Override
   public void usage()
   {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] pdf-report -user <user> -password <password> [-path <php path>] [-report <report name>] [-period <period>] [-logdir <log path>] [-snapshot <snapshot>] [-profile-time <profile time>] [-sample-period <sample-period>]"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] pdf-report -user <user> -password <password> [-path <php path>] [-report <report name>] [-period <period>] [-logdir <log path>] [-snapshot] [-profile-time <profile time>] [-sample-period <sample-period>]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
     System.err.println(L.l("   generates pdf report (Pro version only)"));

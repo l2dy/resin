@@ -27,33 +27,39 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import java.lang.annotation.Annotation;
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
+import java.util.Arrays;
 
-import javax.enterprise.util.Nonbinding;
-
-
-@Target({ElementType.METHOD, ElementType.TYPE })
-@Retention(RetentionPolicy.RUNTIME)
-public @interface CacheResult
+public class DefaultCacheKey implements CacheKey
 {
-  @Nonbinding
-  String cacheName() default "";
+  private static final long serialVersionUID = 1L;
   
-  @Nonbinding
-  boolean skipGet() default false;
+  private final Object []parameters;
+  private final int hashCode;
   
-  @Nonbinding
-  Class<? extends CacheResolver> cacheResolver() default CacheResolver.class;
-  
-  @Nonbinding
-  Class<? extends Annotation>[] cacheResolverQualifiers() default {};
-  
-  @Nonbinding
-  Class<? extends Annotation>[] cacheKeyGeneratorQualifiers() default {};
+  public DefaultCacheKey(Object []parameters)
+  {
+    this.parameters = parameters;
+    this.hashCode = Arrays.deepHashCode(parameters);
+  }
+
+  @Override
+  public int hashCode()
+  {
+    return this.hashCode;
+  }
+
+  @Override
+  public boolean equals(Object obj)
+  {
+    if (this == obj)
+      return true;
+    else if (obj == null || getClass() != obj.getClass())
+      return false;
+    
+    DefaultCacheKey key = (DefaultCacheKey) obj;
+    
+    return Arrays.deepEquals(this.parameters, key.parameters);
+  }
 }

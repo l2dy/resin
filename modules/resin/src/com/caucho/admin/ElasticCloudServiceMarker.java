@@ -27,31 +27,9 @@
  * @author Scott Ferguson
  */
 
-package javax.cache;
+package com.caucho.admin;
 
-public interface CacheStatisticsMBean
+
+public interface ElasticCloudServiceMarker
 {
-  public String getName();
-  
-  public String getStatus();
-  
-  public void clearStatistics();
-  
-  public long getEntryCount();
-  
-  public long getCacheHits();
-  
-  public float getCacheHitPercentage();
-  
-  public long getCacheMisses();
-  
-  public float getCacheMissPercentage();
-  
-  public long getCacheGets();
-  
-  public long getCachePuts();
-  
-  public long getCacheRemovals();
-  
-  public long getCacheEvictions();
 }

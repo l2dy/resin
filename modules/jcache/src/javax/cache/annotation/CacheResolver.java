@@ -27,10 +27,14 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.annotation;
 
-import java.io.Serializable;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 
-public interface CacheKey extends Serializable
+import javax.cache.Cache;
+
+public interface CacheResolver
 {
+  <K,V> Cache<K,V> resolveCache(CacheInvocationContext<Annotation> cacheInvocationContext);
 }

@@ -31,8 +31,6 @@ package com.caucho.util;
 
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.logging.Logger;
 
 import com.caucho.env.thread.ThreadPool;
@@ -47,6 +45,8 @@ public class AlarmClock {
   private static final Logger log
     = Logger.getLogger(AlarmClock.class.getName());
   private static final int CLOCK_PERIOD = 60 * 1000;
+  private static final int CLOCK_NEXT = 5 * 1000;
+  private static final int CLOCK_INTERVAL = 1;
   
   private Alarm []_clockArray = new Alarm[CLOCK_PERIOD];
   
@@ -61,6 +61,8 @@ public class AlarmClock {
     = new ArrayList<Alarm>();
   
   private Object _lock = new Object();
+  
+  private ThreadPool _threadPool = ThreadPool.getThreadPool();
 
   /**
    * Queue the alarm for wakeup.
@@ -138,7 +140,9 @@ public class AlarmClock {
   
   void dequeue(Alarm alarm)
   {
-    long oldWakeTime = alarm.getAndSetWakeTime(0);
+    // long oldWakeTime = alarm.getAndSetWakeTime(0);
+    // long oldWakeTime = alarm.getAndSetWakeTime(0);
+    alarm.setWakeTime(0);
     
     if (alarm.getBucket() >= 0)
       dequeueImpl(alarm);
@@ -222,37 +226,47 @@ public class AlarmClock {
   /**
    * Returns the next alarm ready to run
    */
-  public void extractAlarm(long now, boolean isTest)
+  public long extractAlarm(long now, boolean isTest)
   {
     long lastTime = _now.getAndSet(now);
     
-    _nextAlarmTime.set(now + CLOCK_PERIOD);
+    long nextTime = _nextAlarmTime.get();
+    
+    if (now < nextTime)
+      return nextTime;
+    
+    _nextAlarmTime.set(now + CLOCK_NEXT);
     
     int delta;
     
-    if (CLOCK_PERIOD <= now - lastTime)
+    delta = (int) (now - lastTime) / CLOCK_INTERVAL;
+    
+    if (CLOCK_PERIOD <= delta)
       delta = CLOCK_PERIOD;
-    else
-      delta = (int) (now - lastTime);
 
     Alarm alarm;
     
+    int bucket = getBucket(lastTime);
+    
     for (int i = 0; i <= delta; i++) {
-      long time = lastTime + i;
-      int bucket = getBucket(time);
+      // long time = lastTime + i;
 
       while ((alarm = extractNextAlarm(bucket, now, isTest)) != null) {
         dispatch(alarm, now, isTest);
       }
+      
+      bucket = (bucket + 1) % CLOCK_PERIOD;
     }
     
     while ((alarm = extractNextCurrentAlarm()) != null) {
       dispatch(alarm, now, isTest);
     }
     
-    updateNextAlarmTime(now);
+    long next = updateNextAlarmTime(now);
     
     _lastTime = now;
+    
+    return next;
   }
   
   private Alarm extractNextCurrentAlarm()
@@ -270,29 +284,33 @@ public class AlarmClock {
     }
   }
   
-  private void updateNextAlarmTime(long now)
+  private long updateNextAlarmTime(long now)
   {
     long nextTime = _nextAlarmTime.get();
     
     long delta = nextTime - now;
-    
+
     for (int i = 0; i < delta; i++) {
       long time = now + i;
+      
+      if (nextTime < time)
+        return nextTime;
       
       int bucket = getBucket(time);
       
       if (_clockArray[bucket] != null) {
-        long wakeTime = time;
-          
-        while (wakeTime < nextTime) {
-          if (_nextAlarmTime.compareAndSet(nextTime, wakeTime))
-            return;
+        // Alarm alarm = _clockArray[bucket];
+        
+        while (time < nextTime) {
+          if (_nextAlarmTime.compareAndSet(nextTime, time))
+            return time;
           
           nextTime = _nextAlarmTime.get();
         }
       }
     }
-
+    
+    return nextTime;
   }
   
   private void dispatch(Alarm alarm, long now, boolean isTest)
@@ -325,15 +343,14 @@ public class AlarmClock {
       }
     }
     else if (alarm.isPriority())
-      ThreadPool.getThreadPool().schedulePriority(alarm);
+      _threadPool.schedulePriority(alarm);
     else
-      ThreadPool.getThreadPool().schedule(alarm);
-
+      _threadPool.schedule(alarm);
   }
   
   private int getBucket(long time)
   {
-    return (int) (time % CLOCK_PERIOD);
+    return (int) (time / CLOCK_INTERVAL % CLOCK_PERIOD);
   }
 
   /**

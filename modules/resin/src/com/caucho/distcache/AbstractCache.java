@@ -50,7 +50,8 @@ import javax.cache.Cache;
 import javax.cache.CacheConfiguration;
 import javax.cache.CacheException;
 import javax.cache.CacheLoader;
-import javax.cache.CacheStatisticsMBean;
+import javax.cache.CacheManager;
+import javax.cache.CacheStatistics;
 import javax.cache.Status;
 import javax.cache.event.CacheEntryListener;
 import javax.cache.event.NotificationScope;
@@ -67,8 +68,9 @@ import com.caucho.server.distcache.DataStore;
 import com.caucho.server.distcache.DistCacheEntry;
 import com.caucho.server.distcache.DistributedCacheManager;
 import com.caucho.server.distcache.MnodeStore;
-import com.caucho.server.distcache.MnodeValue;
+import com.caucho.server.distcache.MnodeEntry;
 import com.caucho.util.HashKey;
+import com.caucho.util.Hex;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.vfs.StreamSource;
@@ -504,7 +506,11 @@ public class AbstractCache
   @Override
   public Object get(Object key)
   {
-    return getDistCacheEntry(key).get(_config);
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    Object value = entry.get(_config);
+    
+    return value;
   }
 
   /**
@@ -549,7 +555,7 @@ public class AbstractCache
   @Override
   public ExtCacheEntry peekExtCacheEntry(Object key)
   {
-    return getDistCacheEntry(key).getMnodeValue();
+    return getDistCacheEntry(key).getMnodeEntry();
   }
   
   public ExtCacheEntry getStatCacheEntry(Object key)
@@ -575,7 +581,7 @@ public class AbstractCache
   public void put(Object key, Object value)
   {
     getDistCacheEntry(key).put(value, _config);
-    
+
     notifyPut(key);
   }
 
@@ -649,9 +655,12 @@ public class AbstractCache
     return true;
   }
 
-  public void compareAndPut(HashKey key, HashKey value, long version)
+  public void compareAndPut(HashKey key, 
+                            HashKey value,
+                            long valueLength,
+                            long version)
   {
-    getDistCacheEntry(key).compareAndPut(version, value, _config);
+    getDistCacheEntry(key).compareAndPut(version, value, valueLength, _config);
     
     notifyPut(key);
   }
@@ -659,7 +668,7 @@ public class AbstractCache
   @Override
   public boolean putIfAbsent(Object key, Object value) throws CacheException
   {
-    HashKey NULL = MnodeValue.NULL_KEY;
+    HashKey NULL = MnodeEntry.NULL_KEY;
     
     HashKey result
       = getDistCacheEntry(key).compareAndPut(NULL, value, _config);
@@ -685,7 +694,7 @@ public class AbstractCache
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    HashKey oldHash = MnodeValue.ANY_KEY;
+    HashKey oldHash = MnodeEntry.ANY_KEY;
     
     HashKey result = entry.compareAndPut(oldHash, value, _config);
     
@@ -697,7 +706,7 @@ public class AbstractCache
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    HashKey oldHash = MnodeValue.ANY_KEY;
+    HashKey oldHash = MnodeEntry.ANY_KEY;
     
     HashKey result = entry.compareAndPut(oldHash, value, _config);
     
@@ -713,6 +722,21 @@ public class AbstractCache
    */
   @Override
   public boolean remove(Object key)
+  {
+    notifyRemove(key);
+    
+    getDistCacheEntry(key).remove(_config);
+    
+    return true;
+  }
+
+  /**
+   * Removes the entry from the cache.
+   *
+   * @return true if the object existed
+   */
+  @Override
+  public boolean remove(Object key, Object oldValue)
   {
     notifyRemove(key);
     
@@ -759,12 +783,14 @@ public class AbstractCache
    */
   protected DistCacheEntry getDistCacheEntry(Object key)
   {
-    DistCacheEntry cacheEntry = _entryCache.get(key);
+    DistCacheEntry cacheEntry = null;
+    
+    // cacheEntry = _entryCache.get(key);
 
     if (cacheEntry == null) {
       cacheEntry = _manager.getCacheEntry(key, _config);
 
-      _entryCache.put(key, cacheEntry);
+      // _entryCache.put(key, cacheEntry);
     }
 
     return cacheEntry;
@@ -851,7 +877,8 @@ public class AbstractCache
    */
   @Override
   public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            NotificationScope scope)
+                                            NotificationScope scope,
+                                            boolean synchronous)
   {
     _listeners.add(listener);
     
@@ -862,8 +889,7 @@ public class AbstractCache
    * Removes a listener from the cache.
    */
   @Override
-  public boolean unregisterCacheEntryListener(CacheEntryListener listener,
-                                              NotificationScope scope)
+  public boolean unregisterCacheEntryListener(CacheEntryListener listener)
   {
     _listeners.remove(listener);
     
@@ -874,7 +900,7 @@ public class AbstractCache
    * Returns the CacheStatistics for this cache.
    */
   @Override
-  public CacheStatisticsMBean getCacheStatistics()
+  public CacheStatistics getCacheStatistics()
   {
     return null; // this;
   }
@@ -1021,6 +1047,8 @@ public class AbstractCache
     _isClosed = true;
     
     _localManager.remove(_guid);
+    
+    _manager.closeCache(_guid);
   }
 
   private void initName(String name)
@@ -1142,7 +1170,7 @@ public class AbstractCache
     DistCacheSystem cacheService = DistCacheSystem.getCurrent();
 
     if (cacheService == null)
-      throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a clustered environment",
+      throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a Resin environment",
                                     getClass().getSimpleName()));
 
     _manager = cacheService.getDistCacheManager();
@@ -1264,16 +1292,6 @@ public class AbstractCache
   }
 
   /* (non-Javadoc)
-   * @see javax.cache.Cache#getCacheName()
-   */
-  @Override
-  public String getCacheName()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
    * @see javax.cache.Cache#getConfiguration()
    */
   @Override
@@ -1282,12 +1300,18 @@ public class AbstractCache
     // TODO Auto-generated method stub
     return null;
   }
+  
+  @Override
+  public CacheManager getCacheManager()
+  {
+    return null;
+  }
 
   /* (non-Javadoc)
    * @see javax.cache.Cache#load(java.lang.Object, javax.cache.CacheLoader, java.lang.Object)
    */
   @Override
-  public Future load(Object key, CacheLoader loader, Object arg)
+  public Future load(Object key)
       throws CacheException
   {
     // TODO Auto-generated method stub
@@ -1298,7 +1322,7 @@ public class AbstractCache
    * @see javax.cache.Cache#loadAll(java.util.Collection, javax.cache.CacheLoader, java.lang.Object)
    */
   @Override
-  public Future loadAll(Collection keys, CacheLoader loader, Object arg)
+  public Future loadAll(Collection keys)
       throws CacheException
   {
     // TODO Auto-generated method stub

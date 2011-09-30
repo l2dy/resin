@@ -9,10 +9,19 @@
 
   <chapter title="Deployment">
     <linked-section link="admin/deploy.xtp" />
-    <linked-section link="admin/deploy-command-line.xtp" />
-    <linked-section link="admin/deploy-git-overview.xtp" />
-    <linked-section link="admin/deploy-tool-reference.xtp" />
   </chapter>
+  
+  <chapter title="Deployment: Cloud">
+    <linked-section link="admin/deploy-cloud.xtp" />
+  </chapter>
+
+  <chapter title="Deployment: Command-Line">
+    <linked-section link="admin/deploy-command-line.xtp" />
+  </chapter>
+    <!--
+    <linked-section link="admin/deploy-git-architecture.xtp" />
+    <linked-section link="admin/deploy-ant-maven.xtp" />
+    -->
 
   <chapter title="Clustering">
     <linked-section link="admin/clustering-overview.xtp" />
@@ -22,7 +31,7 @@
     <linked-section link="admin/cluster-server.xtp" />
   </chapter>
 
-  <chapter title="Clustering: Elastic Server (Cloud)">
+  <chapter title="Clustering: Dynamic Server (Cloud)">
     <linked-section link="admin/cluster-cloud.xtp" />
   </chapter>
 
@@ -43,15 +52,22 @@
     <linked-section link="admin/database.xtp" />
   </chapter>
 
-  <chapter title="Health Checks and Meters">
+  <chapter title="Health: Checks and Meters">
     <linked-section link="admin/health-checking.xtp" />
     <linked-section link="admin/health-meters.xtp" />
+  </chapter>
+
+  <chapter title="Health: Report">
+    <linked-section link="admin/health-report.xtp" />
+  </chapter>
+
+  <chapter title="Health: Watchdog">
+    <linked-section link="admin/health-watchdog.xtp" />
   </chapter>
 
   <chapter title="Installation">
     <linked-section link="admin/starting-resin-install.xtp" />
     <linked-section link="admin/starting-resin-command-line.xtp" />
-    <linked-section link="admin/starting-resin-watchdog.xtp" />
     <linked-section link="admin/starting-resin-apache.xtp" />
     <linked-section link="admin/starting-resin-iis-7.xtp" />
     <linked-section link="admin/starting-resin-licenses.xtp" />
@@ -59,10 +75,6 @@
 
   <chapter title="Logging">
     <linked-section link="admin/logging.xtp" />
-  </chapter>
-  
-  <chapter title="URL Rewriting and Dispatching">
-    <linked-section link="admin/http-rewrite.xtp" />
   </chapter>
 
   <chapter title="Security">
@@ -81,6 +93,10 @@
     <linked-section link="admin/http-server.xtp" />
   </chapter>
   
+  <chapter title="Web Server: URL Rewriting and Dispatch">
+    <linked-section link="admin/http-rewrite.xtp" />
+  </chapter>
+  
   <chapter title="Web Server: Virtual Hosts">
     <linked-section link="admin/http-virtual-hosts.xtp" />
   </chapter>
@@ -88,7 +104,7 @@
   <chapter title="Web Server: Web Apps">
     <linked-section link="admin/http-web-apps.xtp" />
   </chapter>
-  
+
   <chapter title="Web Server: HTTP Proxy Cache">
     <linked-section link="admin/http-proxy-cache.xtp" />
   </chapter>
@@ -106,4 +122,5 @@
   <chapter title="Reference">
     <linked-section link="reference.xtp" />
   </chapter>
+
 </book>

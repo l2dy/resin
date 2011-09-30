@@ -396,14 +396,29 @@ public class WebAppContainer
     }
     */
 
-    WebAppSingleDeployGenerator deploy
-      = new WebAppSingleDeployGenerator(_appDeploySpi, this, config);
-
-    deploy.deploy();
-
-    _appDeploy.add(deploy);
+    WebAppSingleDeployGenerator deployGenerator = createDeployGenerator(config);
+      
+    addWebApp(deployGenerator);
+  }
+  
+  public WebAppSingleDeployGenerator createDeployGenerator(WebAppConfig config)
+  {
+    return new WebAppSingleDeployGenerator(_appDeploySpi, this, config);
+  }
+  
+  public void addWebApp(WebAppSingleDeployGenerator deployGenerator)
+  {
+    deployGenerator.deploy();
+    
+    _appDeploy.add(deployGenerator);
 
     clearCache();
+  }
+  
+  public void removeWebApp(WebAppSingleDeployGenerator deployGenerator)
+  {
+    _appDeploy.remove(deployGenerator);
+    deployGenerator.destroy();
   }
 
   /**
@@ -1233,6 +1248,13 @@ public class WebAppContainer
    */
   public WebApp getErrorWebApp()
   {
+    if (_errorWebApp == null) {
+      WebApp defaultWebApp = findWebAppByURI("/");
+      
+      if (defaultWebApp != null)
+        return defaultWebApp;
+    }
+    
     synchronized (this) {
       if (_errorWebApp == null) {
         _errorWebApp = createErrorWebApp();
@@ -1244,12 +1266,6 @@ public class WebAppContainer
   
   private WebApp createErrorWebApp()
   {
-    WebApp defaultWebApp = findWebAppByURI("/");
-      
-    if (defaultWebApp != null) {
-      return defaultWebApp;
-    }
-      
     Thread thread = Thread.currentThread();
     ClassLoader loader = thread.getContextClassLoader();
     try {

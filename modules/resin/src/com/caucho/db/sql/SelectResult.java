@@ -1259,6 +1259,10 @@ public class SelectResult {
       _tempBuffers[i] = null;
       _buffers[i] = null;
     }
+    
+    for (int i = _stores.length - 1; i >= 0; i--) {
+      _stores[i] = null;
+    }
 
     _order = null;
     _orderIndex = null;

@@ -645,7 +645,9 @@ public class Resin
     if ("".equals(serverId))
       serverId = "default";
     
-    Config.setProperty("serverId", serverId);
+    //Config.setProperty("serverId", serverId);
+    ClassLoader classLoader = ClassLoader.getSystemClassLoader();
+    Config.setProperty("serverId", serverId, classLoader);
 
     _serverId = serverId;
     _serverIdLocal.set(serverId);

@@ -22,7 +22,7 @@
   <!--
      - save jmx information on start.
     -->
-  <health:DumpJmx>
+  <health:DumpJmx async="true">
     <health:OnStart/>
   </health:DumpJmx>
 
@@ -152,6 +152,10 @@
     <objectName>java.lang:type=OperatingSystem</objectName>
     <attribute>OpenFileDescriptorCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>OS|Process|File Descriptor Count</meter-name>
+  </health:AnomalyAnalyzer>
    
   <health:JmxMeter>
     <name>JVM|Memory|Heap Memory Used</name>
@@ -206,12 +210,20 @@
     <objectName>java.lang:type=Threading</objectName>
     <attribute>ThreadCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>JVM|Thread|JVM Thread Count</meter-name>
+  </health:AnomalyAnalyzer>
   
   <health:JmxMeter>
     <name>JVM|Thread|JVM Runnable Count</name>
     <objectName>resin:type=JvmThreads</objectName>
     <attribute>RunnableCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>JVM|Thread|JVM Runnable Count</meter-name>
+  </health:AnomalyAnalyzer>
   
   <health:JmxMeter>
     <name>JVM|Thread|JVM Native Count</name>
@@ -224,12 +236,20 @@
     <objectName>resin:type=JvmThreads</objectName>
     <attribute>WaitingCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>JVM|Thread|JVM Waiting Count</meter-name>
+  </health:AnomalyAnalyzer>
   
   <health:JmxMeter>
     <name>JVM|Thread|JVM Blocked Count</name>
     <objectName>resin:type=JvmThreads</objectName>
     <attribute>BlockedCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>JVM|Thread|JVM Blocked Count</meter-name>
+  </health:AnomalyAnalyzer>
 
   <health:JmxMeter>
     <name>Resin|Thread|Thread Count</name>
@@ -242,6 +262,10 @@
     <objectName>resin:type=ThreadPool</objectName>
     <attribute>ThreadActiveCount</attribute>
   </health:JmxMeter>
+
+  <health:AnomalyAnalyzer>
+    <meter-name>Resin|Thread|Thread Active Count</meter-name>
+  </health:AnomalyAnalyzer>
 
   <health:JmxMeter>
     <name>Resin|Thread|Thread Idle Count</name>
@@ -303,10 +327,20 @@
     <attribute>MissCountTotal</attribute>
   </health:JmxDeltaMeter>
 
+  <!--
+  <health:AnomalyAnalyzer>
+    <meter>Resin|Database|Connection Active</meter>
+  </health:AnomalyAnalyzer>
+
+  <health:AnomalyAnalyzer>
+    <meter>Resin|Http|Request Time</meter>
+  </health:AnomalyAnalyzer>
+  -->
+
   <!-- meter graphs -->
   
   <health:MeterGraphPage>
-    <name>Summary</name>
+    <name>Snapshot</name>
     <period>6h</period>
     <columns>3</columns>
       

@@ -34,6 +34,7 @@ import static java.sql.ResultSet.TYPE_FORWARD_ONLY;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -70,8 +71,9 @@ public class DataStore {
   private final String _mnodeTableName;
 
   // remove unused data after 15 minutes
+  // server/60i0
   // private long _expireTimeout = 60 * 60L * 1000L;
-  private long _expireTimeout = 15 * 60L * 1000L;
+  private long _expireTimeout = 60 * 60L * 1000L;
 
   private DataSource _dataSource;
 
@@ -225,18 +227,11 @@ public class DataStore {
    */
   public boolean load(HashKey id, WriteStream os)
   {
-    DataConnection conn = null;
-
     try {
-      conn = getConnection();
-
-      PreparedStatement pstmt = conn.prepareLoad();
-      pstmt.setBytes(1, id.getHash());
-
-      ResultSet rs = pstmt.executeQuery();
-
-      if (rs.next()) {
-        InputStream is = rs.getBinaryStream(1);
+      Blob blob = loadBlob(id);
+      
+      if (blob != null) {
+        InputStream is = blob.getBinaryStream();
 
         if (is == null)
           return false;
@@ -259,9 +254,6 @@ public class DataStore {
       log.log(Level.FINE, e.toString(), e);
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
-    } finally {
-      if (conn != null)
-        conn.close();
     }
 
     return false;
@@ -275,9 +267,10 @@ public class DataStore {
    *
    * @return true on successful load
    */
-  public boolean load(HashKey id, LoadDataCallback cb)
+  public Blob loadBlob(HashKey id)
   {
     DataConnection conn = null;
+    ResultSet rs = null;
 
     try {
       conn = getConnection();
@@ -285,7 +278,48 @@ public class DataStore {
       PreparedStatement pstmt = conn.prepareLoad();
       pstmt.setBytes(1, id.getHash());
 
-      ResultSet rs = pstmt.executeQuery();
+      rs = pstmt.executeQuery();
+
+      if (rs.next()) {
+        Blob blob = rs.getBlob(1);
+        
+        return blob;
+      }
+
+      if (log.isLoggable(Level.FINER))
+        log.finer(this + " no blob data loaded for " + id);
+    } catch (SQLException e) {
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      JdbcUtil.close(rs);
+      
+      if (conn != null)
+        conn.close();
+    }
+
+    return null;
+  }
+
+  /**
+   * Reads the object from the data store.
+   *
+   * @param id the hash identifier for the data
+   * @param os the WriteStream to hold the data
+   *
+   * @return true on successful load
+   */
+  public boolean load(HashKey id, LoadDataCallback cb)
+  {
+    DataConnection conn = null;
+    ResultSet rs = null;
+
+    try {
+      conn = getConnection();
+
+      PreparedStatement pstmt = conn.prepareLoad();
+      pstmt.setBytes(1, id.getHash());
+
+      rs = pstmt.executeQuery();
 
       if (rs.next()) {
         InputStream is = rs.getBinaryStream(1);
@@ -306,12 +340,14 @@ public class DataStore {
       }
 
       if (log.isLoggable(Level.FINER))
-        log.finer(this + " no data loaded for " + id);
+        log.finer(this + " no callback data loaded for " + id);
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
+      JdbcUtil.close(rs);
+      
       if (conn != null)
         conn.close();
     }
@@ -329,21 +365,23 @@ public class DataStore {
   public boolean isDataAvailable(HashKey id)
   {
     DataConnection conn = null;
+    ResultSet rs = null;
 
     try {
       conn = getConnection();
 
       PreparedStatement pstmt = conn.prepareLoad();
       pstmt.setBytes(1, id.getHash());
-
-      ResultSet rs = pstmt.executeQuery();
-
+      rs = pstmt.executeQuery();
+      
       if (rs.next()) {
         return true;
       }
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
+      JdbcUtil.close(rs);
+      
       if (conn != null)
         conn.close();
     }
@@ -362,6 +400,7 @@ public class DataStore {
   public InputStream openInputStream(HashKey id)
   {
     DataConnection conn = null;
+    ResultSet rs = null;
 
     try {
       conn = getConnection();
@@ -369,7 +408,7 @@ public class DataStore {
       PreparedStatement pstmt = conn.prepareLoad();
       pstmt.setBytes(1, id.getHash());
 
-      ResultSet rs = pstmt.executeQuery();
+      rs = pstmt.executeQuery();
 
       if (rs.next()) {
         InputStream is = rs.getBinaryStream(1);
@@ -382,6 +421,8 @@ public class DataStore {
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
+      JdbcUtil.close(rs);
+      
       if (conn != null)
         conn.close();
     }
@@ -401,6 +442,8 @@ public class DataStore {
   {
     // try updating first to avoid the exception for an insert
     if (updateExpires(id)) {
+      source.close();
+      
       return true;
     }
     else if (insert(id, source.openInputStream(), length)) {
@@ -572,6 +615,7 @@ public class DataStore {
   private void updateExpire(long now)
   {
     DataConnection conn = null;
+    ResultSet rs = null;
 
     boolean isValid = false;
     
@@ -582,7 +626,7 @@ public class DataStore {
 
       long expires = now + _expireTimeout;
 
-      ResultSet rs = pstmt.executeQuery();
+      rs = pstmt.executeQuery();
 
       try {
         while (rs.next()) {
@@ -642,8 +686,11 @@ public class DataStore {
       PreparedStatement pstmt = conn.prepareValidate();
 
       pstmt.executeUpdate();
-    } catch (SQLException e) {
-      log.log(Level.FINE, e.toString(), e);
+    } catch (Exception e) {
+      if (log.isLoggable(Level.FINE))
+        log.log(Level.FINE, e.toString(), e);
+      else
+        log.warning(this + " " + e);
     } finally {
       if (conn != null)
         conn.close();
@@ -657,12 +704,13 @@ public class DataStore {
   public long getCount()
   {
     DataConnection conn = null;
+    ResultSet rs = null;
 
     try {
       conn = getConnection();
       PreparedStatement stmt = conn.prepareCount();
 
-      ResultSet rs = stmt.executeQuery();
+      rs = stmt.executeQuery();
 
       if (rs != null && rs.next()) {
         long value = rs.getLong(1);
@@ -676,6 +724,8 @@ public class DataStore {
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
+      JdbcUtil.close(rs);
+      
       if (conn != null)
         conn.close();
     }
@@ -687,10 +737,10 @@ public class DataStore {
   {
     _dataSource = null;
     _freeConn = null;
-
+    
     Alarm alarm = _alarm;
     _alarm = null;
-
+    
     if (alarm != null)
       alarm.dequeue();
   }
@@ -751,6 +801,7 @@ public class DataStore {
       return _is.read(buffer, offset, length);
     }
 
+    @Override
     public void close()
     {
       DataConnection conn = _conn;

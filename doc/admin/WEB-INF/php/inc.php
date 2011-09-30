@@ -17,10 +17,12 @@ global $g_tail_objects;
 
 $g_tail_objects = array();
 
-// kill the cache, all pages are uncached and private
-header("Expires: 01 Dec 1994 16:00:00 GMT"); 
-header("Cache-Control: max-age=0,private"); 
-header("Pragma: No-Cache");
+if (function_exists('header')) {
+  // kill the cache, all pages are uncached and private
+  header("Expires: 01 Dec 1994 16:00:00 GMT"); 
+  header("Cache-Control: max-age=0,private"); 
+  header("Pragma: No-Cache");
+}  
 
 function admin_init($query="", $is_refresh=false)
 {
@@ -388,11 +390,16 @@ function display_jmx($mbean_server, $group_mbeans)
 
   $javascript = "";
 
+  $row = 0;
+
   echo "<div class='jmx'>";
   
   foreach ($type_partition as $type_name => $type_mbeans) {
     echo "<div id='jmx-${group_id}-type-${type_name}'";
-    echo " class='ui-widget-header ui-corner-all switch jmx-header'>\n";
+    // echo " class='ui-widget-header ui-corner-all switch jmx-header'>\n";
+    // echo " class='switch jmx-header'>\n";
+    echo " class='switch jmx-header " . row_style($row++) . "'>\n";
+
     echo "$type_name";
     echo "</div>\n";
 
@@ -412,13 +419,16 @@ function display_jmx($mbean_server, $group_mbeans)
       $start_id = ++$data_id;
 
       echo "<div id='jmx-${start_id}' ";
-      echo " class='switch ui-widget-header ui-corner-all jmx-header'>";
+      // echo " class='switch ui-widget-header ui-corner-all jmx-header'>";
+      //echo " class='switch jmx-header " . row_style($row++) . "'>";
+      //echo " class='switch jmx-header " . row_style($row++) . "'>";
+      echo " class='switch jmx-header'>";
       echo jmx_short_name($mbean->mbean_name, $group_array);
       echo "</div>\n";
 
-      echo "<div class='jmx-data-table ui-widget-content toggle-jmx-${start_id}'>";
+//      echo "<div class='jmx-data-table ui-widget-content toggle-jmx-${start_id}'>";
+      echo "<div class='jmx-data-table toggle-jmx-${start_id}'>";
       echo "<table class='jmx-data'>\n";
-      $row = 0;
 
       foreach ($attr_names as $attr_name) {
         echo "<tr>";
@@ -1252,6 +1262,21 @@ function display_health_status($s)
   }
   
   echo "</table><br/>";
+}
+
+function get_stats_service($mbean_server = null)
+{
+  global $g_mbean_server;
+
+  if (! $mbean_server) {
+    $mbean_server = $g_mbean_server;
+  }
+
+  if (! $mbean_server) {
+    return;
+  }
+
+  return $mbean_server->lookup("resin:type=StatService");
 }
 
 function display_add_tail($tail)

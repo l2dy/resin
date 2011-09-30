@@ -27,39 +27,18 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.interceptor;
+package javax.cache.spi;
 
-import java.util.Arrays;
+import javax.cache.CacheManager;
+import javax.cache.OptionalFeature;
 
-public class DefaultCacheKey implements CacheKey
-{
-  private static final long serialVersionUID = 1L;
+/**
+ * Creates a new CacheManager.
+ */
+public interface CachingProvider {
+  public CacheManager createCacheManager(String name);
   
-  private final Object []parameters;
-  private final int hashCode;
+  public ClassLoader getDefaultClassLoader();
   
-  public DefaultCacheKey(Object []parameters)
-  {
-    this.parameters = parameters;
-    this.hashCode = Arrays.deepHashCode(parameters);
-  }
-
-  @Override
-  public int hashCode()
-  {
-    return this.hashCode;
-  }
-
-  @Override
-  public boolean equals(Object obj)
-  {
-    if (this == obj)
-      return true;
-    else if (obj == null || getClass() != obj.getClass())
-      return false;
-    
-    DefaultCacheKey key = (DefaultCacheKey) obj;
-    
-    return Arrays.deepEquals(this.parameters, key.parameters);
-  }
+  public boolean isSupported(OptionalFeature feature);
 }

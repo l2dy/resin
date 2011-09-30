@@ -22,16 +22,15 @@ $mbean_server = $g_mbean_server;
 $resin = $g_resin;
 $server = $g_server;
 
-if ($g_mbean_server)
-  $stat = $g_mbean_server->lookup("resin:type=StatService");
+$stat = get_stats_service();
 
-echo "<h1>Postmortem";
-print_help("Postmortem");
+echo "<h1>Watchdog";
+print_help("Watchdog");
 echo " Analysis</h1>\n";
   
 if (! $stat) {
   ?>
-  <p>Postmortem analysis requires Resin Professional and
+  <p>Watchdog analysis requires Resin Professional and
   a &lt;resin:StatService/> and &lt;resin:LogService/> defined in
   the resin.xml.</p>
   <?php
@@ -66,21 +65,12 @@ $restart_time = floor($restart_ms / 1000);
 
 $g_time = $restart_time;
 
-echo "<h2>Restart at " . date("Y-m-d H:i", $restart_time) . "</h2>\n";
-
-echo " <br /> ";
-echo "<a href='pdf-gen.php?report=Postmortem&amp;time=$restart_time'>PDF</a> (";
-echo "<a href='pdf-gen?report=Postmortem&amp;time=$restart_time&amp;period=1800'>1/2 hour</a>, ";
-echo "<a href='pdf-gen.php?report=Postmortem&amp;time=$restart_time&amp;period=900'>15 minutes</a>, ";
-echo "<a href='pdf-gen.php?report=Postmortem&amp;time=$restart_time&amp;period=3600'>1 hour</a>)";
-echo " <br /> ";
-
 echo "<form name='restarts' method='get' action='#'>";
 echo " <input type='hidden' name='q' value='${g_page}'/>\n";
 echo " <input type='hidden' name='s' value='${g_server_index}'/>\n";
 echo " <input type='hidden' name='p' value='${g_period}'/>\n";
 echo " <input type='hidden' name='o' value='${g_offset}'/>\n";
-echo "<label for='time'>Time</label>: <select name='t' onchange='document.forms.restarts.submit();' id='time'>\n";
+echo "<label for='time'>Restart Time</label>: <select name='t' onchange='document.forms.restarts.submit();' id='time'>\n";
 foreach ($restart_list as $time_ms) {
   $time = floor($time_ms / 1000);
   
@@ -94,29 +84,36 @@ foreach ($restart_list as $time_ms) {
 echo "</select>\n";
 echo "</form>";
 
+echo "<h2>Restart at " . date("Y-m-d H:i", $restart_time) . "</h2>\n";
+
 $log_mbean = $mbean_server->lookup("resin:type=LogService");
 
-echo "<div id='postmortem-tabs'>\n";
+echo "<div id='watchdog-tabs'>\n";
 echo "<ul>";
 echo "<li><a href='#pm-graph'>Graphs</a></li>\n";
 if ($log_mbean) {
   echo "<li><a href='#pm-logs'>Logs</a></li>\n";
 }  
+echo "<li><a href='#pm-pdf'>PDF</a></li>\n";
 echo "</ul>";
 
 echo "<div id='pm-graph'>\n";
-display_postmortem_graph($mbean_server);
+display_watchdog_graph($mbean_server);
 echo "</div>\n";
 
 if ($log_mbean) {
   echo "<div id='pm-logs'>\n";
-  display_postmortem_logs($log_mbean);
+  display_watchdog_logs($log_mbean);
   echo "</div>\n";
 }
 
+echo "<div id='pm-pdf'>\n";
+print_pdf_select();
+echo "</div>\n";
+
 echo "</div>";
 
-function display_postmortem_graph($mbean_server)
+function display_watchdog_graph($mbean_server)
 {
   global $restart_time;
   global $si;
@@ -124,7 +121,7 @@ function display_postmortem_graph($mbean_server)
   $width = 250;
   $height = 150;
   
-  echo "<h2>Postmortem Graphs</h2>\n";
+  echo "<h2>Watchdog Graphs</h2>\n";
   
   echo "<table summary='Graphs' border='0' cellspacing='0' cellpadding='5'>";
   echo "<tr valign='top'><td colspan='3' align='center'>";
@@ -265,7 +262,7 @@ function display_postmortem_graph($mbean_server)
   echo "</table>";
 }
 
-function display_postmortem_logs($log_mbean)
+function display_watchdog_logs($log_mbean)
 {
   global $restart_time;
 
@@ -324,4 +321,44 @@ function display_postmortem_logs($log_mbean)
   }
 }
 
-display_footer($g_page, $javascript . javascript_create_tab("postmortem-tabs"));
+function print_pdf_select()
+{
+  global $g_periods;
+  global $g_period;
+  
+  global $g_time;
+  
+  $stat = get_stats_service();
+  if (! $stat) {
+    return;
+  }
+
+	echo "<h2>Watchdog PDF Report</h2>\n";
+	
+	echo "<form action='pdf-gen.php' method='get' style='display:inline;'>";
+  echo "<input type='hidden' name='report' value='Watchdog'/>\n";
+  echo "<input type='hidden' name='time' value='${g_time}'/>\n";
+  
+  echo "<label for='period'>Report Period</label>: "; 
+  echo "<select name='period' id='period'>\n";
+  
+  if (!isset($_POST['period']) || !is_numeric($_POST['period']) || !in_array(intval($_POST['period']), $g_periods))
+    $postedPeriod = $g_period;
+  else
+    $postedPeriod = $_POST['period'];
+		
+	foreach ($g_periods as $period => $name) {
+    if ($period == $postedPeriod) 
+      echo "  <option selected='selected' value='${period}'>${name}</option>";
+    else
+      echo "  <option value='${period}'>${name}</option>";
+  }
+	
+	echo "</select> before " . date("Y-m-d H:i", $g_time) . ".\n";
+	
+	echo " &nbsp;<input type='submit' value='Generate PDF'/>\n";
+  
+  echo "</form>";
+}
+
+display_footer($g_page, $javascript . javascript_create_tab("watchdog-tabs"));
