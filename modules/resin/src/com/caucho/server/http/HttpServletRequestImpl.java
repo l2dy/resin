@@ -30,18 +30,13 @@
 package com.caucho.server.http;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.Principal;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Level;
@@ -49,10 +44,8 @@ import java.util.logging.Logger;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.DispatcherType;
-import javax.servlet.MultipartConfigElement;
 import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
-import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletRequestAttributeEvent;
@@ -61,10 +54,8 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.Part;
 
 import com.caucho.config.scope.ScopeRemoveListener;
-import com.caucho.i18n.CharacterEncoding;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.network.listen.SocketLinkDuplexController;
 import com.caucho.remote.websocket.MaskedFrameInputStream;
@@ -78,16 +69,11 @@ import com.caucho.server.session.SessionManager;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
-import com.caucho.util.CharSegment;
 import com.caucho.util.HashMapImpl;
 import com.caucho.util.L10N;
 import com.caucho.util.NullEnumeration;
-import com.caucho.vfs.Encoding;
-import com.caucho.vfs.FilePath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
-import com.caucho.vfs.Vfs;
-import com.caucho.vfs.WriteStream;
 import com.caucho.websocket.WebSocketContext;
 import com.caucho.websocket.WebSocketListener;
 import com.caucho.websocket.WebSocketServletRequest;
@@ -103,12 +89,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
   private static final L10N L = new L10N(HttpServletRequestImpl.class);
 
-  private static final String CHAR_ENCODING = "resin.form.character.encoding";
-  private static final String FORM_LOCALE = "resin.form.local";
-  private static final String CAUCHO_CHAR_ENCODING = "caucho.form.character.encoding";
-
-  private static final Charset UTF8 = Charset.forName("UTF-8");
-
   private AbstractHttpRequest _request;
 
   private final HttpServletResponseImpl _response;
@@ -116,10 +96,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   private Boolean _isSecure;
 
   private Invocation _invocation;
-
-  // form
-  private HashMapImpl<String,String[]> _filledForm;
-  private List<Part> _parts;
 
   // session/cookies
   private Cookie []_cookiesIn;
@@ -913,268 +889,6 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   }
 
   //
-  // parameter/form
-  //
-
-  /**
-   * Returns an enumeration of the form names.
-   */
-  @Override
-  public Enumeration<String> getParameterNames()
-  {
-    if (_filledForm == null)
-      _filledForm = parseQuery();
-
-    return Collections.enumeration(_filledForm.keySet());
-  }
-
-  /**
-   * Returns a map of the form.
-   */
-  @Override
-  public Map<String,String[]> getParameterMap()
-  {
-    if (_filledForm == null)
-      _filledForm = parseQuery();
-
-    return Collections.unmodifiableMap(_filledForm);
-  }
-
-  /**
-   * Returns the form's values for the given name.
-   *
-   * @param name key in the form
-   * @return value matching the key
-   */
-  @Override
-  public String []getParameterValues(String name)
-  {
-    if (_filledForm == null)
-      _filledForm = parseQuery();
-
-    return (String []) _filledForm.get(name);
-  }
-
-  /**
-   * Returns the form primary value for the given name.
-   */
-  @Override
-  public String getParameter(String name)
-  {
-    String []values = getParameterValues(name);
-
-    if (values != null && values.length > 0)
-      return values[0];
-    else
-      return null;
-  }
-
-  /**
-   * @since Servlet 3.0
-   */
-  @Override
-  public Collection<Part> getParts()
-    throws IOException, ServletException
-  {
-    MultipartConfigElement multipartConfig
-      = _invocation.getMultipartConfig();
-    
-    if (multipartConfig == null)
-      throw new ServletException(L.l("multipart-form is disabled; check @MultipartConfig annotation on `{0}'.", _invocation.getServletName()));
-    
-    /*
-    if (! getWebApp().doMultipartForm())
-      throw new ServletException("multipart-form is disabled; check <multipart-form> configuration tag.");
-      */
-
-    if (! getContentType().startsWith("multipart/form-data"))
-      throw new ServletException("Content-Type must be of 'multipart/form-data'.");
-
-    if (_filledForm == null)
-      _filledForm = parseQuery();
-
-    return _parts;
-  }
-
-  Part createPart(String name, Map<String, List<String>> headers)
-  {
-    return new PartImpl(name, headers);
-  }
-
-  /**
-   * @since Servlet 3.0
-   */
-  @Override
-  public Part getPart(String name)
-    throws IOException, ServletException
-  {
-    for (Part part : getParts()) {
-      if (name.equals(part.getName()))
-        return part;
-    }
-
-    return null;
-  }
-
-  /**
-   * Parses the query, either from the GET or the post.
-   *
-   * <p/>The character encoding is somewhat tricky.  If it's a post, then
-   * assume the encoded form uses the same encoding as
-   * getCharacterEncoding().
-   *
-   * <p/>If the request doesn't provide the encoding, use the
-   * character-encoding parameter from the webApp.
-   *
-   * <p/>Otherwise use the default system encoding.
-   */
-  private HashMapImpl<String,String[]> parseQuery()
-  {
-    HashMapImpl<String,String[]> form = _request.getForm();
-
-    try {
-      String query = getQueryString();
-      CharSegment contentType = _request.getContentTypeBuffer();
-
-      if (query == null && contentType == null)
-        return form;
-
-      Form formParser = _request.getFormParser();
-      long contentLength = _request.getLongContentLength();
-
-      String charEncoding = getCharacterEncoding();
-      if (charEncoding == null) {
-        charEncoding = (String) getAttribute(CAUCHO_CHAR_ENCODING);
-        if (charEncoding == null)
-          charEncoding = (String) getAttribute(CHAR_ENCODING);
-        if (charEncoding == null) {
-          Locale locale = (Locale) getAttribute(FORM_LOCALE);
-          if (locale != null)
-            charEncoding = Encoding.getMimeName(locale);
-        }
-      }
-
-      if (query != null) {
-        String queryEncoding = charEncoding;
-
-        if (queryEncoding == null && getServer() != null)
-          queryEncoding = getServer().getURLCharacterEncoding();
-
-        if (queryEncoding == null)
-          queryEncoding = CharacterEncoding.getLocalEncoding();
-
-        String javaEncoding = Encoding.getJavaName(queryEncoding);
-
-        formParser.parseQueryString(form, query, javaEncoding, true);
-      }
-
-      if (charEncoding == null)
-        charEncoding = CharacterEncoding.getLocalEncoding();
-
-      String javaEncoding = Encoding.getJavaName(charEncoding);
-
-      MultipartConfigElement multipartConfig
-        = _invocation.getMultipartConfig();
-
-      if (contentType == null || ! "POST".equalsIgnoreCase(getMethod())) {
-      }
-
-      else if (contentType.startsWith("application/x-www-form-urlencoded")) {
-        formParser.parsePostData(form, getInputStream(), javaEncoding);
-      }
-
-      else if ((getWebApp().doMultipartForm() || multipartConfig != null)
-               && contentType.startsWith("multipart/form-data")) {
-        int length = contentType.length();
-        int i = contentType.indexOf("boundary=");
-
-        if (i < 0)
-          return form;
-
-        long formUploadMax = getWebApp().getFormUploadMax();
-        long parameterLengthMax = getWebApp().getFormParameterLengthMax();
-        
-        if (parameterLengthMax < 0)
-          parameterLengthMax = Long.MAX_VALUE / 2;
-
-        Object uploadMax = getAttribute("caucho.multipart.form.upload-max");
-        if (uploadMax instanceof Number)
-          formUploadMax = ((Number) uploadMax).longValue();
-
-        Object paramMax = getAttribute("caucho.multipart.form.parameter-length-max");
-        if (paramMax instanceof Number)
-          parameterLengthMax = ((Number) paramMax).longValue();
-
-        // XXX: should this be an error?
-        if (formUploadMax >= 0 && formUploadMax < contentLength) {
-          setAttribute("caucho.multipart.form.error",
-                       L.l("Multipart form upload of '{0}' bytes was too large.",
-                           String.valueOf(contentLength)));
-          setAttribute("caucho.multipart.form.error.size",
-                       new Long(contentLength));
-
-          return form;
-        }
-
-        long fileUploadMax = -1;
-
-        if (multipartConfig != null) {
-          formUploadMax = multipartConfig.getMaxRequestSize();
-          fileUploadMax = multipartConfig.getMaxFileSize();
-        }
-
-        if (multipartConfig != null
-            && formUploadMax > 0
-            && formUploadMax < contentLength)
-          throw new IllegalStateException(L.l(
-            "multipart form data request's Content-Length '{0}' is greater then configured in @MultipartConfig.maxRequestSize value: '{1}'",
-            contentLength,
-            formUploadMax));
-
-        i += "boundary=".length();
-        char ch = contentType.charAt(i);
-        CharBuffer boundary = new CharBuffer();
-        if (ch == '\'') {
-          for (i++; i < length && contentType.charAt(i) != '\''; i++)
-            boundary.append(contentType.charAt(i));
-        }
-        else if (ch == '\"') {
-          for (i++; i < length && contentType.charAt(i) != '\"'; i++)
-            boundary.append(contentType.charAt(i));
-        }
-        else {
-          for (;
-               i < length && (ch = contentType.charAt(i)) != ' ' &&
-                 ch != ';';
-               i++) {
-            boundary.append(ch);
-          }
-        }
-
-        _parts = new ArrayList<Part>();
-
-        try {
-          MultipartFormParser.parsePostData(form,
-                                      _parts,
-                                      getStream(false), boundary.toString(),
-                                      this,
-                                      javaEncoding,
-                                      formUploadMax,
-                                      fileUploadMax,
-                                      parameterLengthMax);
-        } catch (IOException e) {
-          log.log(Level.FINE, e.toString(), e);
-          setAttribute("caucho.multipart.form.error", e.getMessage());
-        }
-      }
-    } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
-    }
-
-    return form;
-  }
-
-  //
   // session/cookie management
   //
 
@@ -1535,6 +1249,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     return _request.getStream();
   }
 
+  @Override
   public ReadStream getStream(boolean isFlush)
     throws IOException
   {
@@ -1654,7 +1369,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   //
   // HttpServletRequestImpl methods
   //
-
+  @Override
   public AbstractHttpRequest getAbstractHttpRequest()
   {
     return _request;
@@ -2044,188 +1759,5 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _request + "]";
-  }
-
-  public class PartImpl implements Part {
-    private String _name;
-    private Map<String, List<String>> _headers;
-    private Object _value;
-    private Path _newPath;
-
-    private PartImpl(String name, Map<String, List<String>> headers)
-    {
-      _name = name;
-      _headers = headers;
-    }
-
-    public void delete()
-      throws IOException
-    {
-      if (_newPath != null)
-        _newPath.remove();
-
-      Object value = getValue();
-
-      if (! (value instanceof FilePath))
-        throw new IOException(L.l("Part.delete() is not applicable to part '{0}':'{1}'", _name, value));
-
-      ((FilePath)value).remove();
-    }
-
-    public String getContentType()
-    {
-      String[] value = _filledForm.get(_name + ".content-type");
-
-      if (value != null && value.length > 0)
-        return value[0];
-
-      return null;
-    }
-
-    public String getHeader(String name)
-    {
-      List<String> values = _headers.get(name);
-
-      if (values != null && values.size() > 0)
-        return values.get(0);
-
-      return null;
-    }
-
-    public Collection<String> getHeaderNames()
-    {
-      return _headers.keySet();
-    }
-
-    public Collection<String> getHeaders(String name)
-    {
-      return _headers.get(name);
-    }
-
-    public InputStream getInputStream()
-      throws IOException
-    {
-      Object value = getValue();
-
-      if (value instanceof FilePath)
-        return ((FilePath) value).openRead();
-
-      ByteArrayInputStream is
-        = new ByteArrayInputStream(value.toString().getBytes(UTF8));
-
-      return is;
-    }
-
-
-    public String getName()
-    {
-      return _name;
-    }
-
-    public long getSize()
-    {
-      Object value = getValue();
-
-      if (value instanceof FilePath) {
-        return ((Path) value).getLength();
-      }
-      else if (value instanceof String) {
-        return -1;
-      }
-      else if (value == null) {
-        return -1;
-      }
-      else {
-        log.finest(L.l("Part.getSize() is not applicable to part'{0}':'{1}'",
-                       _name, value));
-
-        return -1;
-      }
-    }
-
-    @Override
-    public void write(String fileName)
-      throws IOException
-    {
-      if (_newPath != null)
-        throw new IOException(L.l(
-          "Contents of part '{0}' has already been written to '{1}'",
-          _name,
-          _newPath));
-
-      Path path;
-
-      Object value = getValue();
-
-      if (! (value instanceof FilePath))
-        throw new IOException(L.l(
-          "Part.write() is not applicable to part '{0}':'{1}'",
-          _name,
-          value));
-      else
-        path = (Path) value;
-
-      MultipartConfigElement mc = _invocation.getMultipartConfig();
-      String location = mc.getLocation().replace('\\', '/');
-      fileName = fileName.replace('\\', '/');
-
-      String file;
-
-      if (location.charAt(location.length() -1) != '/' && fileName.charAt(fileName.length() -1) != '/')
-        file = location + '/' + fileName;
-      else
-        file = location + fileName;
-
-      _newPath = Vfs.lookup(file);
-
-      if (_newPath.exists())
-        throw new IOException(L.l("File '{0}' already exists.", _newPath));
-
-      Path parent = _newPath.getParent();
-
-      if (! parent.exists())
-        if (! parent.mkdirs())
-          throw new IOException(L.l("Unable to create path '{0}'. Check permissions.", parent));
-
-      if (! path.renameTo(_newPath)) {
-        WriteStream out = null;
-
-        try {
-          out = _newPath.openWrite();
-
-          path.writeToStream(out);
-
-          out.flush();
-
-          out.close();
-        } catch (IOException e) {
-          log.log(Level.SEVERE, L.l("Cannot write contents of '{0}' to '{1}'", path, _newPath), e);
-
-          throw e;
-        } finally {
-          if (out != null)
-            out.close();
-        }
-      }
-    }
-
-    public Object getValue()
-    {
-      if (_value != null)
-        return _value;
-
-      String []values = _filledForm.get(_name + ".file");
-
-      if (values != null && values.length > 0) {
-        _value = Vfs.lookup(values[0]);
-      } else {
-        values = _filledForm.get(_name);
-
-        if (values != null && values.length > 0)
-          _value = values[0];
-      }
-
-      return _value;
-    }
   }
 }

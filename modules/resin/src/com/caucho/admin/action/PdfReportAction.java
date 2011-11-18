@@ -47,6 +47,7 @@ public class PdfReportAction implements AdminAction
 
   private MailService _mailService = new MailService();
   private String _mailTo;
+  private String _mailFrom;
   
   private boolean _isSnapshot;
   private long _profileTime;
@@ -151,7 +152,14 @@ public class PdfReportAction implements AdminAction
   
   public void setMailTo(String mailTo)
   {
-    _mailTo = mailTo;
+    if (! "".equals(mailTo))
+      _mailTo = mailTo;
+  }
+  
+  public void setMailFrom(String mailFrom)
+  {
+    if (! "".equals(mailFrom))
+      _mailFrom = mailFrom;
   }
   
   private String calculateReport()
@@ -202,14 +210,29 @@ public class PdfReportAction implements AdminAction
     // to ${resin.home}/doc/admin/pdf-gen.php
     //
     // If Resin is not running, then path is required
-    
-    if (resin != null) {
-      if (_path == null)
-        _path = resin.getResinHome() + "/doc/admin/pdf-gen.php";
+
+    if (_path != null) {
+      _phpPath = Vfs.lookup(_path);
+    }
+    else if (resin != null) {
+      if (_path == null) {
+        Path path = resin.getRootDirectory().lookup("doc/admin/pdf-gen.php");
+
+        if (path.canRead()) {
+          _path = path.getNativePath();
+        }
+      }
       
-      _phpPath = Vfs.lookup(_path);
-    } else if (_path != null) {
-      _phpPath = Vfs.lookup(_path);
+      if (_path == null) {
+        Path path = resin.getResinHome().lookup("doc/admin/pdf-gen.php");
+
+        if (path.canRead()) {
+          _path = path.getNativePath();
+        }
+      }
+      
+      if (_path != null)
+        _phpPath = Vfs.lookup(_path);
     }
     
     if (_phpPath == null) {
@@ -228,6 +251,15 @@ public class PdfReportAction implements AdminAction
     if (_mailTo != null) {
       try {
         _mailService.addTo(new InternetAddress(_mailTo));
+        _mailService.init();
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+    }
+
+    if (_mailFrom != null) {
+      try {
+        _mailService.addFrom(new InternetAddress(_mailFrom));
         _mailService.init();
       } catch (Exception e) {
         throw ConfigException.create(e);

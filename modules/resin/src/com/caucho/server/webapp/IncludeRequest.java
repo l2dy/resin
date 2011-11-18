@@ -29,19 +29,6 @@
 
 package com.caucho.server.webapp;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.Map;
-import java.util.NoSuchElementException;
-
-import javax.servlet.DispatcherType;
-import javax.servlet.RequestDispatcher;
-import javax.servlet.ServletContext;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import com.caucho.inject.Module;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.http.CauchoRequestWrapper;
@@ -49,6 +36,18 @@ import com.caucho.server.http.Form;
 import com.caucho.util.HashMapImpl;
 import com.caucho.util.IntMap;
 import com.caucho.vfs.Encoding;
+
+import javax.servlet.DispatcherType;
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletContext;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.Map;
+import java.util.NoSuchElementException;
 
 @Module
 public class IncludeRequest extends CauchoRequestWrapper {
@@ -87,16 +86,25 @@ public class IncludeRequest extends CauchoRequestWrapper {
     _invocation = invocation;
   }
 
+  @Override
+  protected Invocation getInvocation()
+  {
+    return _invocation;
+  }
+
+  @Override
   public IncludeResponse getResponse()
   {
     return _response;
   }
 
+  @Override
   public ServletContext getServletContext()
   {
     return _invocation.getWebApp();
   }
 
+  @Override
   public DispatcherType getDispatcherType()
   {
     return DispatcherType.INCLUDE;
@@ -106,6 +114,7 @@ public class IncludeRequest extends CauchoRequestWrapper {
   // CauchoRequest
   //
   
+  @Override
   public String getPageURI()
   {
     return _invocation.getURI();
@@ -117,26 +126,31 @@ public class IncludeRequest extends CauchoRequestWrapper {
     return _invocation.getContextPath();
   }
 
+  @Override
   public String getPageContextPath()
   {
     return _invocation.getContextPath();
   }
   
+  @Override
   public String getPageServletPath()
   {
     return _invocation.getServletPath();
   }
   
+  @Override
   public String getPagePathInfo()
   {
     return _invocation.getPathInfo();
   }
   
+  @Override
   public String getPageQueryString()
   {
     return _invocation.getQueryString();
   }
 
+  @Override
   public String getMethod()
   {
     String method = getRequest().getMethod();
@@ -148,6 +162,7 @@ public class IncludeRequest extends CauchoRequestWrapper {
       return "GET";
   }
   
+  @Override
   public WebApp getWebApp()
   {
     return _invocation.getWebApp();
@@ -204,7 +219,7 @@ public class IncludeRequest extends CauchoRequestWrapper {
 
     return Collections.enumeration(_headerNames);
   }
-
+  
   /*
   public ServletResponse getServletResponse()
   {
@@ -238,6 +253,7 @@ public class IncludeRequest extends CauchoRequestWrapper {
   /**
    * Returns a map of the form.
    */
+  @Override
   public Map<String,String[]> getParameterMap()
   {
     if (_filledForm == null)
@@ -252,17 +268,19 @@ public class IncludeRequest extends CauchoRequestWrapper {
    * @param name key in the form
    * @return value matching the key
    */
+  @Override
   public String []getParameterValues(String name)
   {
     if (_filledForm == null)
       _filledForm = parseQuery();
 
-    return (String []) _filledForm.get(name);
+    return _filledForm.get(name);
   }
 
   /**
    * Returns the form primary value for the given name.
    */
+  @Override
   public String getParameter(String name)
   {
     String []values = getParameterValues(name);
@@ -275,12 +293,22 @@ public class IncludeRequest extends CauchoRequestWrapper {
 
   private HashMapImpl<String,String[]> parseQuery()
   {
+    HashMapImpl<String,String[]> form = new HashMapImpl<String,String[]>();
+
+    Map<String, String[]> map = getParameterMapImpl();
+
+    form.putAll(map);
+
+    map = getRequest().getParameterMap();
+
+    mergeParameters(map, form);
+    
+    return form;
+
+    /*
     String javaEncoding = Encoding.getJavaName(getCharacterEncoding());
 
     HashMapImpl<String,String[]> form = new HashMapImpl<String,String[]>();
-
-    form.putAll(getRequest().getParameterMap());
-    
     Form formParser = Form.allocate();
 
     try {
@@ -294,13 +322,42 @@ public class IncludeRequest extends CauchoRequestWrapper {
     }
 
     return form;
+    */
   }
-  
+
+  @Override
+  protected void parseGetQueryImpl(HashMapImpl<String,String[]> form)
+  {
+    // server/053n
+    String javaEncoding = Encoding.getJavaName(getCharacterEncoding());
+
+    Form formParser = Form.allocate();
+
+    try {
+      String queryString = _invocation.getQueryString();
+      
+      if (queryString != null) {
+        formParser.parseQueryString(form, queryString, javaEncoding, false);
+      }
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  @Override
+  protected void parsePostQueryImpl(HashMapImpl<String,String[]> form)
+  {
+    if (isMultipartEnabled() && ! isDelegateMultipartEnabled()) {
+      // server/1650
+      super.parsePostQueryImpl(form);
+    }
+  }
 
   //
   // attributes
   //
 
+  @Override
   public Object getAttribute(String name)
   {
     switch (_includeAttributeMap.get(name)) {

@@ -47,8 +47,13 @@ public class LoadBalanceBuilder
   private LoadBalanceStrategy _strategy = LoadBalanceStrategy.ADAPTIVE;
   private String _meterCategory = null;
   
+  private long _idleTimeout;
+  
   private ArrayList<ClientSocketFactory> _clientList 
     = new ArrayList<ClientSocketFactory>();
+  
+  private String _cluster;
+  private int _port;
   
   /**
    * Sets the load balance strategy.
@@ -75,6 +80,17 @@ public class LoadBalanceBuilder
   public void setStickyRequestHashGenerator(StickyRequestHashGenerator gen)
   {
     
+  }
+  
+  
+  public void setIdleTimeout(long timeout)
+  {
+    _idleTimeout = timeout;
+  }
+  
+  public long getIdleTimeout()
+  {
+    return _idleTimeout;
   }
   
   /**
@@ -124,6 +140,14 @@ public class LoadBalanceBuilder
     throw new IllegalStateException(L.l("{0}: setTargetCluster is invalid here",
                                         this));
   }
+  /**
+   * Sets the target cluster by id.
+   */
+  public void setTargetPort(int port)
+  {
+    throw new IllegalStateException(L.l("{0}: setTargetPort is invalid here",
+                                        this));
+  }
   
   /**
    * Sets the target cluster by CloudPod id.
@@ -158,12 +182,18 @@ public class LoadBalanceBuilder
 
     boolean isSecure = false;
 
-    return new ClientSocketFactory(server.getServerId(),
-                                   address,
-                                   getMeterCategory(),
-                                   address,
-                                   host,
-                                   port,
-                                   isSecure);
+    ClientSocketFactory factory
+      = new ClientSocketFactory(server.getServerId(),
+                                address,
+                                getMeterCategory(),
+                                address,
+                                host,
+                                port,
+                                isSecure);
+    
+    if (_idleTimeout > 0)
+      factory.setLoadBalanceIdleTime(_idleTimeout);
+    
+    return factory;
   }
 }

@@ -29,16 +29,15 @@
 
 package com.caucho.boot;
 
-import com.caucho.admin.ElasticCloudServiceMarker;
+import java.util.ArrayList;
+
 import com.caucho.config.ConfigException;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.env.service.ResinSystem;
-
+import com.caucho.server.resin.BootServerMultiConfig;
 import com.caucho.util.L10N;
 import com.caucho.xml.QName;
-
-import java.util.ArrayList;
 
 public class BootClusterConfig {
   private static final L10N L = new L10N(BootClusterConfig.class);
@@ -53,6 +52,9 @@ public class BootClusterConfig {
   
   private ArrayList<ContainerProgram> _serverDefaultList
     = new ArrayList<ContainerProgram>();
+  
+  private ArrayList<WatchdogClient> _serverList
+    = new ArrayList<WatchdogClient>();
 
   BootClusterConfig(ResinSystem system,
                     BootResinConfig resin)
@@ -97,7 +99,9 @@ public class BootClusterConfig {
   public WatchdogConfig createServer()
   {
     WatchdogConfig config
-      = new WatchdogConfig(this, _resin.getArgs(), _resin.getRootDirectory());
+      = new WatchdogConfig(this, _resin.getArgs(), 
+                           _resin.getRootDirectory(),
+                           _serverList.size());
 
     for (int i = 0; i < _serverDefaultList.size(); i++)
       _serverDefaultList.get(i).configure(config);
@@ -116,7 +120,38 @@ public class BootClusterConfig {
                                     config.getId()));
       
     _resin.addServer(config);
-    _resin.addClient(new WatchdogClient(_system, _resin, config));
+    
+    WatchdogClient client = new WatchdogClient(_system, _resin, config);
+    _resin.addClient(client);
+    
+    _serverList.add(client);
+  }
+  
+  public void addServerMulti(BootServerMultiConfig multiServer)
+  {
+    int index = 0;
+
+    for (String address : multiServer.getAddressList()) {
+      WatchdogConfig server = createServer();
+      
+      server.setId(multiServer.getIdPrefix() + index++);
+      
+      int p = address.lastIndexOf(':');
+      int port = Integer.parseInt(address.substring(p + 1));
+      address = address.substring(0, p);
+      
+      server.setAddress(address);
+      server.setPort(port);
+      
+      multiServer.getServerProgram().configure(server);
+      
+      addServer(server);
+    }
+  }
+  
+  public ArrayList<WatchdogClient> getClients()
+  {
+    return _serverList;
   }
   
   public void addStdoutLog(ContainerProgram config)

@@ -1048,10 +1048,12 @@ public class Server
   {
     synchronized (this) {
       if (_systemStore == null) {
-        _systemStore = new ClusterCache("resin:system");
-        _systemStore.setGuid("resin:system");
-        _systemStore.setExpireTimeoutMillis(CacheConfig.TIME_INFINITY);
-        _systemStore.setIdleTimeoutMillis(CacheConfig.TIME_INFINITY);
+        _systemStore = new ClusterCache();
+        _systemStore.setName("resin:system");
+        _systemStore.setManagerName("resin");
+        _systemStore.setModifiedExpireTimeoutMillis(CacheConfig.TIME_INFINITY);
+        _systemStore.setAccessedExpireTimeoutMillis(CacheConfig.TIME_INFINITY);
+        _systemStore.setLocalExpireTimeoutMillis(10);
         // XXX: need to set reliability values
       }
     }
@@ -1243,7 +1245,7 @@ public class Server
 
       AdminAuthenticator adminAuth = getAdminAuthenticator();
       if (adminAuth != null)
-        adminAuth.initStore();
+        adminAuth.init();
     } catch (RuntimeException e) {
       log.log(Level.WARNING, e.toString(), e);
 

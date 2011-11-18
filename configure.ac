@@ -1,15 +1,16 @@
-AC_INIT(modules/c/src/resin_os/boot.c)
-AC_PREFIX_DEFAULT(/usr/local/resin)
-AC_CONFIG_AUX_DIR(automake)	
+AC_INIT([resin],4.0.24)
+AC_CONFIG_AUX_DIR(automake)
+#AC_CONFIG_MACRO_DIR([m4])
 
-FULL_VERSION="Resin $VERSION -- `date`"
-AC_SUBST(FULL_VERSION)
 
 dnl Get os info
 AC_CANONICAL_SYSTEM
 
-AC_CONFIG_MACRO_DIR([m4])
-AM_INIT_AUTOMAKE(resin, 4.0.11)
+AM_INIT_AUTOMAKE
+AC_PREFIX_DEFAULT(/usr/local/share)
+
+FULL_VERSION="Resin $PACKAGE_VERSION -- `date`"
+AC_SUBST(FULL_VERSION)
 
 dnl Checks for programs.
 AC_PROG_CC
@@ -25,13 +26,25 @@ AC_CHECK_HEADER(sys/epoll.h, [ CFLAGS="$CFLAGS -DEPOLL"; epoll=1 ])
 # Resin home
 #
 
+resin_version="resin-$PACKAGE_VERSION"
+
 if test "$prefix" == "NONE"; then
-  resin_home="$ac_default_prefix"
+  usr_share="$ac_default_prefix"
+  resin_home="$ac_default_prefix/$resin_version"
 else
   resin_home="$prefix"
 fi  
-AC_SUBST(resin_home)
 
+build_dir="${abs_builddir}"
+
+if test -z "${build_dir}"; then
+  build_dir=`pwd`
+fi
+  
+AC_SUBST(resin_home)
+AC_SUBST(resin_version)
+AC_SUBST(usr_share)
+AC_SUBST(build_dir)
 #
 # --with-resin-root
 #
@@ -152,18 +165,25 @@ else
       fi
     done
 
-    javabin=`dirname $java`
-    JAVA_HOME=`cd $javabin/..; pwd`
+    JAVA_HOME=`dirname $java`
 
     # we're in $JAVA_HOME/jre
-    if test -f "$JAVA_HOME/../include/jni.h"; then
+    if test -f "$JAVA_HOME/include/jni.h"; then
+      JAVA_HOME=$JAVA_HOME
+    elif test -f "/System/Library/Frameworks/JavaVM.framework"; then
+      JAVA_HOME="/System/Library/Frameworks/JavaVM.framework"
+    elif test -d "/etc/alternatives/java_sdk"; then
+      JAVA_HOME="/etc/alternatives/java_sdk"
+    elif test -f "$JAVA_HOME/../include/jni.h"; then
       JAVA_HOME=`cd $JAVA_HOME/..; pwd`
     elif test -f "$JAVA_HOME/lib/rt.jar"; then
       JAVA_HOME=`cd $JAVA_HOME/..; pwd`
+    elif test -f "/usr/lib/jvm/java-6-openjdk/include/jni.h"; then
+      JAVA_HOME="/usr/lib/jvm/java-6-openjdk"
+    elif test -f "/usr/lib/jvm/java-6-sun/include/jni.h"; then
+      JAVA_HOME="/usr/lib/jvm/java-6-sun"
     elif test -d "/usr/java"; then
       JAVA_HOME=/usr/java
-    elif test -f "/System/Library/Frameworks/JavaVM.framework"; then
-      JAVA_HOME="/System/Library/Frameworks/JavaVM.framework"
     fi
   elif test -d "/usr/java"; then
     JAVA_HOME=/usr/java
@@ -180,7 +200,8 @@ fi
 
 AC_SUBST(JAVA_HOME)
 
-JAVA_EXE="$JAVA_HOME/bin/java"
+#JAVA_EXE="$JAVA_HOME/bin/java"
+JAVA_EXE=`which java`
 
 $JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
 
@@ -766,11 +787,6 @@ if test -z "${LD_SHLIB}"; then
       CFLAGS_JNI="$CFLAGS_JNI -fPIC"
       LDFLAGS_SHLIB="-shared -fPIC"
 
-      if test -n "$b64"; then
-        CFLAGS="$CFLAGS -m64"
-      else
-        CFLAGS="$CFLAGS -m32"
-      fi
       if test -n "$b64_jni"; then
         CFLAGS_JNI="$CFLAGS_JNI -m64 -fPIC"
         LDFLAGS_SHLIB="$LDFLAGS_SHLIB -m64"
@@ -792,7 +808,7 @@ if test -z "${LD_SHLIB}"; then
           CFLAGS="$CFLAGS -m64"
           LDFLAGS_SHLIB="-m64 -R /usr/sfw/lib/64 -R /usr/local/lib/sparcv9"
         fi
-        if test -n "$b64_jni"; then
+        if test -n "${b64_jni}"; then
           CFLAGS_JNI="$CFLAGS_JNI -m64"
           LDFLAGS_SHLIB="-m64 -R /usr/sfw/lib/64 -R /usr/local/lib/sparcv9"
         fi
@@ -1438,11 +1454,18 @@ init.d/resin
 bin/resinctl
 ], [])
 
+#if test -n "${resin_pro_plugins}"; then
+#  AC_OUTPUT([
+#    ${resin_pro}/modules/c/src/Makefile
+#    ${resin_pro}/modules/c/src/resin/Makefile
+#    ${resin_pro}/modules/c/src/resinssl/Makefile
+#  ])
+#fi
+
 if test -n "${resin_pro_plugins}"; then
   AC_OUTPUT([
-    ${resin_pro}/modules/c/src/Makefile
-    ${resin_pro}/modules/c/src/resin/Makefile
-    ${resin_pro}/modules/c/src/resinssl/Makefile
+    modules/c/src/resin/Makefile
+    modules/c/src/resinssl/Makefile
   ])
 fi
 
@@ -1471,13 +1494,13 @@ else
   echo "  JAVA_HOME: ${JAVA_HOME}"
   echo ""
 
-  if test -n "$b64_jni"; then
+  if test -n "${b64_jni}"; then
     echo "    + 64-bit JNI in ${JNI_INCLUDE}"
   else  
     echo "    + 32-bit JNI in ${JNI_INCLUDE}"
   fi
 
-  echo "    + JNI CFLAGS: ${CFLAGS}"
+  echo "    + JNI CFLAGS: ${JNI_CFLAGS}"
 
   if test -n "$epoll"; then
     echo "    + epoll() for keepalives"

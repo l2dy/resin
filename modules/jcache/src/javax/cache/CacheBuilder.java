@@ -31,17 +31,21 @@ package javax.cache;
 
 import javax.cache.event.CacheEntryListener;
 import javax.cache.event.NotificationScope;
+import javax.cache.transaction.IsolationLevel;
+import javax.cache.transaction.Mode;
 
 /**
  * Provides the capability of dynamically creating a cache.
  *
- * See  the  default implementation of this inteface in {@link com.caucho.cluster.CacheTemplate}
+ * See  the  default implementation of this interface in {@link com.caucho.cluster.CacheTemplate}
  * for additional methods.
  */
 public interface CacheBuilder<K,V> {
   public Cache<K,V> build();
   
   public CacheBuilder<K,V> setCacheLoader(CacheLoader<K,V> cacheLoader);
+  
+  public CacheBuilder<K,V> setCacheWriter(CacheWriter<K,V> cacheWriter);
   
   public CacheBuilder<K,V> 
   registerCacheEntryListener(CacheEntryListener<K,V> listener,
@@ -50,11 +54,15 @@ public interface CacheBuilder<K,V> {
   
   public CacheBuilder<K,V> setStoreByValue(boolean storeByValue);
   
-  public CacheBuilder<K,V> setTransactionEnabled(boolean enableTransactions);
+  public CacheBuilder<K,V> setTransactionEnabled(IsolationLevel isolationLevel,
+                                                 Mode mode);
   
   public CacheBuilder<K,V> setStatisticsEnabled(boolean isEnable);
   
   public CacheBuilder<K,V> setReadThrough(boolean readThrough);
   
   public CacheBuilder<K,V> setWriteThrough(boolean writeThrough);
+  
+  public CacheBuilder<K,V> setExpiry(CacheConfiguration.ExpiryType type,
+                                     CacheConfiguration.Duration timeToLive);
 }

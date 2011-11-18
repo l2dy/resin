@@ -37,12 +37,33 @@ import java.util.Set;
 public abstract class AbstractBootCommand implements BootCommand {
   private static L10N _L;
   
+  private HashSet<String> _valueKeySet = new HashSet<String>();
   private HashSet<String> _optionSet = new HashSet<String>();
 
   @Override
   public String getName()
   {
     return "abstract-boot-command";
+  }
+  
+  @Override
+  public int doCommand(ResinBoot boot, WatchdogArgs args)
+  {
+    WatchdogClient client = findClient(boot, args);
+    
+    return doCommand(args, client);
+  }
+  
+  protected WatchdogClient findClient(ResinBoot boot, WatchdogArgs args)
+  {
+    WatchdogClient client = boot.findClient(args.getServerId(), args);
+
+    return client;
+  }
+  
+  protected int doCommand(WatchdogArgs args, WatchdogClient client)
+  {
+    throw new UnsupportedOperationException(getClass().getSimpleName());
   }
 
   public void validateArgs(String[] args) throws BootArgumentException
@@ -114,11 +135,16 @@ public abstract class AbstractBootCommand implements BootCommand {
   {
     return _optionSet;
   }
+  
+  protected void addValueKey(String key)
+  {
+    _valueKeySet.add(key);
+  }
 
   @Override
   public Set<String> getValueKeys()
   {
-    return new HashSet<String>();
+    return _valueKeySet;
   }
 
   @Override

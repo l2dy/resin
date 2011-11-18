@@ -53,7 +53,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import javax.annotation.PostConstruct;
-import javax.cache.CacheManager;
 import javax.enterprise.inject.InjectionException;
 import javax.enterprise.inject.spi.Bean;
 import javax.management.ObjectName;
@@ -101,7 +100,6 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.el.CandiElResolver;
-import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.SingletonBindingHandle;
 import com.caucho.config.j2ee.PersistenceContextRefConfig;
@@ -112,8 +110,6 @@ import com.caucho.config.types.PathBuilder;
 import com.caucho.config.types.Period;
 import com.caucho.config.types.ResourceRef;
 import com.caucho.config.types.Validator;
-import com.caucho.distcache.ClusterCacheManager;
-import com.caucho.distcache.ClusterCacheManagerDelegate;
 import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.manager.EjbModule;
 import com.caucho.env.deploy.DeployContainer;
@@ -174,7 +170,6 @@ import com.caucho.server.dispatch.SubInvocation;
 import com.caucho.server.dispatch.UrlMap;
 import com.caucho.server.dispatch.VersionInvocation;
 import com.caucho.server.host.Host;
-import com.caucho.server.http.StubServletRequest;
 import com.caucho.server.http.StubSessionContextRequest;
 import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
@@ -2185,7 +2180,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns true if multipart forms are enabled.
    */
-  public boolean doMultipartForm()
+  public boolean isMultipartFormEnabled()
   {
     return _multipartForm != null && _multipartForm.isEnable();
   }
@@ -3894,9 +3889,6 @@ public class WebApp extends ServletContextImpl
     // the cache must be outside of the WebAppFilterChain because
     // the CacheListener in ServletInvocation needs the top to
     // be a CacheListener.  Otherwise, the cache won't get lru.
-
-    if (_isStatisticsEnabled)
-      chain = new StatisticsFilterChain(chain, this);
     
     if (getRequestListeners() != null && getRequestListeners().length > 0)
       chain = new WebAppListenerFilterChain(chain, this, getRequestListeners());
@@ -3913,6 +3905,9 @@ public class WebApp extends ServletContextImpl
 
     // webAppChain.setSecurityRoleMap(invocation.getSecurityRoleMap());
     chain = webAppChain;
+
+    if (_isStatisticsEnabled)
+      chain = new StatisticsFilterChain(chain, this);
 
     if (getAccessLog() != null && isTop)
       chain = new AccessLogFilterChain(chain, this);
@@ -4319,8 +4314,9 @@ public class WebApp extends ServletContextImpl
   @Override
   public String getRealPath(String uri)
   {
+    // server/10m7
     if (uri == null)
-      throw new NullPointerException();
+      return null;
 
     String realPath = _realPathCache.get(uri);
 

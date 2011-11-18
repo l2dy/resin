@@ -33,4 +33,9 @@ import java.io.Serializable;
 
 public interface CacheKey extends Serializable
 {
+  @Override
+  int hashCode();
+  
+  @Override
+  boolean equals(Object o);
 }

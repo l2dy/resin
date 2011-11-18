@@ -115,8 +115,8 @@ public class ServerLinkActor extends SimpleActor
     
       getBroker().queryError(id, from, to, query,
                                  new BamError(BamError.TYPE_AUTH,
-                                                BamError.NOT_AUTHORIZED,
-                                                e.getMessage()));
+                                              BamError.NOT_AUTHORIZED,
+                                              e.getMessage()));
       return;
     } catch (Throwable e) {
       log.log(Level.FINER, e.toString(), e);

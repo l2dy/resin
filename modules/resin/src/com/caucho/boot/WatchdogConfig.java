@@ -52,6 +52,7 @@ class WatchdogConfig
   private static final int WATCHDOG_PORT_DEFAULT = 6600;
   
   private String _id = "";
+  private int _index;
   
   private final BootClusterConfig _cluster;
 
@@ -95,10 +96,13 @@ class WatchdogConfig
   private boolean _isVerbose;
   private boolean _hasWatchdogXss;
   private boolean _hasWatchdogXmx;
+  
+  private boolean _isDynamic;
 
   WatchdogConfig(BootClusterConfig cluster,
                  WatchdogArgs args,
-                 Path rootDirectory)
+                 Path rootDirectory,
+                 int index)
   {
     _cluster = cluster;
     
@@ -120,6 +124,11 @@ class WatchdogConfig
     return _id;
   }
   
+  public int getIndex()
+  {
+    return _index;
+  }
+  
   String []getArgv()
   {
     return _args.getArgv();
@@ -127,6 +136,12 @@ class WatchdogConfig
 
   public void setDynamic(boolean isDynamic)
   {
+    _isDynamic = isDynamic;
+  }
+  
+  public boolean isDynamic()
+  {
+    return _isDynamic;
   }
 
   public void setVerbose(boolean isVerbose)
@@ -234,6 +249,9 @@ class WatchdogConfig
 
   public void setUserName(String user)
   {
+    if ("".equals(user))
+      user = null;
+    
     _userName = user;
   }
 
@@ -244,6 +262,9 @@ class WatchdogConfig
 
   public void setGroupName(String group)
   {
+    if ("".equals(group))
+      group = null;
+    
     _groupName = group;
   }
 

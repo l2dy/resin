@@ -47,13 +47,13 @@ public interface ByteStreamCache
   /**
    * Returns the cache entry for the object with the given key.
    */
-  public ExtCacheEntry getExtCacheEntry(Object key);
+  public ExtCacheEntry<?,?> getExtCacheEntry(Object key);
   
   /**
    * Returns the cache entry for the object with the given key, without
    * triggering a load.
    */
-  public ExtCacheEntry peekExtCacheEntry(Object key);
+  public ExtCacheEntry<?,?> peekExtCacheEntry(Object key);
   
   /**
    * Puts a new item in the cache.
@@ -61,8 +61,23 @@ public interface ByteStreamCache
    * @param key the key of the item to put
    * @param is stream to contain the value
    */
-  public ExtCacheEntry put(Object key, InputStream is,
-                           long idleTimeout)
+  public ExtCacheEntry<?,?> put(Object key,
+                                InputStream is,
+                                long accessedExpireTimeout,
+                                long modifiedExpireTimeout)
+    throws IOException;
+  
+  /**
+   * Puts a new item in the cache.
+   *
+   * @param key the key of the item to put
+   * @param is stream to contain the value
+   */
+  public ExtCacheEntry<?,?> put(Object key,
+                                InputStream is,
+                                long accessedExpireTimeout,
+                                long modifiedExpireTimeout,
+                                int flags)
     throws IOException;
   
   /**

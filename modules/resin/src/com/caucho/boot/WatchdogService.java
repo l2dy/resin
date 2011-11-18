@@ -75,12 +75,13 @@ class WatchdogService extends SimpleActor
   public boolean watchdogStart(long id, String to, String from,
                                WatchdogStartQuery start)
   {
+    String serverId = start.getServerId();
     String []argv = start.getArgv();
 
     try {
-      _manager.startServer(argv);
+      _manager.startServer(serverId, argv);
 
-      String msg = L.l("{0}: started server", this);
+      String msg = L.l("{0}: started server '{1}'", this, serverId);
     
       getBroker().queryResult(id, from, to,
                                     new ResultStatus(true, msg));
@@ -147,6 +148,40 @@ class WatchdogService extends SimpleActor
       log.log(Level.WARNING, e.toString(), e);
       
       String msg = L.l("{0}: stop server='{1}' failed because of exception\n{2}'",
+                       this, serverId, e.toString());
+    
+      getBroker().queryResult(id, from, to,
+                                    new ResultStatus(false, msg));
+    }
+    
+    if (_manager.isEmpty()) {
+      new Thread(new Shutdown()).start();
+    }
+    
+    return true;
+  }
+
+  /**
+   * Handles stop queries
+   */
+  @Query
+  public boolean watchdogRestart(long id, String to, String from,
+                                 WatchdogRestartQuery restart)
+  {
+    String serverId = restart.getServerId();
+    String []argv = restart.getArgv();
+
+    try {
+      _manager.restartServer(serverId, argv);
+
+      String msg = L.l("{0}: restarted server='{1}'", this, serverId);
+    
+      getBroker().queryResult(id, from, to,
+                                    new ResultStatus(true, msg));
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
+      
+      String msg = L.l("{0}: restart server='{1}' failed because of exception\n{2}'",
                        this, serverId, e.toString());
     
       getBroker().queryResult(id, from, to,

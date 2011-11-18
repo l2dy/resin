@@ -40,8 +40,8 @@ import com.caucho.db.block.Block;
 import com.caucho.db.block.BlockStore;
 import com.caucho.db.jdbc.ConnectionImpl;
 import com.caucho.db.lock.DatabaseLock;
-import com.caucho.sql.SQLExceptionWrapper;
 import com.caucho.util.L10N;
+import com.caucho.util.SQLExceptionWrapper;
 
 /**
  * Represents a single transaction.
@@ -204,7 +204,7 @@ public class DbTransaction extends StoreTransaction {
       if (_writeLocks.contains(lock))
         throw new SQLException(L.l("lockReadAndWrite cannot already have a write lock"));
       
-      lock.lockReadAndWrite(_timeout);
+      lock.lockWrite(_timeout);
       _readLocks.add(lock);
       _writeLocks.add(lock);
     } catch (SQLException e) {
@@ -301,7 +301,7 @@ public class DbTransaction extends StoreTransaction {
         commit();
       } finally {
         // lock.unlockWrite();
-        lock.unlockReadAndWrite();
+        lock.unlockWrite();
       }
     }
   }
@@ -312,7 +312,7 @@ public class DbTransaction extends StoreTransaction {
     _readLocks.remove(lock);
     
     if (_writeLocks.remove(lock)) {
-      lock.unlockReadAndWrite();
+      lock.unlockWrite();
     }
   }
 
@@ -442,7 +442,11 @@ public class DbTransaction extends StoreTransaction {
         Inode inode = _deleteInodes.remove(0);
 
         // XXX: should be allocating based on auto-commit
-        inode.remove();
+        try {
+          inode.remove();
+        } catch (Exception e) {
+          log.log(Level.WARNING, e.toString(), e);
+        }
       }
     }
 
@@ -454,13 +458,13 @@ public class DbTransaction extends StoreTransaction {
 
         try {
           block.getStore().saveAllocation();
-        } catch (IOException e) {
+        } catch (Exception e) {
           log.log(Level.WARNING, e.toString(), e);
         }
         
         try {
           block.commit();
-        } catch (IOException e) {
+        } catch (Exception e) {
           log.log(Level.WARNING, e.toString(), e);
         }
       }
@@ -498,7 +502,7 @@ public class DbTransaction extends StoreTransaction {
           _readLocks.remove(lock);
 
         try {
-          lock.unlockReadAndWrite();
+          lock.unlockWrite();
         } catch (Throwable e) {
           log.log(Level.WARNING, e.toString(), e);
         }

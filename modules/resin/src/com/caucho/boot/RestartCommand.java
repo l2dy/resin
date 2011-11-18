@@ -57,7 +57,12 @@ public class RestartCommand extends AbstractStartCommand
     validateArgs(args.getArgv());
 
     try {
-      _client.restartWatchdog(args.getArgv());
+      String id = args.getServerId();
+      
+//      if (id == null)
+//        id = _client.getId();
+      
+      _client.restartWatchdog(id, args.getArgv());
 
       System.out.println(L().l(
         "Resin/{0} restarted -server '{1}' for watchdog at {2}:{3}",
@@ -67,7 +72,8 @@ public class RestartCommand extends AbstractStartCommand
         _client.getWatchdogPort()));
     } catch (Exception e) {
       System.out.println(L().l("Resin/{0} can't restart -server '{1}'.\n{2}",
-                               VersionFactory.getVersion(), _client.getId(),
+                               VersionFactory.getVersion(), 
+                               args.getServerId(),
                                e.toString()));
 
       log().log(Level.FINE, e.toString(), e);

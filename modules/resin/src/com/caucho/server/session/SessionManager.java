@@ -52,9 +52,9 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.AbstractCache;
 import com.caucho.distcache.ByteStreamCache;
-import com.caucho.distcache.ClusterByteStreamCache;
+import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.ExtCacheEntry;
-import com.caucho.env.distcache.DistCacheSystem;
+import com.caucho.distcache.ResinCacheBuilder.Scope;
 import com.caucho.env.meter.AverageSensor;
 import com.caucho.env.meter.MeterService;
 import com.caucho.hessian.io.HessianDebugInputStream;
@@ -62,7 +62,7 @@ import com.caucho.hessian.io.SerializerFactory;
 import com.caucho.management.server.SessionManagerMXBean;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
-import com.caucho.server.distcache.AbstractCacheManager;
+import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.PersistentStoreConfig;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
@@ -105,7 +105,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   private final ClusterServer _selfServer;
   private final int _selfIndex;
 
-  private AbstractCache _sessionStore;
+  private CacheImpl _sessionStore;
 
   // active sessions
   private LruCache<String,SessionImpl> _sessions;
@@ -1105,25 +1105,28 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _sessions = new LruCache<String,SessionImpl>(_sessionMax);
     _sessionIter = _sessions.values();
 
-    if (_sessionStore != null)
-      _sessionStore.setIdleTimeoutMillis(_sessionTimeout);
-
     if (_isPersistenceEnabled) {
-      AbstractCache sessionCache = AbstractCache.getMatchingCache("resin:session"); 
-        
-      if (sessionCache == null) {
-        sessionCache = new ClusterByteStreamCache();
-        
-        sessionCache.setName("resin:session");
-        sessionCache.setBackup(_isSaveBackup);
-        sessionCache.setTriplicate(_isSaveTriplicate);
-        sessionCache = sessionCache.createIfAbsent();
-        
-        if (isAlwaysLoadSession())
-          sessionCache.setLocalReadTimeoutMillis(20);
-      }
+      AbstractCache cacheBuilder = new ClusterCache();
 
-      _sessionStore = sessionCache;
+      cacheBuilder.setName("resin:session");
+      if (_isSaveTriplicate)
+        cacheBuilder.setScopeMode(Scope.CLUSTER);
+      else if (_isSaveBackup)
+        cacheBuilder.setScopeMode(Scope.CLUSTER);
+      else
+        cacheBuilder.setScopeMode(Scope.LOCAL);
+        
+      if (isAlwaysLoadSession())
+        cacheBuilder.setLocalExpireTimeoutMillis(20);
+      else
+        cacheBuilder.setLocalExpireTimeoutMillis(1000);
+      
+      cacheBuilder.setAccessedExpireTimeoutMillis(_sessionTimeout);
+      cacheBuilder.setLeaseExpireTimeoutMillis(5 * 60 * 1000);
+      // server/0b12
+      cacheBuilder.setLocalExpireTimeoutMillis(100);
+
+      _sessionStore = cacheBuilder.createIfAbsent();
     }
 
     if (_cookiePath != null) {

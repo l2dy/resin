@@ -100,7 +100,7 @@
       <param name="artifact.name" value="mule"/>
     </antcall>
     -->
-
+<!-- XXX: temp rpm
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
     </antcall>
@@ -108,6 +108,7 @@
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
     </antcall>
+    -->
 <!--
     <antcall target="artifact" inheritRefs="true">
       <param name="artifact.name" value="xfire"/>
@@ -360,6 +361,7 @@
   </target>
 
   <target name="resin-xml" depends="init">
+    <!--
     <copy tofile="conf/resin.xml"
           file="conf/resin.xml.in"
           preservelastmodified="true"
@@ -367,6 +369,19 @@
       <filterset>
         <filter token="HTTP_PORT" value="${resin.http}"/>
         <filter token="HTTPS_PORT" value="${resin.https}"/>
+      </filterset>
+    </copy>
+    -->
+    
+    <copy tofile="conf/resin.properties"
+          file="conf/resin.properties.in"
+          preservelastmodified="true"
+          overwrite="true">
+      <filterset>
+        <filter token="HTTP_PORT" value="${resin.http}"/>
+        <filter token="HTTPS_PORT" value="${resin.https}"/>
+        <filter token="SETUID_USER" value=""/>
+        <filter token="SETUID_GROUP" value=""/>
       </filterset>
     </copy>
     
@@ -834,7 +849,7 @@
 
   <target name="dist" depends="dist.clean, configure, compile, update, junit, eclipselink, artifacts, resin.dist.build, dist.package, quercus.war"/>
 
-  <target name="configure">
+  <target name="configure" depends="init">
      <copy tofile="modules/c/src/resin/Makefile.in"
 	   file="${prodir}/modules/c/src/resin/Makefile.in"
            preservelastmodified="true"
@@ -846,9 +861,19 @@
            preservelastmodified="true"
 	   failonerror="false"
            overwrite="true"/>
-     
+
+     <copy tofile="configure.ac"
+	   file="configure.ac.in"
+           overwrite="true">
+        <filterset>
+          <filter token="RESIN_VERSION" value="${version}"/>
+        </filterset>
+     </copy>
+
      <mkdir dir="automake"/>
+
      <exec executable="aclocal"/>
+
      <exec executable="libtoolize">
         <arg line="-f -c"/>
      </exec>
@@ -858,6 +883,7 @@
      <exec executable="automake">
         <arg line="-a -i -c --foreign"/>
      </exec>
+
      <exec executable="autoconf"/>
   </target>
 

@@ -41,6 +41,7 @@ import com.caucho.management.server.JdbcDriverMXBean;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.L10N;
+import com.caucho.util.SQLExceptionWrapper;
 import com.caucho.sql.spy.*;
 
 import javax.naming.InitialContext;
@@ -934,7 +935,7 @@ public class DBPoolImpl implements AlarmListener, EnvironmentListener {
         driver.setPassword(_password);
 
       driver.initDriver();
-      driver.initDataSource(_isTransactional, _isSpy);
+      driver.initDataSource(_isTransactional, _name, _isSpy);
 
       if (_mcf == null)
         _mcf = driver.getManagedConnectionFactory();
@@ -957,7 +958,7 @@ public class DBPoolImpl implements AlarmListener, EnvironmentListener {
         driver.setPassword(_password);
 
       driver.initDriver();
-      driver.initDataSource(_isTransactional, _isSpy);
+      driver.initDataSource(_isTransactional, _name, _isSpy);
       /*
       if (driver.getXADataSource() == null)
         _isTransactional = false;
@@ -1022,7 +1023,7 @@ public class DBPoolImpl implements AlarmListener, EnvironmentListener {
     for (int i = 0; i < _driverList.size(); i++) {
       DriverConfig driver = _driverList.get(i);
 
-      driver.initDataSource(_isTransactional, _isSpy);
+      driver.initDataSource(_isTransactional, _name, _isSpy);
     }
 
     try {

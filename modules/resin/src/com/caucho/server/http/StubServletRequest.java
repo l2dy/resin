@@ -208,7 +208,8 @@ public class StubServletRequest implements CauchoRequest {
 
   public AbstractHttpRequest getAbstractHttpRequest()
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    // throw new UnsupportedOperationException(getClass().getName());
+    return null;
   }
   
   public ServletRequest getRequest()
@@ -352,6 +353,12 @@ public class StubServletRequest implements CauchoRequest {
     throws IOException, ServletException
   {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  @Override
+  public boolean isMultipartEnabled()
+  {
+    return false;
   }
 
   @Override

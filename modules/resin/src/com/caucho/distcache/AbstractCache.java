@@ -33,12 +33,9 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.AbstractMap;
-import java.util.AbstractSet;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
@@ -59,18 +56,17 @@ import javax.cache.event.NotificationScope;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
+import com.caucho.distcache.jcache.CacheManagerFacade;
 import com.caucho.env.distcache.CacheDataBacking;
-import com.caucho.env.distcache.DistCacheSystem;
 import com.caucho.loader.Environment;
-import com.caucho.server.distcache.AbstractCacheManager;
 import com.caucho.server.distcache.CacheConfig;
+import com.caucho.server.distcache.CacheImpl;
+import com.caucho.server.distcache.CacheManagerImpl;
 import com.caucho.server.distcache.DataStore;
-import com.caucho.server.distcache.DistCacheEntry;
-import com.caucho.server.distcache.DistributedCacheManager;
+import com.caucho.server.distcache.DistCacheSystem;
+import com.caucho.server.distcache.CacheEngine;
 import com.caucho.server.distcache.MnodeStore;
-import com.caucho.server.distcache.MnodeEntry;
 import com.caucho.util.HashKey;
-import com.caucho.util.Hex;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.vfs.StreamSource;
@@ -81,32 +77,22 @@ import com.caucho.vfs.WriteStream;
  */
 
 public class AbstractCache
-  implements ObjectCache, ByteStreamCache, Closeable
+  implements ObjectCache, ByteStreamCache, ResinCacheBuilder, Closeable
 {
   private static final L10N L = new L10N(AbstractCache.class);
 
-  private CacheManagerImpl _localManager;
-  private DistributedCacheManager _manager;
-
-  private String _name = null;
+  private String _name;
+  
+  private String _managerName;
+  private CacheManagerFacade _cacheManager;
 
   private String _guid;
 
-  private Collection<CacheEntryListener> _listeners
-    = new ConcurrentLinkedQueue<CacheEntryListener>();
-
   private CacheConfig _config = new CacheConfig();
 
-  private LruCache<Object,DistCacheEntry> _entryCache;
-
-  private boolean _isInit;
   private boolean _isClosed;
-
-  private long _priorMisses = 0;
-  private long _priorHits = 0;
-
-  private String _scopeName = Scope.CLUSTER.toString();
-  private String _persistenceOption = Persistence.TRIPLE.toString();
+  
+  private CacheImpl _delegate;
 
   public AbstractCache()
   {
@@ -129,17 +115,18 @@ public class AbstractCache
   {
     _name = name;
   }
-
-  public void setGuid(String guid)
+  
+  @Configurable
+  public void setManagerName(String managerName)
   {
-    _guid = guid;
+    _managerName = managerName;
   }
   
-  public String getGuid()
+  public void setCacheManager(CacheManagerFacade cacheManager)
   {
-    return _guid;
+    _cacheManager = cacheManager;
   }
-
+  
   /**
    * Sets the CacheLoader that the Cache can then use to populate
    * cache misses from a reference store (database).
@@ -161,41 +148,73 @@ public class AbstractCache
   {
     _config.setValueSerializer(serializer);
   }
-
-  /**
-   * Sets the backup mode.  If backups are enabled, copies of the
-   * cache item will be sent to the owning triad server.
-   * <p/>
-   * Defaults to true.
-   */
-  @Configurable
-  public void setBackup(boolean isBackup)
+  
+  public void setEngine(CacheEngine engine)
   {
-    _config.setBackup(isBackup);
+    _config.setEngine(engine);
   }
 
   /**
-   * Sets the global mode.  If global is enabled, copies of the
-   * cache item will be sent to all clusters
+   * The maximum idle time for an item, which is typically used for
+   * temporary data like sessions.  For example, session
+   * data might be removed if idle over 30 minutes.
    * <p/>
-   * Defaults to false.
+   * Cached data would have infinite idle time because
+   * it doesn't depend on how often it's accessed.
+   * <p/>
+   * Default is infinite.
    */
   @Configurable
-  public void setGlobal(boolean isGlobal)
+  public void setAccessedExpireTimeout(Period period)
   {
-    _config.setGlobal(isGlobal);
+    setAccessedExpireTimeoutMillis(period.getPeriod());
+  }
+  
+  @Configurable
+  public void setIdleTimeout(Period period)
+  {
+    setAccessedExpireTimeout(period);
   }
 
   /**
-   * Sets the triplicate backup mode.  If triplicate backups is set,
-   * all triad servers have a copy of the cache item.
+   * The maximum idle time for an item, which is typically used for
+   * temporary data like sessions.  For example, session
+   * data might be removed if idle over 30 minutes.
    * <p/>
-   * Defaults to true.
+   * Cached data would have infinite idle time because
+   * it doesn't depend on how often it's accessed.
+   * <p/>
+   * Default is infinite.
+   */
+  public long getAccessedExpireTimeout()
+  {
+    return _config.getAccessedExpireTimeout();
+  }
+
+  /**
+   * Sets the idle timeout in milliseconds
    */
   @Configurable
-  public void setTriplicate(boolean isTriplicate)
+  public void setAccessedExpireTimeoutMillis(long timeout)
   {
-    _config.setTriplicate(isTriplicate);
+    _config.setAccessedExpireTimeout(timeout);
+  }
+
+  /**
+   * Returns the idle check window, used to minimize traffic when
+   * updating access times.
+   */
+  public long getAccessedExpireTimeoutWindow()
+  {
+    return _config.getAccessedExpireTimeoutWindow();
+  }
+
+  /**
+   * Sets the idle timeout windows
+   */
+  public void setAccessedExpireTimeoutWindow(Period period)
+  {
+    _config.setAccessedExpireTimeoutWindow(period.getPeriod());
   }
 
   /**
@@ -205,9 +224,9 @@ public class AbstractCache
    * <p/>
    * Default is infinite.
    */
-  public long getExpireTimeout()
+  public long getModifiedExpireTimeout()
   {
-    return _config.getExpireTimeout();
+    return _config.getModifiedExpireTimeout();
   }
 
   /**
@@ -218,9 +237,18 @@ public class AbstractCache
    * Default is infinite.
    */
   @Configurable
+  public void setModifiedExpireTimeout(Period expireTimeout)
+  {
+    setModifiedExpireTimeoutMillis(expireTimeout.getPeriod());
+  }
+  
+  /**
+   * Backwards compat.
+   */
+  @Configurable
   public void setExpireTimeout(Period expireTimeout)
   {
-    setExpireTimeoutMillis(expireTimeout.getPeriod());
+    setModifiedExpireTimeout(expireTimeout);
   }
 
   /**
@@ -231,85 +259,34 @@ public class AbstractCache
    * Default is infinite.
    */
   @Configurable
-  public void setExpireTimeoutMillis(long expireTimeout)
+  public void setModifiedExpireTimeoutMillis(long expireTimeout)
   {
-    _config.setExpireTimeout(expireTimeout);
-  }
-
-  /**
-   * The maximum idle time for an item, which is typically used for
-   * temporary data like sessions.  For example, session
-   * data might be removed if idle over 30 minutes.
-   * <p/>
-   * Cached data would have infinite idle time because
-   * it doesn't depend on how often it's accessed.
-   * <p/>
-   * Default is infinite.
-   */
-  @Configurable
-  public void setIdleTimeout(Period period)
-  {
-    setIdleTimeoutMillis(period.getPeriod());
-  }
-
-  /**
-   * The maximum idle time for an item, which is typically used for
-   * temporary data like sessions.  For example, session
-   * data might be removed if idle over 30 minutes.
-   * <p/>
-   * Cached data would have infinite idle time because
-   * it doesn't depend on how often it's accessed.
-   * <p/>
-   * Default is infinite.
-   */
-  public long getIdleTimeout()
-  {
-    return _config.getIdleTimeout();
-  }
-
-  /**
-   * Sets the idle timeout in milliseconds
-   */
-  @Configurable
-  public void setIdleTimeoutMillis(long timeout)
-  {
-    _config.setIdleTimeout(timeout);
-  }
-
-  /**
-   * Returns the idle check window, used to minimize traffic when
-   * updating access times.
-   */
-  public long getIdleTimeoutWindow()
-  {
-    return _config.getIdleTimeoutWindow();
-  }
-
-  /**
-   * Sets the idle timeout windows
-   */
-  public void setIdleTimeoutWindow(Period period)
-  {
-    _config.setIdleTimeoutWindow(period.getPeriod());
+    _config.setModifiedExpireTimeout(expireTimeout);
   }
 
   /**
    * The lease timeout is the time a server can use the local version
    * if it owns it, before a timeout.
    */
-  public long getLeaseTimeout()
+  public long getLeaseExpireTimeout()
   {
-    return _config.getLeaseTimeout();
+    return _config.getLeaseExpireTimeout();
   }
 
   /**
    * The lease timeout is the time a server can use the local version
    * if it owns it, before a timeout.
    */
+  @Configurable
+  public void setLeaseExpireTimeout(Period period)
+  {
+    setLeaseExpireTimeoutMillis(period.getPeriod());
+  }
+  
   @Configurable
   public void setLeaseTimeout(Period period)
   {
-    setLeaseTimeoutMillis(period.getPeriod());
+    setLeaseExpireTimeout(period);
   }
 
   /**
@@ -317,9 +294,9 @@ public class AbstractCache
    * if it owns it, before a timeout.
    */
   @Configurable
-  public void setLeaseTimeoutMillis(long timeout)
+  public void setLeaseExpireTimeoutMillis(long timeout)
   {
-    _config.setLeaseTimeout(timeout);
+    _config.setLeaseExpireTimeout(timeout);
   }
 
   /**
@@ -332,9 +309,9 @@ public class AbstractCache
    * <p/>
    * The default is 10ms
    */
-  public long getLocalReadTimeout()
+  public long getLocalExpireTimeout()
   {
-    return _config.getLocalReadTimeout();
+    return _config.getLocalExpireTimeout();
   }
 
   /**
@@ -346,11 +323,20 @@ public class AbstractCache
    * quicky changing item can be 10ms or 100ms.
    * <p/>
    * The default is 10ms
+   */
+  @Configurable
+  public void setLocalExpireTimeout(Period period)
+  {
+    setLocalExpireTimeoutMillis(period.getPeriod());
+  }
+  
+  /**
+   * Backwards compat.
    */
   @Configurable
   public void setLocalReadTimeout(Period period)
   {
-    setLocalReadTimeoutMillis(period.getPeriod());
+    setLocalExpireTimeout(period);
   }
 
   /**
@@ -364,9 +350,9 @@ public class AbstractCache
    * The default is 10ms
    */
   @Configurable
-  public void setLocalReadTimeoutMillis(long period)
+  public void setLocalExpireTimeoutMillis(long period)
   {
-    _config.setLocalReadTimeout(period);
+    _config.setLocalExpireTimeout(period);
   }
 
   public void setScopeMode(Scope scope)
@@ -374,121 +360,31 @@ public class AbstractCache
     _config.setScopeMode(scope);
   }
 
-  /**
-   * Sets the {@link Scope} of the cache.
-   */
-  @Configurable
-  public void setScope(String scopeName)
+  public boolean isBackup()
   {
-    _scopeName = scopeName;
+    return _config.isBackup();
   }
 
-  /**
-   * Returns the name of the Scope of the cache.
-   * @return
-   */
-  public String getScope()
+  public boolean isTriplicate()
   {
-    return _config.getScopeMode().toString().toLowerCase(Locale.ENGLISH);
-  }
-
-  public void setPersistence(String persistenceOption)
-  {
-    _persistenceOption = persistenceOption;
+    return _config.isTriplicate();
   }
   
-  public void setCacheManager(CacheManagerImpl cacheManager)
+  public void setPersistenceMode(Persistence persistence)
   {
-    if (_localManager != null && _localManager != cacheManager)
-      throw new IllegalStateException();
     
-    _localManager = cacheManager;
-  }
-
-  public static AbstractCache getMatchingCache(String name)
-  {
-    DistCacheSystem cacheService = DistCacheSystem.getCurrent();
-    
-    CacheManagerImpl localManager = cacheService.getCacheManager();
-
-    String contextId = Environment.getEnvironmentName();
-
-    String guid = contextId + ":" + name;
-  
-    return localManager.get(guid);
-  }
-
-  /**
-   * Initialize the cache.
-   */
-  @PostConstruct
-  public void init()
-  {
-    init(false);
   }
   
-  public AbstractCache createIfAbsent()
-  {
-    init(true);
-    
-    return _localManager.get(_guid);
-  }
-  
-  
-
-  private void init(boolean ifAbsent)
-  {
-    synchronized (this) {
-      if (_isInit)
-        return;
-
-      _isInit = true;
-
-      _config.init();
-
-      initServer();
-
-      initName(_name);
-
-      initScope(_scopeName);
-
-      initPersistence(_persistenceOption);
-
-      _config.setCacheKey(_manager.createSelfHashKey(_config.getGuid(),
-                                                     _config.getKeySerializer()));
-
-      if (_localManager == null) {
-        DistCacheSystem cacheService = DistCacheSystem.getCurrent();
-        
-        _localManager = cacheService.getCacheManager();
-      }
-      
-      if (_localManager.putIfAbsent(_guid, this) != null) {
-        if (ifAbsent) {
-          close();
-          return;
-        }
-        
-        throw new ConfigException(L.l("'{0}' with full name '{1}' is an invalid Cache name because it's already used by another cache.",
-                                      this, _guid));
-      }
-
-      _entryCache = new LruCache<Object,DistCacheEntry>(512);
-      
-      Environment.addCloseListener(this);
-    }
-    
-    _manager.initCache(this);
-  }
+  //
+  // caching API facade
+  //
 
   /**
    * Returns the object with the given key without checking the backing store.
    */
   public Object peek(Object key)
   {
-    DistCacheEntry cacheEntry = _entryCache.get(key);
-
-    return (cacheEntry != null) ? cacheEntry.peek() : null;
+    return _delegate.peek(key);
   }
   
   /**
@@ -496,7 +392,7 @@ public class AbstractCache
    */
   public HashKey getKeyHash(Object key)
   {
-    return getDistCacheEntry(key).getKeyHash();
+    return _delegate.getKeyHash(key);
   }
 
   /**
@@ -506,24 +402,18 @@ public class AbstractCache
   @Override
   public Object get(Object key)
   {
-    DistCacheEntry entry = getDistCacheEntry(key);
-    
-    Object value = entry.get(_config);
-    
-    return value;
+    return _delegate.get(key);
   }
 
   /**
-   * Returns the object with the given key, updating the backing
+   * Returns the object with the given key, checking the backing
    * store if necessary.
    */
-  /*
   @Override
-  public Object getLazy(Object key)
+  public Object getExact(Object key)
   {
-    return getDistCacheEntry(key).getLazy(_config);
+    return _delegate.getExact(key);
   }
-  */
 
   /**
    * Fills an output stream with the value for a key.
@@ -532,7 +422,7 @@ public class AbstractCache
   public boolean get(Object key, OutputStream os)
     throws IOException
   {
-    return getDistCacheEntry(key).getStream(os, _config);
+    return _delegate.get(key, os);
   }
 
   /**
@@ -541,12 +431,12 @@ public class AbstractCache
   @Override
   public ExtCacheEntry getExtCacheEntry(Object key)
   {
-    return getDistCacheEntry(key).getMnodeValue(_config);
+    return _delegate.getExtCacheEntry(key);
   }
   
   public ExtCacheEntry getExtCacheEntry(HashKey key)
   {
-    return getDistCacheEntry(key).getMnodeValue(_config);
+    return _delegate.getExtCacheEntry(key);
   }
 
   /**
@@ -555,12 +445,12 @@ public class AbstractCache
   @Override
   public ExtCacheEntry peekExtCacheEntry(Object key)
   {
-    return getDistCacheEntry(key).getMnodeEntry();
+    return _delegate.peekExtCacheEntry(key);
   }
   
   public ExtCacheEntry getStatCacheEntry(Object key)
   {
-    return getDistCacheEntry(key);
+    return _delegate.getStatCacheEntry(key);
   }
 
   /**
@@ -568,7 +458,7 @@ public class AbstractCache
    */
   public Cache.Entry getCacheEntry(Object key)
   {
-    return getExtCacheEntry(key);
+    return _delegate.getExtCacheEntry(key);
   }
 
   /**
@@ -580,9 +470,150 @@ public class AbstractCache
   @Override
   public void put(Object key, Object value)
   {
-    getDistCacheEntry(key).put(value, _config);
+    _delegate.put(key, value);
+  }
 
-    notifyPut(key);
+  @Override
+  public boolean putIfAbsent(Object key, Object value) throws CacheException
+  {
+    return _delegate.putIfAbsent(key, value);
+  }
+
+  @Override
+  public boolean replace(Object key, Object oldValue, Object value)
+    throws CacheException
+  {
+    return _delegate.replace(key, oldValue, value);
+  }
+
+  @Override
+  public boolean replace(Object key, Object value) throws CacheException
+  {
+    return _delegate.replace(key, value);
+  }
+
+  @Override
+  public Object getAndReplace(Object key, Object value) throws CacheException
+  {
+    return _delegate.getAndReplace(key, value);
+  }
+
+  /**
+   * Removes the entry from the cache.
+   *
+   * @return true if the object existed
+   */
+  @Override
+  public boolean remove(Object key)
+  {
+    return _delegate.remove(key);
+  }
+
+  /**
+   * Removes the entry from the cache.
+   *
+   * @return true if the object existed
+   */
+  @Override
+  public boolean remove(Object key, Object oldValue)
+  {
+    return _delegate.remove(key, oldValue);
+  }
+
+  @Override
+  public Object getAndRemove(Object key) throws CacheException
+  {
+    return _delegate.getAndRemove(key);
+  }
+
+  /**
+   * Removes the entry from the cache if the current entry matches the version.
+   */
+  @Override
+  public boolean compareAndRemove(Object key, long version)
+  {
+    return _delegate.compareAndRemove(key, version);
+  }
+
+  @Override
+  public Future load(Object key)
+      throws CacheException
+  {
+    return _delegate.load(key);
+  }
+
+  @Override
+  public Future loadAll(Collection keys)
+      throws CacheException
+  {
+    return _delegate.loadAll(keys);
+  }
+
+  @Override
+  public void removeAll(Collection keys) throws CacheException
+  {
+    _delegate.removeAll(keys);
+  }
+
+  @Override
+  public void removeAll() throws CacheException
+  {
+    _delegate.removeAll();
+  }
+
+  @Override
+  public Iterator iterator()
+  {
+    return _delegate.iterator();
+  }
+
+  @Override
+  public Status getStatus()
+  {
+    return _delegate.getStatus();
+  }
+
+  @Override
+  public void start() throws CacheException
+  {
+  }
+
+  @Override
+  public void stop() throws CacheException
+  {
+  }
+
+  @Override
+  public Object unwrap(Class cl)
+  {
+    return _delegate.unwrap(cl);
+  }
+  
+  //
+  // Resin ObjectCache facade
+  //
+
+  /**
+   * Puts a new item in the cache with a custom idle
+   * timeout (used for sessions).
+   *
+   * @param key         the key of the item to put
+   * @param is          the value of the item to put
+   * @param idleTimeout the idle timeout for the item
+   * @param flags       the flags value (for memcache)
+   */
+  @Override
+  public ExtCacheEntry put(Object key,
+                           InputStream is,
+                           long accessedExpireTimeout,
+                           long modifiedExpireTimeout,
+                           int userFlags)
+    throws IOException
+  {
+    return _delegate.put(key, is, 
+                         accessedExpireTimeout, 
+                         modifiedExpireTimeout,
+                         userFlags);
   }
 
   /**
@@ -596,10 +627,13 @@ public class AbstractCache
   @Override
   public ExtCacheEntry put(Object key,
                            InputStream is,
-                           long idleTimeout)
+                           long accessedExpireTimeout,
+                           long modifiedExpireTimeout)
     throws IOException
   {
-    return getDistCacheEntry(key).put(is, _config, idleTimeout);
+    return _delegate.put(key, is, 
+                         accessedExpireTimeout, 
+                         modifiedExpireTimeout);
   }
 
   /**
@@ -611,9 +645,7 @@ public class AbstractCache
   @Override
   public Object getAndPut(Object key, Object value)
   {
-    return getDistCacheEntry(key).getAndPut(value, _config);
-    
-    // notifyPut(key);
+    return _delegate.getAndPut(key, value);
   }
 
   /**
@@ -630,9 +662,7 @@ public class AbstractCache
                                long version,
                                Object value)
   {
-    put(key, value);
-
-    return true;
+    return _delegate.compareAndPut(key, version, value);
   }
 
   /**
@@ -650,137 +680,23 @@ public class AbstractCache
                                InputStream inputStream)
     throws IOException
   {
-    put(key, inputStream);
-
-    return true;
-  }
-
-  public void compareAndPut(HashKey key, 
-                            HashKey value,
-                            long valueLength,
-                            long version)
-  {
-    getDistCacheEntry(key).compareAndPut(version, value, valueLength, _config);
-    
-    notifyPut(key);
-  }
-
-  @Override
-  public boolean putIfAbsent(Object key, Object value) throws CacheException
-  {
-    HashKey NULL = MnodeEntry.NULL_KEY;
-    
-    HashKey result
-      = getDistCacheEntry(key).compareAndPut(NULL, value, _config);
-    
-    return result != null && result.isNull();
-  }
-
-  @Override
-  public boolean replace(Object key, Object oldValue, Object value)
-    throws CacheException
-  {
-    DistCacheEntry entry = getDistCacheEntry(key);
-    
-    HashKey oldHash = entry.getValueHash(oldValue, _config);
-    
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
-    
-    return result != null && result.equals(oldHash);
-  }
-
-  @Override
-  public boolean replace(Object key, Object value) throws CacheException
-  {
-    DistCacheEntry entry = getDistCacheEntry(key);
-    
-    HashKey oldHash = MnodeEntry.ANY_KEY;
-    
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
-    
-    return result != null && ! result.isNull();
-  }
-
-  @Override
-  public Object getAndReplace(Object key, Object value) throws CacheException
-  {
-    DistCacheEntry entry = getDistCacheEntry(key);
-    
-    HashKey oldHash = MnodeEntry.ANY_KEY;
-    
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
-    
-    // return result != null && ! result.isNull();
-    
-    return null;
-  }
-
-  /**
-   * Removes the entry from the cache.
-   *
-   * @return true if the object existed
-   */
-  @Override
-  public boolean remove(Object key)
-  {
-    notifyRemove(key);
-    
-    getDistCacheEntry(key).remove(_config);
-    
-    return true;
-  }
-
-  /**
-   * Removes the entry from the cache.
-   *
-   * @return true if the object existed
-   */
-  @Override
-  public boolean remove(Object key, Object oldValue)
-  {
-    notifyRemove(key);
-    
-    getDistCacheEntry(key).remove(_config);
-    
-    return true;
-  }
-
-  @Override
-  public Object getAndRemove(Object key) throws CacheException
-  {
-    notifyRemove(key);
-    
-    return getDistCacheEntry(key).remove(_config);
-  }
-
-  /**
-   * Removes the entry from the cache if the current entry matches the version.
-   */
-  @Override
-  public boolean compareAndRemove(Object key, long version)
-  {
-    DistCacheEntry cacheEntry = getDistCacheEntry(key);
-
-    if (cacheEntry.getVersion() == version) {
-      remove(key);
-
-      return true;
-    }
-
-    return false;
+    return _delegate.compareAndPut(key, version, inputStream);
   }
   
   /**
    * Returns the entry for the given key, returning the live item.
    */
+  /*
   public ExtCacheEntry getLiveCacheEntry(Object key)
   {
     return getDistCacheEntry(key);
   }
+  */
 
   /**
    * Returns the CacheKeyEntry for the given key.
    */
+  /*
   protected DistCacheEntry getDistCacheEntry(Object key)
   {
     DistCacheEntry cacheEntry = null;
@@ -795,14 +711,17 @@ public class AbstractCache
 
     return cacheEntry;
   }
+  */
 
   /**
    * Returns the CacheKeyEntry for the given key.
    */
+  /*
   protected DistCacheEntry getDistCacheEntry(HashKey key)
   {
     return _manager.getCacheEntry(key, _config);
   }
+  */
 
   /**
    * Returns a new map of the items found in the central cache.
@@ -880,9 +799,7 @@ public class AbstractCache
                                             NotificationScope scope,
                                             boolean synchronous)
   {
-    _listeners.add(listener);
-    
-    return true;
+    return _delegate.registerCacheEntryListener(listener, scope, synchronous);
   }
 
   /**
@@ -891,16 +808,14 @@ public class AbstractCache
   @Override
   public boolean unregisterCacheEntryListener(CacheEntryListener listener)
   {
-    _listeners.remove(listener);
-    
-    return true;
+    return _delegate.unregisterCacheEntryListener(listener);
   }
 
   /**
    * Returns the CacheStatistics for this cache.
    */
   @Override
-  public CacheStatistics getCacheStatistics()
+  public CacheStatistics getStatistics()
   {
     return null; // this;
   }
@@ -930,17 +845,7 @@ public class AbstractCache
   @Override
   public boolean containsKey(Object key)
   {
-    return _entryCache.get(key) != null;
-  }
-
-  public boolean isBackup()
-  {
-    return _config.isBackup();
-  }
-
-  public boolean isTriplicate()
-  {
-    return _config.isTriplicate();
+    return _delegate.containsKey(key);
   }
   
   public HashKey getCacheKey()
@@ -962,32 +867,13 @@ public class AbstractCache
     
     Object arg = null;
 
-    value = (loader != null) ? loader.load(key, arg) : null;
+    value = (loader != null) ? loader.load(key) : null;
 
     if (value != null)
       put(key, value);
     notifyLoad(key);
 
     return value;
-  }
-
-  protected  void setPersistenceMode(Persistence persistence)
-  {
-      switch (persistence) {
-      case NONE:
-        setTriplicate(false);
-        setBackup(false);
-        break;
-
-      case SINGLE:
-        setTriplicate(false);
-        setBackup(true);
-        break;
-
-      case TRIPLE:
-      default:
-        setTriplicate(true);
-    }
   }
 
   protected void notifyLoad(Object key)
@@ -1044,11 +930,6 @@ public class AbstractCache
   @Override
   public void close()
   {
-    _isClosed = true;
-    
-    _localManager.remove(_guid);
-    
-    _manager.closeCache(_guid);
   }
 
   private void initName(String name)
@@ -1058,50 +939,32 @@ public class AbstractCache
       throw new ConfigException(L.l("Each Cache must have a name."));
 
     String contextId = Environment.getEnvironmentName();
+    
+    if (_cacheManager != null)
+      contextId = _cacheManager.getGuid();
+      
 
     if (_guid == null)
       _guid = contextId + ":" + _name;
 
     _config.setGuid(_guid);
   }
-
-  private void initPersistence(String persistence)
-    throws ConfigException
-  {
-    Persistence result  = Persistence.TRIPLE;
-
-    if (persistence != null) {
-      try {
-        result = Persistence.valueOf(persistence.toUpperCase(Locale.ENGLISH));
-      }
-      catch (Exception e) {
-        throw new ConfigException(L.l("'{0}' is not a valid Persistence option", persistence));
-      }
-    }
-
-    setPersistenceMode(result);
-  }
   
   public boolean loadData(HashKey valueHash, WriteStream os)
     throws IOException
   {
-    return getDataBacking().loadData(valueHash, os);
+    return _delegate.loadData(valueHash, os);
   }
 
   public boolean saveData(HashKey valueHash, StreamSource source, int length)
     throws IOException
   {
-    return getDataBacking().saveData(valueHash, source, length);
+    return _delegate.saveData(valueHash, source, length);
   }
 
   public boolean isDataAvailable(HashKey valueKey)
   {
-    return getDataBacking().isDataAvailable(valueKey);
-  }
-  
-  private CacheDataBacking getDataBacking()
-  {
-    return _manager.getDataBacking();
+    return _delegate.isDataAvailable(valueKey);
   }
 
   //
@@ -1110,282 +973,85 @@ public class AbstractCache
   
   public byte []getKeyHash(String name)
   {
-    return getDistCacheEntry(name).getKeyHash().getHash();
+    return _delegate.getKeyHash(name);
   }
   
   public byte []getValueHash(Object value)
   {
-    return _manager.calculateValueHash(value, _config);
+    return _delegate.getValueHash(value);
   }
   
-  @SuppressWarnings("unchecked")
   public MnodeStore getMnodeStore()
   {
-    return ((AbstractCacheManager) _manager).getMnodeStore();
+    return _delegate.getMnodeStore();
   }
   
-  @SuppressWarnings("unchecked")
   public DataStore getDataStore()
   {
-    return ((AbstractCacheManager) _manager).getDataStore();
+    return _delegate.getDataStore();
   }
   
   public void saveData(Object value)
   {
-    ((AbstractCacheManager) _manager).writeData(null, value, 
-                                                _config.getValueSerializer());
-  }
-
-  private void initScope(String scopeName)
-    throws ConfigException
-  {
-    Scope scope = null;
-
-    if (_scopeName != null) {
-      try {
-        scope = Scope.valueOf(_scopeName.toUpperCase(Locale.ENGLISH));
-      }
-      catch (Exception e) {
-        throw new ConfigException(L.l("'{0}' is not a valid Scope option", scopeName));
-      }
-    }
-
-    setScopeMode(scope);
-  }
-
-  public void setManager(DistributedCacheManager manager)
-  {
-    if (_manager != null)
-      throw new IllegalStateException();
-    
-    _manager = manager;
+    _delegate.saveData(value);
   }
   
-  private void initServer()
-    throws ConfigException
+  public CacheImpl createIfAbsent()
   {
-    if (_manager != null)
+    init();
+    
+    return _delegate;
+  }
+
+  /**
+   * Initialize the cache.
+   */
+  @PostConstruct
+  public void init()
+  {
+    if (_delegate != null)
       return;
+
+    _config.init();
+
+    initName(_name);
     
     DistCacheSystem cacheService = DistCacheSystem.getCurrent();
 
     if (cacheService == null)
       throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a Resin environment",
                                     getClass().getSimpleName()));
+    
+    String managerName = _managerName;
+    
+    if (managerName == null && _cacheManager != null)
+      managerName = _cacheManager.getName();
 
-    _manager = cacheService.getDistCacheManager();
-
-    if (_manager == null)
-      throw new IllegalStateException("distributed cache manager not available");
+    CacheManagerImpl manager;
+    
+    if (managerName != null)
+      manager = cacheService.getCacheManager(managerName);
+    else
+      manager = cacheService.getCacheManager();
+    
+    _delegate = manager.createIfAbsent(_name, _config);
   }
 
-
-  /**
-   * Defines the scope options for a cache.
-   */
-  public enum Scope {
-
-    /** Not distributed, no persistence.*/
-    LOCAL,
-
-    /** Not distributed, single or no persistence */
-    SERVER,
-
-    /** Distributed across a pod, persistence required.*/
-    POD,
-
-    /** Accessible across a multi-pod cluster*/
-    CLUSTER,
-
-    /** Support CRUD operation with basic access control*/
-    GLOBAL
-  }
-
-  /**
-   * Defines the persistence options for a cache.
-   */
-  public enum Persistence {
-
-    /**
-     * No persistence.
-     */
-    NONE,
-
-    /**
-     * A single copy of the cache is persisted on one server in the cluster.
-     */
-    SINGLE,
-
-    /**
-     * Three copies of the cache and its entrys are saved on three servers.
-     */
-    TRIPLE
-  }
-
-  /**
-   * Provides an iterator over the entries in the the local cache.
-   */
-  protected static class CacheEntrySetIterator<K, V>
-    implements Iterator<Cache.Entry<K, V>>
+  @Override
+  public CacheConfiguration getConfiguration()
   {
-    private Iterator<LruCache.Entry<K, V>> _iterator;
-
-    protected CacheEntrySetIterator(LruCache<K, V> lruCache)
-    {
-      _iterator = lruCache.iterator();
-    }
-
-    public Cache.Entry<K,V> next()
-    {
-      if (!hasNext())
-        throw new NoSuchElementException();
-
-      LruCache.Entry<K, V> entry = _iterator.next();
-      Cache.Entry<K,V> cacheEntry = (Cache.Entry<K, V>) entry.getValue();
-
-      return new EntryImpl<K, V>(cacheEntry.getKey(),
-                                 cacheEntry.getValue());
-    }
-
-    public boolean hasNext()
-    {
-      return _iterator.hasNext();
-    }
-
-    /**
-     *
-     */
-    public void remove()
-    {
-      throw new UnsupportedOperationException(getClass().getName());
-    }
+    return _delegate.getConfiguration();
+  }
+  
+  @Override
+  public CacheManager getCacheManager()
+  {
+    return _delegate.getCacheManager();
   }
 
   @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _guid + "]";
-  }
-  
-  static class EntryImpl<K,V> implements Cache.Entry<K,V>
-  {
-    private final K _key;
-    private final V _value;
-    
-    EntryImpl(K key, V value)
-    {
-      _key = key;
-      _value = value;
-    }
-
-    @Override
-    public K getKey()
-    {
-      return _key;
-    }
-
-    @Override
-    public V getValue()
-    {
-      return _value;
-    }
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#getConfiguration()
-   */
-  @Override
-  public CacheConfiguration getConfiguration()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-  
-  @Override
-  public CacheManager getCacheManager()
-  {
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#load(java.lang.Object, javax.cache.CacheLoader, java.lang.Object)
-   */
-  @Override
-  public Future load(Object key)
-      throws CacheException
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#loadAll(java.util.Collection, javax.cache.CacheLoader, java.lang.Object)
-   */
-  @Override
-  public Future loadAll(Collection keys)
-      throws CacheException
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#removeAll(java.util.Collection)
-   */
-  @Override
-  public void removeAll(Collection keys) throws CacheException
-  {
-    // TODO Auto-generated method stub
-    
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#removeAll()
-   */
-  @Override
-  public void removeAll() throws CacheException
-  {
-    // TODO Auto-generated method stub
-    
-  }
-
-  /* (non-Javadoc)
-   * @see java.lang.Iterable#iterator()
-   */
-  @Override
-  public Iterator iterator()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#getStatus()
-   */
-  @Override
-  public Status getStatus()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#start()
-   */
-  @Override
-  public void start() throws CacheException
-  {
-    // TODO Auto-generated method stub
-    
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#stop()
-   */
-  @Override
-  public void stop() throws CacheException
-  {
-    // TODO Auto-generated method stub
-    
   }
 }

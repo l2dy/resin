@@ -702,7 +702,7 @@ public abstract class AbstractHttpRequest
 
   protected void setContentLength(CharSegment value)
   {
-    int contentLength = 0;
+    long contentLength = 0;
     int ch;
     int i = 0;
 
@@ -1694,7 +1694,7 @@ public abstract class AbstractHttpRequest
   protected void startInvocation()
     throws IOException
   {
-    _startTime = Alarm.getCurrentTime();
+    _startTime = Alarm.getExactTime();
     
     TcpSocketLink tcpConn = _tcpConn;
     

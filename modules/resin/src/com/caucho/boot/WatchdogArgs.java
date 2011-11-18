@@ -46,6 +46,7 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Set;
 import java.util.logging.Level;
@@ -56,6 +57,9 @@ class WatchdogArgs
   private static L10N _L;
   private static final Logger log
     = Logger.getLogger(WatchdogArgs.class.getName());
+  
+  private static final HashMap<String,StartMode> _commandMap
+    = new HashMap<String,StartMode>();
 
   private Path _javaHome;
   private Path _resinHome;
@@ -64,7 +68,8 @@ class WatchdogArgs
   private String[] _argv;
   private Path _resinConf;
   private Path _logDirectory;
-  private String _serverId = "";
+  private String _serverId = null;
+  private String _clusterId;
   private int _watchdogPort;
   private boolean _isVerbose;
   private boolean _isHelp;
@@ -146,6 +151,17 @@ class WatchdogArgs
   {
     return _serverId;
   }
+  
+  void setDynamicServerId(String serverId)
+  {
+    if (serverId != null)
+      _serverId = serverId;
+  }
+
+  String getClusterId()
+  {
+    return _clusterId;
+  }
 
   String[] getArgv()
   {
@@ -188,7 +204,7 @@ class WatchdogArgs
     if (_serverId != null)
       return _serverId;
     else
-      return "dyn-" + getDynamicAddress() + "-" + getDynamicPort();
+      return "dyn-" + getDynamicAddress() + ":" + getDynamicPort();
   }
 
   boolean isVerbose()
@@ -453,6 +469,11 @@ class WatchdogArgs
       }
       else if ("-server".equals(arg) || "--server".equals(arg)) {
         _serverId = argv[i + 1];
+
+        i++;
+      }
+      else if ("-cluster".equals(arg) || "--cluster".equals(arg)) {
+        _clusterId = argv[i + 1];
         i++;
       }
       else if ("-server-root".equals(arg) || "--server-root".equals(arg)) {
@@ -556,6 +577,9 @@ class WatchdogArgs
       else if ("kill".equals(arg)) {
         _startMode = StartMode.KILL;
       }
+      else if ("license-add".equals(arg)) {
+        _startMode = StartMode.LICENSE_ADD;
+      }
       else if ("list-restarts".equals(arg)) {
         _startMode = StartMode.LIST_RESTARTS;
       }
@@ -608,6 +632,9 @@ class WatchdogArgs
       else if ("start-with-foreground".equals(arg)) {
         _startMode = StartMode.START_WITH_FOREGROUND;
       }
+      else if (_commandMap.get(arg) != null) {
+        _startMode = _commandMap.get(arg);
+      }
       else if (_startMode != null) {
         _tailArgs.add(arg);
       }
@@ -650,6 +677,7 @@ class WatchdogArgs
                                + "\n  thread-dump - produces a thread dump"
                                + "\n  pdf-report - generates pdf report (Pro version only)"
                                + "\n  profile - profiles the system"
+                               + "\n  license-add - add a license file to the license directory"
                                + "\n  list-restarts - lists server restart timestamps"
                                + "\n  log-level - sets a log level"
                                + "\n  jmx-list - lists MBeans, attributes, operations"
@@ -1000,6 +1028,7 @@ class WatchdogArgs
     DISABLE_SOFT,
     ENABLE,
     GUI,
+    GENERATE_PASSWORD,
     HEAP_DUMP,
     JMX_CALL,
     JMX_DUMP,
@@ -1007,6 +1036,7 @@ class WatchdogArgs
     JMX_SET,
     JSPC,
     KILL,
+    LICENSE_ADD,
     LIST_RESTARTS,
     LOG_LEVEL,
     PDF_REPORT,
@@ -1015,6 +1045,7 @@ class WatchdogArgs
     THREAD_DUMP,
     SHUTDOWN,
     START,
+    START_ALL,
     START_WITH_FOREGROUND,
     STATUS,
     STOP,
@@ -1024,4 +1055,9 @@ class WatchdogArgs
     USER_REMOVE,
     WATCHDOG,
   };
+  
+  static {
+    _commandMap.put("generate-password", StartMode.GENERATE_PASSWORD);
+    _commandMap.put("start-all", StartMode.START_ALL);
+  }
 }

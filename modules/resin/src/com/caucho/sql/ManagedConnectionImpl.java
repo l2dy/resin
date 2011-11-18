@@ -767,8 +767,11 @@ public class ManagedConnectionImpl
       }
       _isolation = _oldIsolation;
 
+      // #4663
+      /*
       if (needsRollback)
         conn.rollback();
+        */
       
       if (! _autoCommit) {
         conn.setAutoCommit(true);
@@ -833,16 +836,13 @@ public class ManagedConnectionImpl
       }
 
       String pingQuery = dbPool.getPingQuery();
-
-      if (! dbPool.isPing() || pingQuery == null) {
-        if (isPingRequired)
-          return false;
-        else
-          return ! conn.isClosed();
-      }
       
       if (conn.isClosed()) {
         return false;
+      }
+
+      if (! dbPool.isPing() || pingQuery == null) {
+        return ! isPingRequired;
       }
       
       Statement stmt = conn.createStatement();
@@ -857,7 +857,6 @@ public class ManagedConnectionImpl
         stmt.close();
       }
     } catch (SQLException e) {
-      e.printStackTrace();
       throw new ResourceException(e);
     }
   }
@@ -892,7 +891,8 @@ public class ManagedConnectionImpl
     try {
       if (poolConn != null) {
         poolConn.close();
-        driverConn = null;
+        // env/11m0
+        // driverConn = null;
       }
     } catch (SQLException e) {
       throw new ResourceException(e);

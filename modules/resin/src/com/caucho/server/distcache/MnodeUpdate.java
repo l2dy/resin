@@ -44,14 +44,14 @@ public class MnodeUpdate extends MnodeValue {
                      long valueLength,
                      long version,
                      byte []cacheHash,
-                     int flags,
-                     long expireTimeout,
-                     long idleTimeout)
+                     long flags,
+                     long accessedExpireTime,
+                     long modifiedExpireTime)
   {
     super(valueHash, valueLength, version,
           cacheHash, 
           flags, 
-          expireTimeout, idleTimeout);
+          accessedExpireTime, modifiedExpireTime);
     
     _keyHash = keyHash;
   }
@@ -128,7 +128,7 @@ public class MnodeUpdate extends MnodeValue {
         + "[key=" + Hex.toHex(getKeyHash(), 0, 4)
         + ",value=" + Hex.toHex(getValueHash(), 0, 4)
         + ",len=" + getValueLength()
-        + ",flags=" + Integer.toHexString(getFlags())
+        + ",flags=" + Long.toHexString(getFlags())
         + ",version=" + getVersion()
         + "]");
   }

@@ -569,6 +569,14 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   public Part getPart(String name)
     throws IOException, ServletException
   {
+    if (isDelegateMultipartEnabled())
+      return _request.getPart(name);
+    
+    Part part = super.getPart(name);
+
+    if (part != null)
+      return part;
+
     return _request.getPart(name);
   }
 
@@ -576,7 +584,32 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   public Collection<Part> getParts()
     throws IOException, ServletException
   {
+    if (isDelegateMultipartEnabled())
+      return _request.getParts();
+    
+    Collection<Part> parts = super.getParts();
+
+    if (parts != null)
+      return parts;
+
     return _request.getParts();
+  }
+  
+  protected boolean isDelegateMultipartEnabled()
+  {
+    if (_request instanceof CauchoRequest) {
+      boolean isEnabled = ((CauchoRequest) _request).isMultipartEnabled();
+      
+      return isEnabled;
+    }
+    
+    return false;
+  }
+  
+  @Override
+  public boolean isMultipartEnabled()
+  {
+    return isDelegateMultipartEnabled() || super.isMultipartEnabled();
   }
   
   /*

@@ -61,6 +61,7 @@
 
   <target name="update">
     <!-- <mkdir dir="${maven.lib}"/>-->
+    <!-- XXX: temp build issues
     <artifact:dependencies filesetId="dependency.classpath">
       <pom file="maven.xml"/>
     </artifact:dependencies>
@@ -70,6 +71,7 @@
       <fileset refid="dependency.classpath"/>
       <mapper type="flatten"/>
     </copy>
+    -->
 
     <delete file="${maven.lib}/ant-1.6.5.jar" failonerror="false"/>
   </target>
@@ -620,15 +622,18 @@
     </antcall>
     -->
 
+    <!-- XXX: temp
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
       <param name="artifacts" value="${resin.artifacts}"/>
     </antcall>
-    
+    -->
+    <!-- XXX: temp
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="wicket"/>
       <param name="artifacts" value="${resin.artifacts}"/>
     </antcall>
+    -->
 <!--    
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="xfire"/>
@@ -648,6 +653,9 @@
     
     <copy tofile="${install}/conf/resin.xml.orig"
           file="${resindir}/conf/resin.xml"/>
+    
+    <copy tofile="${install}/conf/resin.properties.orig"
+          file="${resindir}/conf/resin.properties"/>
 
     <copy todir="${dist.build}"
           preservelastmodified="true"
@@ -713,8 +721,7 @@
         <include name="lib/jcache.jar"/>
         <include name="lib/jaxstream-15.jar"/>
         -->
-        <include name="lib/jsf-api.jar"/>
-        <include name="lib/jsf-impl.jar"/>
+        <include name="lib/jsf-mojarra-2.1.3.jar"/>
         <include name="lib/jsf.LICENSE"/>
         <!--
         <include name="lib/slf4j-api-1.6.1.jar"/>
@@ -783,7 +790,7 @@
       <fileset dir="${dist.build}">
         <include name="configure"/>
         <include name="bin/resin.sh"/>
-        <include name="bin/resinctl.in"/>
+        <include name="bin/resinctl"/>
         <include name="bin/start.bat"/>
         <include name="bin/stop.bat"/>
         <include name="automake/missing"/>
@@ -871,7 +878,7 @@
       
       <include name="${dist.name}/lib/activation.jar"/>
       <include name="${dist.name}/lib/javamail-14.jar"/>
-      <include name="${dist.name}/lib/jsf-api.jar"/>
+      <include name="${dist.name}/lib/jsf-mojarra-2.1.3.jar"/>
 
       <exclude name="${dist.name}/webapps/*.war"/>
       <exclude name="${dist.name}/lib/**"/>
@@ -1128,7 +1135,8 @@
       <param name="artifact.name" value="mule"/>
     </antcall>
     -->
-
+    
+<!-- XXX: temp
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="spring"/>
     </antcall>
@@ -1144,6 +1152,7 @@
     <antcall target="artifact.dist.macro" inheritRefs="true">
       <param name="artifact.name" value="xwork2"/>
     </antcall>
+  -->
   </target>
 
   <target name="dist.configure.make" depends="dist">
@@ -1257,18 +1266,34 @@
         <!--
         <include name="admin-users.xml"/>
         -->
+        <include name="resin.xml"/>
         <include name="app-default.xml"/>
-        <include name="health.xml"/>
+        <include name="local.d/**.xml"/>
       </fileset>
     </copy>
-    
+
+    <!--
     <copy tofile="dist-debian/etc/resin/resin.xml"
           file="${resindir}/conf/resin.xml.in"
           preservelastmodified="true"
           overwrite="true">
       <filterset>
-        <filter token="HTTP_PORT" value="80"/>
+        <filter token="HTTP_PORT" value="8080"/>
         <filter token="HTTPS_PORT" value="8443"/>
+      </filterset>
+    </copy>
+    -->
+    
+    <copy tofile="dist-debian/etc/resin/resin.properties"
+          file="${resindir}/conf/resin.properties.in"
+          preservelastmodified="true"
+          overwrite="true">
+      <filterset>
+        <filter token="HTTP_PORT" value="8080"/>
+        <filter token="HTTPS_PORT" value="8443"/>
+    
+        <filter token="SETUID_USER" value="www-data"/>
+        <filter token="SETUID_GROUP" value="www-data"/>
       </filterset>
     </copy>
     
@@ -1277,9 +1302,10 @@
           preservelastmodified="true"
           overwrite="true">
       <filterset>
-        <filter token="JAVA_HOME" value="/usr/lib/jvm/java-6-sun"/>
-        <filter token="JAVA_EXE" value="$JAVA_HOME/bin/java"/>
-        <filter token="resin_home" value="/usr/share/resin"/>
+        <filter token="BASH" value="/bin/sh"/>
+        <filter token="JAVA_HOME" value=""/>
+        <filter token="JAVA_EXE" value="/usr/bin/java"/>
+        <filter token="resin_home" value="/usr/local/share/resin"/>
         <filter token="resin_root" value="/var/www"/>
         <filter token="resin_log" value="/var/log/resin"/>
         <filter token="resin_conf" value="/etc/resin"/>
@@ -1292,11 +1318,13 @@
       </fileset>
     </chmod>
 
-    <mkdir dir="dist-debian/usr/share/${shortproduct}-${version}/lib"/>
-    <mkdir dir="dist-debian/usr/share/${shortproduct}-${version}/keys"/>
-    <mkdir dir="dist-debian/usr/share/${shortproduct}-${version}/licenses"/>
+    <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/lib"/>
+    <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/keys"/>
+    <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/licenses"/>
+    <mkdir dir="dist-debian/var/www/licenses"/>
+    <mkdir dir="dist-debian/usr/bin"/>
     
-    <copy todir="dist-debian/usr/share/${shortproduct}-${version}"
+    <copy todir="dist-debian/usr/local/share/${shortproduct}-${version}"
           preservelastmodified="true"
           overwrite="true">
       <fileset dir="${dist.build}">
@@ -1311,8 +1339,7 @@
         <include name="lib/javaee-16.jar"/>
         <include name="lib/javamail-141.jar"/>
         <include name="lib/jaxrpc-15.jar"/>
-        <include name="lib/jsf-api.jar"/>
-        <include name="lib/jsf-impl.jar"/>
+        <include name="lib/jsf-mojarra-2.1.3.jar"/>
 
         <include name="lib/resin.jar"/>
         <include name="lib/resin-eclipselink.jar"/>
@@ -1333,7 +1360,7 @@
       
       <fileset dir="${resindir}">
         <include name="bin/resin.sh"/>
-        <include name="bin/resinctl.in"/>
+        <include name="bin/resinctl"/>
       </fileset>
       
       <fileset dir="${dist.build}/libexec${bits}">
@@ -1369,18 +1396,31 @@
       </fileset>
     </copy>
 
-    <chmod perm="ugo+rx">
-      <fileset dir="dist-debian/usr/share/${shortproduct}-${version}">
-        <include name="configure"/>
-        <include name="bin/resin.sh"/>
-        <include name="bin/resinctl.in"/>
-      </fileset>
-    </chmod>
-
     <exec executable="ln">
       <arg value="-s"/>
       <arg value="${shortproduct}-${version}"/>
-      <arg value="dist-debian/usr/share/resin"/>
+      <arg value="dist-debian/usr/local/share/resin"/>
+    </exec>
+    
+    <copy tofile="dist-debian/usr/local/share/resin/bin/resinctl"
+          file="${resindir}/bin/resinctl.in"
+          preservelastmodified="true"
+          overwrite="true">
+      <filterset>
+        <filter token="BASH" value="/bin/sh"/>
+        <filter token="JAVA_HOME" value=""/>
+        <filter token="JAVA_EXE" value="/usr/bin/java"/>
+        <filter token="resin_home" value="/usr/local/share/resin"/>
+        <filter token="resin_root" value="/var/www"/>
+        <filter token="resin_log" value="/var/log/resin"/>
+        <filter token="resin_conf" value="/etc/resin"/>
+      </filterset>
+    </copy>
+
+    <exec executable="ln">
+      <arg value="-s"/>
+      <arg value="/usr/local/share/resin/bin/resinctl"/>
+      <arg value="dist-debian/usr/bin/resinctl"/>
     </exec>
     
     <copy todir="dist-debian/var/www"
@@ -1399,6 +1439,14 @@
         <include name="favicon.ico"/>
       </fileset>
     </copy>
+
+    <chmod perm="ugo+rx">
+      <fileset dir="dist-debian/usr/local/share/${shortproduct}-${version}">
+        <include name="configure"/>
+        <include name="bin/resin.sh"/>
+        <include name="bin/resinctl"/>
+      </fileset>
+    </chmod>
 
     <exec executable="uname" outputproperty="debian.architecture">
       <arg value="-m"/>

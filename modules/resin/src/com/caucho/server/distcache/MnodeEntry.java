@@ -49,11 +49,11 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   
   private final long _leaseTimeout;
 
-  private final long _lastUpdateTime;
-
   private final boolean _isServerVersionValid;
 
   private final boolean _isImplicitNull;
+  
+  private final long _lastModifiedTime;
   
   private volatile long _lastAccessTime;
   
@@ -72,9 +72,9 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
                     long version,
                     Object value,
                     HashKey cacheHash,
-                    int flags,
-                    long expireTimeout,
-                    long idleTimeout,
+                    long flags,
+                    long accessedExpireTimeout,
+                    long modifiedExpireTimeout,
                     long leaseTimeout,
                     long lastAccessTime,
                     long lastUpdateTime,
@@ -84,11 +84,11 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
     super(HashKey.getHash(valueHash), valueLength, version,
           HashKey.getHash(cacheHash),
           flags,
-          expireTimeout, idleTimeout);
+          accessedExpireTimeout, modifiedExpireTimeout);
     
     _leaseTimeout = leaseTimeout;
     _lastRemoteAccessTime = lastAccessTime;
-    _lastUpdateTime = lastUpdateTime;
+    _lastModifiedTime = lastUpdateTime;
     
     _lastAccessTime = Alarm.getExactTime();
 
@@ -111,7 +111,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
     
     _leaseTimeout = leaseTimeout;
     _lastRemoteAccessTime = lastAccessTime;
-    _lastUpdateTime = lastUpdateTime;
+    _lastModifiedTime = lastUpdateTime;
     
     _lastAccessTime = Alarm.getExactTime();
 
@@ -123,7 +123,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   }
 
   public MnodeEntry(MnodeEntry oldMnodeValue,
-                    long idleTimeout,
+                    long accessTimeout,
                     long lastUpdateTime)
   {
     super(oldMnodeValue.getValueHash(),
@@ -131,13 +131,13 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
           oldMnodeValue.getVersion(),
           oldMnodeValue.getCacheHash(),
           oldMnodeValue.getFlags(),
-          oldMnodeValue.getExpireTimeout(),
-          idleTimeout);
+          accessTimeout,
+          oldMnodeValue.getModifiedExpireTimeout());
     
     _leaseTimeout = oldMnodeValue.getLeaseTimeout();
     
     _lastRemoteAccessTime = lastUpdateTime;
-    _lastUpdateTime = lastUpdateTime;
+    _lastModifiedTime = lastUpdateTime;
     
     _lastAccessTime = Alarm.getExactTime();
 
@@ -161,7 +161,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   /**
    * Returns the last access time.
    */
-  public long getLastAccessTime()
+  public long getLastAccessedTime()
   {
     return _lastAccessTime;
   }
@@ -194,9 +194,9 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
    * Returns the last update time.
    */
   @Override
-  public long getLastUpdateTime()
+  public long getLastModifiedTime()
   {
-    return _lastUpdateTime;
+    return _lastModifiedTime;
   }
 
   /**
@@ -204,21 +204,21 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
    */
   public final long getExpirationTime()
   {
-    return _lastUpdateTime + getExpireTimeout();
+    return _lastModifiedTime + getModifiedExpireTimeout();
   }
 
-  public final boolean isLocalReadValid(int serverIndex, 
-                                        long now,
-                                        long localReadTimeout)
+  public final boolean isLocalExpired(int serverIndex, 
+                                      long now,
+                                      long localExpireTimeout)
   {
     if (! _isServerVersionValid)
-      return false;
-    else if (now <= _lastAccessTime + localReadTimeout)
       return true;
+    else if (now <= _lastAccessTime + localExpireTimeout)
+      return false;
     else if (_leaseOwner == serverIndex && now <= _leaseExpireTime)
-      return true;
-    else
       return false;
+    else
+      return true;
   }
 
   public final boolean isLeaseExpired(long now)
@@ -227,10 +227,24 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   }
 
   /**
+   * Returns true if the local (unchecked) expire time.
+   */
+  public final boolean isLocalExpired(long now, CacheConfig config)
+  {
+    if (isExpired(now))
+      return true;
+    else if (_lastAccessTime + config.getLocalExpireTimeout() <= now)
+      return true;
+    else
+      return false;
+  }
+  
+  /**
    * Returns true is the entry has expired for being idle or having
    * expired.
    */
-  public final boolean isEntryExpired(long now)
+  @Override
+  public final boolean isExpired(long now)
   {
     return isIdleExpired(now) || isValueExpired(now);
   }
@@ -240,7 +254,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
    */
   public final boolean isValueExpired(long now)
   {
-    return _lastUpdateTime + getExpireTimeout() < now;
+    return _lastModifiedTime + getModifiedExpireTimeout() < now;
   }
 
   /**
@@ -248,7 +262,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
    */
   public final boolean isIdleExpired(long now)
   {
-    return _lastAccessTime + getIdleTimeout() < now;
+    return _lastAccessTime + getAccessedExpireTimeout() < now;
   }
 
   /**
@@ -274,6 +288,9 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
       _leaseOwner = -1;
 
       _leaseExpireTime = 0;
+      
+      // server/0b10
+      _lastAccessTime = 0;
     }
   }
 
@@ -290,9 +307,9 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   /**
    * Returns the idle window to avoid too many updates
    */
-  public long getIdleWindow()
+  public long getAccessExpireTimeoutWindow()
   {
-    long window = getIdleTimeout() / 4;
+    long window = getAccessedExpireTimeout() / 4;
     long windowMax = 15 * 60 * 1000L;
 
     if (window < windowMax)
@@ -443,7 +460,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   @Override
   public boolean isValid()
   {
-    return (! isEntryExpired(Alarm.getCurrentTime()));
+    return (! isExpired(Alarm.getCurrentTime()));
   }
 
   /*
@@ -475,7 +492,7 @@ public final class MnodeEntry extends MnodeValue implements ExtCacheEntry {
   {
     return (getClass().getSimpleName()
             + "[value=" + Hex.toHex(getValueHash(), 0, 4)
-            + ",flags=0x" + Integer.toHexString(getFlags())
+            + ",flags=0x" + Long.toHexString(getFlags())
             + ",version=" + getVersion()
             + ",lease=" + _leaseOwner
             + "]");

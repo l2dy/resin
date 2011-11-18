@@ -29,10 +29,11 @@
 
 package com.caucho.server.webapp;
 
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.Map;
+import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.http.CauchoRequestWrapper;
+import com.caucho.util.HashMapImpl;
+import com.caucho.util.IntMap;
+import com.caucho.util.L10N;
 
 import javax.servlet.AsyncContext;
 import javax.servlet.DispatcherType;
@@ -40,14 +41,10 @@ import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-
-import com.caucho.server.dispatch.Invocation;
-import com.caucho.server.http.CauchoRequestWrapper;
-import com.caucho.server.http.Form;
-import com.caucho.util.HashMapImpl;
-import com.caucho.util.IntMap;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Encoding;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Enumeration;
+import java.util.Map;
 
 public class ForwardRequest extends CauchoRequestWrapper {
   private static final IntMap _forwardAttributeMap = new IntMap();
@@ -317,7 +314,7 @@ public class ForwardRequest extends CauchoRequestWrapper {
     if (_filledForm == null)
       _filledForm = parseQuery();
 
-    return (String []) _filledForm.get(name);
+    return _filledForm.get(name);
   }
 
   /**
@@ -335,12 +332,20 @@ public class ForwardRequest extends CauchoRequestWrapper {
 
   private HashMapImpl<String,String[]> parseQuery()
   {
-    String javaEncoding = Encoding.getJavaName(getCharacterEncoding());
-
     HashMapImpl<String,String[]> form = new HashMapImpl<String,String[]>();
 
-    form.putAll(getRequest().getParameterMap());
-    
+    Map <String,String[]> map = getParameterMapImpl();
+
+    //server/162r
+    form.putAll(map);
+
+    map = getRequest().getParameterMap();
+
+    mergeParameters(map, form);
+
+    /*
+    String javaEncoding = Encoding.getJavaName(getCharacterEncoding());
+
     Form formParser = Form.allocate();
 
     try {
@@ -353,6 +358,7 @@ public class ForwardRequest extends CauchoRequestWrapper {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+    */
 
     return form;
   }

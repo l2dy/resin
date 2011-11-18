@@ -65,7 +65,6 @@ import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.deploy.DeployControllerService;
-import com.caucho.env.distcache.DistCacheSystem;
 import com.caucho.env.git.GitSystem;
 import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
@@ -99,9 +98,11 @@ import com.caucho.server.cluster.Server;
 import com.caucho.server.cluster.ServerConfig;
 import com.caucho.server.cluster.ServletContainerConfig;
 import com.caucho.server.cluster.ServletSystem;
-import com.caucho.server.distcache.FileCacheManager;
+import com.caucho.server.distcache.CacheStoreManager;
+import com.caucho.server.distcache.DistCacheSystem;
 import com.caucho.server.resin.ResinArgs.BoundPort;
 import com.caucho.server.webbeans.ResinCdiProducer;
+import com.caucho.server.webbeans.ResinServerConfigLibrary;
 import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
 import com.caucho.util.L10N;
@@ -393,13 +394,15 @@ public class Resin
     _startInfoListeners.add(listener);
   }
   
-  void setStartInfo(boolean isRestart, String startMessage)
+  void setStartInfo(boolean isRestart, 
+                    String startMessage,
+                    ExitCode exitCode)
   {
     _isRestart = isRestart;
     _restartMessage = startMessage;
     
     for (StartInfoListener listener : _startInfoListeners) {
-      listener.setStartInfo(isRestart, startMessage);
+      listener.setStartInfo(isRestart, startMessage, exitCode);
     }
   }
   
@@ -518,6 +521,8 @@ public class Resin
       Config.setProperty("java", new JavaVar());
       Config.setProperty("system", System.getProperties());
       Config.setProperty("getenv", System.getenv());
+      // server/4342
+      Config.setProperty("server_id", getServerId());
 
       // _management = createResinManagement();
 
@@ -525,6 +530,7 @@ public class Resin
         Config.setProperty("fmt", new FmtFunctions());
 
         ResinConfigLibrary.configure(cdiManager);
+        ResinServerConfigLibrary.configure(cdiManager);
 
         try {
           Method method = Jndi.class.getMethod("lookup", new Class[] { String.class });
@@ -577,19 +583,21 @@ public class Resin
   {
     TempFileService.createAndAddService();
     
-    LockService.createAndAddService(createLockManager());
+    // LockService.createAndAddService(createLockManager());
   }
   
   protected DistCacheSystem createDistCacheService()
   {
     return DistCacheSystem.
-      createAndAddService(new FileCacheManager(getResinSystem()));
+      createAndAddService(new CacheStoreManager(getResinSystem()));
   }
   
+  /*
   protected AbstractLockManager createLockManager()
   {
     return new SingleLockManager();
   }
+  */
   
   private void setArgs(ResinArgs args)
   {
@@ -642,12 +650,13 @@ public class Resin
    */
   public void setServerId(String serverId)
   {
-    if ("".equals(serverId))
+    if (serverId == null || "".equals(serverId))
       serverId = "default";
     
     //Config.setProperty("serverId", serverId);
     ClassLoader classLoader = ClassLoader.getSystemClassLoader();
     Config.setProperty("serverId", serverId, classLoader);
+    Config.setProperty("server_id", serverId, classLoader);
 
     _serverId = serverId;
     _serverIdLocal.set(serverId);
@@ -704,6 +713,9 @@ public class Resin
   public void setJoinCluster(String clusterId)
   {
     _dynamicJoinCluster = clusterId;
+    
+    if ("null".equals(clusterId))
+      Thread.dumpStack();
   }
   
   /**
@@ -1269,15 +1281,31 @@ public class Resin
     String clusterId = "";
     
     if (_dynamicJoinCluster != null) {
+      clusterId = _dynamicJoinCluster;
+      
       CloudServer cloudServer = joinCluster(bootResin.getCloudSystem());
 
-      if (cloudServer != null)
-        clusterId = cloudServer.getCluster().getId(); 
+      if (cloudServer != null) {
+        clusterId = cloudServer.getCluster().getId();
+      }
     }
     
-    BootServerConfig bootServer = bootResin.findServer(_serverId);
+    
+    String serverId = _serverId;
+    
+    BootServerConfig bootServer = bootResin.findServer(serverId);
     
     if (bootServer == null) {
+      /*
+      if (_serverId != null 
+          && ! "".equals(_serverId)
+          && ! "default".equals(_serverId)
+          && ! isWatchdog()
+          && _dynamicJoinCluster == null)
+        throw new ConfigException(L().l("-server '{0}' is an unknown server in the configuration file.",
+                                        _serverId));
+                                        */
+      
       BootClusterConfig clusterConfig;
       
       clusterConfig = bootResin.findCluster(clusterId);
@@ -1289,9 +1317,13 @@ public class Resin
         clusterConfig.setId(clusterId);
         clusterConfig.init();
       }
-      else {
+      else if (serverId != null) {
         throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
-                                        _serverId));
+                                        serverId));
+      }
+      else {
+          throw new ConfigException(L().l("'{0}' is an unknown cluster in the configuration file.",
+                                          clusterId));
       }
       
       /*
@@ -1302,7 +1334,7 @@ public class Resin
       */
       
       bootServer = clusterConfig.createServer();
-      bootServer.setId(getServerId());
+      bootServer.setId(serverId); // getServerId());
       
       if (_dynamicJoinCluster != null)
         bootServer.setDynamic(true);

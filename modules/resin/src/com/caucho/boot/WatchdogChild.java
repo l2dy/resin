@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.env.service.ResinSystem;
+import com.caucho.env.shutdown.ExitCode;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.WatchdogMXBean;
 import com.caucho.network.listen.TcpSocketLinkListener;
@@ -74,12 +75,13 @@ class WatchdogChild
                 ResinSystem system,
                 WatchdogArgs args, 
                 Path rootDirectory,
-                BootClusterConfig cluster)
+                BootClusterConfig cluster,
+                int index)
   {
     _id = id;
     
     _system = system;
-    _config = new WatchdogConfig(cluster, args, rootDirectory);
+    _config = new WatchdogConfig(cluster, args, rootDirectory, index);
 
     _admin = new WatchdogAdmin();
   }
@@ -88,6 +90,7 @@ class WatchdogChild
                 WatchdogConfig config)
   {
     _id = config.getId();
+    
     _config = config;
     
     _admin = new WatchdogAdmin();
@@ -270,6 +273,11 @@ class WatchdogChild
     else
       return null;
   }
+  
+  boolean isDynamicServer()
+  {
+    return _config.isDynamic();
+  }
 
   boolean hasXmx()
   {
@@ -355,6 +363,16 @@ class WatchdogChild
       return null;
   }
   
+  ExitCode getPreviousExitCode()
+  {
+    WatchdogChildTask task = _taskRef.get();
+    
+    if (task != null)
+      return task.getPreviousExitCode();
+    else
+      return null;
+  }
+  
   Serializable queryGet(Serializable payload)
   {
     WatchdogChildTask task = _taskRef.get();
@@ -421,6 +439,16 @@ class WatchdogChild
     
     if (task != null)
       task.stop();
+  }
+
+  /**
+   * Stops the watchdog instance
+   */
+  public void restart()
+  {
+    stop();
+    
+    start();
   }
 
   /**

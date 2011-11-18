@@ -862,10 +862,21 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   public String getCharacterEncodingImpl()
   {
     // server/172d
-    // XXX:
-    // return _setCharEncoding;
     // server/2u00
-    return getCharacterEncoding();
+    
+    if (_setCharEncoding != null)
+      return _setCharEncoding;
+    
+    String contentType = getContentType();
+    
+    if (contentType == null
+        || getContentType().startsWith("text/")
+        || getContentType().startsWith("multipart/")) {
+      // server/1b5a, #4778
+      return getCharacterEncoding();
+    }
+    else
+      return null;
   }
 
   /**
@@ -1238,9 +1249,10 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   {
     _sessionId = id;
 
-    // XXX: server/1315 vs server/0506 vs server/170k
+    // XXX: server/1315 vs server/0506 vs server/170k vs server/01r(e,f)
     // could also set the nocache=JSESSIONID
-    setPrivateOrResinCache(true);
+    if (_request.getWebApp().getSessionManager().enableSessionCookies())
+      setPrivateOrResinCache(true);
   }
 
   protected void addServletCookie(WebApp webApp)
@@ -1254,7 +1266,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
       */
 
     // server/003a
-    if (_sessionId != null && webApp != null)
+    if (_sessionId != null
+        && webApp != null
+        && webApp.getSessionManager().enableSessionCookies())
       addCookie(createServletCookie(webApp));
   }
 
@@ -1573,6 +1587,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     return _response;
   }
 
+  @Override
   public int getStatus()
   {
     return _status;

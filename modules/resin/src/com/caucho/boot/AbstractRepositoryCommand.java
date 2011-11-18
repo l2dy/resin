@@ -29,15 +29,26 @@
 
 package com.caucho.boot;
 
+import java.io.IOException;
+import java.net.Socket;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.caucho.bam.NotAuthorizedException;
+import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.actor.ActorSender;
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
+import com.caucho.hmtp.HmtpClient;
 import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.server.admin.HmuxClientFactory;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
 
 public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
   private static final L10N L = new L10N(AbstractRepositoryCommand.class);
+  private static final Logger log
+    = Logger.getLogger(AbstractRepositoryCommand.class.getName());
 
   @Override
   public final int doCommand(WatchdogArgs args,
@@ -49,7 +60,7 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
     try {
       deployClient = getDeployClient(args, client);
 
-     return doCommand(args, client, deployClient);
+      return doCommand(args, client, deployClient);
     } catch (Exception e) {
       if (args.isVerbose())
         e.printStackTrace();
@@ -95,31 +106,30 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
   protected WebAppDeployClient getDeployClient(WatchdogArgs args,
                                                WatchdogClient client)
   {
+    ActorSender sender = createBamClient(args, client);
+    
+    // return new WebAppDeployClient(address, port, user, password);
+    
+    return new WebAppDeployClient(sender);
+  }
+  
+  private ActorSender createBamClient(WatchdogArgs args,
+                                      WatchdogClient client)
+  {
     String address = args.getArg("-address");
-
-    if (address == null || address.isEmpty())
-      address = client.getConfig().getAddress();
 
     int port = -1;
 
     String portArg = args.getArg("-port");
 
     try {
-    if (portArg != null && !portArg.isEmpty())
-      port = Integer.parseInt(portArg);
+      if (portArg != null && ! portArg.isEmpty())
+        port = Integer.parseInt(portArg);
     } catch (NumberFormatException e) {
       NumberFormatException e1 = new NumberFormatException("-port argument is not a number '" + portArg + "'");
       e1.setStackTrace(e.getStackTrace());
 
       throw e;
-    }
-
-    if (port == -1)
-      port = findPort(client);
-
-    if (port == 0) {
-      throw new ConfigException(L.l("HTTP listener {0}:{1} was not found",
-                                    address, port));
     }
     
     String user = args.getArg("-user");
@@ -130,7 +140,137 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
       password = client.getResinSystemAuthKey();
     }
     
-    return new WebAppDeployClient(address, port, user, password);
+    return createBamClient(client, address, port, user, password);
+  }
+  
+  private ActorSender createBamClient(WatchdogClient client,
+                                      String address,
+                                      int port,
+                                      String userName,
+                                      String password)
+  {
+    WatchdogClient liveClient = client;
+    
+    ActorSender hmuxClient
+      = createHmuxClient(client, address, port, userName, password);
+    
+    if (hmuxClient != null)
+      return hmuxClient;
+
+    if (address == null || address.isEmpty()) {
+      liveClient = findLiveClient(client, port);
+      
+      address = liveClient.getConfig().getAddress();
+    }
+
+    if (port <= 0)
+      port = findPort(liveClient);
+
+    if (port <= 0) {
+      throw new ConfigException(L.l("Cannot find live Resin server for deployment at {0}:{1} was not found",
+                                    address, port));
+    }
+    
+    return createHmtpClient(address, port, userName, password);
+  }
+  
+  private ActorSender createHmtpClient(String address, int port,
+                                       String userName,
+                                       String password)
+  {
+    String url = "http://" + address + ":" + port + "/hmtp";
+    
+    HmtpClient client = new HmtpClient(url);
+    try {
+      client.setVirtualHost("admin.resin");
+
+      client.connect(userName, password);
+
+      return client;
+    } catch (RemoteConnectionFailedException e) {
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    url, e.getMessage()),
+                                                e);
+    }
+  }
+  
+  
+  private ActorSender createHmuxClient(WatchdogClient client,
+                                       String address, int port,
+                                       String userName,
+                                       String password)
+  {
+    WatchdogClient triad = findLiveTriad(client);
+
+    if (triad == null)
+      return null;
+    
+    address = triad.getConfig().getAddress();
+    port = triad.getConfig().getPort();
+
+    HmuxClientFactory hmuxFactory
+      = new HmuxClientFactory(address, port, userName, password);
+                                                          
+    try {
+      return hmuxFactory.create();
+    } catch (RemoteConnectionFailedException e) {
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    triad, e.getMessage()),
+                                                e);
+    }
+  }
+  
+  private WatchdogClient findLiveTriad(WatchdogClient client)
+  {
+    for (WatchdogClient triad : client.getConfig().getCluster().getClients()) {
+      int port = triad.getConfig().getPort();
+      
+      if (clientCanConnect(triad, port)) {
+        return triad;
+      }
+      
+      if (triad.getIndex() > 2)
+        break;
+    }
+    
+    return null;
+  }
+
+  private WatchdogClient findLiveClient(WatchdogClient client, int port)
+  {
+    for (WatchdogClient triad : client.getConfig().getCluster().getClients()) {
+      int triadPort = port;
+      
+      if (triadPort <= 0)
+        triadPort = findPort(triad);
+      
+      if (clientCanConnect(triad, triadPort)) {
+        return triad;
+      }
+      
+      if (triad.getIndex() > 2)
+        break;
+    }
+    
+    return client;
+  }
+  
+  private boolean clientCanConnect(WatchdogClient client, int port)
+  {
+    String address = client.getConfig().getAddress();
+    int clusterPort = client.getConfig().getPort();
+    
+    try {
+      Socket s = new Socket(address, clusterPort);
+      
+      s.close();
+      
+      return true;
+    } catch (IOException e) {
+      log.log(Level.FINER, e.toString(), e);
+      
+      return false;
+    }
   }
   
   private int findPort(WatchdogClient client)

@@ -30,6 +30,7 @@
 package com.caucho.server.resin;
 
 import java.util.ArrayList;
+import java.util.logging.Logger;
 
 import com.caucho.cloud.security.SecurityService;
 import com.caucho.cloud.topology.CloudSystem;
@@ -50,8 +51,10 @@ import com.caucho.vfs.Vfs;
  */
 public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentBean
 {
+  private static final Logger log
+    = Logger.getLogger(BootResinConfig.class.getName());
   private Resin _resin;
-
+  
   private ContainerProgram _resinProgram
     = new ContainerProgram();
 
@@ -104,6 +107,12 @@ public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentB
     _resin.setRootDirectory(rootDirectory);
     
     Vfs.setPwd(rootDirectory);
+  }
+  
+  public void setJoinCluster(String joinCluster)
+  {
+    if (! "".equals(joinCluster))
+      _resin.setJoinCluster(joinCluster);
   }
   
   /**

@@ -442,7 +442,7 @@ public class XmlConfigContext {
 
    try {
       attrStrategy = getAttribute(parentType, qName, childNode);
-      
+
       if (attrStrategy == null) {
         if (qName.equals(TEXT)) {
           validateEmptyText(parentBean, childNode);
@@ -568,8 +568,9 @@ public class XmlConfigContext {
       Object elValue = eval(attrStrategy.getConfigType(), text);
 
       // ioc/2410
-      if (elValue != NULL)
+      if (elValue != NULL) {
         attrStrategy.setValue(bean, qName, elValue);
+      }
       else {
         try {
           attrStrategy.setValue(bean, qName, null);
@@ -1099,7 +1100,7 @@ public class XmlConfigContext {
     Expr expr = parser.parse();
 
     Object value = type.valueOf(elContext, expr);
-    
+
     if (value != null)
       return value;
     else

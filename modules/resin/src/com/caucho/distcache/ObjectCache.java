@@ -34,17 +34,14 @@ import javax.cache.Cache;
 /**
  * Interface for a distributed cache.
  */
-public interface ObjectCache extends Cache
+public interface ObjectCache<K,V> extends Cache<K,V>
 {
   /**
    * Returns the extended entry
    */
-  public ExtCacheEntry getExtCacheEntry(Object entry);
-
-  /**
-   * Gets the value, with a lazy update
-   */
-  // public Object getLazy(Object key);
+  public ExtCacheEntry<K,V> getExtCacheEntry(K key);
+  
+  public V getExact(K key);
 
   /**
    * Updates the cache if the old value hash matches the current value.
@@ -56,13 +53,13 @@ public interface ObjectCache extends Cache
    *
    * @return true if the update succeeds, false if it fails
    */
-  public boolean compareAndPut(Object key, long version, Object value);
+  public boolean compareAndPut(K key, long version, Object value);
 
   /**
    * Removes the entry from the cache if the current entry's version
    * matches.
    */
-  public boolean compareAndRemove(Object key, long version);
+  public boolean compareAndRemove(K key, long version);
 
   /**
    * Returns true if the cache is closed
@@ -72,5 +69,5 @@ public interface ObjectCache extends Cache
   //
   // for statistics
   //
-  public ExtCacheEntry getStatCacheEntry(Object entry);
+  public ExtCacheEntry<K,V> getStatCacheEntry(K key);
 }

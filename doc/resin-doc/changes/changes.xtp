@@ -10,7 +10,48 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.23 - snapshot">
+<s2 title="4.0.24 - snapshot">
+<ul>
+<li>servlet: session creation with enable-cookies=false (#4775, rep by jkeays)</li>
+<li>quercus: isset returning true for null values in compiled mode (Wordpress fix) (#4477, rep by mhixson)</li>
+<li>health pdf: mailto config should be mail-to (rep by Keith Fetterman)</li>
+<li>security: custom constraints could not be added to resin:security-constraint (#4835, rep by K. Ding)</li>
+<li>cli: new "license-add" command</li>
+<li>config: added rvar() method to properties-based config</li>
+<li>access-log: use Alarm.getExactTime() for '%D' formatting in access log (#4842, rep by William Au)</li>
+<li>servlet: transport constraint priority(#4843, rep by Keith Fetterman)</li>
+<li>ssl: jsse self-signed certificates are only possible with Sun/Oracle JDK (#4829)</li>
+<li>el: added "?:" operator ("x ?: 80" is "x != null ? x : 80")</li>
+<li>iis: add suport for windows authentiation(#4826, rep by Urs Kehrli)</li>
+<li>centos: update ./configure for centos (#4803)</li>
+<li>servlet: fixed bug failing @MultipartConfig when used with resin:Forward(#4777)</li>
+<li>config: add resin:properties</li>
+<li>cli: "restart" command needs to handle dynamic servers (#4801)</li>
+<li>jsp-el: CompositeELResolver wasn't implementing invoke properly (#4820, rep by Wesley Wu)</li>
+<li>websocket: WebSocketReader.read(char[]) was using iso-8859-1 instead of utf-8 (#4818, rep by ihristov)</li>
+<li>hessian: add setUnshared and HessianUnshared for serialization performance</li>
+<li>health: added LicenseHealthCheck</li>
+<li>health pdf: added license info to PDF report</li>
+<li>health pdf: add cluster summary section to PDF report</li>
+<li>health pdf: add http error codes to PDF report</li>
+<li>health pdf: add log warning counts to PDF report</li>
+<li>jsp: errorPage with setStatus(200) not properly logged (#4804, rep by richardmoco)</li>
+<li>solaris: solaris needs #define _POSIX_PTHREAD_SEMANTICS for proper ctime_r behavior (#4791, rep by Alan Wright)</li>
+<li>health: added health events and anomaly events (#4724)</li>
+<li>db-pool: reduced default max-create-connections back to 5 (#4734)</li>
+<li>db-pool: add min-idle-count to &lt;database> configuration (#4664)</li>
+<li>log: log-handler config wasn't in proper class loader context (#4784, rep by chris214)</li>
+<li>log: flush logs in separate thread so writers don't need to be bottlenecked (#4765, apleshi)</li>
+<li>servlet: allow null to getRealPath(null) which returns null (#4761, rep by stbu)</li>
+<li>db-pool: on close connection, if auto-commit is false, do not automatically call rollback() (#4663)</li>
+<li>jsf: updated to mojarra-2.1.3 (#4746, rep by cyttesen)</li>
+<li>servlet: character-encoding should not be defaulted for images (#4778, rep by fesse)</li>
+<li>webapp: detailed web-app statistics gathering needs flush (#4750)</li>
+</ul>
+</s2>
+
+
+<s2 title="4.0.23 - Sep 30, 2011">
 <ul>
 <li>hessian: ServiceContext.end wasn't clearing _response pointer (rep by Mattias Jiderhamn)</li>
 <li>health: added mail-to to PdfReport</li>
