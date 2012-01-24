@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,13 +42,37 @@ public class JmxCallCommand extends JmxCommand
 {
   private static final L10N L = new L10N(JmxCallCommand.class);
   private static final Set<String> options = new HashSet<String>();
+  
+  public JmxCallCommand()
+  {
+    addValueOption("pattern", "pattern", "pattern to match MBean");
+    addValueOption("operation", "operation", "operation to invoke");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "calls a JMX operation on a server MBean";
+  }
+  
+  @Override
+  public String getUsageArgs()
+  {
+    return " value...";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
                        ManagerClient managerClient)
   {
-    String []trailingArgs = args.getTrailingArgs(options);
+    String []trailingArgs = args.getDefaultArgs();
 
     String pattern = args.getArg("-pattern");
     if (pattern == null)
@@ -83,18 +107,5 @@ public class JmxCallCommand extends JmxCommand
     System.out.println(result);
 
     return 0;
-  }
-
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-call -user <user> -password <password> -pattern <pattern> -operation <operation> value..."));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   calls method defined with option -operation on MBean using parameters specified at value..."));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -pattern               : pattern to match MBean, adheres to the rules defined for javax.managment.ObjectName e.g. qa:type=Foo"));
-    System.err.println(L.l("   -operation             : operation to invoke"));
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -95,6 +95,16 @@ public class PDFFont extends PDFObject {
   {
     return _face.stringWidth(text);
   }
+  
+  public double getAvgCharWidth()
+  {
+    return _face.getAvgCharWidth();
+  }
+
+  public double getMaxCharWidth()
+  {
+    return _face.getMaxCharWidth();
+  }
 
   public String getPDFName()
   {
@@ -106,18 +116,19 @@ public class PDFFont extends PDFObject {
     return "/Font";
     
   }
+  
   String getResource()
   {
     return "<< /F" + _id + " " + _id + " 0 R >>";
   }
 
+  @Override
   public void writeObject(PDFWriter out)
     throws IOException
   {
     out.println("<< /Type /Font");
     out.println("   /Subtype /Type1");
-    out.println("   /Name /" + _face.getFontName());
-    out.println("   /BaseFont /Helvetica");
+    out.println("   /BaseFont /" + _face.getFontName());
     out.println("   /Encoding /MacRomanEncoding");
     out.println(">>");
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,20 @@ import com.caucho.vfs.Vfs;
 public class LicenseAddCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(LicenseAddCommand.class);
+
+  public LicenseAddCommand()
+  {
+    addValueOption("license", "license file", "path to license file to add (required)");
+    addValueOption("to", "filename","file name license will be written to (defaults to name of license file)");
+    addFlagOption("overwrite", "overwrite existing license file if exists");
+    addFlagOption("restart", "restart Resin after license is added");
+  }
+
+  @Override
+  public String getDescription()
+  {
+    return "adds a Resin-Professional license to an installation";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
@@ -118,6 +132,7 @@ public class LicenseAddCommand extends AbstractManagementCommand
     return 0;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -133,5 +148,5 @@ public class LicenseAddCommand extends AbstractManagementCommand
     System.err.println(L.l("   -overwrite              : overwrite existing license file if exists"));
     System.err.println(L.l("   -restart                : restart Resin after license is added"));
   }
-  
+   */
 }

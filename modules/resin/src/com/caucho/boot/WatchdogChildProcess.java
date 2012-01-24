@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,6 +47,7 @@ import java.util.logging.Logger;
 
 import com.caucho.bootjni.JniProcess;
 import com.caucho.config.ConfigException;
+import com.caucho.env.health.HealthSystemFacade;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.thread.ThreadPool;
@@ -85,6 +86,7 @@ class WatchdogChildProcess
   private final Lifecycle _lifecycle = new Lifecycle();
 
   private WatchdogActor _watchdogActor;
+  private WatchdogChildTask _task;
 
   private Socket _childSocket;
   private AtomicReference<Process> _processRef
@@ -99,11 +101,13 @@ class WatchdogChildProcess
 
   WatchdogChildProcess(String id,
                        ResinSystem system,
-                       WatchdogChild watchdog)
+                       WatchdogChild watchdog,
+                       WatchdogChildTask task)
   {
     _id = id;
     _system = system;
     _watchdog = watchdog;
+    _task = task;
   }
 
   int getPid()
@@ -145,6 +149,11 @@ class WatchdogChildProcess
   public String getExitMessage()
   {
     return _exitMessage;
+  }
+  
+  public void setShutdownMessage(String msg)
+  {
+    _task.setShutdownMessage(msg);
   }
   
   public long getUptime()
@@ -208,7 +217,8 @@ class WatchdogChildProcess
         
         message(new StartInfoMessage(_watchdog.isRestart(),
                                      _watchdog.getRestartMessage(),
-                                     _watchdog.getPreviousExitCode()));
+                                     _watchdog.getPreviousExitCode(),
+                                     _task.getShutdownMessage()));
 
         _status = process.waitFor();
 
@@ -663,7 +673,7 @@ class WatchdogChildProcess
     jvmArgs.add("-Djava.awt.headless=true");
 
     jvmArgs.add("-Dresin.home=" + resinHome.getFullPath());
-
+    
     if (! _watchdog.hasXss())
       jvmArgs.add("-Xss1m");
 
@@ -673,6 +683,21 @@ class WatchdogChildProcess
     // #4308, #4585
     if (CauchoSystem.isWindows())
       jvmArgs.add("-Xrs");
+
+    if (_task.getPreviousExitCode() != null)
+      jvmArgs.add("-Dresin.exit.code=" + _task.getPreviousExitCode().toString());
+
+    /*
+    if (_task.getRestartMessage() != null) {
+      jvmArgs.add("-D" + HealthSystemFacade.RESIN_EXIT_MESSAGE
+                  + "=" + _task.getRestartMessage());
+    }
+    */
+    
+    if (_task.getShutdownMessage() != null) {
+      jvmArgs.add("-D" + HealthSystemFacade.RESIN_EXIT_MESSAGE
+                  + "=" + _task.getShutdownMessage());
+    }
 
     String[] argv = _watchdog.getArgv();
 
@@ -738,7 +763,14 @@ class WatchdogChildProcess
       resinArgs.add("-server");
       resinArgs.add(_watchdog.getId());
     }
-
+    
+    /*
+    if (_watchdog.getArgs().getClusterId() != null) {
+      resinArgs.add("-cluster");
+      resinArgs.add(_watchdog.getArgs().getClusterId());
+    }
+    */
+    
     resinArgs.add("-socketwait");
     resinArgs.add(String.valueOf(socketPort));
 

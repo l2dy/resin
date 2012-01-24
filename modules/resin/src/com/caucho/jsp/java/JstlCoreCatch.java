@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -60,7 +60,7 @@ public class JstlCoreCatch extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<c:catch");
+    String prefix = printXmlOpen(os, JSTL_CORE_NS, "catch");
 
     if (_var != null)
       os.print(" var=\"" + xmlText(_var) + "\"");
@@ -69,7 +69,7 @@ public class JstlCoreCatch extends JstlNode {
 
     printXmlChildren(os);
 
-    os.print("</c:catch>");
+    os.print("</" + prefix + ":catch>");
   }
   
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,5 +35,5 @@ import javax.cache.Cache;
 
 public interface CacheResolver
 {
-  <K,V> Cache<K,V> resolveCache(CacheInvocationContext<Annotation> cacheInvocationContext);
+  <K,V> Cache<K,V> resolveCache(CacheInvocationContext<? extends Annotation> cacheInvocationContext);
 }

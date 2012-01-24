@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,17 @@ import java.io.Writer;
 public class JmxDumpCommand extends JmxCommand
 {
   private static final L10N L = new L10N(JmxDumpCommand.class);
+  
+  public JmxDumpCommand()
+  {
+    addValueOption("file", "file", "file where the JMX dump will be saved");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "dumps all JMX values from a Resin server";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
@@ -76,6 +87,7 @@ public class JmxDumpCommand extends JmxCommand
     }
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -88,4 +100,5 @@ public class JmxDumpCommand extends JmxCommand
     System.err.println(L.l("options:"));
     System.err.println(L.l("   -file <file>          : file name where jmx dump will be stored"));
   }
+  */
 }

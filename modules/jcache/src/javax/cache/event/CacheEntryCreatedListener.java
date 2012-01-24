@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,6 @@ import javax.cache.Cache;
 
 public interface CacheEntryCreatedListener<K,V> extends CacheEntryListener<K,V>
 {
-  public void onCreate(Cache.Entry<K,V> entry);
-  public void onCreateAll(Iterable<Cache.Entry<K,V>> entry);
+  public void entryCreated(CacheEntryEvent<? extends K,? extends V> entry);
+  public void entriesCreated(Iterable<Cache.Entry<? extends K,? extends V>> entry);
 }

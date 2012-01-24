@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,6 @@
 
 package com.caucho.boot;
 
-import com.caucho.util.L10N;
-
 import java.io.IOException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -41,28 +39,25 @@ import java.util.logging.Logger;
  */
 public class ConsoleCommand extends AbstractStartCommand
 {
-  private static Logger _log;
-  private static L10N _L;
-
+  private static final Logger log
+    = Logger.getLogger(ConsoleCommand.class.getName());
+  
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "console";
+    return "start Resin in console mode";
   }
-
+  
   @Override
-  public int doCommand(WatchdogArgs args, WatchdogClient client)
-    throws BootArgumentException
+  public boolean isConsole()
   {
-    validateArgs(args.getArgv());
-
-    try {
-      return client.startConsole();
-    } catch (IOException e) {
-      log().log(Level.FINE, e.getMessage(), e);
-
-      return 1;
-    }
+    return true;
+  }
+  
+  @Override
+  public boolean isStart()
+  {
+    return true;
   }
 
   @Override
@@ -71,14 +66,20 @@ public class ConsoleCommand extends AbstractStartCommand
     return true;
   }
 
-  private static Logger log()
+  @Override
+  public int doCommand(WatchdogArgs args, WatchdogClient client)
+    throws BootArgumentException
   {
-    if (_log == null)
-      _log = Logger.getLogger(ConsoleCommand.class.getName());
+    try {
+      return client.startConsole();
+    } catch (IOException e) {
+      log.log(Level.FINE, e.getMessage(), e);
 
-    return _log;
+      return 1;
+    }
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -98,4 +99,5 @@ public class ConsoleCommand extends AbstractStartCommand
     System.out.println("   -debug-port <port>    : configure a debug port");
     System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");
   }
+  */
 }

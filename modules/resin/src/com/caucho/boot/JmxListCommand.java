@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,24 +35,43 @@ import com.caucho.util.L10N;
 
 import javax.management.MalformedObjectNameException;
 import javax.management.ObjectName;
-import java.util.HashSet;
-import java.util.Set;
 
 public class JmxListCommand extends JmxCommand
 {
   private static final L10N L = new L10N(JmxListCommand.class);
-  private static final Set<String> options = new HashSet<String>();
+
+  public JmxListCommand()
+  {
+    addFlagOption("attributes", "prints MBean's attributes");
+    addFlagOption("values", "prints attribute values");
+    addFlagOption("operations", "prints operations");
+    addFlagOption("all", "when <pattern> not specified sets the wildcard pattern (*:*)");
+    addFlagOption("platform", "when <pattern> not specified sets the pattern to (java.lang:*)");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "lists the JMX MBeans in a Resin server";
+  }
+  
+  public String getUsageArgs()
+  {
+    return " [<pattern>]";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
                        ManagerClient managerClient)
   {
-    String []trailingArgs = args.getTrailingArgs(options);
-
-    String pattern = null;
-    if (trailingArgs.length > 0)
-      pattern = trailingArgs[0];
+    String pattern = args.getDefaultArg();
 
     if (pattern != null) {
       try {
@@ -83,30 +102,4 @@ public class JmxListCommand extends JmxCommand
 
     return 0;
   }
-
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-list -user <user> -password <password> [-attributes] [-values] [-operations] [-all] [-platform] [<pattern>]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   lists beans registered with JMX and matching <pattern>. <pattern> is optional and adheres\n"
-                           + "to the rules defined for javax.management.ObjectName (default resin:*)"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -attributes            : prints MBean's attributes"));
-    System.err.println(L.l("   -values                : prints attribute values"));
-    System.err.println(L.l("   -operations            : prints operations"));
-    System.err.println(L.l("   -all                   : when <pattern> not specified sets the wildcard pattern (*:*)"));
-    System.err.println(L.l("   -platform              : when <pattern> not specified sets the pattern to (java.lang:*)"));
-  }
-
-  static {
-    options.add("-attributes");
-    options.add("-values");
-    options.add("-operations");
-    options.add("-all");
-    options.add("-platform");
-  }
-
 }

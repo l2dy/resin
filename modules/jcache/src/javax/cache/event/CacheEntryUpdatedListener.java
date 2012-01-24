@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,10 +29,8 @@
 
 package javax.cache.event;
 
-import javax.cache.Cache;
-
 public interface CacheEntryUpdatedListener<K,V> extends CacheEntryListener<K,V>
 {
-  public void onUpdate(Cache.Entry<K,V> entry);
-  public void onUpdateAll(Iterable<Cache.Entry<K,V>> entry);
+  public void entryUpdate(CacheEntryEvent<? extends K,? extends V> entry);
+  public void entriesUpdate(Iterable<CacheEntryEvent<? extends K,? extends V>> entry);
 }

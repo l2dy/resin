@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,39 +39,38 @@ import java.util.logging.Logger;
  * Command to shutdown Resin server
  * bin/resin.sh shutdown -server a
  */
-public class ShutdownCommand extends AbstractStartCommand
+public class ShutdownCommand extends AbstractStopCommand
 {
-  private static Logger _log;
-  private static L10N _L;
+  private static final L10N L = new L10N(ShutdownCommand.class);
+  private static final Logger log
+    = Logger.getLogger(ShutdownCommand.class.getName());
 
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "shutdown";
+    return "shuts down the watchdog and all its managed Resin servers";
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       client.shutdown();
 
-      System.out.println(L().l("Resin/{0} shutdown watchdog at {1}:{2}",
+      System.out.println(L.l("Resin/{0} shutdown watchdog at {1}:{2}",
                                VersionFactory.getVersion(),
                                client.getWatchdogAddress(),
                                client.getWatchdogPort()));
     } catch (Exception e) {
-      System.out.println(L().l(
+      System.out.println(L.l(
         "Resin/{0} can't shutdown watchdog at {1}:{2}.\n{3}",
         VersionFactory.getVersion(),
         client.getWatchdogAddress(),
         client.getWatchdogPort(),
         e.toString()));
 
-      log().log(Level.FINE, e.toString(), e);
+      log.log(Level.FINE, e.toString(), e);
 
       System.exit(1);
     }
@@ -83,36 +82,5 @@ public class ShutdownCommand extends AbstractStartCommand
   public boolean isRetry()
   {
     return true;
-  }
-
-  private static Logger log()
-  {
-    if (_log == null)
-      _log = Logger.getLogger(ShutdownCommand.class.getName());
-
-    return _log;
-  }
-
-  private static L10N L()
-  {
-    if (_L == null)
-      _L = new L10N(ShutdownCommand.class);
-
-    return _L;
-  }
-
-  @Override
-  public void usage()
-  {
-    System.out.println("usage: bin/resin.sh [-options] shutdown");
-    System.out.println();
-    System.out.println("where options include:");
-    System.out.println("   -conf <file>          : select a configuration file");
-    System.out.println("   -data-directory <dir> : select a resin-data directory");
-    System.out.println("   -log-directory <dir>  : select a logging directory");
-    System.out.println("   -resin-home <dir>     : select a resin home directory");
-    System.out.println("   -root-directory <dir> : select a root directory");
-    System.out.println("   -watchdog-port <port> : override the watchdog-port");
-    System.out.println("   -verbose              : print verbose starting information");
   }
 }

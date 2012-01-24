@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -78,8 +78,6 @@ import com.caucho.xml.QName;
 @Module
 public class XmlManagedBeanImpl<X> extends ManagedBeanImpl<X>
 {
-  private static final L10N L = new L10N(XmlManagedBeanImpl.class);
-  
   private QName _qName;
   private String _filename;
   private int _line;

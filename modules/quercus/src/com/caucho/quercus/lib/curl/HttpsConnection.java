@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,7 +44,7 @@ import javax.net.ssl.SSLPeerUnverifiedException;
  * Represents a HttpURLConnection wrapper.
  */
 public class HttpsConnection
-  extends HttpConnection
+  extends CurlHttpConnection
 {
   protected HttpsConnection(URL url,
                             String username,

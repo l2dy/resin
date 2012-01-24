@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,21 +39,42 @@ import java.util.logging.Level;
 public class LogLevelCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(LogLevelCommand.class);
-  
+
   private static final Map<String, Level> _options = new LinkedHashMap<String, Level>();
+
+  public LogLevelCommand()
+  {
+    addFlagOption("all", "all logs (rare to use)");
+    addFlagOption("finest", "finest debugging log");
+    addFlagOption("finer", "finer debugging logs (developer-level)");
+    addFlagOption("fine", "finer debugging logs (admin/user-level)");
+    addFlagOption("config", "configuration debugging logs");
+    addFlagOption("info", "default logging level");
+    addFlagOption("warning", "non-fatal warnings");
+    addFlagOption("severe", "severe, typically fatal warnings");
+    addFlagOption("off", "disable logging");
+    
+    addValueOption("active-time", "time", "specifies temporary level active time (default permanent). e.g. 5s");
+  }
   
-  static {
-    _options.put("-all", Level.ALL);
-    _options.put("-finest", Level.FINEST);
-    _options.put("-finer", Level.FINER);
-    _options.put("-fine", Level.FINE);
-    _options.put("-config", Level.CONFIG);
-    _options.put("-info", Level.INFO);
-    _options.put("-warning", Level.WARNING);
-    _options.put("-severe", Level.SEVERE);
-    _options.put("-off", Level.OFF);
+  @Override
+  public String getUsageArgs()
+  {
+    return " loggers...";
   }
 
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
+
+  @Override
+  public String getDescription()
+  {
+    return "sets the java.util.logging level for debugging";
+  }
+ 
   @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
@@ -81,7 +102,7 @@ public class LogLevelCommand extends AbstractManagementCommand
     if (time != null)
       period = Period.toPeriod(time);
 
-    String[] loggers = args.getTrailingArgs(_options.keySet());
+    String[] loggers = args.getDefaultArgs();
     if (loggers == null || loggers.length == 0) {
       loggers = new String[2];
       loggers[0] = "";
@@ -95,16 +116,19 @@ public class LogLevelCommand extends AbstractManagementCommand
     return 0;
   }
 
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] log-level -user <user> -password <password> -all|-finest|-finer|-fine|-config|-info|-warning|-severe|-off [-active-time <time-period>] [loggers...]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   sets level for logger(s).  Defaults to root and `com.caucho' loggers."));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -<level>             : specifies new log level"));
-    System.err.println(L.l("   -active-time         : specifies temporary level active time (default permanent). e.g. 5s"));
+  public static Level getLevel(String level) {
+    return _options.get(level);
+  }
+
+  static {
+    _options.put("-all", Level.ALL);
+    _options.put("-finest", Level.FINEST);
+    _options.put("-finer", Level.FINER);
+    _options.put("-fine", Level.FINE);
+    _options.put("-config", Level.CONFIG);
+    _options.put("-info", Level.INFO);
+    _options.put("-warning", Level.WARNING);
+    _options.put("-severe", Level.SEVERE);
+    _options.put("-off", Level.OFF);
   }
 }

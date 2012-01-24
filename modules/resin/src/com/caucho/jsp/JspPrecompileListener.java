@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.jsp;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.PathPatternType;
+import com.caucho.config.types.Period;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 
@@ -63,6 +64,14 @@ public class JspPrecompileListener extends JspPrecompileResource
       extension = extension.substring(1);
 
     createFileset().addInclude(new PathPatternType("**/*." + extension));
+  }
+  
+  /**
+   * Set the time to wait for compilation to complete
+   */
+  public void setTimeout(Period timeout)
+  {
+    setTimeoutMs(timeout.getPeriod());
   }
   
   public void contextInitialized(ServletContextEvent event)

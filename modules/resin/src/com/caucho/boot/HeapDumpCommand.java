@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,6 +39,17 @@ import com.caucho.util.L10N;
 public class HeapDumpCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(HeapDumpCommand.class);
+  
+  public HeapDumpCommand()
+  {
+    addFlagOption("raw", "creates a JVM hprof file");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "produces a JVM memory heap dump";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
@@ -55,20 +66,8 @@ public class HeapDumpCommand extends AbstractManagementCommand
   }
 
   @Override
-  public void usage()
+  public boolean isProOnly()
   {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] [-server <id>] heap-dump [-address <address>] [-port <port>] -user <user> -password <password> [-raw]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   prints heap summary taken on remote server"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -conf <file>          : resin configuration file"));
-    System.err.println(L.l("   -server <id>          : id of a server"));
-    System.err.println(L.l("   -address <address>    : ip or host name of the server"));
-    System.err.println(L.l("   -port <port>          : server http port"));
-    System.err.println(L.l("   -user <user>          : user name used for authentication to the server"));
-    System.err.println(L.l("   -password <password>  : password used for authentication to the server"));
-    System.err.println(L.l("   -raw                  : creates an hprof file"));
+    return false;
   }
 }

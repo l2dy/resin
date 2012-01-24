@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,26 +46,29 @@ public class StartCommand extends AbstractStartCommand
   private static L10N _L;
 
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "start";
+    return "starts a Resin server";
+  }
+  
+  @Override
+  public boolean isStart()
+  {
+    return true;
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       client.startWatchdog(args.getArgv());
 
-      System.out.println(L().l(
-        "Resin/{0} started -server '{1}' for watchdog at {2}:{3}",
-        VersionFactory.getVersion(),
-        client.getId(),
-        client.getWatchdogAddress(),
-        client.getWatchdogPort()));
+      System.out.println(L().l("Resin/{0} started{1} with watchdog at {2}:{3}",
+                               VersionFactory.getVersion(),
+                               getServerUsageArg(args, client.getId()),
+                               client.getWatchdogAddress(),
+                               client.getWatchdogPort()));
     } catch (Exception e) {
       String eMsg;
 
@@ -111,23 +114,4 @@ public class StartCommand extends AbstractStartCommand
 
     return _L;
   }
-
-  @Override
-  public void usage()
-  {
-    System.out.println("usage: bin/resin.sh [-options] start");
-    System.out.println();
-    System.out.println("where options include:");
-    System.out.println("   -conf <file>          : select a configuration file");
-    System.out.println("   -data-directory <dir> : select a resin-data directory");
-    System.out.println("   -join-cluster <cluster>       : join a cluster as a dynamic server");
-    System.out.println("   -log-directory <dir>  : select a logging directory");
-    System.out.println("   -resin-home <dir>     : select a resin home directory");
-    System.out.println("   -root-directory <dir> : select a root directory");
-    System.out.println("   -server <id>          : select a <server> to run");
-    System.out.println("   -watchdog-port <port> : override the watchdog-port");
-    System.out.println("   -verbose              : print verbose starting information");
-    System.out.println("   -preview              : run as a preview server");
-    System.out.println("   -debug-port <port>    : configure a debug port");
-    System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");  }
 }

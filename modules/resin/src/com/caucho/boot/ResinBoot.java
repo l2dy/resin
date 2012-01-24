@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,9 +37,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.VersionFactory;
-import com.caucho.boot.WatchdogArgs.StartMode;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
+import com.caucho.config.core.ResinProperties;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.env.service.ResinSystem;
@@ -49,7 +49,6 @@ import com.caucho.loader.LibraryLoader;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.server.webbeans.ResinServerConfigLibrary;
 import com.caucho.util.L10N;
-import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.NullPath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -72,10 +71,6 @@ import com.caucho.vfs.Vfs;
 public class ResinBoot
 {
   private static L10N _L;
-  private static Logger _log;
-  
-  private static HashMap<StartMode,BootCommand> _commandMap
-    = new HashMap<StartMode,BootCommand>();
 
   private WatchdogArgs _args;
   private BootResinConfig _resinConfig;
@@ -133,14 +128,12 @@ public class ResinBoot
 
     ResinSystem system;
     
-    if (_args.isConsole()) {
+    if (_args.getCommand().isConsole()) {
       system = new ResinSystem("watchdog",
                                rootDirectory,
                                dataDirectory);
     }
     else {
-      String userName = System.getProperty("user.name");
-      
       system = new ResinSystem("watchdog", 
                                rootDirectory,
                                new NullPath("boot-temp"));
@@ -172,22 +165,43 @@ public class ResinBoot
     Config.setProperty("getenv", System.getenv());
     // server/4342
     Config.setProperty("server_id", _args.getServerId());
-
+    Config.setProperty("rvar0", _args.getServerId());
+    
     ResinConfigLibrary.configure(beanManager);
     ResinServerConfigLibrary.configure(beanManager);
+    
+    // read $HOME/.resin
+    if (_args.getUserProperties() != null && _args.getUserProperties().canRead()) {
+      ResinProperties properties = new ResinProperties();
+      properties.setPath(_args.getUserProperties());
+      
+      String mode = _args.getMode();
+      if (mode == null && _args.getCommand().isRemote(_args)) {
+        mode = "remote";
+      }
+      properties.setMode(_args.getMode());
+      
+      properties.init();
+    }
 
     config.configure(_resinConfig, _args.getResinConf(),
                      "com/caucho/server/resin/resin.rnc");
-
+    
     if (! _args.isHelp())
       initClient();
   }
   
   private void initClient()
   {
-    if (_args.isDynamicServer() || _resinConfig.isJoinCluster()) {
+    if (! (_args.isDynamicServer() || _resinConfig.isHomeCluster()))
+      return;
+    
+    if (_args.getServerId() != null)
+      return;
+
+    if (findLocalClients().isEmpty()) {
       WatchdogClient client = _resinConfig.addDynamicClient(_args);
-      
+
       if (client != null)
         _args.setDynamicServerId(client.getId());
     }
@@ -197,7 +211,12 @@ public class ResinBoot
   {
     return _resinConfig.findClient(serverId, args);
   }
-  
+
+  WatchdogClient findShutdownClient(WatchdogArgs args)
+  {
+    return _resinConfig.findShutdownClient(args.getClusterId());
+  }
+ 
   ArrayList<WatchdogClient> findLocalClients()
   {
     return _resinConfig.findLocalClients();
@@ -205,13 +224,13 @@ public class ResinBoot
 
   BootCommand getCommand()
   {
-    return _commandMap.get(_args.getStartMode());
+    return _args.getCommand();
   }
 
   boolean start()
     throws Exception
   {
-    BootCommand command = _commandMap.get(_args.getStartMode());
+    BootCommand command = getCommand();
 
     if (command != null && _args.isHelp()) {
       command.usage();
@@ -224,12 +243,26 @@ public class ResinBoot
       return code != 0;
     }
     else if (command != null) {
-      int code = command.doCommand(this, _args);
+      if (! command.isProOnly() || (command.isProOnly() && isPro())) {
+        int code = command.doCommand(this, _args);
 
-      System.exit(code);
+        System.exit(code);
+      }
+      else {
+        System.err.println(L().l(
+          "command '{0}' is only available with Resin Pro",
+          command.getName()));
+
+        System.exit(ExitCode.UNKNOWN.ordinal());
+      }
     }
 
     throw new IllegalStateException(L().l("Unknown start mode"));
+  }
+
+  private boolean isPro()
+  {
+    return _args.isResinProfessional();
   }
 
   /**
@@ -258,7 +291,6 @@ public class ResinBoot
     BootCommand command = null;
     try {
       boot = new ResinBoot(argv);
-
       command = boot.getCommand();
 
       while (boot.start()) {
@@ -272,14 +304,14 @@ public class ResinBoot
       
       System.exit(ExitCode.OK.ordinal());
     } catch (BootArgumentException e) {
-      System.out.println(e.getMessage());
+      System.err.println(e.getMessage());
 
       if (command != null)
         command.usage();
 
       System.exit(ExitCode.UNKNOWN_ARGUMENT.ordinal());
     } catch (ConfigException e) {
-      System.out.println(e.getMessage());
+      System.err.println(e.getMessage());
 
       System.exit(ExitCode.BAD_CONFIG.ordinal());
     } catch (Exception e) {
@@ -295,63 +327,5 @@ public class ResinBoot
       _L = new L10N(ResinBoot.class);
 
     return _L;
-  }
-
-  private static Logger log()
-  {
-    if (_log == null)
-      _log = Logger.getLogger(ResinBoot.class.getName());
-
-    return _log;
-  }
-  
-  static {
-    _commandMap.put(StartMode.CONSOLE, new ConsoleCommand());
-    _commandMap.put(StartMode.DEPLOY_COPY, new DeployCopyCommand());
-    _commandMap.put(StartMode.DEPLOY, new DeployCommand());
-    _commandMap.put(StartMode.DEPLOY_CONFIG, new DeployConfigCommand());
-    _commandMap.put(StartMode.DEPLOY_LIST, new DeployListCommand());
-    _commandMap.put(StartMode.DEPLOY_RESTART, new DeployRestartCommand());
-    _commandMap.put(StartMode.DEPLOY_START, new DeployStartCommand());
-    _commandMap.put(StartMode.DEPLOY_STOP, new DeployStopCommand());
-    _commandMap.put(StartMode.DISABLE, new DisableCommand());
-    _commandMap.put(StartMode.DISABLE_SOFT, new DisableSoftCommand());
-    _commandMap.put(StartMode.THREAD_DUMP, new DeployStartCommand());
-    _commandMap.put(StartMode.ENABLE, new EnableCommand());
-    
-    _commandMap.put(StartMode.GUI, new GuiCommand());
-    _commandMap.put(StartMode.GENERATE_PASSWORD, new GeneratePasswordCommand());
-    
-    _commandMap.put(StartMode.HEAP_DUMP, new HeapDumpCommand());
-    _commandMap.put(StartMode.JMX_CALL, new JmxCallCommand());
-    _commandMap.put(StartMode.JMX_DUMP, new JmxDumpCommand());
-    _commandMap.put(StartMode.JMX_LIST, new JmxListCommand());
-    _commandMap.put(StartMode.JMX_SET, new JmxSetCommand());
-    _commandMap.put(StartMode.JSPC, new JspcCommand());
-    _commandMap.put(StartMode.KILL, new KillCommand());
-    _commandMap.put(StartMode.LICENSE_ADD, new LicenseAddCommand());
-    _commandMap.put(StartMode.LIST_RESTARTS, new ListRestartsCommand());
-    _commandMap.put(StartMode.LOG_LEVEL, new LogLevelCommand());
-    
-    _commandMap.put(StartMode.PDF_REPORT, new PdfReportCommand());
-    _commandMap.put(StartMode.PROFILE, new ProfileCommand());
-    
-    _commandMap.put(StartMode.RESTART, new RestartCommand());
-    
-    _commandMap.put(StartMode.SHUTDOWN, new ShutdownCommand());
-    _commandMap.put(StartMode.START, new StartCommand());
-    _commandMap.put(StartMode.START_ALL, new StartAllCommand());
-    _commandMap.put(StartMode.START_WITH_FOREGROUND, new StartWithForegroundCommand());
-    _commandMap.put(StartMode.STATUS, new StatusCommand());
-    _commandMap.put(StartMode.STOP, new StopCommand());
-    
-    _commandMap.put(StartMode.THREAD_DUMP, new ThreadDumpCommand());
-    
-    _commandMap.put(StartMode.UNDEPLOY, new UnDeployCommand());
-    _commandMap.put(StartMode.USER_ADD, new AddUserCommand());
-    _commandMap.put(StartMode.USER_LIST, new ListUsersCommand());
-    _commandMap.put(StartMode.USER_REMOVE, new RemoveUserCommand());
-
-    _commandMap.put(StartMode.WATCHDOG, new WatchdogCommand());
   }
 }

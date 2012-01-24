@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -58,11 +58,13 @@ public class JstlCoreOtherwise extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<c:otherwise>");
+    String prefix = printXmlOpen(os, JSTL_CORE_NS, "otherwise");
+    
+    os.print(">");
 
     printXmlChildren(os);
 
-    os.print("</c:otherwise>");
+    os.print("</" + prefix + ":otherwise>");
   }
   
   /**

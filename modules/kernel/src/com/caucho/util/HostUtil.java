@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,6 +43,8 @@ import com.caucho.config.ConfigException;
  */
 public final class HostUtil {
   private static final Logger log = Logger.getLogger(HostUtil.class.getName());
+  
+  private static final TimedCache _cache = new TimedCache(128, 2000);
   
   private HostUtil() {}
   
@@ -107,12 +109,7 @@ public final class HostUtil {
     ArrayList<InetAddress> localAddresses = new ArrayList<InetAddress>();
     
     try {
-      Enumeration<NetworkInterface> ifaceEnum
-        = NetworkInterface.getNetworkInterfaces();
-    
-      while (ifaceEnum.hasMoreElements()) {
-        NetworkInterface iface = ifaceEnum.nextElement();
-
+      for (NetworkInterface iface : getNetworkInterfaces()) {
         Enumeration<InetAddress> addrEnum = iface.getInetAddresses();
       
         while (addrEnum.hasMoreElements()) {
@@ -146,5 +143,36 @@ public final class HostUtil {
     }
     
     return false;
+  }
+
+  /**
+   * @return
+   */
+  public static synchronized 
+  ArrayList<NetworkInterface> getNetworkInterfaces()
+  {
+    ArrayList<NetworkInterface> interfaceList
+      = (ArrayList<NetworkInterface>) _cache.get("network-interfaces");
+    
+    if (interfaceList == null) {
+      interfaceList = new ArrayList<NetworkInterface>();
+      
+      try {
+        Enumeration<NetworkInterface> ifaceEnum
+          = NetworkInterface.getNetworkInterfaces();
+    
+        while (ifaceEnum.hasMoreElements()) {
+          NetworkInterface iface = ifaceEnum.nextElement();
+
+          interfaceList.add(iface);
+        }
+      } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
+      
+      _cache.put("network-interfaces", interfaceList);
+    }
+
+    return new ArrayList<NetworkInterface>(interfaceList);
   }
 }

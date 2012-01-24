@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1965,7 +1965,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
       name = name.substring(0, name.length() - 1);
     
     // String alias = getResourceAlias(name);
-    // System.out.println("GRAS: " + alias + " " + name);
 
     boolean isNormalJdkOrder = isNormalJdkOrder(name);
     InputStream is = null;

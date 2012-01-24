@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -71,13 +71,14 @@ public class JstlFmtParam extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<fmt:param>");
+    String prefix = printXmlOpen(os, JSTL_FMT_NS, "param");
+    os.print(">");
 
     printXmlText(os, _value);
     
     printXmlChildren(os);
 
-    os.print("</fmt:param>");
+    os.print("</" + prefix + ":param>");
   }
   
   /**

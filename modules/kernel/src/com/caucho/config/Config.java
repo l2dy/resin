@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -158,6 +158,11 @@ public class Config {
       return props.get(key);
     else
       return null;
+  }
+  
+  public static ConfigProperties getConfigProperties()
+  {
+    return _envProperties.get();
   }
 
   /**
@@ -746,6 +751,16 @@ public class Config {
     }
     else
       return null;
+  }
+  
+  public static Object getElVar(String var)
+  {
+    ELContext context = getEnvironment();
+    
+    if (context != null)
+      return context.getELResolver().getValue(context, null, var);
+    
+    return getProperty(var);
   }
 
   /**

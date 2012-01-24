@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -85,6 +85,19 @@ public interface ResinMXBean extends ManagedObjectMXBean {
   @Description("The configuration file used when starting this"
                + " instance of Resin, the value of `-conf'")
   public String getConfigFile();
+  
+  /**
+   * Returns the log directory, the value of "-log-directory"
+   */
+  @Description("The log directory used when starting this"
+               + " instance of Resin, the value of `-log-directory'")
+  public String getLogDirectory();
+  
+  /**
+   * Returns the resin-data directory
+   */
+  @Description("The resin-data directory")
+  public String getDataDirectory();
   
   /**
    * Returns the version.

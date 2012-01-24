@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -361,13 +361,15 @@ class WatchdogClient
     }
   }
 
-  public void restartWatchdog(String id, String []argv)
+  public void restartWatchdog(String []argv)
     throws IOException
   {
     // cloud/1295
     ActorSender conn = getConnection();
-
+    
     try {
+      String id = getId();
+      
       ResultStatus status = (ResultStatus)
       conn.query(WATCHDOG_ADDRESS, 
                  new WatchdogRestartQuery(id, argv),
@@ -520,7 +522,7 @@ class WatchdogClient
 
     list.add("com.caucho.boot.WatchdogManager");
 
-    if ("".equals(args.getServerId())
+    if (("".equals(args.getServerId()) || args.getServerId() == null)
         && ! args.isDynamicServer()
         && ! "".equals(getId())) {
       list.add("-server");
@@ -536,6 +538,11 @@ class WatchdogClient
       }
       else
         list.add(argv[i]);
+    }
+
+    if (! args.isDynamicServer() && _config.getHomeCluster() != null) {
+      list.add("--cluster");
+      list.add(_config.getHomeCluster());
     }
 
     list.add("--log-directory");

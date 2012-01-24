@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -155,7 +155,7 @@ public class BamModule extends AbstractQuercusModule
     if (actor != null)
       return env.error("bam_login not available from actor script");
 
-    HmtpClient client = null;//new HmtpClient(url);
+    HmtpClient client = new HmtpClient(url);
 
     BamConnectionResource resource = new BamConnectionResource(client);
     env.addCleanup(resource);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -50,4 +50,9 @@ public interface WebSocketConstants {
   public static final int OP_CLOSE = 0x08;
   public static final int OP_PING = 0x09;
   public static final int OP_PONG = 0x0a;
+  
+  public static final int CLOSE_OK = 1000;
+  public static final int CLOSE_ERROR = 1002;
+  public static final int CLOSE_UTF8 = 1007;
+  public static final int CLOSE_MESSAGE_TOO_BIG = 1008;
 }

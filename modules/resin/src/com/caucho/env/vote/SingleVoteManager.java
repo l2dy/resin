@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,11 @@ import com.caucho.server.cluster.Server;
  */
 public class SingleVoteManager extends AbstractVoteManager {
   private Server _server;
+
+  public SingleVoteManager(Server server)
+  {
+    _server = server;
+  }
   
   /**
    * Selects a cluster owner
@@ -44,10 +49,5 @@ public class SingleVoteManager extends AbstractVoteManager {
   public ClusterServer electServer(String guid, String name)
   {
     return _server.getSelfServer();
-  }
-
-  public SingleVoteManager(Server server)
-  {
-    _server = server;
   }
 }

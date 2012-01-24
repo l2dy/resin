@@ -10,7 +10,43 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.24 - snapshot">
+<s2 title="4.0.25 - snapshot">
+<ul>
+<li>cache: validate/remove corrupted blob rows (#4919, rep by Keith Fetterman)</li>
+<li>cache: remove corrupted database on restart (#4919, rep by Keith Fetterman)</li>
+<li>servlet: add form-parameter-max (default 10000) to limit form parameters (#4912, rep by georgbuschbeck)</li>
+<li>install: make install target fails to compare directories on Solaris (#4917, rep by Leonid Kaminksy)</li>
+<li>install: ./configure fails to link conftest on Solaris (#4916, rep by Leonid Kaminksy)</li>
+<li>async: comet memory retention of HttpResponse needs unlink (#4907, rep by Richard Mccluskey)</li>
+<li>config: rvar app-0.http when read in watchdog needs current server-id (#4900)</li>
+<li>config:  ${foo} now uses rvar search path automatically</li>
+<li>cli: add $HOME/.resin and --mode</li>
+<li>cli: add config-cat and config-ls for debugging</li>
+<li>websocket: pass autobahn test suite</li>
+<li>config: added $disable_compiling_loader to properties (#4787, rep by systhemes)</li>
+<li>cli: made web-app-deploy, web-app-restart, etc. primary cli (#4885)</li>
+<li>servlet: web-app root url /foo now automatically redirects to /foo/ (#4884)</li>
+<li>config: add password-encrypt and &lt;resin:Password> (#4810, Leonid Kaminsky)</li>
+<li>health: stat gathering limited to 14 days for baseline (#4893)</li>
+<li>config: server should start but not serve pages for certain config errors (#4891)</li>
+<li>config: cluster merging, used by local.d (#4882)</li>
+<li>http: add &lt;tcp-keepalive> to enable TCP keepalive for a socket (#4886, rep by Hal Hildebrand)</li>
+<li>cdi: interceptor and InterceptorBinding with enum array (#4883, rep by andreaskaltenbach)</li>
+<li>health: add expire-timeout to LogService (#4848, rep by C. Moran)</li>
+<li>health: HealthSystem event as a classloader context (#4861)</li>
+<li>cache: timing in mmap file extension could truncate (#4854, rep by georgbuschbeck)</li>
+<li>config: rvar should work like an EL var lookup (#4879)</li>
+<li>debian: change /var/www ownership to 'resin' for rpm consistency</li>
+<li>cli/deploy: deploy with --address when local machine has resinctl (#4868)</li>
+<li>jsp: pageContext.errorData.throwable could grab the wrong exception attribute (#4874, rep by mate)</li>
+<li>cli: update/normalization of usage messages</li>
+<li>jstl: validation of JSTL fast-mode c:if, etc. (#4866)</li>
+<li>vhosts: host-alias-regexp needs to have implicit anchors for the pattern (#4859, rep by Rick Mann)</li>
+<li>server: NPE on getUserPrincipal() (#4862, rep by wtao)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.24 - Nov 17, 2011">
 <ul>
 <li>servlet: session creation with enable-cookies=false (#4775, rep by jkeays)</li>
 <li>quercus: isset returning true for null values in compiled mode (Wordpress fix) (#4477, rep by mhixson)</li>

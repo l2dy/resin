@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,29 +29,21 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.java.WorkDir;
-import com.caucho.quercus.*;
-import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.lib.ErrorModule;
-import com.caucho.quercus.lib.VariableModule;
-import com.caucho.quercus.lib.OptionsModule;
-import com.caucho.quercus.lib.file.FileModule;
-import com.caucho.quercus.lib.file.PhpStderr;
-import com.caucho.quercus.lib.file.PhpStdin;
-import com.caucho.quercus.lib.file.PhpStdout;
-import com.caucho.quercus.lib.regexp.RegexpState;
-import com.caucho.quercus.lib.string.StringModule;
-import com.caucho.quercus.lib.string.StringUtility;
-import com.caucho.quercus.module.ModuleContext;
-import com.caucho.quercus.module.ModuleStartupListener;
-import com.caucho.quercus.module.IniDefinition;
-import com.caucho.quercus.page.QuercusPage;
-import com.caucho.quercus.program.*;
-import com.caucho.quercus.function.AbstractFunction;
-import com.caucho.quercus.resources.StreamContextResource;
-import com.caucho.util.*;
-import com.caucho.vfs.*;
-import com.caucho.vfs.i18n.EncodingReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.script.Bindings;
 import javax.script.ScriptContext;
@@ -61,13 +53,53 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.sql.DataSource;
-import java.io.IOException;
-import java.io.InputStream;
-import java.lang.ref.WeakReference;
-import java.net.URL;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import com.caucho.java.WorkDir;
+import com.caucho.quercus.Location;
+import com.caucho.quercus.QuercusContext;
+import com.caucho.quercus.QuercusDieException;
+import com.caucho.quercus.QuercusErrorException;
+import com.caucho.quercus.QuercusException;
+import com.caucho.quercus.QuercusExitException;
+import com.caucho.quercus.QuercusModuleException;
+import com.caucho.quercus.QuercusRuntimeException;
+import com.caucho.quercus.expr.Expr;
+import com.caucho.quercus.function.AbstractFunction;
+import com.caucho.quercus.lib.ErrorModule;
+import com.caucho.quercus.lib.OptionsModule;
+import com.caucho.quercus.lib.VariableModule;
+import com.caucho.quercus.lib.file.FileModule;
+import com.caucho.quercus.lib.file.PhpStderr;
+import com.caucho.quercus.lib.file.PhpStdin;
+import com.caucho.quercus.lib.file.PhpStdout;
+import com.caucho.quercus.lib.regexp.RegexpState;
+import com.caucho.quercus.lib.string.StringModule;
+import com.caucho.quercus.lib.string.StringUtility;
+import com.caucho.quercus.module.IniDefinition;
+import com.caucho.quercus.module.ModuleContext;
+import com.caucho.quercus.module.ModuleStartupListener;
+import com.caucho.quercus.page.QuercusPage;
+import com.caucho.quercus.program.ClassDef;
+import com.caucho.quercus.program.JavaClassDef;
+import com.caucho.quercus.program.QuercusProgram;
+import com.caucho.quercus.program.UndefinedFunction;
+import com.caucho.quercus.resources.StreamContextResource;
+import com.caucho.util.CharBuffer;
+import com.caucho.util.FreeList;
+import com.caucho.util.IntMap;
+import com.caucho.util.L10N;
+import com.caucho.util.LruCache;
+import com.caucho.util.QDate;
+import com.caucho.vfs.ByteToChar;
+import com.caucho.vfs.Encoding;
+import com.caucho.vfs.JarPath;
+import com.caucho.vfs.MemoryPath;
+import com.caucho.vfs.NullPath;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.TempBuffer;
+import com.caucho.vfs.WriteStream;
+import com.caucho.vfs.i18n.EncodingReader;
 
 /**
  * Represents the Quercus environment.
@@ -1667,9 +1699,11 @@ public class Env
 
     _javaSession = _request.getSession(true);
 
-    if (create && _javaSession.getId().length() >= 3
-               && sessionId.length() >= 3)
+    if (create 
+        && _javaSession.getId().length() >= 3
+        && sessionId.length() >= 3) {
       sessionId = _javaSession.getId().substring(0, 3) + sessionId.substring(3);
+    }
 
     SessionArrayValue session = _quercus.loadSession(this, sessionId);
 
@@ -2606,7 +2640,16 @@ public class Env
       }
 
       case _SESSION: {
-        return _globalMap.get("_SESSION");
+        envVar = _globalMap.get("_SESSION");
+
+        if (envVar == null) {
+          var = new SessionVar();
+          envVar = new EnvVarImpl(var);
+
+          _globalMap.put(name, envVar);
+        }
+        
+        return envVar;
       }
 
       case PHP_SELF: {
@@ -2811,7 +2854,7 @@ public class Env
   public Var getGlobalVar(StringValue name)
   {
     EnvVar envVar = getGlobalEnvVar(name);
-
+    
     return envVar.getVar();
   }
 

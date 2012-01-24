@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -41,6 +41,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.db.Database;
+import com.caucho.env.health.HealthSystemFacade;
 // import com.caucho.db.lock.Lock;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.L10N;
@@ -105,11 +106,17 @@ public class BlockStore {
     = 1L * ALLOC_GROUP_COUNT * BLOCK_SIZE;
 
   public final static int ALLOC_FREE      = 0x00;
+  // row (relational fixed-length data)
   public final static int ALLOC_ROW       = 0x01;
-  public final static int ALLOC_USED      = 0x02;
-  // public final static int ALLOC_FRAGMENT  = 0x03;
+  // inode/blob leaf data
+  public final static int ALLOC_DATA      = 0x02;
+  // inode indirect pointer (pointer to data)
+  public final static int ALLOC_INODE_PTR = 0x03;
+  // btree index
   public final static int ALLOC_INDEX     = 0x04;
+  // compressed index
   public final static int ALLOC_MINI_FRAG = 0x05;
+  // mask for the alloc byte
   public final static int ALLOC_MASK      = 0x0f;
 
   public final static int MINI_FRAG_SIZE = 256;
@@ -121,8 +128,12 @@ public class BlockStore {
   public final static long DATA_START = BLOCK_SIZE;
 
   public final static int STORE_CREATE_END = 1024;
+  
+  public static final String DATABASE_CORRUPT_EVENT
+    = "caucho.database.corrupt";
 
   private final String _name;
+  private final Path _path;
 
   private int _id;
 
@@ -161,8 +172,6 @@ public class BlockStore {
   private Lock _rowWriteLock;
   
   private long _blockLockTimeout = 120000;
-
-  private boolean _isCorrupted;
 
   private final Lifecycle _lifecycle = new Lifecycle();
   
@@ -216,6 +225,20 @@ public class BlockStore {
 
     if (path == null)
       throw new NullPointerException();
+    
+    _path = path;
+    
+    String exitMessage = HealthSystemFacade.getExitMessage();
+    
+    if (exitMessage.indexOf(path.getFullPath()) >= 0) {
+      log.warning("removing " + _path.getFullPath() + " due to restart corruption");
+      
+      try {
+        _path.remove();
+      } catch (Exception e) {
+        log.log(Level.FINE, e.toString(), e);
+      }
+    }
 
     _readWrite = new BlockReadWrite(this, path, isEnableMmap);
 
@@ -336,6 +359,7 @@ public class BlockStore {
     return _writer;
   }
 
+  /*
   public void setCorrupted(boolean isCorrupted)
   {
     _isCorrupted = isCorrupted;
@@ -345,6 +369,7 @@ public class BlockStore {
   {
     return _isCorrupted;
   }
+  */
 
   /**
    * Returns the file size.
@@ -428,9 +453,9 @@ public class BlockStore {
     _allocationTable = new byte[ALLOC_CHUNK_SIZE];
 
     // allocates the allocation table itself
-    setAllocation(0, ALLOC_USED);
+    setAllocation(0, ALLOC_DATA);
     // allocates the header information
-    setAllocation(1, ALLOC_USED);
+    setAllocation(1, ALLOC_DATA);
 
     boolean isPriority = true;
 
@@ -580,7 +605,7 @@ public class BlockStore {
    */
   public boolean isRowBlock(long blockAddress)
   {
-    return getAllocation(blockAddress / BLOCK_SIZE) == ALLOC_ROW;
+    return getAllocationByAddress(blockAddress) == ALLOC_ROW;
   }
 
   /**
@@ -592,7 +617,19 @@ public class BlockStore {
     throws IOException
   {
     boolean isSave = true;
-    return allocateBlock(ALLOC_USED, isSave);
+    return allocateBlock(ALLOC_DATA, isSave);
+  }
+
+  /**
+   * Allocates a new block for a non-row.
+   *
+   * @return the block id of the allocated block.
+   */
+  public Block allocateIndirectBlock()
+    throws IOException
+  {
+    boolean isSave = true;
+    return allocateBlock(ALLOC_INODE_PTR, isSave);
   }
 
   /**
@@ -624,7 +661,15 @@ public class BlockStore {
    */
   public boolean isIndexBlock(long blockAddress)
   {
-    return getAllocation(blockAddress / BLOCK_SIZE) == ALLOC_INDEX;
+    return getAllocationByAddress(blockAddress) == ALLOC_INDEX;
+  }
+
+  /**
+   * Return true if the block is an index block.
+   */
+  public boolean isInodePtrBlock(long blockAddress)
+  {
+    return getAllocationByAddress(blockAddress) == ALLOC_INODE_PTR;
   }
 
   /**
@@ -682,7 +727,7 @@ public class BlockStore {
           _freeAllocCount++;
 
           // mark USED before actual code so it's properly initialized
-          setAllocation(blockIndex, ALLOC_USED);
+          setAllocation(blockIndex, ALLOC_DATA);
 
           return blockIndex;
         }
@@ -703,6 +748,7 @@ public class BlockStore {
   private void extendFile()
   {
     long newBlockCount;
+    long newBlockIndex;
 
     synchronized (_allocationLock) {
       if (_freeAllocIndex < _blockCount)
@@ -712,9 +758,12 @@ public class BlockStore {
         newBlockCount = _blockCount + 1;
       else
         newBlockCount = _blockCount + 256;
-
+      
+      if (newBlockCount * BLOCK_SIZE < _readWrite.getFileSize())
+        newBlockCount = _readWrite.getFileSize() / BLOCK_SIZE;
+      
       while (_allocationTable.length / ALLOC_BYTES_PER_BLOCK
-             <= newBlockCount) {
+             < newBlockCount) {
         // expand the allocation table
 
         byte []newTable = new byte[_allocationTable.length + ALLOC_CHUNK_SIZE];
@@ -724,17 +773,18 @@ public class BlockStore {
         _allocationTable = newTable;
 
         long superBlockMax = _allocationTable.length / ALLOC_BYTES_PER_BLOCK;
-        for (long count = 0;
-             count < superBlockMax;
-             count += ALLOC_GROUP_COUNT) {
+        for (long index = 0;
+             index < superBlockMax;
+             index += ALLOC_GROUP_COUNT) {
           // if the allocation table is over 8k, allocate the block for the
           // extension (each allocation block of 8k allocates 512m)
-          setAllocation(count, ALLOC_USED);
+          setAllocation(index, ALLOC_DATA);
           // System.out.println("SET_ALLOC: " + count);
 
           // avoid collision
-          if (newBlockCount == count)
+          if (newBlockCount == index + 1) {
             newBlockCount++;
+          }
         }
 
         _allocDirtyMin = 0;
@@ -747,13 +797,17 @@ public class BlockStore {
       _blockCount = newBlockCount;
       _freeAllocIndex = 0;
 
-      if (getAllocation(newBlockCount) != ALLOC_FREE)
-        System.out.println("BAD_BLOCK: " + newBlockCount);
+      newBlockIndex = newBlockCount - 1;
 
-      setAllocation(newBlockCount, ALLOC_USED);
+      if (getAllocation(newBlockIndex) != ALLOC_FREE) {
+        System.out.println(this + " BAD_BLOCK: " + newBlockIndex
+                           + " " + getAllocation(newBlockIndex));
+      }
+
+      setAllocation(newBlockIndex, ALLOC_DATA);
     }
 
-    long blockId = blockIndexToBlockId(newBlockCount);
+    long blockId = blockIndexToBlockId(newBlockIndex);
 
     Block block = _blockManager.getBlock(this, blockId);
 
@@ -775,7 +829,7 @@ public class BlockStore {
     block.free();
 
     synchronized (_allocationLock) {
-      setAllocation(newBlockCount, ALLOC_FREE);
+      setAllocation(newBlockIndex, ALLOC_FREE);
     }
   }
 
@@ -843,6 +897,14 @@ public class BlockStore {
     saveAllocation();
   }
 
+  /**
+   * Sets the allocation for a block.
+   */
+  public final int getAllocationByAddress(long blockAddress)
+  {
+    return getAllocation(blockAddress / BLOCK_SIZE);
+  }
+  
   /**
    * Sets the allocation for a block.
    */
@@ -1469,6 +1531,7 @@ public class BlockStore {
             if ((blockBuffer[offset] & mask) == 0) {
               fragOffset = i;
               blockBuffer[offset] |= mask;
+
               block.setDirty(offset, offset + 1);
               break;
             }
@@ -1736,6 +1799,13 @@ public class BlockStore {
       }
     }
   }
+  
+  public void fatalCorrupted(String msg)
+  {
+    String fullMsg = DATABASE_CORRUPT_EVENT + "[" + _path.getFullPath() + "] " + msg;
+    
+    HealthSystemFacade.fireFatalEvent(DATABASE_CORRUPT_EVENT, fullMsg); 
+  }
 
   /**
    * True if destroyed.
@@ -1837,7 +1907,7 @@ public class BlockStore {
       return "free";
     case ALLOC_ROW:
       return "row";
-    case ALLOC_USED:
+    case ALLOC_DATA:
       return "used";
     case ALLOC_MINI_FRAG:
       return "mini-fragment";

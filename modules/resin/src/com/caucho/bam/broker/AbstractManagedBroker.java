@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -90,7 +90,7 @@ abstract public class AbstractManagedBroker
     Agent agent = new AbstractAgent(actorStream.getAddress(),
                                     mailbox,
                                     this);
-    
+
     addMailbox(mailbox);
     
     return agent;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,54 +31,41 @@ package com.caucho.server.resin;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.BindException;
 import java.net.Socket;
-import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
-import javax.annotation.PostConstruct;
-import javax.management.ObjectName;
 
 import com.caucho.VersionFactory;
 import com.caucho.bam.broker.Broker;
 import com.caucho.cloud.bam.BamSystem;
-import com.caucho.cloud.loadbalance.LoadBalanceFactory;
+import com.caucho.cloud.license.LicenseClient;
 import com.caucho.cloud.loadbalance.LoadBalanceService;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.NetworkClusterSystem;
 import com.caucho.cloud.network.NetworkListenSystem;
-import com.caucho.cloud.security.SecurityService;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.cloud.topology.CloudSystem;
-import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
-import com.caucho.config.functions.FmtFunctions;
-import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.WebBeansAddLoaderListener;
-import com.caucho.config.lib.ResinConfigLibrary;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.deploy.DeployControllerService;
 import com.caucho.env.git.GitSystem;
-import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.jpa.ListenerPersistenceEnvironment;
-import com.caucho.env.lock.*;
 import com.caucho.env.log.LogSystem;
 import com.caucho.env.repository.AbstractRepository;
 import com.caucho.env.repository.LocalRepositoryService;
-import com.caucho.env.repository.RepositorySystem;
 import com.caucho.env.repository.RepositorySpi;
-import com.caucho.env.service.*;
+import com.caucho.env.repository.RepositorySystem;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.env.service.RootDirectorySystem;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.env.vfs.RepositoryScheme;
-import com.caucho.env.warning.WarningService;
 import com.caucho.java.WorkDir;
 import com.caucho.license.LicenseCheck;
 import com.caucho.lifecycle.Lifecycle;
@@ -86,30 +73,20 @@ import com.caucho.lifecycle.LifecycleState;
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
-import com.caucho.management.server.ClusterMXBean;
-import com.caucho.management.server.ResinMXBean;
-import com.caucho.management.server.ThreadPoolMXBean;
-import com.caucho.naming.Jndi;
 import com.caucho.server.admin.Management;
 import com.caucho.server.admin.StatSystem;
-import com.caucho.server.cache.TempFileService;
-import com.caucho.server.cluster.ClusterPod;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.cluster.ServerConfig;
 import com.caucho.server.cluster.ServletContainerConfig;
 import com.caucho.server.cluster.ServletSystem;
-import com.caucho.server.distcache.CacheStoreManager;
-import com.caucho.server.distcache.DistCacheSystem;
+import com.caucho.server.resin.BootConfig.BootType;
 import com.caucho.server.resin.ResinArgs.BoundPort;
-import com.caucho.server.webbeans.ResinCdiProducer;
-import com.caucho.server.webbeans.ResinServerConfigLibrary;
 import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 import com.caucho.vfs.MemoryPath;
 import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
 
 /**
  * The Resin class represents the top-level container for Resin.
@@ -125,52 +102,48 @@ public class Resin
   private static final EnvironmentLocal<Resin> _resinLocal
     = new EnvironmentLocal<Resin>();
 
-  private final EnvironmentLocal<String> _serverIdLocal
-    = new EnvironmentLocal<String>("caucho.server-id");
-
-  private boolean _isEmbedded;
-
-  private String _serverId = "default";
-  private final boolean _isWatchdog;
-  
-  private String _stage = "production";
-  private String _dynamicJoinCluster;
-  
-  private String _dynamicAddress;
-  private int _dynamicPort;
-  
-  private String _user;
-  private String _password;
-  
-  private ResinArgs _args;
-
-  private Path _resinHome;
-  private Path _rootDirectory;
-
-  private Path _resinDataDirectory;
-  private Path _logDirectory;
+  private final ResinArgs _args;
   
   private final ResinSystem _resinSystem;
   
+  private String _serverId = null;
+
+  private Path _resinHome;
+  private Path _resinConf;
+  
+  private Path _rootDirectory;
+  private Path _resinDataDirectory;
+  private Path _serverDataDirectory;
+  
+  private Path _logDirectory;
+  
+  private String _homeCluster;
+  private String _dynamicAddress;
+  private int _dynamicPort;
+  
+  private String _resinSystemAuthKey;
+  
+  private String _stage = "production";
+
+  private Socket _pingSocket;
+  
   private long _shutdownWaitMax = 60000L;
+  
+  private ResinDelegate _resinDelegate;
 
   private Lifecycle _lifecycle;
 
+  private BootConfig _bootConfig;
   private BootResinConfig _bootResinConfig;
+  private BootServerConfig _bootServerConfig;
+  
   private CloudServer _selfServer;
   
   private ServletContainerConfig _servletContainerConfig;
-  private Server _servletContainer;
+  private Server _servletSystem;
 
   private long _initialStartTime;
   private long _startTime;
-  
-  private boolean _isRestart;
-  private String _restartMessage;
-
-  private String _licenseErrorMessage;
-
-  private Path _resinConf;
 
   private ClassLoader _systemClassLoader;
 
@@ -178,13 +151,13 @@ public class Resin
 
   protected Management _management;
 
-  private ThreadPoolAdmin _threadPoolAdmin;
-  private ObjectName _objectName;
   private ResinAdmin _resinAdmin;
 
   private InputStream _waitIn;
-
-  private Socket _pingSocket;
+  
+  private boolean _isRestart;
+  private String _restartMessage;
+  private Path _licenseDirectory;
   
   private ResinWaitForExitService _waitForExitService;
   
@@ -194,156 +167,51 @@ public class Resin
   /**
    * Creates a new resin server.
    */
-  protected Resin(ResinSystem system, boolean isWatchdog)
+  public Resin(String []args)
   {
-    this(system, isWatchdog, null);
+    this(new ResinArgs(args));
   }
 
   /**
    * Creates a new resin server.
    */
-  protected Resin(ResinSystem system,
-                  boolean isWatchdog,
-                  String licenseErrorMessage)
+  public Resin(ResinArgs args)
   {
     _startTime = Alarm.getCurrentTime();
+    
+    _args = args;
+    
+    _resinSystem = new ResinSystem(args.getServerId());
 
-    _isWatchdog = isWatchdog;
-    _licenseErrorMessage = licenseErrorMessage;
+    // _licenseErrorMessage = licenseErrorMessage;
+    
+    _resinLocal.set(this, _resinSystem.getClassLoader());
 
-    // DynamicClassLoader.setJarCacheEnabled(true);
     Environment.init();
+ 
+    _serverId = args.getServerId();
     
-    _resinSystem = system;
-
-    initEnvironment();
-
-    try {
-      URL.setURLStreamHandlerFactory(ResinURLStreamHandlerFactory.create());
-    } catch (java.lang.Error e) {
-      //operation permitted once per jvm; catching for harness.
-    }
-  }
-
-  /**
-   * Creates a new Resin instance
-   */
-  public static Resin create(String id)
-  {
-    ResinSystem system = new ResinSystem(id);
+    _resinHome = args.getResinHome();
     
-    return create(system, false);
-  }
-
-  /**
-   * Creates a new Resin instance
-   */
-  public static Resin createWatchdog(ResinSystem system)
-  {
-    Resin resin = create(system, true);
-
-    return resin;
-  }
-
-  /**
-   * Creates a new Resin instance
-   */
-  public static Resin create(ResinSystem system, boolean isWatchdog)
-  {
-    String licenseErrorMessage = null;
-
-    Resin resin = null;
-
-    try {
-      Class<?> cl = Class.forName("com.caucho.server.resin.ProResin");
-      Constructor<?> ctor = cl.getConstructor(new Class[] { ResinSystem.class, boolean.class });
-
-      resin = (Resin) ctor.newInstance(system, isWatchdog);
-    } catch (ConfigException e) {
-      log().log(Level.FINER, e.toString(), e);
-
-      licenseErrorMessage = e.getMessage();
-    } catch (InvocationTargetException e) {
-      Throwable cause = e.getCause();
-
-      log().log(Level.FINER, cause.toString(), cause);
-
-      if (cause instanceof ConfigException) {
-        licenseErrorMessage = cause.getMessage();
-      }
-      else {
-        licenseErrorMessage= L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n"
-                                   + "\n"
-                                   + "  See http://www.caucho.com for information on Resin Professional,\n"
-                                   + "  including caching, clustering, JNI acceleration, and OpenSSL integration.\n"
-                                   + "\n  Exception=" + cause + "\n");
-      }
-    } catch (Throwable e) {
-      log().log(Level.FINER, e.toString(), e);
-
-      String causeMsg = "";
-      if (! (e instanceof ClassNotFoundException)) {
-        causeMsg = "\n  Exception=" + e + "\n";
-      }
-
-
-      String msg = L().l("  Using Resin(R) Open Source under the GNU Public License (GPL).\n"
-                         + "\n"
-                         + "  See http://www.caucho.com for information on Resin Professional,\n"
-                         + "  including caching, clustering, JNI acceleration, and OpenSSL integration.\n"
-                         + causeMsg);
-
-      licenseErrorMessage = msg;
-    }
-
-    if (resin == null) {
-      try {
-        Class<?> cl = Class.forName("com.caucho.license.LicenseCheckImpl");
-        LicenseCheck license = (LicenseCheck) cl.newInstance();
-
-        license.requirePersonal(1);
-
-        licenseErrorMessage = license.doLogging();
-      } catch (ConfigException e) {
-        licenseErrorMessage = e.getMessage();
-      } catch (Throwable e) {
-        // message should already be set above
-      }
-
-      resin = new Resin(system, isWatchdog, licenseErrorMessage);
-    }
-
-    _resinLocal.set(resin, system.getClassLoader());
-
-    // resin.initEnvironment();
-
-    return resin;
-  }
-
-  /**
-   * Creates a new Resin instance
-   */
-  public static Resin createOpenSource(String id)
-  {
-    ResinSystem system = new ResinSystem(id);
+    _resinConf = args.getResinConfPath();
     
-    return createOpenSource(system);
-  }
+    _rootDirectory = args.getRootDirectory();
+    _resinDataDirectory = args.getDataDirectory();
 
-  /**
-   * Creates a new Resin instance
-   */
-  public static Resin createOpenSource(ResinSystem system)
-  {
-    return new Resin(system, false, null);
-  }
-
-  /**
-   * Returns the resin server.
-   */
-  public static Resin getLocal()
-  {
-    return _resinLocal.get();
+    _licenseDirectory = args.getLicenseDirectory();
+    
+    _homeCluster = args.getHomeCluster();
+    _dynamicAddress = args.getServerAddress();
+    _dynamicPort = args.getServerPort();
+    
+    _stage = args.getStage();
+ 
+    _pingSocket = _args.getPingSocket();
+    
+    preConfigureInit();
+    
+    if (! isWatchdog())
+      configureFile(_resinConf);
   }
 
   /**
@@ -351,257 +219,12 @@ public class Resin
    */
   public static Resin getCurrent()
   {
-    return getLocal();
+    return _resinLocal.get();
   }
 
   public ResinSystem getResinSystem()
   {
     return _resinSystem;
-  }
-  
-  public CloudSystem getCloudSystem()
-  {
-    ResinSystem resinSystem = _resinSystem;
-    
-    if (resinSystem != null)
-      return resinSystem.getService(TopologyService.class).getSystem();
-    else
-      return null;
-  }
-  
-  public void setRootDirectory(Path path)
-  {
-    _rootDirectory = path;
-  }
-  
-  public void setPingSocket(Socket socket)
-  {
-    _pingSocket = socket;
-  }
-  
-  public void setEmbedded(boolean isEmbedded)
-  {
-    _isEmbedded = isEmbedded;
-  }
-  
-  public boolean isEmbedded()
-  {
-    return _isEmbedded;
-  }
-  
-  public void addStartInfoListener(StartInfoListener listener)
-  {
-    _startInfoListeners.add(listener);
-  }
-  
-  void setStartInfo(boolean isRestart, 
-                    String startMessage,
-                    ExitCode exitCode)
-  {
-    _isRestart = isRestart;
-    _restartMessage = startMessage;
-    
-    for (StartInfoListener listener : _startInfoListeners) {
-      listener.setStartInfo(isRestart, startMessage, exitCode);
-    }
-  }
-  
-  public boolean isRestart()
-  {
-    return _isRestart;
-  }
-  
-  public void setDataDirectory(Path path)
-  {
-    _resinDataDirectory = path;
-  }
-  
-  public String getRestartMessage()
-  {
-    return _restartMessage;
-  }
-  
-  private void initEnvironment()
-  {
-    String resinHome = System.getProperty("resin.home");
-
-    if (resinHome != null)
-      _resinHome = Vfs.lookup(resinHome);
-    else
-      _resinHome = Vfs.getPwd();
-
-    _rootDirectory = _resinHome;
-
-    // server.root backwards compat
-    String resinRoot = System.getProperty("server.root");
-
-    if (resinRoot != null)
-      _rootDirectory = Vfs.lookup(resinRoot);
-
-    // resin.root backwards compat
-    resinRoot = System.getProperty("resin.root");
-
-    if (resinRoot != null)
-      _rootDirectory = Vfs.lookup(resinRoot);
-  }
-  
-  /**
-   * Must be called after the Resin.create()
-   */
-  public void preConfigureInit()
-  {
-    if (_lifecycle != null)
-      return;
-
-    Thread thread = Thread.currentThread();
-    ClassLoader oldLoader = thread.getContextClassLoader();
-
-    try {
-      /*
-      String serverName = getServerId();
-      if (serverName == null || "".equals(serverName))
-        serverName = "default";
-      
-      _resinSystem = new ResinSystem(serverName);
-      */
-      
-      thread.setContextClassLoader(getClassLoader());
-
-      _resinLocal.set(this, getClassLoader());
-
-      _lifecycle = new Lifecycle(log(), "Resin[]");
-
-      // default server id
-      if (_args != null) {
-        setServerId(_args.getServerId());
-
-        if (_args.getRootDirectory() != null)
-          setRootDirectory(_args.getRootDirectory());
-
-        if (_args.getDataDirectory() != null)
-          setDataDirectory(_args.getDataDirectory());
-
-        _pingSocket = _args.getPingSocket();
-        
-        setJoinCluster(_args.getJoinCluster());
-        setServerAddress(_args.getServerAddress());
-        setServerPort(_args.getServerPort());
-        
-        if (_args.getStage() != null)
-          setStage(_args.getStage());
-      }
-      
-      if (getRootDirectory() == null)
-        throw new NullPointerException();
-      
-      addPreTopologyServices();
-      
-      _bootResinConfig = new BootResinConfig(this);
-
-      // watchdog/0212
-      // else
-      //  setRootDirectory(Vfs.getPwd());
-
-      Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
-      Environment.addChildLoaderListener(new WebBeansAddLoaderListener());
-      Environment.addChildLoaderListener(new EjbEnvironmentListener());
-      InjectManager cdiManager = InjectManager.create();
-      
-      ResinVar resinVar = new ResinVar(getServerId(),
-                                       getResinHome(),
-                                       getRootDirectory(),
-                                       getLogDirectory(),
-                                       getResinConf(),
-                                       isProfessional(),
-                                       null);
-
-      Config.setProperty("resinHome", getResinHome());
-      Config.setProperty("resin", resinVar);
-      Config.setProperty("server", resinVar);
-      Config.setProperty("java", new JavaVar());
-      Config.setProperty("system", System.getProperties());
-      Config.setProperty("getenv", System.getenv());
-      // server/4342
-      Config.setProperty("server_id", getServerId());
-
-      // _management = createResinManagement();
-
-      if (cdiManager.getBeans(ResinCdiProducer.class).size() == 0) {
-        Config.setProperty("fmt", new FmtFunctions());
-
-        ResinConfigLibrary.configure(cdiManager);
-        ResinServerConfigLibrary.configure(cdiManager);
-
-        try {
-          Method method = Jndi.class.getMethod("lookup", new Class[] { String.class });
-          Config.setProperty("jndi", method);
-          Config.setProperty("jndi:lookup", method);
-        } catch (Exception e) {
-          throw ConfigException.create(e);
-        }
-
-        cdiManager.addManagedBean(cdiManager.createManagedBean(ResinCdiProducer.class));
-        Class<?> resinValidatorClass = ResinCdiProducer.createResinValidatorProducer();
-        
-        if (resinValidatorClass != null)
-          cdiManager.addManagedBean(cdiManager.createManagedBean(resinValidatorClass));
-
-        cdiManager.update();
-      }
-
-      _threadPoolAdmin = ThreadPoolAdmin.create();
-      _resinAdmin = new ResinAdmin(this);
-
-      _threadPoolAdmin.register();
-
-      MemoryAdmin.create();
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-      throw ConfigException.create(e);
-    } finally {
-      thread.setContextClassLoader(oldLoader);
-    }
-  }
-  
-  protected void addPreTopologyServices()
-  {
-    WarningService.createAndAddService();
-    
-    ShutdownSystem.createAndAddService(_isEmbedded);
-    
-    HealthStatusService.createAndAddService();
-    
-    TopologyService.createAndAddService(_serverId);
-    
-    SecurityService.createAndAddService();
-
-    createDistCacheService();
-  }
-  
-  protected void addServices()
-  {
-    TempFileService.createAndAddService();
-    
-    // LockService.createAndAddService(createLockManager());
-  }
-  
-  protected DistCacheSystem createDistCacheService()
-  {
-    return DistCacheSystem.
-      createAndAddService(new CacheStoreManager(getResinSystem()));
-  }
-  
-  /*
-  protected AbstractLockManager createLockManager()
-  {
-    return new SingleLockManager();
-  }
-  */
-  
-  private void setArgs(ResinArgs args)
-  {
-    _args = args;
   }
 
   /**
@@ -611,55 +234,10 @@ public class Resin
   {
     return _resinSystem.getClassLoader();
   }
-
-  public ObjectName getObjectName()
+  
+  ResinArgs getArgs()
   {
-    return _objectName;
-  }
-
-  public ResinMXBean getAdmin()
-  {
-    return _resinAdmin;
-  }
-
-  /**
-   * Returns the admin broker
-   */
-  public Broker getAdminBroker()
-  {
-    return _management.getAdminBroker();
-  }
-
-  public ThreadPoolMXBean getThreadPoolAdmin()
-  {
-    return _threadPoolAdmin;
-  }
-
-  protected String getLicenseMessage()
-  {
-    return null;
-  }
-
-  protected String getLicenseErrorMessage()
-  {
-    return _licenseErrorMessage;
-  }
-
-  /**
-   * Sets the server id.
-   */
-  public void setServerId(String serverId)
-  {
-    if (serverId == null || "".equals(serverId))
-      serverId = "default";
-    
-    //Config.setProperty("serverId", serverId);
-    ClassLoader classLoader = ClassLoader.getSystemClassLoader();
-    Config.setProperty("serverId", serverId, classLoader);
-    Config.setProperty("server_id", serverId, classLoader);
-
-    _serverId = serverId;
-    _serverIdLocal.set(serverId);
+    return _args;
   }
 
   /**
@@ -671,30 +249,43 @@ public class Resin
   }
 
   /**
-   * Returns true for a Resin server, false for a watchdog.
+   * Sets the server id.
    */
-  public boolean isResinServer()
+  void setServerId(String serverId)
   {
-    return ! _isWatchdog;
-  }
+    if (serverId == null || "".equals(serverId))
+      return;//      serverId = "default";
 
-  public boolean isWatchdog()
-  {
-    return _isWatchdog;
+    _serverId = serverId;
+
+    _resinSystem.setId(_serverId);
   }
 
   public String getUniqueServerName()
   {
     String name;
+    
+    String serverId = getDisplayServerId();
 
-    if (_isWatchdog)
-      name = _serverId + "_watchdog";
+    if (isWatchdog())
+      name = serverId + "_watchdog";
     else
-      name = _serverId;
+      name = serverId;
 
     name = name.replace('-', '_');
 
     return name;
+  }
+
+  /**
+   * Returns the server id.
+   */
+  public String getDisplayServerId()
+  {
+    if (_serverId == null || "".equals(_serverId))
+      return "default";
+    else
+      return _serverId;
   }
 
   public static String getCurrentServerId()
@@ -708,110 +299,29 @@ public class Resin
   }
 
   /**
-   * Sets the cluster for a dynamic cluster join.
+   * Returns true for a Resin server, false for a watchdog.
    */
-  public void setJoinCluster(String clusterId)
+  public boolean isResinServer()
   {
-    _dynamicJoinCluster = clusterId;
-    
-    if ("null".equals(clusterId))
-      Thread.dumpStack();
+    return ! isWatchdog();
   }
-  
-  /**
-   * Returns the cluster to join for a dynamic cluster join.
-   */
-  public String getJoinCluster()
+
+  public boolean isWatchdog()
   {
-    return _dynamicJoinCluster;
-  }
-  
-  /**
-   * Sets the server stage.
-   */
-  public void setStage(String stage)
-  {
-    _stage = stage;
-  }
-  
-  /**
-   * Returns the server stage.
-   */
-  public String getStage()
-  {
-    return _stage;
+    return false;
   }
 
   /**
-   * Sets the IP cluster address for the dynamic server.
+   * The configuration file used to start the server.
    */
-  public void setServerAddress(String address)
+  public Path getResinConf()
   {
-    _dynamicAddress= address;
-  }
-  
-  public String getServerAddress()
-  {
-    return _dynamicAddress;
+    return _resinConf;
   }
 
-  /**
-   * Sets the TCP cluster port for the dynamic server.
-   */
-  public void setServerPort(int port)
+  protected String getResinName()
   {
-    _dynamicPort = port;
-  }
-  
-  public int getServerPort()
-  {
-    return _dynamicPort;
-  }
-  
-  public void setUser(String user)
-  {
-    _user = user;
-  }
-  
-  public String getUser()
-  {
-    return _user;
-  }
-  
-  public void setPassword(String password)
-  {
-    _password = password;
-  }
-  
-  public String getPassword()
-  {
-    return _password;
-  }
-
-  /**
-   * Returns the server id.
-   */
-  public String getDisplayServerId()
-  {
-    if ("".equals(_serverId))
-      return "default";
-    else
-      return _serverId;
-  }
-
-  /**
-   * Sets the config file.
-   */
-  public void setConfigFile(String configFile)
-  {
-  }
-
-  /**
-   * Sets resin.home
-   */
-  public void setResinHome(Path home)
-  {
-    _resinHome = home;
+    return getDelegate().getResinName();
   }
 
   /**
@@ -823,6 +333,23 @@ public class Resin
   }
 
   /**
+   * Set true for Resin pro.
+   */
+  public boolean isProfessional()
+  {
+    return getDelegate().isProfessional();
+  }
+  
+  //
+  // configuration
+  //
+  
+  public boolean isEmbedded()
+  {
+    return false;
+  }
+
+  /**
    * Gets the root directory.
    */
   public Path getRootDirectory()
@@ -830,6 +357,65 @@ public class Resin
     return _rootDirectory;
   }
   
+  public void setRootDirectory(Path path)
+  {
+    _rootDirectory = path;
+  }
+
+  public Path getLicenseDirectory()
+  {
+    return _licenseDirectory;
+  }
+
+  public void setLicenseDirectory(Path licenseDirectory)
+  {
+    _licenseDirectory = licenseDirectory;
+  }
+
+  /**
+   * Sets the cluster for a dynamic cluster join.
+   */
+  void setHomeCluster(String clusterId)
+  {
+    _homeCluster = clusterId;
+  }
+  
+  /**
+   * Returns the cluster to join for a dynamic cluster join.
+   */
+  public String getHomeCluster()
+  {
+    return _homeCluster;
+  }
+  
+  public String getResinSystemAuthKey()
+  {
+    return _resinSystemAuthKey;
+  }
+  
+  void setResinSystemAuthKey(String key)
+  {
+    _resinSystemAuthKey = key;
+  }
+  
+  /**
+   * Returns the server stage.
+   */
+  public String getStage()
+  {
+    return _stage;
+  }
+  
+  public String getServerAddress()
+  {
+    return _dynamicAddress;
+  }
+  
+  public int getServerPort()
+  {
+    return _dynamicPort;
+  }
+
   public Path getLogDirectory()
   {
     if (_logDirectory != null)
@@ -850,7 +436,7 @@ public class Resin
     if (_resinDataDirectory != null)
       root = _resinDataDirectory;
 
-    if (_isWatchdog)
+    if (isWatchdog())
       path = root.lookup("watchdog-data");
     else
       path = root.lookup("resin-data");
@@ -861,36 +447,22 @@ public class Resin
 
     return path;
   }
-
-  /**
-   * Sets the admin directory
-   */
-  public void setAdminPath(Path path)
-  {
-    // setResinDataDirectory(path);
-  }
-
-  /**
-   * The configuration file used to start the server.
-   */
-  public Path getResinConf()
-  {
-    return _resinConf;
-  }
-
-  protected String getResinName()
-  {
-    return "Resin";
-  }
-
-  /**
-   * Set true for Resin pro.
-   */
-  public boolean isProfessional()
-  {
-    return false;
-  }
   
+  protected Path getServerDataDirectory()
+  {
+    synchronized (this) {
+      Path dataDirectory = getResinDataDirectory();
+
+      if (_serverDataDirectory == null) {
+        String serverName = getDisplayServerId();
+  
+        _serverDataDirectory = dataDirectory.lookup("./" + serverName);
+      }
+    }
+
+    return _serverDataDirectory;
+  }
+
   public long getShutdownWaitMax()
   {
     return _shutdownWaitMax;
@@ -901,28 +473,26 @@ public class Resin
     _shutdownWaitMax = shutdownTime;
   }
   
-  /**
-   * Returns the cluster names.
-   */
-  public ClusterMXBean []getClusters()
+  //
+  // deprecated configuration
+  //
+
+  public Management createResinManagement()
   {
-    /*
-    ClusterMXBean []clusters = new ClusterMXBean[_clusters.size()];
+    if (_management == null) 
+      _management = new Management(this);
 
-    for (int i = 0; i < _clusters.size(); i++)
-      clusters[i] = _clusters.get(i).getAdmin();
-
-    return clusters;
-    */
-    throw new UnsupportedOperationException();
+    return _management;
   }
 
-  /**
-   * Sets the initial start time.
-   */
-  void setInitialStartTime(long now)
+  public StatSystem createStatSystem()
   {
-    _initialStartTime = now;
+    return getDelegate().createStatSystem();
+  }
+  
+  public LogSystem createLogSystem()
+  {
+    return getDelegate().createLogSystem();
   }
 
   /**
@@ -950,22 +520,11 @@ public class Resin
   }
 
   /**
-   * Initialize the server.
-   */
-  @PostConstruct
-  public void init()
-  {
-    preConfigureInit();
-
-    _lifecycle.toInit();
-  }
-
-  /**
    * Returns the active server.
    */
   public Server getServer()
   {
-    return _servletContainer;
+    return _servletSystem;
   }
 
   /**
@@ -976,11 +535,6 @@ public class Resin
     return _management;
   }
   
-  public double getCpuLoad()
-  {
-    return 0;
-  }
-  
   public CloudServer getSelfServer()
   {
     return _selfServer;
@@ -988,116 +542,18 @@ public class Resin
 
   public Server createServer()
   {
-    if (_servletContainer == null) {
+    if (_servletSystem == null) {
       configure();
 
       // _server.start();
     }
 
-    return _servletContainer;
-  }
-
-  protected ClusterServer loadDynamicServer(ClusterPod pod,
-                                            String dynId,
-                                            String dynAddress,
-                                            int dynPort)
-  {
-    throw new ConfigException(L().l("dynamic-server requires Resin Professional"));
-  }
-
-  /**
-   * Starts the server.
-   */
-  public void start()
-    throws Exception
-  {
-    preConfigureInit();
-
-    if (! _lifecycle.toActive())
-      return;
-
-    Thread thread = Thread.currentThread();
-    ClassLoader oldLoader = thread.getContextClassLoader();
-
-    try {
-      thread.setContextClassLoader(_resinSystem.getClassLoader());
-
-      // force a GC on start
-      System.gc();
-
-      _servletContainer = createServer();
-      
-      NetworkListenSystem listenService 
-        = _resinSystem.getService(NetworkListenSystem.class);
-
-      if (_args != null) {
-        for (BoundPort port : _args.getBoundPortList()) {
-          listenService.bind(port.getAddress(),
-                             port.getPort(),
-                             port.getServerSocket());
-        }
-      }
-      
-      if (_management != null)
-        _management.init();
-      
-
-      _resinSystem.start();
-
-      /*
-        if (! hasListeningPort()) {
-        log().warning(L().l("-server \"{0}\" has no matching http or srun ports.  Check the resin.xml and -server values.",
-        _serverId));
-        }
-      */
-
-      log().info(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
-    } finally {
-      thread.setContextClassLoader(oldLoader);
-    }
+    return _servletSystem;
   }
   
-  private void initRepository()
-  {
-    GitSystem.createAndAddService();
-    
-    LocalRepositoryService localRepositoryService = 
-      LocalRepositoryService.createAndAddService();
-
-    RepositorySpi localRepository = localRepositoryService.getRepositorySpi();
-
-    AbstractRepository repository = createRepository(localRepository);
-    RepositorySystem.createAndAddService(repository);
-    
-    // add the cluster repository
-    try {
-      RepositoryScheme.create("cluster-config", 
-                              getStage() + "/config/resin",
-                              RootDirectorySystem.getCurrentDataDirectory().lookup("config"));
-    } catch (Exception e) {
-      log().log(Level.WARNING, e.toString(), e);
-    }
-  }
-  
-  protected AbstractRepository createRepository(RepositorySpi localRepository)
-  {
-    return (AbstractRepository) localRepository;
-  }
-
-  /**
-   * Starts the server.
-   */
-  public void stop()
-  {
-    _resinSystem.stop();
-  }
-
-  /**
-   * Dump threads for debugging
-   */
-  public void dumpThreads()
-  {
-  }
+  //
+  // lifecycle
+  //
 
   /**
    * Returns true if active.
@@ -1123,9 +579,195 @@ public class Resin
     return _lifecycle.isDestroyed();
   }
 
+  public void addStartInfoListener(StartInfoListener listener)
+  {
+    _startInfoListeners.add(listener);
+  }
+  
+  void setStartInfo(boolean isRestart, 
+                    String startMessage,
+                    ExitCode exitCode)
+  {
+    _isRestart = isRestart;
+    _restartMessage = startMessage;
+    
+    for (StartInfoListener listener : _startInfoListeners) {
+      listener.setStartInfo(isRestart, startMessage, exitCode);
+    }
+  }
+  
+  public boolean isRestart()
+  {
+    return _isRestart;
+  }
+  
+  public String getRestartMessage()
+  {
+    return _restartMessage;
+  }
+  
+  //
+  // initialization code
+  //
+  
+  /**
+   * Must be called after the Resin.create()
+   */
+  private void preConfigureInit()
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+
+    try {
+      /*
+      String serverName = getServerId();
+      if (serverName == null || "".equals(serverName))
+        serverName = "default";
+      
+      _resinSystem = new ResinSystem(serverName);
+      */
+      
+      thread.setContextClassLoader(getClassLoader());
+
+      _resinLocal.set(this, getClassLoader());
+
+      _lifecycle = new Lifecycle(log(), "Resin[]");
+
+      if (getRootDirectory() == null)
+        throw new NullPointerException();
+      
+      _resinDelegate = ResinDelegate.create(this);
+
+      getDelegate().addPreTopologyServices();
+
+      // server/p603
+      initRepository();
+
+      // watchdog/0212
+      // else
+      //  setRootDirectory(Vfs.getPwd());
+      
+      if (! isWatchdog()) {
+        Environment.addChildLoaderListener(new ListenerPersistenceEnvironment());
+        Environment.addChildLoaderListener(new WebBeansAddLoaderListener());
+        Environment.addChildLoaderListener(new EjbEnvironmentListener());
+      }
+
+      _bootConfig
+        = new BootConfig(_resinSystem,
+                         getServerId(),
+                         getResinHome(),
+                         getRootDirectory(),
+                         getLogDirectory(),
+                         getResinConf(),
+                         isProfessional(),
+                         isWatchdog() ? BootType.WATCHDOG : BootType.RESIN);
+
+     _bootResinConfig = _bootConfig.getBootResin();
+     
+      _resinAdmin = new ResinAdmin(this);
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    } finally {
+      thread.setContextClassLoader(oldLoader);
+    }
+  }
+  
+  /*
+  private String findLocalServerId()
+  {
+    BootServerConfig server = _bootResinConfig.findLocalServer();
+    
+    if (server != null)
+      return server.getId();
+    else
+      return null;
+  }
+  */
+
+  /**
+   * Starts the server.
+   */
+  public void start()
+    throws Exception
+  {
+    if (! _lifecycle.toActive())
+      return;
+
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+
+    try {
+      thread.setContextClassLoader(_resinSystem.getClassLoader());
+
+      // force a GC on start
+      System.gc();
+
+      _servletSystem = createServer();
+      
+      NetworkListenSystem listenService 
+        = _resinSystem.getService(NetworkListenSystem.class);
+
+      if (_args != null) {
+        for (BoundPort port : _args.getBoundPortList()) {
+          listenService.bind(port.getAddress(),
+                             port.getPort(),
+                             port.getServerSocket());
+        }
+      }
+      
+      _resinSystem.start();
+
+      log().info(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
+    } finally {
+      thread.setContextClassLoader(oldLoader);
+    }
+  }
+  
+  private void initRepository()
+  {
+    GitSystem.createAndAddService();
+    
+    LocalRepositoryService localRepositoryService = 
+      LocalRepositoryService.createAndAddService();
+
+    RepositorySpi localRepository = localRepositoryService.getRepositorySpi();
+
+    AbstractRepository repository = getDelegate().createRepository(localRepository);
+    RepositorySystem.createAndAddService(repository);
+    
+    // add the cluster repository
+    try {
+      RepositoryScheme.create("cloud", 
+                              getStage() + "/config/resin",
+                              getServerDataDirectory().lookup("config"));
+    } catch (Exception e) {
+      log().log(Level.WARNING, e.toString(), e);
+    }
+  }
+
+  /**
+   * Starts the server.
+   */
+  public void stop()
+  {
+    _resinSystem.stop();
+  }
+
   public void destroy()
   {
     _resinSystem.destroy();
+  }
+  
+  //
+  // JMX/Admin
+  //
+
+  public ResinAdmin getAdmin()
+  {
+    return _resinAdmin;
   }
 
   /**
@@ -1136,23 +778,21 @@ public class Resin
   {
     _mainThread = Thread.currentThread();
     _mainThread.setContextClassLoader(_systemClassLoader);
-
-    preConfigureInit();
-
-    addRandom();
+    
+    // preConfigureInit();
 
     System.out.println(VersionFactory.getFullVersion());
     System.out.println(VersionFactory.getCopyright());
     System.out.println();
 
-    String licenseMessage = getLicenseMessage();
+    String licenseMessage = getDelegate().getLicenseMessage();
 
     if (licenseMessage != null) {
       log().warning(licenseMessage);
       System.out.println(licenseMessage);
     }
 
-    String licenseErrorMessage = getLicenseErrorMessage();
+    String licenseErrorMessage = getDelegate().getLicenseErrorMessage();
 
     if (licenseErrorMessage != null) {
       log().warning(licenseErrorMessage);
@@ -1189,14 +829,12 @@ public class Resin
     try {
       thread.setContextClassLoader(_resinSystem.getClassLoader());
       
-      if (_servletContainer == null) {
-        BootResinConfig bootResin = configureBoot();
+      if (_servletSystem == null) {
+        BootResinConfig bootResin = _bootResinConfig;
   
-        _rootDirectory = bootResin.getRootDirectory();
-  
-        configureRoot(bootResin);
+        configureRootDirectory(bootResin);
         
-        configureServer();
+        initServletSystem();
       }
       
     } catch (Exception e) {
@@ -1206,40 +844,9 @@ public class Resin
     }
   }
   
-  /**
-   * Configures the boot structure, which parses the clusters and servers
-   * for the system topology.
-   */
-  private BootResinConfig configureBoot()
+  public void configureFile(Path path)
   {
-    Vfs.setPwd(_rootDirectory);
-    
-    Path resinConf = null;
-    
-    if (_args != null)
-      resinConf = _args.getResinConfPath();
-
-    _resinConf = resinConf;
-
-    // server.setServerRoot(_serverRoot);
-
-    Vfs.setPwd(getRootDirectory());
-
-    if (resinConf != null)
-      configureFile(resinConf);
-
-    return _bootResinConfig;
-  }
-  
-  public void configureFile(Path resinConf)
-  {
-    BootResinConfig bootResin = _bootResinConfig;
-    
-    Config config = new Config();
-    // server/10hc
-    // config.setResinInclude(true);
-
-    config.configure(bootResin, resinConf, bootResin.getSchema());
+    _bootConfig.configureFile(path);
   }
   
   public void configureProgram(ConfigProgram program)
@@ -1250,17 +857,10 @@ public class Resin
   /**
    * Configures the root directory and dataDirectory.
    */
-  private void configureRoot(BootResinConfig bootConfig) 
+  private void configureRootDirectory(BootResinConfig bootConfig) 
     throws IOException
   {
-    Path dataDirectory = getResinDataDirectory();
-  
-    String serverName = _serverId;
-  
-    if (serverName == null || serverName.isEmpty())
-      serverName = "default";
-  
-    dataDirectory = dataDirectory.lookup("./" + serverName);
+    Path dataDirectory = getServerDataDirectory();
 
     RootDirectorySystem.createAndAddService(_rootDirectory, dataDirectory);
   }
@@ -1268,184 +868,311 @@ public class Resin
   /**
    * Configures the selected server from the boot config.
    */
-  private void configureServer()
-    throws IOException
+  private synchronized void initTopology()
   {
-    if (_servletContainer != null)
+    if (_selfServer != null)
       return;
     
     BootResinConfig bootResin = _bootResinConfig;
     
-    bootResin.configureServers();
-    
-    String clusterId = "";
-    
-    if (_dynamicJoinCluster != null) {
-      clusterId = _dynamicJoinCluster;
-      
-      CloudServer cloudServer = joinCluster(bootResin.getCloudSystem());
-
-      if (cloudServer != null) {
-        clusterId = cloudServer.getCluster().getId();
-      }
-    }
-    
+    _resinSystemAuthKey = bootResin.getResinSystemAuthKey();
     
     String serverId = _serverId;
     
-    BootServerConfig bootServer = bootResin.findServer(serverId);
-    
-    if (bootServer == null) {
-      /*
-      if (_serverId != null 
-          && ! "".equals(_serverId)
-          && ! "default".equals(_serverId)
-          && ! isWatchdog()
-          && _dynamicJoinCluster == null)
-        throw new ConfigException(L().l("-server '{0}' is an unknown server in the configuration file.",
-                                        _serverId));
-                                        */
-      
-      BootClusterConfig clusterConfig;
-      
-      clusterConfig = bootResin.findCluster(clusterId);
-      
-      if (clusterConfig != null) {
-      }
-      else if (bootResin.getClusterList().size() == 0) {
-        clusterConfig = bootResin.createCluster();
-        clusterConfig.setId(clusterId);
-        clusterConfig.init();
-      }
-      else if (serverId != null) {
-        throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
-                                        serverId));
-      }
-      else {
-          throw new ConfigException(L().l("'{0}' is an unknown cluster in the configuration file.",
-                                          clusterId));
-      }
-      
-      /*
-      if (clusterConfig.getPodList().size() > 0) {
-        throw new ConfigException(L().l("'{0}' is an unknown server in the configuration file.",
-                                        _serverId));
-      }
-      */
-      
-      bootServer = clusterConfig.createServer();
-      bootServer.setId(serverId); // getServerId());
-      
-      if (_dynamicJoinCluster != null)
-        bootServer.setDynamic(true);
-      
-      bootServer.init();
-      clusterConfig.addServer(bootServer);
-      // bootServer.configureServer();
+    if ("".equals(serverId)) {
+      serverId = "default";
+    }
+
+    if (serverId != null) {
+      _bootServerConfig = bootResin.findServer(serverId);
     }
     
-    _selfServer = bootServer.getCloudServer();
+    if (serverId == null) {
+      _bootServerConfig = bootResin.findServer("default");
+    }
+
+    CloudSystem cloudSystem = bootResin.initTopology();
     
-    validateServerCluster();
+    if (_bootServerConfig != null) {
+    }
+    else if (isEmbedded()) { 
+      _bootServerConfig = joinEmbed();
+    }
+    else if (Alarm.isTest()) {
+      _bootServerConfig = joinTest();
+    }
+    else if (isWatchdog()) {
+      _bootServerConfig = joinWatchdog();
+    }
+    else if (_serverId != null && getHomeCluster() == null) {
+      throw new ConfigException(L().l("-server '{0}' is an unknown server in the configuration file.",
+                                      _serverId));
+      
+    }
+    else if ((_bootServerConfig = bootResin.findLocalServer()) != null) {
+    }
     
-    NetworkClusterSystem networkService = 
-      NetworkClusterSystem.createAndAddService(_selfServer);
+    if (_bootServerConfig == null && getHomeCluster() != null) {
+      _bootServerConfig = joinCluster(cloudSystem);
+    }
+    
+    if (_bootServerConfig == null) {
+      throw new ConfigException(L().l("unknown server {0} in unknown cluster",
+                                      _serverId));
+    }
+    
+    _selfServer = cloudSystem.findServer(_bootServerConfig.getId());
+    
+    if (_selfServer ==  null)
+      throw new ConfigException(L().l("unexpected empty server"));
+    
+    Config.setProperty("rvar0", _selfServer.getId());
+    Config.setProperty("rvar1", _selfServer.getCluster().getId());
+
+    getDelegate().validateServerCluster();
+    
+    // NetworkClusterSystem.createAndAddService(_selfServer);
+    
+    // ClusterServer server = _selfServer.getData(ClusterServer.class);
+  }
+  
+  private BootServerConfig joinCluster(CloudSystem cloudSystem)
+  {
+    String clusterId = _homeCluster;
+    
+    BootResinConfig bootResin = _bootResinConfig;
+    
+    BootClusterConfig bootCluster = bootResin.findCluster(clusterId);
+    
+    if (bootCluster == null) {
+      throw new ConfigException(L().l("-cluster {0} is an unknown cluster.",
+                                      clusterId));
+    }
+    
+    CloudServer cloudServer = getDelegate().joinCluster(cloudSystem);
+
+    if (cloudServer == null) {
+      throw new ConfigException(L().l("unable to join cluster {0}",
+                                      clusterId));
+    }
+    
+    return bootCluster.addDynamicServer(cloudServer);
+  }
+  
+  private BootServerConfig joinWatchdog()
+  {
+    BootResinConfig bootResin = _bootResinConfig;
+    
+    BootClusterConfig bootCluster = bootResin.addClusterById("watchdog");
+    
+    BootServerConfig bootServer = bootCluster.createServer();
+    bootServer.setId("default");
+    bootServer.setAddress("127.0.0.1");
+    bootCluster.addServer(bootServer);
+    
+    bootResin.initTopology();
+    
+    return bootServer;
+  }
+  
+  private BootServerConfig joinTest()
+  {
+    BootResinConfig bootResin = _bootResinConfig;
+    
+    BootClusterConfig bootCluster = findDefaultCluster();
+    
+    if (bootCluster.getPodList().size() == 0) {
+    }
+    else if (bootCluster.getPodList().get(0).getServerList().size() == 1) {
+      // server/6b07
+      return bootCluster.getPodList().get(0).getServerList().get(0);
+    }
+    else if (bootCluster.getPodList().get(0).getServerList().size() > 0) {
+        // server/0342
+        return null;
+    }
+    
+    BootServerConfig bootServer = bootCluster.createServer();
+    bootServer.setId("default");
+    bootServer.setAddress("127.0.0.1");
+    bootCluster.addServer(bootServer);
+    
+    bootResin.initTopology();
+    
+    return bootServer;
+  }
+  
+  private BootClusterConfig findDefaultCluster()
+  {
+    BootResinConfig bootResin = _bootResinConfig;
+    
+    if (bootResin.getClusterList().size() == 1)
+      return bootResin.getClusterList().get(0);
+    
+    return bootResin.findCluster("");
+  }
+  
+  private BootServerConfig joinEmbed()
+  {
+    BootResinConfig bootResin = _bootResinConfig;
+    
+    BootClusterConfig bootCluster = null;
+    
+    if (bootResin.getClusterList().size() == 1)
+      bootCluster = bootResin.getClusterList().get(0);
+    
+    if (bootCluster == null)
+      bootCluster = bootResin.findCluster("");
+
+    if (bootCluster == null)
+      return null;
+    
+    if (bootCluster.getPodList().size() == 0) {
+      
+    }
+    else if (bootCluster.getPodList().get(0).getServerList().size() == 1) {
+      // server/1e06
+      return bootCluster.getPodList().get(0).getServerList().get(0);
+    }
+    else if (bootCluster.getPodList().get(0).getServerList().size() > 0) {
+      // server/0342
+      return null;
+    }
+    
+    BootServerConfig bootServer = bootCluster.createServer();
+    bootServer.setId("default");
+    bootServer.setAddress("127.0.0.1");
+    bootCluster.addServer(bootServer);
+    
+    bootResin.initTopology();
+    
+    return bootServer;
+  }
+
+  private void initClusterNetwork()
+  {
+    NetworkClusterSystem clusterSystem
+      = getDelegate().createNetworkSystem(_selfServer);
+    
+    NetworkClusterSystem.createAndAddService(clusterSystem);
     
     ClusterServer server = _selfServer.getData(ClusterServer.class);
     
-    LoadBalanceService.createAndAddService(createLoadBalanceFactory());
+    // initRepository();
+    
+    LoadBalanceService.createAndAddService(getDelegate().createLoadBalanceFactory());
     
     BamSystem.createAndAddService(server.getBamAdminName());
+  }
+  
+  /**
+   * Configures the selected server from the boot config.
+   */
+  private void initServletSystem()
+    throws IOException
+  {
+    if (_servletSystem != null)
+      return;
+
+    initTopology();
     
-    DeployControllerService.createAndAddService();
+    initClusterNetwork();
     
-    initRepository();
-   
-    _servletContainer = createServer(networkService);
+    _servletSystem = getDelegate().createServer();
 
     if (_args != null && _args.getStage() != null)
-      _servletContainer.setStage(_args.getStage());
+      _servletSystem.setStage(_args.getStage());
     else if (_stage != null)
-      _servletContainer.setStage(_stage);
+      _servletSystem.setStage(_stage);
     
     NetworkListenSystem.createAndAddService(_selfServer);
     
+    DeployControllerService.createAndAddService();
+    
     if (! isWatchdog()) {
-      addServices();
+      getDelegate().addServices();
     }
      
-    ServletSystem.createAndAddService(_servletContainer);
+    ServletSystem.createAndAddService(_servletSystem);
     
     ResinConfig resinConfig = new ResinConfig(this);
     
+    BootResinConfig bootResin = _bootResinConfig;
+    
     bootResin.getProgram().configure(resinConfig);
     
-    _servletContainerConfig = new ServletContainerConfig(_servletContainer);
+    _servletContainerConfig = new ServletContainerConfig(_servletSystem);
     
-    BootClusterConfig cluster = bootServer.getPod().getCluster();
+    BootClusterConfig cluster = _bootServerConfig.getPod().getCluster();
 
     cluster.getProgram().configure(_servletContainerConfig);
-    
+      
     ServerConfig config = new ServerConfig(_servletContainerConfig);
     cluster.getServerDefault().configure(config);
-    bootServer.getServerProgram().configure(config);
+    _bootServerConfig.getServerProgram().configure(config);
     
     _servletContainerConfig.init();
     
-    _servletContainer.init();
+    _servletSystem.init();
   }
   
-  protected void validateServerCluster()
+  ResinDelegate getDelegate()
   {
-    if (_selfServer.getPod().getServerLength() != 1) {
-      throw new ConfigException(L().l("{0} does not support multiple <server> instances in a cluster.\nFor clustered servers, please use Resin Professional with a valid license.",
-                                    this));
+    return _resinDelegate;
+  }
+
+  public LicenseCheck getLicenseCheck() {
+    return _resinDelegate.getLicenseCheck();
+  }
+  
+  protected boolean loadCloudLicenses()
+  {
+    try {
+      Class<?> cl = Class.forName("com.caucho.cloud.license.LicenseClientImpl");
+      LicenseClient client = (LicenseClient) cl.newInstance();
+      
+      Path licenses = getServerDataDirectory().lookup("licenses");
+      
+      return client.loadLicenses(licenses, _selfServer.getPod());
+    } catch (ClassNotFoundException e) {
+      log().log(Level.ALL, e.toString(), e);
+    } catch (Exception e) {
+      log().log(Level.FINER, e.toString(), e);
     }
+    
+    return false;
   }
-  
-  protected CloudServer joinCluster(CloudSystem system)
+
+  /**
+   * Returns the admin broker
+   */
+  public Broker getAdminBroker()
   {
-    throw new ConfigException(L().l("-join-cluster requires Resin Professional"));
+    return _management.getAdminBroker();
+  }
+
+  protected String getLicenseMessage()
+  {
+    return getDelegate().getLicenseMessage();
+  }
+
+  protected String getLicenseErrorMessage()
+  {
+    return getDelegate().getLicenseMessage();
   }
   
   public ServletContainerConfig getServletContainerConfig()
   {
     return _servletContainerConfig;
   }
+
+  //
+  // statistics
+  //
   
-  protected LoadBalanceFactory createLoadBalanceFactory()
+  public double getCpuLoad()
   {
-    return new LoadBalanceFactory();
-  }
-  
-  protected Server createServer(NetworkClusterSystem clusterService)
-  {
-    return new Server(this, _resinSystem, clusterService);
-  }
-
-  public Management createResinManagement()
-  {
-    if (_management == null) 
-      _management = new Management(this);
-
-    return _management;
-  }
-
-  public StatSystem createStatSystem() {
-    throw new ConfigException("StatSystem is available with Resin Professional");
-  }
-  
-  public LogSystem createLogSystem() {
-    throw new ConfigException("LogSystem is available with Resin Professional");
-  }
-
-  private void addRandom()
-  {
-  }
-
-  public void dumpHeapOnExit()
-  {
-
+    return 0;
   }
 
   /**
@@ -1472,9 +1199,19 @@ public class Resin
     _resinSystem.destroy();
   }
 
+  @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[id=" + _serverId + "]";
+    StringBuilder sb = new StringBuilder();
+    
+    if (isProfessional())
+      sb.append("Pro");
+
+    sb.append(getClass().getSimpleName());
+    
+    sb.append("[id=" + getDisplayServerId() + "]");
+    
+    return sb.toString();
   }
 
   /**
@@ -1492,13 +1229,7 @@ public class Resin
       
       validateEnvironment();
       
-      ResinArgs args = new ResinArgs(argv);
-
-      ResinSystem system = new ResinSystem(args.getServerId());
-      
-      final Resin resin = Resin.create(system, false);
-
-      resin.setArgs(args);
+      final Resin resin = new Resin(argv);
 
       resin.initMain();
 
@@ -1513,6 +1244,8 @@ public class Resin
     } catch (Throwable e) {
       Throwable cause;
 
+      e.printStackTrace();
+      
       for (cause = e;
            cause != null && cause.getCause() != null;
            cause = cause.getCause()) {

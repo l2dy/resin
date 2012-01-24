@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,13 +42,12 @@ public class WatchdogRestartQuery implements Serializable {
     _argv = null;
   }
 
-  public WatchdogRestartQuery(String serverId,
-                              String []argv)
+  public WatchdogRestartQuery(String serverId, String []argv)
   {
     _serverId = serverId;
     _argv = argv;
   }
-
+  
   public String getServerId()
   {
     return _serverId;
@@ -65,7 +64,6 @@ public class WatchdogRestartQuery implements Serializable {
     StringBuilder sb = new StringBuilder();
     sb.append(getClass().getSimpleName());
     sb.append("[");
-    sb.append(_serverId);
     sb.append("]");
 
     return sb.toString();

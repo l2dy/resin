@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,11 +34,9 @@ import java.lang.reflect.Modifier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.cloud.network.NetworkClusterSystem;
-import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.Config;
+import com.caucho.config.ConfigPropertiesResolver;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.env.service.ResinSystem;
 
 /**
  * Library of static config functions.
@@ -47,48 +45,28 @@ public class ResinServerConfigLibrary {
   private static final Logger log
     = Logger.getLogger(ResinServerConfigLibrary.class.getName());
   
-  public static Object rvar(String name)
+  public static Object rvar(String var)
   {
     Object value = null;
     
-    ResinSystem resinSystem = ResinSystem.getCurrent();
-    
-    if (resinSystem != null) {
-      value = Config.getProperty(resinSystem.getId() + "." + name);
-
-      if (value != null)
-        return value;
-    }
-    
-    String serverId = (String) Config.getProperty("server_id");
-    if (serverId != null) {
-      value = Config.getProperty(serverId + "." + name);
+    for (String resinProp: ConfigPropertiesResolver.RESIN_PROPERTIES) {
+      String resinKey = (String) getProperty(resinProp);
+      
+      if (resinKey == null)
+        break;
+      
+      value = getProperty(resinKey + '.' + var);
       
       if (value != null)
         return value;
     }
     
-    NetworkClusterSystem networkSystem = NetworkClusterSystem.getCurrent();
-    
-    CloudServer selfServer = null;
-    
-    if (networkSystem != null)
-      selfServer = networkSystem.getSelfServer();
-    
-    if (selfServer != null) {
-      value = Config.getProperty(selfServer.getId() + "." + name);
-      
-      if (value != null)
-        return value;
-      
-      value = Config.getProperty(selfServer.getCluster().getId() + "." + name);
-      
-      if (value != null)
-        return value;
-    }
-    
-    
-    return Config.getProperty(name);
+    return getProperty(var);
+  }
+  
+  private static Object getProperty(String name)
+  {
+    return Config.getElVar(name);
   }
   
   public static void configure(InjectManager webBeans)

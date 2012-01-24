@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,37 +39,35 @@ import java.util.logging.Logger;
  * Command to stop Resin server
  * bin/resin.sh kill -server a
  */
-public class KillCommand extends AbstractStartCommand
+public class KillCommand extends AbstractStopCommand
 {
   private static Logger _log;
   private static L10N _L;
 
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "kill";
+    return "forces a kill of a Resin server";
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       client.killWatchdog(args.getServerId());
 
       System.out.println(L().l(
-        "Resin/{0} killed -server '{1}' for watchdog at {2}:{3}",
+        "Resin/{0} killed{1} for watchdog at {2}:{3}",
         VersionFactory.getVersion(),
-        client.getId(),
+        getServerUsageArg(args.getServerId(), client.getId()),
         client.getWatchdogAddress(),
         client.getWatchdogPort()));
     } catch (Exception e) {
       System.out.println(L().l(
-        "Resin/{0} can't kill -server '{1}' for watchdog at {2}:{3}.\n{4}",
+        "Resin/{0} can't kill -server '{1}' (client {2}) for watchdog at {3}:{4}.\n{4}",
         VersionFactory.getVersion(),
-        client.getId(),
+        args.getServerId(), client.getId(),
         client.getWatchdogAddress(),
         client.getWatchdogPort(),
         e.toString()));
@@ -104,6 +102,7 @@ public class KillCommand extends AbstractStartCommand
     return _L;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -119,4 +118,5 @@ public class KillCommand extends AbstractStartCommand
     System.out.println("   -watchdog-port <port> : override the watchdog-port");
     System.out.println("   -verbose              : print verbose starting information");
   }
+  */
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,47 +29,135 @@
 
 package com.caucho.boot;
 
-import com.caucho.util.L10N;
-
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 
 public abstract class AbstractBootCommand implements BootCommand {
-  private static L10N _L;
-  
-  private HashSet<String> _valueKeySet = new HashSet<String>();
-  private HashSet<String> _optionSet = new HashSet<String>();
+  private final Map<String,BootOption> _optionMap
+    = new HashMap<String,BootOption>();
+
+  protected AbstractBootCommand()
+  {
+    addValueOption("conf", "file", "alternate resin.xml file");
+    addValueOption("mode", "string", "select .resin properties mode");
+    addValueOption("resin-home", "dir", "alternate resin home");
+    addValueOption("server", "id", "select Resin server from config");
+    addValueOption("user-properties", "file", "select an alternate $HOME/.resin file");
+    
+    addValueOption("root-directory", "file", "alternate root directory");
+    addValueOption("log-directory", "file", "alternate log directory");
+    
+    addFlagOption("verbose", "produce verbose output");
+  }
 
   @Override
   public String getName()
   {
-    return "abstract-boot-command";
+    String name = getClass().getSimpleName();
+    
+    int p = name.indexOf("Command");
+    if (p >= 0)
+      name = name.substring(0, p);
+    
+    StringBuilder sb = new StringBuilder();
+    
+    for (int i = 0; i < name.length(); i++) {
+      char ch = name.charAt(i);
+      
+      if (Character.isUpperCase(ch)) {
+        if (i > 0)
+          sb.append('-');
+        
+        sb.append(Character.toLowerCase(ch));
+      }
+      else {
+        sb.append(ch);
+      }
+    }
+    
+    return sb.toString();
   }
   
   @Override
+  public String getDescription()
+  {
+    return "";
+  }
+
+  @Override
+  public boolean isProOnly()
+  {
+    return false;
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return false;
+  }
+
+  @Override
   public int doCommand(ResinBoot boot, WatchdogArgs args)
   {
-    WatchdogClient client = findClient(boot, args);
+    WatchdogClient client = boot.findClient(args.getServerId(), args);
+    
+    if (client == null)
+      client = boot.findShutdownClient(args);
     
     return doCommand(args, client);
-  }
-  
-  protected WatchdogClient findClient(ResinBoot boot, WatchdogArgs args)
-  {
-    WatchdogClient client = boot.findClient(args.getServerId(), args);
-
-    return client;
   }
   
   protected int doCommand(WatchdogArgs args, WatchdogClient client)
   {
     throw new UnsupportedOperationException(getClass().getSimpleName());
   }
-
-  public void validateArgs(String[] args) throws BootArgumentException
+  
+  protected void addOption(BootOption option)
   {
-    Set<String> intValueKeys = getIntValueKeys();
+    _optionMap.put(option.getName(), option);
+  }
+  
+  protected void addFlagOption(String name, String description)
+  {
+    addOption(new FlagBootOption(name, description));
+  }
+  
+  protected void addValueOption(String name,
+                                String value,
+                                String description)
+  {
+    addOption(new ValueBootOption(name, value, description));
+  }
+  
+  protected void addIntValueOption(String name, 
+                                   String value,
+                                   String description)
+  {
+    addOption(new ValueIntBootOption(name, value, description));
+  }
+  
+  public String getOptionUsage()
+  {
+    StringBuilder sb = new StringBuilder();
+    
+    ArrayList<BootOption> optionList = new ArrayList<BootOption>();
+    optionList.addAll(_optionMap.values());
+    
+    Collections.sort(optionList, new BootOptionComparator());
+    
+    for (BootOption option : optionList) {
+      sb.append("  " + option.getUsage() + "\n");
+    }
+    
+    return sb.toString();
+  }
 
+
+/*  public void validateArgs(String[] args) throws BootArgumentException
+  {
     for (int i = 0; i < args.length; i++) {
       final String arg = args[i];
 
@@ -87,70 +175,83 @@ public abstract class AbstractBootCommand implements BootCommand {
         continue;
       }
 
-      if (isOptionArg(arg))
+      if (isFlag(arg)) {
         continue;
-
-      if (! isValueArg(arg))
-        throw new BootArgumentException(L().l("unknown argument '{0}'", arg));
+      }
+      else if (isValueOption(arg)) {
+      }
+      else if (isIntValueOption(arg)) {
+      }
+      else {
+        throw new BootArgumentException(L.l("unknown argument '{0}'", arg));
+      }
 
       if (i + 1 == args.length)
-        throw new BootArgumentException(L().l("option '{0}' requires a value",
+        throw new BootArgumentException(L.l("option '{0}' requires a value",
                                               arg));
       String value = args[++i];
 
-      if (isValueArg(value) || isOptionArg(value))
-        throw new BootArgumentException(L().l("option '{0}' requires a value",
-                                              arg));
+      if (isFlag(value) || isValueOption(value) || isIntValueOption(value))
+        throw new BootArgumentException(L.l("option '{0}' requires a value",
+                                            arg));
 
-      if (intValueKeys.contains(arg)) {
+      if (isIntValueOption(arg)) {
         try {
           Long.parseLong(value);
         } catch (NumberFormatException e) {
-          throw new BootArgumentException(L().l("'{0}' argument must be a number: `{1}'", arg, value));
+          throw new BootArgumentException(L.l("'{0}' argument must be a number: `{1}'", arg, value));
         }
       }
     }
-  }
-  
-  protected boolean isOptionArg(String arg)
-  {
-    return getOptions().contains(arg);
-  }
-  
-  protected boolean isValueArg(String arg)
-  {
-    return getValueKeys().contains(arg);
-  }
+  }*/
 
-  private static L10N L()
+  @Override
+  public boolean isValueOption(String key)
   {
-    if (_L == null)
-      _L = new L10N(AbstractStartCommand.class);
+    BootOption option = getBootOption(key);
 
-    return _L;
+    if (option != null && option.isValue())
+      return true;
+
+    return false;
   }
 
   @Override
-  public Set<String> getOptions()
+  public boolean isIntValueOption(String key)
   {
-    return _optionSet;
-  }
-  
-  protected void addValueKey(String key)
-  {
-    _valueKeySet.add(key);
+    BootOption option = getBootOption(key);
+
+    if (option != null && option.isIntValue())
+      return true;
+
+    return false;
   }
 
   @Override
-  public Set<String> getValueKeys()
+  public boolean isFlag(String key)
   {
-    return _valueKeySet;
+    BootOption option = getBootOption(key);
+
+    if (option != null && option.isFlag())
+      return true;
+
+    return false;
   }
 
-  @Override
-  public Set<String> getIntValueKeys()
-  {
-    return new HashSet<String>();
+  private BootOption getBootOption(String key) {
+    if (key.charAt(0) != '-')
+      return null;
+
+    String cleanKey;
+
+    if (key.charAt(0) == '-' && key.charAt(1) == '-')
+      cleanKey = key.substring(2);
+    else
+      cleanKey = key.substring(1);
+
+    BootOption option = _optionMap.get(cleanKey);
+
+    return option;
   }
 
   @Override
@@ -160,6 +261,57 @@ public abstract class AbstractBootCommand implements BootCommand {
   }
 
   @Override
-  public void usage() {
+  public final void usage()
+  {
+    System.err.println("usage: resinctl " + getName() + " [--options]"
+                       + getUsageArgs());
+    System.err.println();
+    System.err.println("  " + getDescription()
+                       + (isProOnly() ? " (Resin Pro)" : ""));
+    System.err.println();
+    System.err.println("where options include:");
+    System.err.print(getOptionUsage());
+  }
+  
+  public String getUsageArgs()
+  {
+    return "";
+  }
+  
+  @Override
+  public boolean isStart()
+  {
+    return false;
+  }
+  
+  @Override
+  public boolean isConsole()
+  {
+    return false;
+  }
+  
+  @Override
+  public boolean isShutdown()
+  {
+    return false;
+  }
+  
+  @Override
+  public boolean isRemote(WatchdogArgs args)
+  {
+    return args.getArg("address") != null;
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[]";
+  }
+  
+  static class BootOptionComparator implements Comparator<BootOption> {
+    public int compare(BootOption a, BootOption b)
+    {
+      return a.getName().compareTo(b.getName());
+    }
   }
 }

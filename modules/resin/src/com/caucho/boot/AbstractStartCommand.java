@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,23 +29,26 @@
 
 package com.caucho.boot;
 
-import com.caucho.util.L10N;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.logging.Logger;
 
 public abstract class AbstractStartCommand extends AbstractBootCommand
 {
-  private static Logger _log;
-  private static L10N _L;
-
-  private final Set<String> _options = new HashSet<String>();
-  private final Set<String> _valueKeys = new HashSet<String>();
-  private final Set<String> _intValueKeys = new HashSet<String>();
-
   protected AbstractStartCommand()
   {
+    addFlagOption("verbose", "log command-line and environment information");
+    addFlagOption("preview", "run as a preview (staging) server");
+    
+    addValueOption("data-directory", "dir", "override the working directory");
+    addValueOption("cluster", "id", "join a cluster as a dynamic server (pro)");
+    addValueOption("root-directory", "dir", "set the root directory");
+    addValueOption("log-directory", "dir", "set the log directory");
+    addValueOption("server", "id", "select a configured server");
+    addValueOption("stage", "stage", "select a configuration stage (production, preview)");
+
+    addIntValueOption("watchdog-port", "port", "set watchdog port to listen to");
+    addIntValueOption("debug-port", "port", "listen to a JVM debug port");
+    addIntValueOption("jmx-port", "port", "listen to an unauthenticated JMX port");
+
+    /*
     _options.add("-verbose");
     _options.add("--verbose");
     _options.add("-preview");
@@ -82,45 +85,22 @@ public abstract class AbstractStartCommand extends AbstractBootCommand
     _intValueKeys.add("--debug-port");
     _intValueKeys.add("-jmx-port");
     _intValueKeys.add("--jmx-port");
+    */
+  }
+  
+  protected String getServerUsageArg(WatchdogArgs args, String clientId)
+  {
+    if (args.getServerId() != null)
+      return " -server '" + args.getServerId() + "'";
+    else if (! args.isDynamicServer())
+      return " -server '" + clientId + "'";
+    else
+      return "";
   }
 
   @Override
   public boolean isRetry()
   {
     return true;
-  }
-
-  private static Logger log()
-  {
-    if (_log == null)
-      _log = Logger.getLogger(AbstractStartCommand.class.getName());
-
-    return _log;
-  }
-
-  private static L10N L()
-  {
-    if (_L == null)
-      _L = new L10N(AbstractStartCommand.class);
-
-    return _L;
-  }
-
-  @Override
-  public Set<String> getOptions()
-  {
-    return _options;
-  }
-
-  @Override
-  public Set<String> getValueKeys()
-  {
-    return _valueKeys;
-  }
-
-  @Override
-  public Set<String> getIntValueKeys()
-  {
-    return _intValueKeys;
   }
 }

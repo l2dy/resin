@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -834,7 +834,7 @@ public class ServletContainerConfig implements EnvironmentBean, SchemaBean
      */
     public Path getRoot()
     {
-      Resin resin =  Resin.getLocal();
+      Resin resin =  Resin.getCurrent();
 
       return resin == null ? Vfs.getPwd() : resin.getRootDirectory();
     }

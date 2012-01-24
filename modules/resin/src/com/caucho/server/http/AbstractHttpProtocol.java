@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,23 +39,19 @@ import com.caucho.util.L10N;
  */
 abstract public class AbstractHttpProtocol extends AbstractProtocol {
   private static final L10N L = new L10N(AbstractHttpProtocol.class);
-  
-  private Server _server;
-  
-  protected AbstractHttpProtocol()
-  {
-    _server = Server.getCurrent();
-    
-    if (_server == null)
-      throw new ConfigException(L.l("{0} needs an active Resin Server.",
-                                    getClass().getName()));
-  }
 
   /**
    * Returns the active server.
    */
-  public Server getServer()
+  public Server getServletSystem()
   {
-    return _server;
+    Server servletSystem = Server.getCurrent();
+    
+    if (servletSystem == null) {
+      throw new ConfigException(L.l("{0} needs an active Resin Servlet System.",
+                                    getClass().getName()));
+    }
+    
+    return servletSystem;
   }
 }

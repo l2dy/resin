@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,13 +30,11 @@
 package javax.cache.annotation;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Type;
 import java.util.Set;
 
 public interface CacheInvocationParameter
 {
-  public Type getBaseType();
-  
+
   public Class<?> getRawType();
   
   public Object getValue();

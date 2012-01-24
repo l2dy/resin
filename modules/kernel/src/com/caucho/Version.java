@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,11 +31,11 @@ package com.caucho;
 
 final public class Version {
   public static final String COPYRIGHT =
-    "Copyright(c) 1998-2011 Caucho Technology.  All rights reserved.";
+    "Copyright(c) 1998-2012 Caucho Technology.  All rights reserved.";
 
-  public static String FULL_VERSION = "Resin-4.0.24 (built Fri, 18 Nov 2011 11:14:45 PST)";
-  public static String VERSION = "4.0.24";
-  public static String VERSION_DATE = "20111118T111445";
+  public static String FULL_VERSION = "Resin-4.0.25 (built Tue, 24 Jan 2012 11:11:06 PST)";
+  public static String VERSION = "4.0.25";
+  public static String VERSION_DATE = "20120124T111106";
 
   public static void main(String []argv)
   {

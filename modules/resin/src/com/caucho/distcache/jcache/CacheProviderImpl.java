@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,8 +29,8 @@
 
 package com.caucho.distcache.jcache;
 
-import javax.cache.CacheManager;
 import javax.cache.OptionalFeature;
+import javax.cache.spi.CacheManagerFactory;
 import javax.cache.spi.CachingProvider;
 
 /**
@@ -38,18 +38,14 @@ import javax.cache.spi.CachingProvider;
  */
 public class CacheProviderImpl implements CachingProvider
 {
+  private CacheManagerFactory _factory = new CacheManagerFactoryImpl();
+  
   @Override
-  public CacheManager createCacheManager(ClassLoader classLoader, String name)
+  public CacheManagerFactory getCacheManagerFactory()
   {
-    return new CacheManagerFacade(name, classLoader);
+    return _factory;
   }
-
-  @Override
-  public ClassLoader getDefaultClassLoader()
-  {
-    return Thread.currentThread().getContextClassLoader();
-  }
-
+  
   @Override
   public boolean isSupported(OptionalFeature feature)
   {

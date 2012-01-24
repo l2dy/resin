@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,7 +40,6 @@ import com.caucho.config.types.Period;
 import com.caucho.log.AbstractRolloverLog;
 import com.caucho.log.RotateStream;
 import com.caucho.network.listen.TcpSocketLinkListener;
-import com.caucho.server.util.CauchoSystem;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
@@ -82,6 +81,7 @@ class WatchdogConfig
   
   private String _serverAddress = "127.0.0.1";
   private int _serverPort;
+  private boolean _isRequireExplicitId;
 
   private WatchdogLog _watchdogLog;
   private Path _logPath;
@@ -213,6 +213,14 @@ class WatchdogConfig
   public BootClusterConfig getCluster()
   {
     return _cluster;
+  }
+  
+  public String getHomeCluster()
+  {
+    if (_cluster != null)
+      return _cluster.getResin().getHomeCluster();
+    else
+      return null;
   }
   
   /**
@@ -396,6 +404,16 @@ class WatchdogConfig
   public int getPort()
   {
     return _serverPort;
+  }
+  
+  public void setRequireExplicitId(boolean isRequire)
+  {
+    _isRequireExplicitId = isRequire;
+  }
+  
+  public boolean isRequireExplicitId()
+  {
+    return _isRequireExplicitId;
   }
   
   /**

@@ -59,7 +59,7 @@ install	:
 	  fi \
 	fi
 	@ chmod +x $(resin_home)/bin/resinctl
-	@ if test "$(resin_conf)" != $(build_dir)/conf; then \
+	@ if test "$(resin_conf)" != "$(build_dir)/conf"; then \
 	  mkdir -p $(resin_conf); \
 		if test -f "$(resin_conf)/resin.xml"; then\
 			echo "-------------------------------------------------------";\
@@ -81,9 +81,10 @@ install	:
 			echo "-------------------------------------------------------";\
 		else\
 			cp conf/app-default.xml $(resin_conf)/app-default.xml; \
+			cp conf/cluster-default.xml $(resin_conf)/cluster-default.xml; \
+			cp conf/health.xml $(resin_conf)/health.xml; \
 		fi;\
-		mkdir "$(resin_conf)/local.d"; \
-		install -b -t "$(resin_conf)/local.d" conf/local.d/*; \
+		mkdir -p "$(resin_conf)/resin-inf"; \
 	fi
 	(cd modules/c/src; $(MAKE) install)
 	if test -r $(resin_pro)/modules/c/src/Makefile; then \

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -341,6 +341,24 @@ public class CharSegment implements CharSequence {
 
     for (int i = _length - 1; i >= 0; i--)
       if (buffer[offset + i] != cb[i])
+        return false;
+
+    return true;
+  }
+
+  /**
+   * Returns true if the CharSegment equals the char array.
+   */
+  public final boolean equals(char []cb, int offset, int length)
+  {
+    if (length != _length)
+      return false;
+
+    int selfOffset = _offset;
+    char []buffer = _buffer;
+
+    for (int i = _length - 1; i >= 0; i--)
+      if (buffer[selfOffset + i] != cb[i + offset])
         return false;
 
     return true;

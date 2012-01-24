@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -118,7 +118,19 @@ public class WebSocketContextStreamImpl
   }
   
   @Override
+  public void pong(byte []bytes)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  @Override
   public void close()
+  {
+    close(1000, "ok");
+  }
+  
+  @Override
+  public void close(int code, String msg)
   {
     if (_isWriteClosed.getAndSet(true))
       return;
@@ -126,7 +138,7 @@ public class WebSocketContextStreamImpl
     try {
       WriteStream out = getWriteStream();
     
-      out.write(0x81);
+      out.write(0x88);
       out.write(0x00);
       out.flush();
     } catch (IOException e) {

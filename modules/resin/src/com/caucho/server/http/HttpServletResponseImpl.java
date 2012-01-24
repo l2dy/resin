@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1245,6 +1245,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     return _sessionId;
   }
 
+  @Override
   public void setSessionId(String id)
   {
     _sessionId = id;
@@ -1613,7 +1614,8 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   public void setForwardEnclosed(boolean isForwardEnclosed) {
   }
 
-  public boolean isForwardEnclosed() {
+  public boolean isForwardEnclosed()
+  {
     return false;
   }
 

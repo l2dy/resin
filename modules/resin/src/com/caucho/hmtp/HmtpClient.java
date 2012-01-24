@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,8 +35,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.BamException;
+import com.caucho.bam.NotAuthorizedException;
 import com.caucho.bam.actor.ActorHolder;
-import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.client.LinkClient;
 import com.caucho.bam.query.QueryCallback;
@@ -52,7 +53,8 @@ import com.caucho.websocket.WebSocketListener;
 /**
  * HMTP client protocol
  */
-public class HmtpClient implements ActorSender {
+public class HmtpClient implements RemoteActorSender
+{
   private static final L10N L = new L10N(HmtpClient.class);
   
   private static final Logger log
@@ -130,6 +132,12 @@ public class HmtpClient implements ActorSender {
     loginImpl(user, credentials);
   }
 
+  @Override
+  public String getUrl()
+  {
+    return _url;
+  }
+
   private void init()
   {
     _linkFactory = new HmtpLinkFactory();
@@ -201,9 +209,9 @@ public class HmtpClient implements ActorSender {
 
         if (testSignature.equals(serverSignature)) {
         }
-        else if ("".equals(uid)) {
-          throw new BamException(L.l("{0} resin-system-auth-key does not match the server's value",
-                                      this));
+        else if ("".equals(uid) && ! "".equals(password)) {
+          throw new NotAuthorizedException(L.l("{0} resin-system-auth-key does not match the server's value",
+                                               this));
         }
 
         String signature = _authManager.sign(serverAlgorithm, 
@@ -234,6 +242,15 @@ public class HmtpClient implements ActorSender {
 
       if (log.isLoggable(Level.FINE))
         log.fine(this + " login");
+    } catch (NotAuthorizedException e) {
+      if (uid == null || "".equals(uid) )
+        throw new NotAuthorizedException(L.l("A user and password are required to access the remote service. Please check the user and password.\n  {0}",
+                                             e.getMessage()),
+                                         e);
+      else
+        throw new NotAuthorizedException(L.l("The user '{0}' was not authorized to access the remote service. Please check the password.\n  {1}",
+                                             uid, e.getMessage()),
+                                             e);
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {
@@ -283,6 +300,7 @@ public class HmtpClient implements ActorSender {
       */
   }
 
+  @Override
   public void close()
   {
     if (log.isLoggable(Level.FINE))
@@ -297,7 +315,7 @@ public class HmtpClient implements ActorSender {
       linkFactory.close();
 
     if (_webSocketClient != null)
-      _webSocketClient.close();
+      _webSocketClient.close(1000, "ok");
    }
 
   /* (non-Javadoc)

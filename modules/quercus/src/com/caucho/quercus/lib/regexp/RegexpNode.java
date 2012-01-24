@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,8 +35,6 @@ import com.caucho.util.*;
 import com.caucho.quercus.env.StringValue;
 
 class RegexpNode {
-  private static final L10N L = new L10N(RegexpNode.class);
-
   static final int RC_END = 0;
   static final int RC_NULL = 1;
   static final int RC_STRING = 2;

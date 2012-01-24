@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1032,7 +1032,7 @@ public class TcpSocketLink extends AbstractSocketLink
   {
     toDuplexActive();
 
-    RequestState result;
+    RequestState result = RequestState.EXIT;
 
     ReadStream readStream = getReadStream();
 
@@ -1048,6 +1048,12 @@ public class TcpSocketLink extends AbstractSocketLink
         
         close();
 
+        return RequestState.EXIT;
+      }
+      
+      if (duplex.isCompleteRequested()) {
+        close();
+        
         return RequestState.EXIT;
       }
     }

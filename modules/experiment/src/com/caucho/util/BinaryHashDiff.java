@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -441,11 +441,6 @@ public class BinaryHashDiff {
       for (int i = 0; i < size; i++) {
         hash = hash(hash, data[i], 0, factor);
       }
-      
-      long newHash = hash;
-
-      if (oldHash != newHash)
-        System.out.println("OLD: " + oldHash + " " + newHash);
     }
   }
   

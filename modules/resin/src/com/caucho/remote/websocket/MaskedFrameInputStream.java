@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,9 @@ package com.caucho.remote.websocket;
 import java.io.IOException;
 import java.io.InputStream;
 
+import com.caucho.vfs.WriteStream;
+import com.caucho.websocket.WebSocketContext;
+
 /**
  * WebSocketInputStream reads a single WebSocket packet.
  *
@@ -42,11 +45,9 @@ import java.io.InputStream;
  * 
  * OPCODES
  *   0 - cont
- *   1 - close
- *   2 - ping
- *   3 - pong
- *   4 - text
- *   5 - binary
+ *   1 - text
+ *   2 - binary
+ *   8 - close
  * </pre></code>
  */
 public class MaskedFrameInputStream extends FrameInputStream
@@ -63,9 +64,12 @@ public class MaskedFrameInputStream extends FrameInputStream
   public MaskedFrameInputStream()
   {
   }
-  
-  public void init(InputStream is)
+
+  @Override
+  public void init(WebSocketContext cxt, InputStream is)
   {
+    super.init(cxt, is);
+    
     _is = is;
   }
 
@@ -103,11 +107,13 @@ public class MaskedFrameInputStream extends FrameInputStream
       
       _length = length - 1;
 
-      if (ch > 0) {
+      if (ch >= 0) {
         int maskOffset = _maskOffset;
         _maskOffset = (maskOffset + 1) & 0x3;
         
-        return (ch ^ getMask()[maskOffset]) & 0xff;
+        ch = (ch ^ getMask()[maskOffset]) & 0xff;
+        
+        return ch;
       }
       else
         return -1;
@@ -154,55 +160,66 @@ public class MaskedFrameInputStream extends FrameInputStream
   protected boolean readFrameHeaderImpl()
     throws IOException
   {
-    InputStream is = _is;
+    while (true) {
+      InputStream is = _is;
     
-    int frame1 = is.read();
-    int frame2 = is.read();
+      int frame1 = is.read();
+      int frame2 = is.read();
 
-    if (frame2 < 0)
-      return false;
+      if (frame2 < 0)
+        return false;
 
-    boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
-    _op = frame1 & 0xf;
+      boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
+      _op = frame1 & 0xf;
+      
+      int rsv = frame1 & 0x70;
+      
+      if (rsv != 0) {
+        getContext().close(CLOSE_ERROR, "illegal request");
+        return false;
+      }
 
-    _isFinal = isFinal;
+      _isFinal = isFinal;
 
-    long length = frame2 & 0x7f;
+      long length = frame2 & 0x7f;
 
-    if (length < 0x7e) {
+      if (length < 0x7e) {
+      }
+      else if (length == 0x7e) {
+        length = ((((long) is.read()) << 8)
+            + (((long) is.read())));
+      }
+      else {
+        length = ((((long) is.read()) << 56)
+            + (((long) is.read()) << 48)
+            + (((long) is.read()) << 40)
+            + (((long) is.read()) << 32)
+            + (((long) is.read()) << 24)
+            + (((long) is.read()) << 16)
+            + (((long) is.read()) << 8)
+            + (((long) is.read())));
+      }
+
+      _length = length;
+      
+      byte []mask = getMask();
+      if ((frame2 & 0x80) != 0) {
+        mask[0] = (byte) is.read();
+        mask[1] = (byte) is.read();
+        mask[2] = (byte) is.read();
+        mask[3] = (byte) is.read();
+        _maskOffset = 0;
+      }
+      else {
+        mask[0] = 0;
+        mask[1] = 0;
+        mask[2] = 0;
+        mask[3] = 0;
+        _maskOffset = 0;
+      }
+      
+      if (handleFrame())
+        return true;
     }
-    else if (length == 0x7e) {
-      length = ((((long) is.read()) << 8)
-          + (((long) is.read())));
-    }
-    else {
-      length = ((((long) is.read()) << 56)
-          + (((long) is.read()) << 48)
-          + (((long) is.read()) << 40)
-          + (((long) is.read()) << 32)
-          + (((long) is.read()) << 24)
-          + (((long) is.read()) << 16)
-          + (((long) is.read()) << 8)
-          + (((long) is.read())));
-    }
-
-    _length = length;
-    
-    byte []mask = getMask();
-    if ((frame2 & 0x80) != 0) {
-      mask[0] = (byte) is.read();
-      mask[1] = (byte) is.read();
-      mask[2] = (byte) is.read();
-      mask[3] = (byte) is.read();
-      _maskOffset = 0;
-    }
-    else {
-      mask[0] = 0;
-      mask[1] = 0;
-      mask[2] = 0;
-      mask[3] = 0;
-    }
-
-    return true;
   }
 }

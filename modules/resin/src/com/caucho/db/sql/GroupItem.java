@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -95,7 +95,7 @@ class GroupItem {
   {
     setSize(size);
     setGroupByFields(isGroupByFields);
-    clear();
+    clear(size);
   }
 
   /**
@@ -122,10 +122,8 @@ class GroupItem {
   /**
    * Clears the data.
    */
-  public void clear()
+  public void clear(int length)
   {
-    int length = _data.length;
-    
     for (int i = 0; i < length; i++)
       _data[i].clear();
   }
@@ -220,12 +218,13 @@ class GroupItem {
   /**
    * Returns equality based on group by
    */
+  @Override
   public boolean equals(Object o)
   {
     if (this == o)
       return true;
     
-    else if (! o.getClass().equals(getClass()))
+    else if (! (o instanceof GroupItem))
       return false;
 
     GroupItem item = (GroupItem) o;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -155,6 +155,26 @@ public class ShutdownSystem extends AbstractResinSubSystem
       shutdownActive(ExitCode.MEMORY, msg);
     }
   }
+  
+  public static void startFailsafe(String msg)
+  {
+    ShutdownSystem shutdown = _activeService.get();
+    
+    if (shutdown != null) {
+      shutdown.startFailSafeShutdown(msg);
+      return;
+    }
+    
+    shutdown = getCurrent();
+    
+    if (shutdown != null) {
+      shutdown.startFailSafeShutdown(msg);
+      return;
+    }
+    
+    log.warning("ShutdownService is not active: failsafe: " + msg);
+    System.out.println("ShutdownService is not active: failsafe: " + msg);
+  }
     
   /**
    * Start the server shutdown
@@ -218,7 +238,7 @@ public class ShutdownSystem extends AbstractResinSubSystem
     }
 
     try {
-      _warningService.sendWarning(this, msg);
+      _warningService.sendWarning(this, "Shutdown: " + msg);
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
     }

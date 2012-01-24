@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -68,6 +68,17 @@ public interface WebSocketContext {
    * gracefully close the connection, waiting for unread messages.
    */
   public void close();
+
+  /**
+   * gracefully close the connection, waiting for unread messages.
+   */
+  public void close(int code, String message);
+
+  /**
+   * sends a pong message
+   */
+  public void pong(byte[] value)
+    throws IOException;
 
   /**
    * Disconnect the connection.

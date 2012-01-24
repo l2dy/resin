@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -71,8 +71,9 @@ public class WebSocketInputStream extends InputStream
   public boolean startBinaryMessage()
     throws IOException
   {
-    if (! _is.readFrameHeader())
+    if (! _is.readFrameHeader()) {
       return false;
+    }
     
     if (_is.getOpcode() != OP_BINARY)
       throw new UnsupportedOperationException("Expected binary at: " + _is.getOpcode());
@@ -92,8 +93,17 @@ public class WebSocketInputStream extends InputStream
     throws IOException
   {
     while (_length == 0 && ! _isFinal) {
-      if (! _is.readFrameHeader())
+      if (! _is.readFrameHeader()) {
         return -1;
+      }
+      
+      if (_is.getOpcode() == OP_CLOSE) {
+        return -1;
+      }
+      else if (_is.getOpcode() != OP_CONT) {
+        _is.closeError(1002, "illegal fragment");
+        return -1;
+      }
       
       _length = _is.getLength();
       _isFinal = _is.isFinal();
@@ -116,6 +126,14 @@ public class WebSocketInputStream extends InputStream
     while (_length == 0 && ! _isFinal) {
       if (! _is.readFrameHeader())
         return -1;
+      
+      if (_is.getOpcode() == OP_CLOSE) {
+        return -1;
+      }
+      else if (_is.getOpcode() != OP_CONT) {
+        _is.closeError(1002, "illegal fragment");
+        return -1;
+      }
       
       _length = _is.getLength();
       _isFinal = _is.isFinal();

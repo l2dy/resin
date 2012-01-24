@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package com.caucho.server.resin;
 
+import java.io.IOException;
 import java.security.Provider;
 import java.security.Security;
 import java.util.logging.Logger;
@@ -82,6 +83,9 @@ public class ResinConfig implements EnvironmentBean
   {
     _resin = resin;
     _system = resin.getResinSystem();
+    
+    if (resin.getResinSystemAuthKey() != null)
+      setResinSystemAuthKey(resin.getResinSystemAuthKey());
   }
 
   /**
@@ -101,6 +105,12 @@ public class ResinConfig implements EnvironmentBean
   {
     SecurityService security = SecurityService.getCurrent();
     security.setSignatureSecret(key);
+  }
+
+  @Configurable
+  public void setRootDirectory(Path root)
+  {
+    _resin.setRootDirectory(root);
   }
 
   /**
@@ -170,12 +180,23 @@ public class ResinConfig implements EnvironmentBean
   {
   }
   
+  @Configurable
+  public void setHomeCluster(String homeCluster)
+  {
+  }
+  
+  @Configurable
+  public LoggerConfig createLogger()
+  {
+    return new LoggerConfig(true);
+  }
+  
   /**
    * Overrides standard <logger> configuration to change to 
    * system-class-loader.
    */
   @Configurable
-  public void addLogger(ConfigProgram program)
+  public void addLogger(LoggerConfig logger)
   {
     Thread thread = Thread.currentThread();
     ClassLoader loader = thread.getContextClassLoader();
@@ -184,11 +205,17 @@ public class ResinConfig implements EnvironmentBean
       if (! Alarm.isTest())
         thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
       
-      LoggerConfig log = new LoggerConfig();
-      program.configure(log);
+      logger.initImpl();
+      
     } finally {
       thread.setContextClassLoader(loader);
     }
+  }
+  
+  @Configurable
+  public LogConfig createLog()
+  {
+    return new LogConfig(true);
   }
   
   /**
@@ -196,7 +223,8 @@ public class ResinConfig implements EnvironmentBean
    * system-class-loader.
    */
   @Configurable
-  public void addLog(ConfigProgram program)
+  public void addLog(LogConfig log)
+    throws IOException
   {
     Thread thread = Thread.currentThread();
     ClassLoader loader = thread.getContextClassLoader();
@@ -205,8 +233,8 @@ public class ResinConfig implements EnvironmentBean
       if (! Alarm.isTest())
         thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
       
-      LogConfig log = new LogConfig();
-      program.configure(log);
+      log.initImpl();
+      
     } finally {
       thread.setContextClassLoader(loader);
     }
@@ -227,7 +255,7 @@ public class ResinConfig implements EnvironmentBean
    * system-class-loader.
    */
   @Configurable
-  public void addLogHandler(LogHandlerConfig log)
+  public void addLogHandler(LogHandlerConfig logHandler)
   {
     // env/02sf
     Thread thread = Thread.currentThread();
@@ -237,7 +265,8 @@ public class ResinConfig implements EnvironmentBean
       if (! Alarm.isTest())
         thread.setContextClassLoader(ClassLoader.getSystemClassLoader());
 
-      log.initImpl();
+      logHandler.initImpl();
+      
     } finally {
       thread.setContextClassLoader(loader);
     }
@@ -348,7 +377,7 @@ public class ResinConfig implements EnvironmentBean
   @Deprecated
   public Management createResinManagement()
   {
-    return _resin.createResinManagement();
+    return _resin.getDelegate().createResinManagement();
   }
 
   public String toString()

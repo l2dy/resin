@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,6 +46,7 @@ import com.caucho.remote.websocket.WebSocketPrintWriter;
 import com.caucho.remote.websocket.WebSocketReader;
 import com.caucho.remote.websocket.WebSocketWriter;
 import com.caucho.remote.websocket.FrameInputStream;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempBuffer;
@@ -75,7 +76,7 @@ class WebSocketContextImpl
   
   private WebSocketWriter _textOut;
   private PrintWriter _textWriter;
-  private WebSocketReader _textIn;
+  // private WebSocketReader _textIn;
   
   private boolean _isReadClosed;
   private AtomicBoolean _isWriteClosed = new AtomicBoolean();
@@ -94,7 +95,7 @@ class WebSocketContextImpl
   {
     _controller = controller;
     
-    _is.init(controller.getReadStream());
+    _is.init(this, controller.getReadStream());
   }
 
   @Override
@@ -151,20 +152,53 @@ class WebSocketContextImpl
   }
   
   @Override
+  public void pong(byte []value)
+    throws IOException
+  {
+    WriteStream out = _controller.getWriteStream();
+    
+    byte []bytes = value;
+        
+    out.write(0x8a);
+    out.write(bytes.length);
+    out.write(bytes);
+    out.flush();
+  }
+  
+  @Override
   public void close()
+  {
+    close(1000, "ok");
+  }
+    
+  @Override
+  public void close(int code, String message)
   {
     if (_isWriteClosed.getAndSet(true))
       return;
-
-    try {
-      WriteStream out = _controller.getWriteStream();
     
-      out.write(0x81);
-      out.write(0x00);
-      out.flush();
+    Thread.dumpStack();
+
+    WriteStream out = _controller.getWriteStream();
+    
+    try {
+      if (code <= 0) {
+        out.write(0x88);
+        out.write(0x00);
+      }
+      else {
+        byte []bytes = message.getBytes("utf-8");
+        
+        out.write(0x88);
+        out.write(0x02 + bytes.length);
+        out.write((code >> 8) & 0xff);
+        out.write(code & 0xff);
+        out.write(bytes);
+      }
     } catch (IOException e) {
       log.log(Level.WARNING, e.toString(), e);
     } finally {
+      IoUtil.close(out);
       disconnect();
     }
   }
@@ -173,6 +207,8 @@ class WebSocketContextImpl
   public void disconnect()
   {
     _controller.complete();
+    
+    IoUtil.close(_is);
   }
   
   //
@@ -229,27 +265,123 @@ class WebSocketContextImpl
       break;
 
     case OP_TEXT:
-      if (_textIn == null)
-        _textIn = new WebSocketReader(_is);
+      WebSocketReader textIn = _is.initReader(_is.getLength(), _is.isFinal());
 
-      _textIn.init();
-
-      _listener.onReadText(this, _textIn);
+      _listener.onReadText(this, textIn);
       break;
+
+      /*
+    case OP_PING:
+      {
+        if (! _is.isFinal()) {
+          close(1002, "ping must be final");
+          return false;
+        }
+        else if (_is.getLength() > 125) {
+          close(1002, "ping must be less than 125 in length");
+          return false;
+        }
+        
+        long length = _is.getLength();
+        WriteStream out = _controller.getWriteStream();
+        
+        out.write(0x80 | OP_PONG);
+        out.write((byte) length);
+        for (int i = 0; i < length; i++) {
+          int ch = _is.read();
+          out.write(ch);
+        }
+        out.flush();
+        break;
+      }
+
+    case OP_PONG:
+      {
+        if (! _is.isFinal()) {
+          close(1002, "pong must be final");
+          return false;
+        }
+        else if (_is.getLength() > 125) {
+          close(1002, "pong must be less than 125 in length");
+          return false;
+        }
+        
+        long length = _is.getLength();
+        
+        _is.skip(length);
+        break;
+      }
       
     case OP_CLOSE:
-      _isReadClosed = true;
-      try {
-        _listener.onClose(this);
-      } finally {
-        close();
+      { 
+        _isReadClosed = true;
+        int closeCode = 1002;
+        String closeMessage = "error";
+        
+        try {
+          long length = _is.getLength();
+          
+          if (length > 125) {
+            closeCode = 1002;
+            closeMessage = "close must be less than 125 in length";
+          }
+          else if (! _is.isFinal()) {
+            closeCode = 1002;
+            closeMessage = "close final";
+          }
+          else if (length > 1) {
+            int d1 = _is.read();
+            int d2 = _is.read();
+          
+            int code = ((d1 & 0xff) << 8) + (d2 & 0xff);
+            length -= 2;
+            
+            textIn = _is.initReader(length, true);
+
+            StringBuilder sb = new StringBuilder();
+            int ch;
+            while ((ch = textIn.read()) >= 0) {
+              sb.append(ch);
+            }
+            
+            switch (code) {
+            case 1000:
+            case 1001:
+            case 1003:
+            case 1007:
+            case 1008:
+            case 1009:
+            case 1010:
+              closeCode = 1000;
+              closeMessage = "ok";
+              break;
+              
+            default:
+              if (3000 <= code && code <= 4999) {
+                closeCode = 1000;
+                closeMessage = "ok";
+              }
+              break;
+            }
+          }
+          else {
+            closeCode = 1000;
+            closeMessage = "ok";
+          }
+        
+          _listener.onClose(this);
+        
+          return false;
+        } finally {
+          close(closeCode, closeMessage);
+        }
       }
-      break;
+      */
 
     default:
       // XXX:
       disconnect();
-      break;
+      return false;
     }
     
     return true;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,11 +31,13 @@ package com.caucho.hmtp;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.net.ConnectException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.bam.BamException;
 import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.actor.AbstractActorSender;
 import com.caucho.bam.actor.ActorHolder;
 import com.caucho.bam.actor.SimpleActorSender;
@@ -124,7 +126,7 @@ class HmtpLinkFactory implements LinkConnectionFactory {
       _webSocketClient = new WebSocketClient(_url, webSocketHandler);
       
       if (oldClient != null) {
-        oldClient.close();
+        oldClient.close(1000, "ok");
       }
       
       if (_virtualHost != null)
@@ -137,10 +139,14 @@ class HmtpLinkFactory implements LinkConnectionFactory {
       return new HmtpLinkConnection(_webSocketClient, webSocketHandler);
     } catch (RuntimeException e) {
       throw e;
-    } catch (IOException e) {
+    } catch (ConnectException e) {
       String msg = "Cannot connect to " + _url + "\n  " + e;
       
       throw new RemoteConnectionFailedException(msg, e);
+    } catch (IOException e) {
+      String msg = "Cannot establish HTTP protocol connection to " + _url + "\n  " + e;
+      
+      throw new RemoteListenerUnavailableException(msg, e);
     }
   }
       
@@ -253,7 +259,7 @@ class HmtpLinkFactory implements LinkConnectionFactory {
 
     // super.close();
     
-    _webSocketClient.close();
+    _webSocketClient.close(1000, "ok");
    }
 
   /* (non-Javadoc)

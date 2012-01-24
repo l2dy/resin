@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -71,6 +71,7 @@ public class FileRandomAccessStream extends RandomAccessStream
   /**
    * Returns the length.
    */
+  @Override
   public long getLength()
     throws IOException
   {
@@ -217,6 +218,7 @@ public class FileRandomAccessStream extends RandomAccessStream
       file.close();
   }
 
+  @Override
   public boolean lock(boolean shared, boolean block)
   {
     unlock();
@@ -238,6 +240,7 @@ public class FileRandomAccessStream extends RandomAccessStream
     }
   }
 
+  @Override
   public boolean unlock()
   {
     try {

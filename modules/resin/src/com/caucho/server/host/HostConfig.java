@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -252,8 +252,13 @@ public class HostConfig extends DeployConfig {
   {
     String value = regexp.getValue();
 
+    /*
     if (! value.endsWith("$"))
       value = value + "$";
+    
+    if (! value.startsWith("^"))
+      value = "^" + value;
+      */
     
     _regexp = Pattern.compile(value, Pattern.CASE_INSENSITIVE);
   }

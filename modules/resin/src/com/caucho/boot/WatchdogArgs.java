@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.license.*;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.server.util.CauchoSystem;
+import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -46,41 +47,52 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 class WatchdogArgs
 {
-  private static L10N _L;
+  private static L10N L = new L10N(WatchdogArgs.class);
+
   private static final Logger log
     = Logger.getLogger(WatchdogArgs.class.getName());
-  
-  private static final HashMap<String,StartMode> _commandMap
-    = new HashMap<String,StartMode>();
+
+  private static final HashMap<String,BootCommand> _commandMap
+    = new HashMap<String,BootCommand>();
 
   private Path _javaHome;
   private Path _resinHome;
   private Path _rootDirectory;
   private Path _dataDirectory;
   private String[] _argv;
+  
   private Path _resinConf;
+  
+  private Path _userProperties;
+  private String _mode;
+  
   private Path _logDirectory;
   private String _serverId = null;
   private String _clusterId;
   private int _watchdogPort;
   private boolean _isVerbose;
   private boolean _isHelp;
-  private StartMode _startMode;
+  private BootCommand _command;
 
   private ArrayList<String> _tailArgs = new ArrayList<String>();
+  private String []_defaultArgs;
 
   private boolean _isDynamicServer;
-  private String _dynamicCluster;
   private String _dynamicAddress;
   private int _dynamicPort;
+  private ResinBootELContext _resinBootELContext = null;
 
   private boolean _is64bit;
 
@@ -108,6 +120,8 @@ class WatchdogArgs
       _resinConf = _resinHome.lookup("conf/resin.xml");
 
     _is64bit = CauchoSystem.is64Bit();
+    
+    _userProperties = Vfs.lookup(System.getProperty("user.home") + "/.resin");
 
     parseCommandLine(_argv);
   }
@@ -147,11 +161,21 @@ class WatchdogArgs
     return _resinConf;
   }
 
+  Path getUserProperties()
+  {
+    return _userProperties;
+  }
+
+  String getMode()
+  {
+    return _mode;
+  }
+
   String getServerId()
   {
     return _serverId;
   }
-  
+
   void setDynamicServerId(String serverId)
   {
     if (serverId != null)
@@ -173,15 +197,25 @@ class WatchdogArgs
     return _isDynamicServer;
   }
 
-  String getDynamicCluster()
-  {
-    return _dynamicCluster;
-  }
-
   String getDynamicAddress()
   {
     if (_dynamicAddress != null)
       return _dynamicAddress;
+    else {
+      try {
+        return InetAddress.getLocalHost().getHostAddress();
+      } catch (Exception e) {
+        return null;
+      }
+    }
+  }
+
+  String getDynamicDisplayAddress()
+  {
+    if (_dynamicAddress != null)
+      return _dynamicAddress;
+    else if (Alarm.isTest())
+      return "192.168.1.x";
     else {
       try {
         return InetAddress.getLocalHost().getHostAddress();
@@ -204,7 +238,7 @@ class WatchdogArgs
     if (_serverId != null)
       return _serverId;
     else
-      return "dyn-" + getDynamicAddress() + ":" + getDynamicPort();
+      return "dyn-" + getDynamicDisplayAddress() + ":" + getDynamicPort();
   }
 
   boolean isVerbose()
@@ -232,54 +266,9 @@ class WatchdogArgs
     return _is64bit;
   }
 
-  boolean isStatus()
+  BootCommand getCommand()
   {
-    return _startMode == StartMode.STATUS;
-  }
-
-  boolean isStart()
-  {
-    return _startMode == StartMode.START;
-  }
-
-  boolean isGui()
-  {
-    return _startMode == StartMode.GUI;
-  }
-
-  boolean isStop()
-  {
-    return _startMode == StartMode.STOP;
-  }
-
-  boolean isRestart()
-  {
-    return _startMode == StartMode.RESTART;
-  }
-
-  boolean isKill()
-  {
-    return _startMode == StartMode.KILL;
-  }
-
-  boolean isShutdown()
-  {
-    return _startMode == StartMode.SHUTDOWN;
-  }
-
-  boolean isConsole()
-  {
-    return _startMode == StartMode.CONSOLE;
-  }
-
-  boolean isWatchdogConsole()
-  {
-    return _startMode == StartMode.START_WITH_FOREGROUND;
-  }
-
-  StartMode getStartMode()
-  {
-    return _startMode;
+    return _command;
   }
 
   public ArrayList<String> getTailArgs()
@@ -304,7 +293,7 @@ class WatchdogArgs
       if (_argv[i].equals(arg)
           || _argv[i].equals("-" + arg))
         return _argv[i];
-      
+
       else if (_argv[i].startsWith(arg + "=")) {
         return _argv[i].substring(arg.length() + 1);
       }
@@ -315,18 +304,37 @@ class WatchdogArgs
 
     return null;
   }
-  
+
   public boolean getArgBoolean(String arg, boolean defaultValue)
   {
     String value = getArgFlag(arg);
 
     if (value == null)
       return defaultValue;
-    
+
     if ("no".equals(value) || "false".equals(value))
       return false;
     else
       return true;
+  }
+
+  public int getArgInt(String arg, int defaultValue)
+  {
+    String value = getArg(arg);
+
+    if (value == null)
+      return defaultValue;
+
+    try {
+      return Integer.parseInt(value);
+    } catch (NumberFormatException e) {
+      NumberFormatException e1
+        = new NumberFormatException(L().l("{0} argument is not a number '{1}'",
+                                        arg, value));
+      e1.setStackTrace(e.getStackTrace());
+
+      throw e;
+    }
   }
 
   public boolean hasOption(String option)
@@ -339,9 +347,17 @@ class WatchdogArgs
     return false;
   }
 
+  public boolean isResinProfessional()
+  {
+    return getELContext().isResinProfessional();
+  }
+
   public ResinELContext getELContext()
   {
-    return new ResinBootELContext();
+    if (_resinBootELContext == null)
+      _resinBootELContext = new ResinBootELContext();
+
+    return _resinBootELContext;
   }
 
   /**
@@ -350,6 +366,14 @@ class WatchdogArgs
    */
   public String getDefaultArg()
   {
+    String defaultArg = null;
+
+    if (_defaultArgs.length > 0)
+      defaultArg = _defaultArgs[0];
+
+    return defaultArg;
+
+/*
     ArrayList<String> tailArgs = getTailArgs();
 
     for (int i = 0; i < tailArgs.size(); i++) {
@@ -364,31 +388,11 @@ class WatchdogArgs
     }
 
     return null;
+*/
   }
 
-  /**
-   * returns all trailing following no dash prefixed token args
-   */
-  public String []getTrailingArgs(Set<String> options)
-  {
-    LinkedList<String> result = new LinkedList<String>();
-    ArrayList<String> tailArgs = getTailArgs();
-
-    for (int i = tailArgs.size() - 1; i >= 0; i--) {
-      String arg = tailArgs.get(i);
-
-      if (! arg.startsWith("-")) {
-        result.addFirst(arg);
-      }
-      else if (options.contains(arg)) {
-        break;
-      }
-      else if (! result.isEmpty()) {
-        result.removeFirst();
-      }
-    }
-
-    return result.toArray(new String[result.size()]);
+  public String []getDefaultArgs() {
+    return _defaultArgs;
   }
 
   public boolean isHelp()
@@ -422,21 +426,35 @@ class WatchdogArgs
     Logger.getLogger("").setLevel(level);
   }
 
-  private void parseCommandLine(String[] argv)
+  private void parseCommandLine(final String[] argv)
   {
     String resinConf = null;
 
     for (int i = 0; i < argv.length; i++) {
       String arg = argv[i];
+      
+      if (! arg.startsWith("--") && arg.startsWith("-")) {
+        arg = "-" + arg;
+      }
 
       if ("-conf".equals(arg) || "--conf".equals(arg)) {
         resinConf = argv[i + 1];
         i++;
       }
+      else if ("--user-properties".equals(arg)) {
+        _userProperties = Vfs.lookup(argv[i + 1]);
+        i++;
+      }
+      else if ("--mode".equals(arg)) {
+        _mode = argv[i + 1];
+        i++;
+      }
       else if ("-join-cluster".equals(arg)
-               || "--join-cluster".equals(arg)) {
+               || "--join-cluster".equals(arg)
+               || "-cluster".equals(arg)
+               || "--cluster".equals(arg)) {
         _isDynamicServer = true;
-        _dynamicCluster = argv[i + 1];
+        _clusterId = argv[i + 1];
 
         i++;
       }
@@ -517,125 +535,14 @@ class WatchdogArgs
       else if ("help".equals(arg)) {
         _isHelp = true;
       }
-      else if ("console".equals(arg)) {
-        _startMode = StartMode.CONSOLE;
-      }
-      else if ("deploy".equals(arg)) {
-        _startMode = StartMode.DEPLOY;
-      }
-      else if ("deploy-config".equals(arg)) {
-        _startMode = StartMode.DEPLOY_CONFIG;
-      }
-      else if ("deploy-copy".equals(arg) || "copy".equals(arg)) {
-        _startMode = StartMode.DEPLOY_COPY;
-      }
-      else if ("deploy-copy".equals(arg) || "copy".equals(arg)) {
-        _startMode = StartMode.DEPLOY_COPY;
-      }
-      else if ("deploy-list".equals(arg) || "list".equals(arg)) {
-        _startMode = StartMode.DEPLOY_LIST;
-      }
-      else if ("deploy-restart".equals(arg) || "restart-webapp".equals(arg)) {
-        _startMode = StartMode.DEPLOY_RESTART;
-      }
-      else if ("deploy-start".equals(arg) || "start-webapp".equals(arg)) {
-        _startMode = StartMode.DEPLOY_START;
-      }
-      else if ("deploy-stop".equals(arg) || "stop-webapp".equals(arg)) {
-        _startMode = StartMode.DEPLOY_STOP;
-      }
-      else if ("disable".equals(arg)) {
-        _startMode = StartMode.DISABLE;
-      }
-      else if ("disable-soft".equals(arg)) {
-        _startMode = StartMode.DISABLE_SOFT;
-      }
-      else if ("enable".equals(arg)) {
-        _startMode = StartMode.ENABLE;
-      }
-      else if ("gui".equals(arg)) {
-        _startMode = StartMode.GUI;
-      }
-      else if ("heap-dump".equals(arg)) {
-        _startMode = StartMode.HEAP_DUMP;
-      }
-      else if ("jmx-call".equals(arg)) {
-        _startMode = StartMode.JMX_CALL;
-      }
-      else if ("jmx-list".equals(arg)) {
-        _startMode = StartMode.JMX_LIST;
-      }
-      else if ("jmx-dump".equals(arg)) {
-        _startMode = StartMode.JMX_DUMP;
-      }
-      else if ("jmx-set".equals(arg)) {
-        _startMode = StartMode.JMX_SET;
-      }
-      else if ("jspc".equals(arg)) {
-        _startMode = StartMode.JSPC;
-      }
-      else if ("kill".equals(arg)) {
-        _startMode = StartMode.KILL;
-      }
-      else if ("license-add".equals(arg)) {
-        _startMode = StartMode.LICENSE_ADD;
-      }
-      else if ("list-restarts".equals(arg)) {
-        _startMode = StartMode.LIST_RESTARTS;
-      }
-      else if ("log-level".equals(arg)) {
-        _startMode = StartMode.LOG_LEVEL;
-      }
-      else if ("pdf-report".equals(arg)) {
-        _startMode = StartMode.PDF_REPORT;
-      }
-      else if ("profile".equals(arg)) {
-        _startMode = StartMode.PROFILE;
-      }
-      else if ("restart".equals(arg)) {
-        _startMode = StartMode.RESTART;
-      }
-      else if ("thread-dump".equals(arg)) {
-        _startMode = StartMode.THREAD_DUMP;
-      }
-      else if ("shutdown".equals(arg)) {
-        _startMode = StartMode.SHUTDOWN;
-      }
-      else if ("start".equals(arg)) {
-        _startMode = StartMode.START;
-      }
-      else if ("status".equals(arg)) {
-        _startMode = StartMode.STATUS;
-      }
-      else if ("stop".equals(arg)) {
-        _startMode = StartMode.STOP;
-      }
-      else if ("undeploy".equals(arg)) {
-        _startMode = StartMode.UNDEPLOY;
-      }
-      else if ("user-add".equals(arg)) {
-        _startMode = StartMode.USER_ADD;
-      }
-      else if ("user-list".equals(arg)) {
-        _startMode = StartMode.USER_LIST;
-      }
-      else if ("user-remove".equals(arg)) {
-        _startMode = StartMode.USER_REMOVE;
-      }
       else if ("version".equals(arg)) {
         System.out.println(VersionFactory.getFullVersion());
         System.exit(0);
       }
-      else if ("watchdog".equals(arg)) {
-        _startMode = StartMode.WATCHDOG;
-      }
-      else if ("start-with-foreground".equals(arg)) {
-        _startMode = StartMode.START_WITH_FOREGROUND;
-      }
       else if (_commandMap.get(arg) != null) {
-        _startMode = _commandMap.get(arg);
+        _command = _commandMap.get(arg);
       }
-      else if (_startMode != null) {
+      else if (_command != null) {
         _tailArgs.add(arg);
       }
       else if (_isHelp) {
@@ -650,47 +557,38 @@ class WatchdogArgs
 */  //#4605 (support before / after command option placement)
     }
 
-    if (_isHelp && _startMode == null) {
+    if (_isHelp && _command == null) {
       usage();
 
       System.exit(1);
     }
-    else if (_startMode == null) {
-      System.out.println(L().l("Resin requires a command:"
-                               + "\n  console - start Resin in console mode"
-                               + "\n  status - watchdog status"
-                               + "\n  start - start a Resin server"
-                               + "\n  start-with-foreground - start Resin server keeping parent JVM (OSX)"
-                               + "\n  gui - start a Resin server with a GUI"
-                               + "\n  stop - stop a Resin server"
-                               + "\n  restart - restart a Resin server"
-                               + "\n  kill - force a kill of a Resin server"
-                               + "\n  shutdown - shutdown the watchdog"
-                               + "\n  deploy - deploys an application"
-                               + "\n  deploy-copy - copies an application"
-                               + "\n  deploy-list - lists all deployed applications"
-                               + "\n  deploy-restart - restarts an application"
-                               + "\n  deploy-start - starts an application"
-                               + "\n  deploy-stop - stops an application"
-                               + "\n  undeploy - undeploys an application"
-                               + "\n  heap-dump - produces a heap dump"
-                               + "\n  thread-dump - produces a thread dump"
-                               + "\n  pdf-report - generates pdf report (Pro version only)"
-                               + "\n  profile - profiles the system"
-                               + "\n  license-add - add a license file to the license directory"
-                               + "\n  list-restarts - lists server restart timestamps"
-                               + "\n  log-level - sets a log level"
-                               + "\n  jmx-list - lists MBeans, attributes, operations"
-                               + "\n  jmx-dump - dumps all MBean attributes and values"
-                               + "\n  jmx-set - sets value on MBean's attribute"
-                               + "\n  jmx-call - invokes a method on MBean"
-                               + "\n  user-add - adds an admin user"
-                               + "\n  user-remove - removes an admin user"
-                               + "\n  user-list - lists admin users"
-                               + "\n  help <command> - prints command usage message"
-                               + "\n  version - prints version"));
+    else if (_command == null) {
+      System.out.println(L().l("Resin requires a command:{0}",
+                               getCommandList()));
       System.exit(1);
+    } else if (! _isHelp) {
+
+      try {
+        validateArgs(argv);
+      } catch (BootArgumentException e) {
+        if (_command != null) {
+          System.err.println(_command.getName() + ": " + e.getMessage());
+        }
+        else {
+          System.err.println("unknown: " + e.getMessage());
+        }
+        
+        System.err.println();
+
+        _command.usage();
+
+        System.exit(14);
+      }
     }
+
+    List<String> defaultArgs = parseDefaultArgs();
+
+    _defaultArgs = defaultArgs.toArray(new String[defaultArgs.size()]);
 
     if (resinConf != null) {
       _resinConf = Vfs.getPwd().lookup(resinConf);
@@ -706,28 +604,149 @@ class WatchdogArgs
     }
   }
 
+  private List<String> parseDefaultArgs() {
+    LinkedList<String> defaultArgs = new LinkedList<String>();
+
+    for (int i = _tailArgs.size() - 1; i >= 0; i--) {
+      String arg = _tailArgs.get(i);
+
+      if (_command.isFlag(arg))
+        break;
+
+      String xarg = null;
+
+      if (i > 0)
+        xarg = _tailArgs.get(i - 1);
+
+      if (xarg == null) {
+      } else if (_command.isValueOption(xarg)) {
+        break;
+      } else if (_command.isIntValueOption(xarg)){
+        break;
+      }
+
+      defaultArgs.addFirst(arg);
+    }
+
+    return defaultArgs;
+  }
+
+  private boolean matchName(BootCommand command, String name) {
+    Set<Map.Entry<String,BootCommand>> entries = _commandMap.entrySet();
+
+    for (Map.Entry<String,BootCommand> entry : entries) {
+      if(! command.getClass().equals(entry.getValue().getClass()))
+        continue;
+
+      if (name.equals(entry.getKey()))
+        return true;
+    }
+
+    return false;
+  }
+
+  private void validateArgs(String []argv) throws BootArgumentException
+  {
+    boolean defaultArgEncountered = false;
+
+    for (int i = 0; i < argv.length; i++) {
+      final String arg = argv[i];
+
+      if (matchName(_command, arg))
+        continue;
+
+      if (arg.charAt(0) != '-' && _command.isDefaultArgsAccepted()) {
+        defaultArgEncountered = true;
+
+        continue;
+      }
+
+      if (defaultArgEncountered && arg.charAt(0) == '-') {
+        throw new BootArgumentException(L.l(
+          "Only default arguments are expected at '{0}'",
+          arg));
+      }
+
+      if (arg.startsWith("-J")
+          || arg.startsWith("-D")
+          || arg.startsWith("-X")) {
+        continue;
+      }
+
+      if (arg.equals("-d64") || arg.equals("-d32")) {
+        continue;
+      }
+
+      if (_command.isFlag(arg)) {
+        continue;
+      }
+      else if (_command.isValueOption(arg)) {
+      }
+      else if (_command.isIntValueOption(arg)) {
+      }
+      else {
+        throw new BootArgumentException(L.l("unknown argument '{0}'", arg));
+      }
+
+      if (i + 1 == argv.length)
+        throw new BootArgumentException(L.l("option '{0}' requires a value",
+                                              arg));
+      String value = argv[++i];
+
+      if (_command.isFlag(value)
+          || _command.isValueOption(value)
+          || _command.isIntValueOption(value))
+        throw new BootArgumentException(L.l("option '{0}' requires a value",
+                                            arg));
+
+      if (_command.isIntValueOption(arg)) {
+        try {
+          Long.parseLong(value);
+        } catch (NumberFormatException e) {
+          throw new BootArgumentException(L.l("'{0}' argument must be a number: `{1}'", arg, value));
+        }
+      }
+    }
+  }
+
   private static void usage()
   {
-    System.err.println(L().l("usage: bin/resin.sh [-options] [console | status | start | gui | stop | restart | kill | shutdown | version | start-with-foreground]"));
-    System.err.println(L().l("       bin/resin.sh [-options] [deploy | undeploy | deploy-copy | deploy-list | deploy-start | deploy-stop | deploy-restart]"));
-    System.err.println(L().l("       bin/resin.sh [-options] [thread-dump | heap-dump | pdf-report | log-level | profile | jmx-list | jmx-dump | jmx-call | jmx-set]"));
-    System.err.println(L().l("       bin/resin.sh [-options] [user-add | user-list | user-remove]"));
+    System.err.println(L().l("usage: bin/resin.sh [-options] <command> [values]"));
     System.err.println(L().l("       bin/resin.sh help <command>"));
     System.err.println(L().l(""));
-    System.err.println(L().l("where options include:"));
-    System.err.println(L().l("   -conf <file>          : select a configuration file"));
-    System.err.println(L().l("   -data-directory <dir> : select a resin-data directory"));
-    System.err.println(L().l("   -join <cluster>       : join a cluster as a dynamic server"));
-    System.err.println(L().l("   -log-directory <dir>  : select a logging directory"));
-    System.err.println(L().l("   -resin-home <dir>     : select a resin home directory"));
-    System.err.println(L().l("   -root-directory <dir> : select a root directory"));
-    System.err.println(L().l("   -server <id>          : select a <server> to run"));
-    System.err.println(L().l("   -watchdog-port <port> : override the watchdog-port"));
-    System.err.println(L().l("   -verbose              : print verbose starting information"));
-    System.err.println(L().l("   -preview              : run as a preview server"));
-    System.err.println(L().l("   -debug-port <port>    : configure a debug port"));
-    System.err.println(L().l("   -jmx-port <port>      : configure an unauthenticated jmx port"));
+    System.err.println(L().l("where command is one of:"));
+    System.err.println(getCommandList());
+  }
 
+  private static String getCommandList()
+  {
+    StringBuilder sb = new StringBuilder();
+
+    ArrayList<BootCommand> commands = new ArrayList<BootCommand>();
+    commands.addAll(_commandMap.values());
+
+    Collections.sort(commands, new CommandNameComparator());
+
+    BootCommand lastCommand = null;
+
+    for (BootCommand command : commands) {
+      if (lastCommand != null && lastCommand.getClass() == command.getClass())
+        continue;
+
+      sb.append("\n  ");
+      sb.append(command.getName());
+      sb.append(" - ");
+      sb.append(command.getDescription());
+      if (command.isProOnly())
+        sb.append(" (Resin-Pro)");
+
+      lastCommand = command;
+    }
+
+    sb.append("\n  help <command> - prints command usage message");
+    sb.append("\n  version - prints version");
+
+    return sb.toString();
   }
 
   private String []fillArgv(String []argv)
@@ -783,10 +802,10 @@ class WatchdogArgs
 
   private static L10N L()
   {
-    if (_L == null)
-      _L = new L10N(WatchdogArgs.class);
+    if (L == null)
+      L = new L10N(WatchdogArgs.class);
 
-    return _L;
+    return L;
   }
 
   //
@@ -1015,49 +1034,84 @@ class WatchdogArgs
     }
   }
 
-  enum StartMode {
-    CONSOLE,
-    DEPLOY,
-    DEPLOY_CONFIG,
-    DEPLOY_COPY,
-    DEPLOY_LIST,
-    DEPLOY_RESTART,
-    DEPLOY_START,
-    DEPLOY_STOP,
-    DISABLE,
-    DISABLE_SOFT,
-    ENABLE,
-    GUI,
-    GENERATE_PASSWORD,
-    HEAP_DUMP,
-    JMX_CALL,
-    JMX_DUMP,
-    JMX_LIST,
-    JMX_SET,
-    JSPC,
-    KILL,
-    LICENSE_ADD,
-    LIST_RESTARTS,
-    LOG_LEVEL,
-    PDF_REPORT,
-    PROFILE,
-    RESTART,
-    THREAD_DUMP,
-    SHUTDOWN,
-    START,
-    START_ALL,
-    START_WITH_FOREGROUND,
-    STATUS,
-    STOP,
-    UNDEPLOY,
-    USER_ADD,
-    USER_LIST,
-    USER_REMOVE,
-    WATCHDOG,
-  };
-  
+  private static void addCommand(BootCommand command)
+  {
+    _commandMap.put(command.getName(), command);
+  }
+
   static {
-    _commandMap.put("generate-password", StartMode.GENERATE_PASSWORD);
-    _commandMap.put("start-all", StartMode.START_ALL);
+    addCommand(new ConfigCatCommand());
+    addCommand(new ConfigDeployCommand());
+    addCommand(new ConfigLsCommand());
+    
+    addCommand(new ConsoleCommand());
+    addCommand(new DeployCopyCommand());
+    addCommand(new DeployCommand());
+    addCommand(new DeployListCommand());
+    addCommand(new DisableCommand());
+    addCommand(new DisableSoftCommand());
+    addCommand(new EnableCommand());
+
+    addCommand(new GuiCommand());
+
+    addCommand(new HeapDumpCommand());
+    addCommand(new JmxCallCommand());
+    addCommand(new JmxDumpCommand());
+    addCommand(new JmxListCommand());
+    addCommand(new JmxSetCommand());
+    addCommand(new JspcCommand());
+    addCommand(new KillCommand());
+    addCommand(new LicenseAddCommand());
+    addCommand(new ListRestartsCommand());
+    addCommand(new LogLevelCommand());
+
+    addCommand(new PasswordEncryptCommand());
+    addCommand(new PasswordGenerateCommand());
+    addCommand(new PdfReportCommand());
+    addCommand(new ProfileCommand());
+
+    addCommand(new RestartCommand());
+
+    addCommand(new ShutdownCommand());
+    addCommand(new StartCommand());
+    addCommand(new StartAllCommand());
+    addCommand(new StartWithForegroundCommand());
+    addCommand(new StatusCommand());
+    addCommand(new StopCommand());
+
+    addCommand(new ThreadDumpCommand());
+
+    addCommand(new UndeployCommand());
+    addCommand(new UserAddCommand());
+    addCommand(new UserListCommand());
+    addCommand(new UserRemoveCommand());
+
+    addCommand(new WatchdogCommand());
+
+    addCommand(new WebAppDeployCommand());
+    addCommand(new WebAppRestartCommand());
+    addCommand(new WebAppStartCommand());
+    addCommand(new WebAppStopCommand());
+    addCommand(new WebAppUndeployCommand());
+
+    _commandMap.put("copy", new DeployCopyCommand());
+    _commandMap.put("list", new DeployListCommand());
+
+    _commandMap.put("deploy-start", new WebAppStartCommand());
+    _commandMap.put("deploy-stop", new WebAppStopCommand());
+    _commandMap.put("deploy-restart", new WebAppRestartCommand());
+
+    _commandMap.put("generate-password", new PasswordGenerateCommand());
+
+    _commandMap.put("start-webapp", new WebAppStartCommand());
+    _commandMap.put("stop-webapp", new WebAppStopCommand());
+    _commandMap.put("restart-webapp", new WebAppRestartCommand());
+  }
+
+  static class CommandNameComparator implements Comparator<BootCommand> {
+    public int compare(BootCommand a, BootCommand b)
+    {
+      return a.getName().compareTo(b.getName());
+    }
   }
 }

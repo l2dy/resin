@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -467,6 +467,17 @@ abstract public class Column {
   }
 
   /**
+   * Returns true if the column is valid (i.e. not corrupted).
+   *
+   * @param block the block's buffer
+   * @param rowOffset the offset of the row in the block
+   */
+  public boolean isValid(byte []block, int rowOffset)
+  {
+    return true;
+  }
+
+  /**
    * Returns true if the bytes are equal.
    */
   public boolean isEqual(byte []block, int rowOffset,
@@ -592,8 +603,11 @@ abstract public class Column {
       = index.lookup(block, rowOffset + getColumnOffset(), getLength());
 
     if (value != rowAddr)
-      throw new IllegalStateException(L.l("invalid index '{0}' at {1}",
-                                          value, Long.toHexString(rowAddr)));
+      throw new IllegalStateException(L.l("{0}: invalid index (key={1}, index value={2}, row addr={3})",
+                                          this, 
+                                          getIndexKeyCompare().toString(block, rowOffset + getColumnOffset(), getLength()),
+                                          Long.toHexString(value), 
+                                          Long.toHexString(rowAddr)));
   }
   
   /**

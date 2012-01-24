@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,6 +44,11 @@ public class QuercusLanguageException extends QuercusException
     = new ConstStringValue("message");
   
   private Value _value;
+  
+  protected QuercusLanguageException()
+  {
+    _value = Env.getCurrent().wrapJava(this);
+  }
   
   public QuercusLanguageException(Value value)
   {

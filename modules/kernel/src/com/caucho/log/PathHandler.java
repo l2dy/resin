@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -224,7 +224,7 @@ public class PathHandler extends Handler {
 
       String message = record.getMessage();
       Throwable thrown = record.getThrown();
-
+      
       synchronized (_os) {
         /*
         if (_timestamp != null) {

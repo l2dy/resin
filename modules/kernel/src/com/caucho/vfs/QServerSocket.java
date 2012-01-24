@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -42,6 +42,15 @@ abstract public class QServerSocket {
   }
   
   public boolean isTcpNoDelay()
+  {
+    return false;
+  }
+  
+  public void setTcpKeepalive(boolean isKeepalive)
+  {
+  }
+  
+  public boolean isTcpKeepalive()
   {
     return false;
   }

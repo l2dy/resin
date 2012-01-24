@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -75,6 +75,7 @@ public class HttpEmbed extends PortEmbed
   /**
    * Returns the local, bound port
    */
+  @Override
   public int getLocalPort()
   {
     if (_port != null)
@@ -86,6 +87,7 @@ public class HttpEmbed extends PortEmbed
   /**
    * Binds the port to the server
    */
+  @Override
   public void bindTo(Server server)
   {
     try {

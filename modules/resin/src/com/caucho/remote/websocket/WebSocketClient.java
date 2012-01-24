@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -191,7 +191,7 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
     parseHeaders(_is);
 
     _frameIs = new UnmaskedFrameInputStream();
-    _frameIs.init(_is);
+    _frameIs.init(this, _is);
     
     // _wsOut = new WebSocketOutputStream(_out);
     // _wsIn = new WebSocketInputStream(_is);
@@ -214,7 +214,7 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
     String status = in.readln();
 
     if (! status.startsWith("HTTP")) {
-      throw new IOException(L.l("Unexpected response {0}", status));
+      throw new WebSocketProtocolException(L.l("Unexpected response {0}", status));
     }
     
     String line;
@@ -236,20 +236,10 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
         sb.append((char) ch);
       }
       
-      throw new IOException(L.l("Unexpected response {0}\n\n{1}",
-                                status, sb));
+      throw new WebSocketProtocolException(L.l("Unexpected response {0}\n\n{1}",
+                                               status, sb));
       
     }
-  }
- 
-  private int scanToLf(byte []data)
-  {
-    for (int i = 0; i < data.length; i++) {
-      if (data[i] == '\n')
-        return i;
-    }
-    
-    return -1;
   }
   
   @Override
@@ -269,8 +259,14 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
   {
     return _isClosed;
   }
-
+  
   public void close()
+  {
+    close(1000, "ok");
+  }
+
+  @Override
+  public void close(int code, String msg)
   {
     _isClosed = true;
     
@@ -339,8 +335,13 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
   public void setTimeout(long timeout)
   {
   }
-
-
+  
+  public void pong(byte []message)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
   @Override
   public String toString()
   {
@@ -370,7 +371,7 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
           log.log(Level.WARNING, e.toString(), e);
         }
         
-        close();
+        close(1000, "");
         
         thread.setName(name);
       }

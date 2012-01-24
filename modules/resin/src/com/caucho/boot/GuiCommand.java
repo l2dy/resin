@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,19 +43,17 @@ public class GuiCommand extends AbstractStartCommand
 {
   private static Logger _log;
   private static L10N _L;
-
+  
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "gui";
+    return "starts a Resin server with a GUI control";
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       return client.startGui(this);
     } catch (IOException e) {
@@ -77,6 +75,7 @@ public class GuiCommand extends AbstractStartCommand
     return _log;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -96,4 +95,5 @@ public class GuiCommand extends AbstractStartCommand
     System.out.println("   -debug-port <port>    : configure a debug port");
     System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");
   }
+  */
 }

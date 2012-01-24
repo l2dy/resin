@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -78,6 +78,8 @@ public class JniStream extends StreamImpl {
       return result;
     }
     else if (result < -1) {
+      if (result == TIMEOUT_EXN)
+        _socket.close();
       _readException = exception(result);
       
       throw _readException;

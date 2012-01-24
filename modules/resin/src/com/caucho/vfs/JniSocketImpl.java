@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -392,6 +392,8 @@ public final class JniSocketImpl extends QSocket {
                                               getRemoteAddress()));
     }
     
+    int result = 0;
+    
     synchronized (_readLock) {
       long now = Alarm.getCurrentTimeActual();
       
@@ -405,8 +407,6 @@ public final class JniSocketImpl extends QSocket {
       else
         expires = _socketTimeout + now - gap;
 
-      int result = 0;
-
       do {
         result = readNative(_fd, buffer, offset, length, timeout);
         
@@ -414,9 +414,9 @@ public final class JniSocketImpl extends QSocket {
         
         timeout = expires - now;
       } while (result == JniStream.TIMEOUT_EXN && timeout > 0);
-      
-      return result;
     }
+    
+    return result;
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1653,6 +1653,19 @@ public class InterceptorGenerator<X>
     else if (value instanceof Class<?>) {
       out.printClass((Class<?>) value);
       out.print(".class");
+    }
+    else if (value.getClass().isArray()) {
+      out.print("new ");
+      out.printClass(value.getClass().getComponentType());
+      out.print("[] {");
+      
+      Object []v = (Object []) value;
+      for (int i = 0; i < v.length; i++) {
+        printValue(out, v[i]);
+        out.print(", ");
+      }
+      
+      out.print("}");
     }
     else
       out.print(value);

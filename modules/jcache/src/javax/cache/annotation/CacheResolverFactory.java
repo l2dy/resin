@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,9 +31,7 @@ package javax.cache.annotation;
 
 import java.lang.annotation.Annotation;
 
-import javax.cache.Cache;
-
 public interface CacheResolverFactory
 {
-  <K,V> Cache<K,V> getCacheManager(CacheMethodDetails<? extends Annotation> cacheMethodDetails);
+  CacheResolver getCacheResolver(CacheMethodDetails<? extends Annotation> cacheMethodDetails);
 }

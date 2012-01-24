@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,7 +43,7 @@ public class GitObjectStream extends InputStream {
   private static final HashMap<String,GitType> _gitTypeMap
     = new HashMap<String,GitType>();
   
-  private ReadStream _rawStream;
+  private InputStream _rawStream;
   private InflaterInputStream _is;
 
   private GitType _type;
@@ -52,7 +52,14 @@ public class GitObjectStream extends InputStream {
   public GitObjectStream(Path path)
     throws IOException
   {
-    _rawStream = path.openRead();
+    this(path.openRead());
+  }
+  
+  public GitObjectStream(InputStream rawStream)
+    throws IOException
+  {  
+    _rawStream = rawStream;
+
     _is = new InflaterInputStream(_rawStream);
 
     int ch;
@@ -80,6 +87,11 @@ public class GitObjectStream extends InputStream {
   public GitType getType()
   {
     return _type;
+  }
+  
+  public long getLength()
+  {
+    return _length;
   }
 
   public GitCommit parseCommit()
@@ -168,6 +180,7 @@ public class GitObjectStream extends InputStream {
     return this;
   }
 
+  @Override
   public int read()
     throws IOException
   {
@@ -181,13 +194,13 @@ public class GitObjectStream extends InputStream {
     return _is.read(buffer, offset, length);
   }
 
+  @Override
   public void close()
   {
-    ReadStream in = _rawStream;
+    InputStream in = _rawStream;
     _rawStream = null;
 
-    if (in != null)
-      in.close();
+    IoUtil.close(in);
 
     InputStream is = _is;
     _is = null;

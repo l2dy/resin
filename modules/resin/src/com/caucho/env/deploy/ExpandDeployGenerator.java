@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -354,6 +354,14 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
    * Sets true to enable versioning
    */
   public void setVersioning(boolean isVersioning)
+  {
+    _isVersioning = isVersioning;
+  }
+
+  /**
+   * Sets true to enable versioning
+   */
+  public void setMultiversionRouting(boolean isVersioning)
   {
     _isVersioning = isVersioning;
   }

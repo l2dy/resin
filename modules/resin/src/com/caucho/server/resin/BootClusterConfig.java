@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,7 @@ import javax.annotation.PostConstruct;
 import com.caucho.cloud.network.ClusterServerProgram;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
+import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
@@ -51,12 +52,9 @@ import com.caucho.util.L10N;
  */
 public class BootClusterConfig implements SchemaBean
 {
-  private static final Logger log = Logger.getLogger(BootClusterConfig.class.getName());
-  
   private static final L10N L = new L10N(BootClusterConfig.class);
   
   private BootResinConfig _resinConfig;
-  private CloudCluster _cloudCluster;
   
   private String _id;
 
@@ -128,7 +126,7 @@ public class BootClusterConfig implements SchemaBean
   {
     BootPodConfig pod = new BootPodConfig(this);
     
-    _pods.add(pod);
+    // _pods.add(pod);
 
     return pod;
   }
@@ -169,18 +167,34 @@ public class BootClusterConfig implements SchemaBean
     int index = 0;
 
     for (String address : multiServer.getAddressList()) {
-      int p = address.lastIndexOf(':');
+      boolean isExt = false;
       
-      int port = Integer.parseInt(address.substring(p + 1));
-      address = address.substring(0, p);
+      if (address.startsWith("ext:")) {
+        isExt = true;
+        
+        address = address.substring("ext:".length());
+      }
+        
+      int port = multiServer.getPort();
+      
+      int p = address.lastIndexOf(':');
+
+      if (p > 0) {
+        port = Integer.parseInt(address.substring(p + 1));
+        address = address.substring(0, p);
+      }
       
       BootServerConfig server = createServer();
       
       server.setId(multiServer.getIdPrefix() + index++);
       server.setAddress(address);
       server.setPort(port);
+      
+      if (isExt)
+        server.setExternalAddress(true);
+      
       server.addBuilderProgram(multiServer.getServerProgram());
-      server.init();
+      // server.init();
       
       addServer(server);
     }
@@ -212,37 +226,38 @@ public class BootClusterConfig implements SchemaBean
   public void init()
   {
     if (_id == null)
-      throw new ConfigException(L.l("'id' is a require attribute for <cluster>"));
-    
+      throw new ConfigException(L.l("'id' is a required attribute for <cluster>"));
+
+    /*
     CloudCluster cluster = getCloudCluster();
     
     cluster.putData(new ClusterServerProgram(_serverDefaultProgram));
 
     getCloudPod();
+    */
   }
   
-  CloudCluster getCloudCluster()
+  void initTopology(CloudCluster cluster)
   {
-    if (_id == null)
-      throw new ConfigException(L.l("'id' is a require attribute for <cluster>"));
-    
-    if (_cloudCluster == null) {
-      _cloudCluster = _resinConfig.getCloudSystem().findCluster(_id);
+    cluster.putData(new ClusterServerProgram(_serverDefaultProgram));
+
+    for (BootPodConfig bootPod : _pods) {
+      CloudPod pod = cluster.createPod();
       
-      if (_cloudCluster == null)
-        _cloudCluster = _resinConfig.getCloudSystem().createCluster(_id);
+      bootPod.initTopology(pod);
     }
-    
-    return _cloudCluster;
   }
-  
-  CloudPod getCloudPod()
+
+  public BootServerConfig addDynamicServer(CloudServer cloudServer)
   {
-    if (_pods.size() == 0) {
-      addPod(createPod());
-    }
+    BootServerConfig bootServer = createServer();
+    bootServer.setId(cloudServer.getId());
+    // bootServer.setDynamic(true);
     
-    return _pods.get(0).getCloudPod();
+    addServer(bootServer);
+    bootServer.initTopology(cloudServer);
+    
+    return bootServer;
   }
   
   @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,8 +34,8 @@ import java.util.ArrayList;
 import javax.annotation.PostConstruct;
 
 import com.caucho.cloud.network.ClusterServerProgram;
-import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
+import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.program.ConfigProgram;
@@ -49,7 +49,6 @@ import com.caucho.config.program.ContainerProgram;
 public class BootPodConfig
 {
   private BootClusterConfig _clusterConfig;
-  private CloudPod _cloudPod;
   
   private String _id;
 
@@ -112,7 +111,7 @@ public class BootPodConfig
   {
     BootServerConfig server = new BootServerConfig(this);
     
-    _servers.add(server);
+    // _servers.add(server);
 
     return server;
   }
@@ -145,14 +144,39 @@ public class BootPodConfig
     if (_id == null)
       throw new ConfigException(L.l("'id' is a required attribute for <pod>"));
       */
-    
-    CloudPod pod = getCloudPod();
-    
-    pod.putData(new ClusterServerProgram(_serverDefaultProgram));
-
-    getCloudPod();
   }
   
+  void initTopology(CloudPod cloudPod)
+  {
+    cloudPod.putData(new ClusterServerProgram(_serverDefaultProgram));
+
+    for (BootServerConfig bootServer : _servers) {
+      CloudServer cloudServer;
+      
+      String id = bootServer.getId();
+      String address = bootServer.getAddress();
+      int port = bootServer.getPort();
+      boolean isSecure = bootServer.isSecure();
+      
+      cloudServer = cloudPod.findServer(id);
+      
+      if (cloudServer != null) {
+        
+      }
+      else if (bootServer.isExternalAddress()) {
+        cloudServer = cloudPod.createExternalStaticServer(id,
+                                                          address,
+                                                          port,
+                                                          isSecure);
+      } else {
+        cloudServer = cloudPod.createStaticServer(id, address, port, isSecure);
+      }
+      
+      bootServer.initTopology(cloudServer);
+    }
+  }
+  
+  /*
   CloudPod getCloudPod()
   {
     if (_cloudPod == null) {
@@ -163,6 +187,7 @@ public class BootPodConfig
     
     return _cloudPod;
   }
+  */
   
   @Override
   public String toString()

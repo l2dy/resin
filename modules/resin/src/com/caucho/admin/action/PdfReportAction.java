@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -243,11 +243,6 @@ public class PdfReportAction implements AdminAction
     if (_logPath == null)
       _logPath = Vfs.lookup(_logDirectory);
     
-    _quercus = new QuercusContext();
-    _quercus.setPwd(_phpPath.getParent());
-    _quercus.init();
-    _quercus.start();
-
     if (_mailTo != null) {
       try {
         _mailService.addTo(new InternetAddress(_mailTo));
@@ -273,7 +268,7 @@ public class PdfReportAction implements AdminAction
     Env env = null;
 
     try {
-      QuercusPage page = _quercus.parse(_phpPath);
+      QuercusPage page = getQuercusContext().parse(_phpPath);
   
       TempStream ts = new TempStream();
       ts.openWrite();
@@ -325,6 +320,20 @@ public class PdfReportAction implements AdminAction
     }
   }
   
+  private QuercusContext getQuercusContext()
+  {
+    synchronized (this) {
+      if (_quercus == null) {
+        _quercus = new QuercusContext();
+        _quercus.setPwd(_phpPath.getParent());
+        _quercus.init();
+        _quercus.start();
+      }
+    }
+    
+    return _quercus;
+  }
+  
   private void mailPdf(TempStream ts)
     throws IOException
   {
@@ -360,8 +369,13 @@ public class PdfReportAction implements AdminAction
     throws IOException
   {
     String date = QDate.formatLocal(Alarm.getCurrentTime(), "%Y%m%dT%H%M");
+
+    String serverId = _serverId;
+    if (serverId == null || serverId.isEmpty())
+      serverId = "default";
+
     Path path = _logPath.lookup(String.format("%s-%s-%s.pdf",
-                                              _serverId,
+                                              serverId,
                                               calculateTitle(),
                                               date));
     path.getParent().mkdirs();

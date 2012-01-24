@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -169,7 +169,7 @@ public class JstlCoreForEach extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<c:forEach");
+    String prefix = printXmlOpen(os, JSTL_CORE_NS, "forEach");
       
     if (_itemsAttr != null) {
       os.print(" items=\"");
@@ -219,7 +219,7 @@ public class JstlCoreForEach extends JstlNode {
 
     printXmlChildren(os);
 
-    os.print("</c:forEach>");
+    os.print("</" + prefix + ":forEach>");
   }
   
   /**

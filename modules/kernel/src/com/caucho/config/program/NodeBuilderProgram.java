@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,7 +51,7 @@ public class NodeBuilderProgram extends FlowProgram {
 
   private final Node _node;
 
-  public NodeBuilderProgram(Node node)
+  private NodeBuilderProgram(Node node)
   {
     _node = node;
   }

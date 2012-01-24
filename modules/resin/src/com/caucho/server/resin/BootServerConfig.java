@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,12 @@
 
 package com.caucho.server.resin;
 
-import javax.annotation.PostConstruct;
-
-import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.network.ClusterServerProgram;
-import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
-import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
-import com.caucho.util.L10N;
 
 /**
  * The BootServerConfig is the first-pass configuration of the server.
@@ -49,8 +43,6 @@ import com.caucho.util.L10N;
  */
 public class BootServerConfig implements SchemaBean
 {
-  private static final L10N L = new L10N(BootServerConfig.class);
-  
   private final BootPodConfig _pod;
   
   private String _id = "default";
@@ -59,12 +51,13 @@ public class BootServerConfig implements SchemaBean
   private int _port = -1;
   private boolean _isSecure;
   
-  private boolean _isDynamic;
+  private boolean _isRequireExplicitId;
+  private boolean _isExternalAddress;
+  
+  // private boolean _isDynamic;
 
   private ContainerProgram _serverProgram
     = new ContainerProgram();
-  
-  private CloudServer _cloudServer;
 
   /**
    * Creates a new resin server.
@@ -134,18 +127,29 @@ public class BootServerConfig implements SchemaBean
   {
     return _isSecure;
   }
-
-  /**
-   * Marks the server as a dynamic server
-   */
-  public void setDynamic(boolean isDynamic)
+  
+  @Configurable
+  public void setRequireExplicitId(boolean isRequire)
   {
-    _isDynamic = isDynamic;
+    _isRequireExplicitId = isRequire;
   }
   
-  public boolean isDynamic()
+  @Configurable
+  public boolean isRequireExplicitId()
   {
-    return _isDynamic;
+    return _isRequireExplicitId;
+  }
+  
+  @Configurable
+  public void setExternalAddress(boolean isExternal)
+  {
+    _isExternalAddress = isExternal;
+  }
+  
+  @Configurable
+  public boolean isExternalAddress()
+  {
+    return _isExternalAddress;
   }
   
   public void addBuilderProgram(ConfigProgram program)
@@ -158,39 +162,9 @@ public class BootServerConfig implements SchemaBean
     return _serverProgram;
   }
   
-  public CloudServer getCloudServer()
+  void initTopology(CloudServer cloudServer)
   {
-    return _cloudServer;
-  }
-
-  @PostConstruct
-  public void init()
-  {
-    CloudPod pod = _pod.getCloudPod();
-    
-    if (pod.getServerLength() >= 64) {
-      throw new ConfigException(L.l("The server cannot be added to the current pod because it would be more than 64 servers to the pod."));
-    }
-
-    if (isDynamic()) {
-      _cloudServer = pod.findServer(getId());
-      
-      if (_cloudServer == null)
-        throw new IllegalStateException(L.l("Dynamic server '{0}' is expected to exist here.",
-                                            getId()));
-    } else {
-      _cloudServer = pod.createStaticServer(getId(), 
-                                            getAddress(),
-                                            getPort(),
-                                            isSecure());
-    }
-    
-    _cloudServer.putData(new ClusterServerProgram(_serverProgram));
-  }
-  
-  ClusterServer getClusterServer()
-  {
-    return _cloudServer.getData(ClusterServer.class);
+    cloudServer.putData(new ClusterServerProgram(_serverProgram));
   }
 
   @Override

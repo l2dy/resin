@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -102,7 +102,7 @@ public class RepositoryPath extends Path
                                                  newAttributes, 
                                                  newPath, 
                                                  offset);
-    
+
     return new RepositoryPath(_repository, _root, physicalPath);
   }
   

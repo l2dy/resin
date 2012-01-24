@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,10 +30,7 @@
 package com.caucho.remote.websocket;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Reader;
-
-import com.caucho.util.L10N;
 
 /**
  * WebSocketReader reads a single WebSocket packet.
@@ -45,12 +42,16 @@ import com.caucho.util.L10N;
 public class WebSocketReader extends Reader
   implements WebSocketConstants
 {
-  private static final L10N L = new L10N(WebSocketReader.class);
-
+  private static final char UTF8_ERROR = 0xfeff;
+  
   private FrameInputStream _is;
 
   private boolean _isFinal;
   private long _length;
+  
+  private final char []_buffer = new char[256 + 1];
+  private int _charOffset;
+  private int _charLength;
 
   public WebSocketReader(FrameInputStream is)
     throws IOException
@@ -61,8 +62,13 @@ public class WebSocketReader extends Reader
   public void init()
     throws IOException
   {
-    _isFinal = _is.isFinal();
-    _length = _is.getLength();
+    init(_is.getLength(), _is.isFinal());
+  }
+
+  public void init(long length, boolean isFinal)
+  {
+    _isFinal = isFinal;
+    _length = length;
   }
 
   public long getLength()
@@ -74,33 +80,67 @@ public class WebSocketReader extends Reader
   public int read()
     throws IOException
   {
-    int d1 = readByte();
+    int offset = _charOffset;
+    int length = _charLength;
     
-    if (d1 < 0x80)
-      return d1;
+    if (length <= offset) {
+      if (! fillBuffer())
+        return -1;
+      
+      offset = _charOffset;
+      length = _charLength;
+    }
     
-    if ((d1 & 0xe0) == 0xc0) {
-      int d2 = readByte();
-      
-      return ((d1 & 0x1f) << 6) + (d2 & 0x3f);
-    }
-    else {
-      int d2 = readByte();
-      int d3 = readByte();
-      
-      return ((d2 & 0xf) << 12) + ((d2 & 0x3f) << 6) + (d3 & 0x3f);
-    }
+    _charOffset = offset + 1;
+
+    return _buffer[offset];
   }
   
   @Override
   public int read(char []buffer, int offset, int length)
     throws IOException
   {
-    int i = 0;
+    int charOffset = _charOffset;
+    int charLength = _charLength;
     
-    int d1;
+    if (charLength <= charOffset) {
+      if (! fillBuffer()) {
+        return -1;
+      }
+      
+      charOffset = _charOffset;
+      charLength = _charLength;
+    }
     
-    while (length-- > 0 && (d1 = readByte()) >= 0) {
+    int sublen = charLength - charOffset;
+    
+    if (length < sublen)
+      sublen = length;
+    
+    System.arraycopy(_buffer, charOffset, buffer, offset, sublen);
+    
+    _charOffset = charOffset + sublen;
+    
+    return sublen;
+  }
+  
+  private boolean fillBuffer()
+    throws IOException
+  {
+    _charOffset = 0;
+    
+    int charLength = 0;
+    char []charBuffer = _buffer;
+    int length = charBuffer.length - 1;
+    
+    while (charLength < length) {
+      int d1 = readByte();
+    
+      if (d1 < 0) {
+        _charLength = charLength;
+        return charLength > 0;
+      }
+      
       char ch;
       
       if (d1 < 0x80) {
@@ -108,23 +148,104 @@ public class WebSocketReader extends Reader
       }
       else if ((d1 & 0xe0) == 0xc0) {
         int d2 = readByte();
-        
+      
         ch = (char) (((d1 & 0x1f) << 6) + (d2 & 0x3f));
+        
+        if (d2 < 0) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d2 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if (ch < 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
       }
-      else {
+      else if ((d1 & 0xf0) == 0xe0){
         int d2 = readByte();
         int d3 = readByte();
         
-        ch = (char) (((d2 & 0xf) << 12) + ((d2 & 0x3f) << 6) + (d3 & 0x3f));
+        ch = (char) (((d1 & 0x0f) << 12) + ((d2 & 0x3f) << 6) + (d3 & 0x3f)); 
+
+        if (d3 < 0) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d2 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d3 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if (ch < 0x800) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if (0xd800 <= ch && ch <= 0xdfff) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+      }
+      else if ((d1 & 0xf8) == 0xf0){
+        int d2 = readByte();
+        int d3 = readByte();
+        int d4 = readByte();
+        
+        int cp = (((d1 & 0x7) << 18)
+                   + ((d2 & 0x3f) << 12)
+                   + ((d3 & 0x3f) << 6)
+                   + ((d4 & 0x3f)));
+        
+        cp -= 0x10000;
+        
+        char h = (char) (0xd800 + ((cp >> 10) & 0x3ff));
+        
+        charBuffer[charLength++] = h;
+        
+        ch = (char) (0xdc00 + (cp & 0x3ff));
+        
+        if (d4 < 0) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d2 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d3 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if ((d4 & 0xc0) != 0x80) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if (cp < 0x0) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+        else if (cp >= 0x100000) {
+          _is.closeError(CLOSE_UTF8, "illegal utf-8");
+          ch = UTF8_ERROR;
+        }
+      }
+      else {
+        _is.closeError(CLOSE_UTF8, "illegal utf-8");
+        
+        ch = UTF8_ERROR;
       }
       
-      buffer[offset + i++] = ch;
+      charBuffer[charLength++] = ch;
     }
     
-    if (i == 0)
-      return -1;
-    else
-      return i;
+    _charLength = charLength;
+    
+    return true;
   }
   
   private int readByte()
@@ -133,8 +254,17 @@ public class WebSocketReader extends Reader
     FrameInputStream is = _is;
 
     while (_length == 0 && ! _isFinal) {
-      if (! is.readFrameHeader())
+      if (! is.readFrameHeader()) {
         return -1;
+      }
+      
+      if (is.getOpcode() == OP_CLOSE) {
+        return -1;
+      }
+      else if (is.getOpcode() != OP_CONT) {
+        _is.closeError(CLOSE_ERROR, "illegal fragment");
+        return -1;
+      }
       
       _isFinal = is.isFinal();
       _length = is.getLength();
@@ -147,51 +277,6 @@ public class WebSocketReader extends Reader
     }
     else
       return -1;
-  }
-
-  private void readFrameHeader()
-    throws IOException
-  {
-    FrameInputStream is = _is;
-
-    if (_isFinal || _length > 0)
-      throw new IllegalStateException();
-
-    while (! _isFinal && _length == 0) {
-      int frame1 = is.read();
-      int frame2 = is.read();
-
-      boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
-      int op = frame1 & 0xf;
-
-      if (op != OP_CONT) {
-        throw new IOException(L.l("{0}: expected op=CONT '0x{1}' because WebSocket binary protocol expects 0x80 at beginning",
-                                  this, Integer.toHexString(frame1 & 0xffff)));
-      }
-
-      _isFinal = isFinal;
-
-      long length = frame2 & 0x7f;
-
-      if (length < 0x7e) {
-      }
-      else if (length == 0x7e) {
-        length = ((((long) is.read()) << 8)
-            + (((long) is.read())));
-      }
-      else {
-        length = ((((long) is.read()) << 56)
-            + (((long) is.read()) << 48)
-            + (((long) is.read()) << 40)
-            + (((long) is.read()) << 32)
-            + (((long) is.read()) << 24)
-            + (((long) is.read()) << 16)
-            + (((long) is.read()) << 8)
-            + (((long) is.read())));
-      }
-
-      _length = length;
-    }
   }
 
   @Override

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,6 +39,12 @@ public class DisableSoftCommand extends AbstractScalingCommand
   private static final L10N L = new L10N(DisableSoftCommand.class);
 
   @Override
+  public String getDescription()
+  {
+    return "allows existing sessions to finish and disables the server";
+  }
+
+  @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
@@ -74,12 +80,25 @@ public class DisableSoftCommand extends AbstractScalingCommand
   }
 
   @Override
+  public String getUsageArgs()
+  {
+    return " <server>";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
+
+  /*
+  @Override
   public void usage()
   {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] -server <triad-server> disable -address <address> -port <port> -user <user> -password <password> <server>"));
+    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] -server <triad-server> disable-soft -address <address> -port <port> -user <user> -password <password> <server>"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
-    System.err.println(L.l("   disables specified in <server> argument server" ));
+    System.err.println(L.l("   disables specified in <server> argument server after existing user sessions complete" ));
     System.err.println(L.l(""));
     System.err.println(L.l("options:"));
     System.err.println(L.l("   -server <triad-server> : one of the servers in the triad"));
@@ -87,6 +106,6 @@ public class DisableSoftCommand extends AbstractScalingCommand
     System.err.println(L.l("   -port <port>           : server http port"));
     System.err.println(L.l("   -user <user>           : user name used for authentication to the server"));
     System.err.println(L.l("   -password <password>   : password used for authentication to the server"));
-    System.err.println(L.l("   <server>               : virtual host to make application available on"));
   }
+  */
 }

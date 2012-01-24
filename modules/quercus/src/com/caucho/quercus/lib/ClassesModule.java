@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -354,10 +354,14 @@ public class ClassesModule extends AbstractQuercusModule {
   {
     QuercusClass cls;
     
-    if (obj.isString())
+    if (obj.isString()) {
       cls = env.findClass(obj.toString());
-    else if (obj.isObject())
+    }
+    else if (obj.isObject()) {
       cls = ((ObjectValue) obj.toValue()).getQuercusClass();
+      
+      return obj.issetField(name) ? BooleanValue.TRUE : BooleanValue.FALSE;
+    }
     else {
       env.warning("must pass in object or name of class");
       return NullValue.NULL;

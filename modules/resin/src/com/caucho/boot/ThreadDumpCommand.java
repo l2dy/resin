@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,26 @@
 
 package com.caucho.boot;
 
-import com.caucho.server.admin.ManagerClient;
-import com.caucho.util.IoUtil;
-import com.caucho.util.L10N;
-
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
 
+import com.caucho.server.admin.ManagerClient;
+import com.caucho.util.IoUtil;
+
 public class ThreadDumpCommand extends AbstractManagementCommand
 {
-  private static final L10N L = new L10N(ThreadDumpCommand.class);
+  public ThreadDumpCommand()
+  {
+    addValueOption("file", "file", "file name where thread dump will be stored");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "displays a JVM thread dump summary";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
@@ -81,21 +89,8 @@ public class ThreadDumpCommand extends AbstractManagementCommand
   }
 
   @Override
-  public void usage()
+  public boolean isProOnly()
   {
-    System.err.println(L.l(
-      "usage: bin/resin.sh [-conf <file>] [-server <id>] thread-dump [-address <address>] [-port <port>] -user <user> -password <password> [-file <file>]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   prints a thread dump taken on remote server"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -conf <file>          : resin configuration file"));
-    System.err.println(L.l("   -server <id>          : id of a server"));
-    System.err.println(L.l("   -address <address>    : ip or host name of the server"));
-    System.err.println(L.l("   -port <port>          : server http port"));
-    System.err.println(L.l("   -user <user>          : user name used for authentication to the server"));
-    System.err.println(L.l("   -password <password>  : password used for authentication to the server"));
-    System.err.println(L.l("   -file <file>          : file name where thread dump will be stored"));
+    return false;
   }
 }

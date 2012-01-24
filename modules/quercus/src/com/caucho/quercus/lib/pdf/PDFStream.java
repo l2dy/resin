@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -60,8 +60,8 @@ public class PDFStream {
   private double _textX = 0;
   private double _textY = 0;
 
-  private double _x = 0;
-  private double _y = 0;
+  private double _x = -1;
+  private double _y = -1;
   private boolean _hasGraphicsPos = true;
 
   PDFStream(int id)
@@ -217,11 +217,9 @@ public class PDFStream {
 
   public void moveTo(double x, double y)
   {
-    if (_x != x || _y != y) {
-      _x = x;
-      _y = y;
-      _hasGraphicsPos = false;
-    }
+    _x = x;
+    _y = y;
+    _hasGraphicsPos = false;
   }
 
   public static int STROKE = 1;
@@ -334,12 +332,12 @@ public class PDFStream {
       _hasTextPos = true;
     }
 
-    println("(" + text + ") Tj");
+    println("(" + pdfEscapeText(text) + ") Tj");
   }
 
   public void continue_text(String text)
   {
-    println("(" + text + ") T*");
+    println("(" + pdfEscapeText(text) + ") T*");
   }
 
   public boolean fit_image(PDFImage img)
@@ -429,5 +427,34 @@ public class PDFStream {
   {
     _tempStream.writeToStream(os);
     _tempStream.destroy();
+  }
+  
+  public static String pdfEscapeText(String text)
+  {
+    StringBuilder sb = new StringBuilder();
+    
+    for(char c : text.toCharArray()) {
+      if (c == '(' || c == ')' || c == '\\') {
+        sb.append('\\');
+        sb.append(c);
+      } else if (c == 0x0A) {
+        sb.append("\\n");
+      } else if (c == 0x0D) {
+        sb.append("\\r");
+      } else if (c == 0x09) {
+        sb.append("\\t");
+      } else if (c == 0x08) {
+        sb.append("\\b");
+      } else if (c == 0xFF) {
+        sb.append("\\f");
+      } else if (c == 0xFF) {
+        sb.append("\\f");
+      } else {
+        sb.append(c);
+      }
+      // TODO: replace other unprintable chars with octal value
+    }
+    
+    return sb.toString();
   }
 }

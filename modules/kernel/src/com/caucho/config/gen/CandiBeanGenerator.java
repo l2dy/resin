@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -79,7 +79,7 @@ public class CandiBeanGenerator<X> extends BeanGenerator<X> {
                             AnnotatedType<X> beanClass)
   {
     super(beanClass.getJavaClass().getName() + "__ResinWebBean", beanClass);
-    
+
     setSuperClassName(beanClass.getJavaClass().getName());
 
     if (beanClass.isAnnotationPresent(SerializeHandle.class)) {

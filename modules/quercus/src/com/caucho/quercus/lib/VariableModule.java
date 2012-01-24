@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -396,6 +396,7 @@ public class VariableModule extends AbstractQuercusModule {
         return (cl.findFunction(name.toString()) != null);
       }
       else if (obj.isObject()) {
+        System.out.println("OBJ: " + obj.findFunction(name.toString()) + " " + isSyntaxOnly);
         if (isSyntaxOnly)
           return true;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -115,7 +115,7 @@ public class HmtpReader {
 
     Hessian2Input hIn = _hIn;
     
-    hIn.init(is);
+    hIn.initPacket(is);
 
     int type = hIn.readInt();
     String to = readAddress(hIn);

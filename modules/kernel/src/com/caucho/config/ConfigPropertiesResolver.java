@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,18 +29,21 @@
 
 package com.caucho.config;
 
-import com.caucho.el.AbstractVariableResolver;
-
 import javax.el.ELContext;
 import javax.el.ELResolver;
 
-import java.util.*;
+import com.caucho.config.Config.ConfigProperties;
+import com.caucho.el.AbstractVariableResolver;
 
 /**
  * Variable resolver for Resin config properties.
  *
  */
 public class ConfigPropertiesResolver extends AbstractVariableResolver {
+  public static final String []RESIN_PROPERTIES = new String[] {
+    "rvar0", "rvar1", "rvar2", "rvar3", "rvar4"
+  };
+  
   /**
    * Creates the resolver
    */
@@ -73,7 +76,27 @@ public class ConfigPropertiesResolver extends AbstractVariableResolver {
     else
       return null;
     
-    Object value = Config.getProperty(var);
+    ConfigProperties properties = Config.getConfigProperties();
+    
+    if (properties == null)
+      return null;
+    
+    Object value = null;
+    
+    for (String resinProp: RESIN_PROPERTIES) {
+      String resinKey = (String) properties.get(resinProp);
+      
+      if (resinKey == null)
+        break;
+      
+      value = properties.get(resinKey + '.' + var);
+      
+      if (value != null)
+        break;
+    }
+    
+    if (value == null)
+      value = Config.getProperty(var);
 
     if (value != null) {
       env.setPropertyResolved(true);

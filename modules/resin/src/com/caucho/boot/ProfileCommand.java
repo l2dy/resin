@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,6 +35,19 @@ import com.caucho.util.L10N;
 public class ProfileCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(ProfileCommand.class);
+  
+  public ProfileCommand()
+  {
+    addValueOption("active-time", "time", "profiling time span, defualts to 5 sec");
+    addValueOption("sampling-rate", "ms", "the sample rate defaults to 10ms");
+    addValueOption("depth", "count", "the stack trace depth (default 16)");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "gathers a CPU profile of a running server";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args,
@@ -64,13 +77,14 @@ public class ProfileCommand extends AbstractManagementCommand
     return 0;
   }
 
+  /*
   @Override
   public void usage()
   {
     System.err.println(L.l("usage: bin/resin.sh [-conf <file>] [-server <id>] profile [-address <address>] [-port <port>] -user <user> -password <password> [-active-time <time>] [-sampling-rate <rate>] [-depth <depth>]"));
     System.err.println(L.l(""));
     System.err.println(L.l("description:"));
-    System.err.println(L.l("   activates resin internal profiler (Pro version only)"));
+    System.err.println(L.l("   activatepdfreports resin internal profiler (Pro version only)"));
     System.err.println(L.l(""));
     System.err.println(L.l("options:"));
     System.err.println(L.l("   -conf <file>          : resin configuration file"));
@@ -83,4 +97,5 @@ public class ProfileCommand extends AbstractManagementCommand
     System.err.println(L.l("   -sampling-rate        : specifies sampling rate (defaults to 10ms)"));
     System.err.println(L.l("   -depth                : specifies stack trace depth (use smaller number (8) for smaller impact, larger – for more information). Defauts to 16."));
   }
+  */
 }

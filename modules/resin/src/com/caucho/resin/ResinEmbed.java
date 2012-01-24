@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -56,6 +56,8 @@ import com.caucho.server.host.Host;
 import com.caucho.server.host.HostConfig;
 import com.caucho.server.http.HttpRequest;
 import com.caucho.server.resin.Resin;
+import com.caucho.server.resin.ResinArgs;
+import com.caucho.server.resin.ResinEmbedded;
 import com.caucho.server.webapp.*;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Vfs;
@@ -115,9 +117,12 @@ public class ResinEmbed
    */
   public ResinEmbed()
   {
-    _resin = Resin.create("embed");
-    _resin.setEmbedded(true);
-    _resin.setRootDirectory(Vfs.lookup());
+    ResinArgs args = new ResinArgs();
+    // args.setServerId("embed");
+    args.setServerId("default");
+    args.setRootDirectory(Vfs.lookup());
+    
+    _resin = new ResinEmbedded(args);
   }
 
   /**
@@ -276,7 +281,8 @@ public class ResinEmbed
     LogManager.getLogManager().reset();
   }
 
-  public void addScanRoot() {
+  public void addScanRoot()
+  {
     _resin.getClassLoader().addScanRoot();
   }
 
@@ -298,13 +304,15 @@ public class ResinEmbed
     try {
       Environment.initializeEnvironment();
 
-      _resin.preConfigureInit();
+      // _resin.preConfigureInit();
       
       thread.setContextClassLoader(_resin.getClassLoader());
 
       initConfig(_configFile);
 
       _server = _resin.createServer();
+      
+      _cluster = _server.getCluster();
 
       thread.setContextClassLoader(_server.getClassLoader());
 
@@ -466,10 +474,13 @@ public class ResinEmbed
       _isConfig = true;
 
       _resin.configureFile(Vfs.lookup(configFile));
+      
+      // _resin.createServer();
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
-    
+
+    /*
     CloudSystem cloudSystem = TopologyService.getCurrent().getSystem();
 
     if (cloudSystem.getClusterList().length == 0)
@@ -485,11 +496,14 @@ public class ResinEmbed
     if (_cluster.getPodList()[0].getServerList().length == 0)
       throw new ConfigException(L.l("Resin needs at least one defined <server>"));
 
-    CloudServer cloudServer = _cluster.getPodList()[0].getServerList()[0]; 
+    CloudServer cloudServer = _cluster.getPodList()[0].getServerList()[0];
+    */ 
     // _clusterServer = cloudServer.getData(ClusterServer.class);
     
+    /*
     if (cloudServer != null)
       _resin.setServerId(cloudServer.getId());
+      */
   }
 
   private void deployWebApplication(WebAppEmbed webApplication)

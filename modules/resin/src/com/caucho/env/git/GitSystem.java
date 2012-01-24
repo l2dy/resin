@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -301,6 +301,13 @@ public class GitSystem extends AbstractResinSubSystem
         expandTreeToPath(path, tree, now);
       }
       else if (GitType.BLOB == is.getType()) {
+        if (path.canRead() && path.getLength() == is.getLength()) {
+          String pathSha1 = getBlobSha1(path);
+          
+          if (sha1.equals(pathSha1))
+            return;
+        }
+        
         WriteStream os = path.openWrite();
 
         try {
@@ -397,6 +404,26 @@ public class GitSystem extends AbstractResinSubSystem
       String hex = writeData(os, type, is, path.getLength());
 
       return writeFile(os, hex);
+    } finally {
+      is.close();
+    }
+  }
+
+  /**
+   * Writes a file to the repository
+   */
+  public String getBlobSha1(Path path)
+    throws IOException
+  {
+    InputStream is = path.openRead();
+    
+    try {
+      NullOutputStream os = new NullOutputStream();
+      String type = "blob";
+
+      String hex = writeData(os, type, is, path.getLength());
+
+      return hex;
     } finally {
       is.close();
     }

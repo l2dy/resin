@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,6 +40,31 @@ public class JspcCommand extends AbstractBootCommand
 {
   private final static Logger log
     = Logger.getLogger(JspcCommand.class.getName());
+  
+  public JspcCommand()
+  {
+    addValueOption("app-dir", "dir", "Directory root of the web-app");
+    addValueOption("class-dir", "dir", "The work directory to compile as output");
+    addValueOption("compiler", "value", "The java compiler for javac");
+    addValueOption("conf", "path", "The resin.xml for the compiler");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "pre-compiles JSP files";
+  }
+  
+  public String getUsageArgs()
+  {
+    return " jsp1 jsp2 ...";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
@@ -96,6 +121,7 @@ public class JspcCommand extends AbstractBootCommand
     }
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -105,4 +131,5 @@ public class JspcCommand extends AbstractBootCommand
       log.log(Level.SEVERE, e.getMessage(), e);
     }
   }
+  */
 }

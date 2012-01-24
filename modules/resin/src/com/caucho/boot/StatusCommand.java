@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,23 +39,30 @@ import java.util.logging.Logger;
  * Command to stop Resin server
  * bin/resin.sh status -server a
  */
-public class StatusCommand extends AbstractStartCommand
+public class StatusCommand extends AbstractBootCommand
 {
   private static Logger _log;
   private static L10N _L;
 
-  @Override
-  public String getName()
+  public StatusCommand()
   {
-    return "status";
+    addFlagOption("verbose", "log command-line and environment information");
+    addValueOption("root-directory", "dir", "set the root directory");
+    addValueOption("log-directory", "dir", "set the log directory");
+    addValueOption("server", "id", "select a configured server");
+    addIntValueOption("debug-port", "port", "listen to a JVM debug port");
+  }
+
+  @Override
+  public String getDescription()
+  {
+    return "watchdog and server status";
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       String status = client.statusWatchdog();
 
@@ -103,6 +110,7 @@ public class StatusCommand extends AbstractStartCommand
     return _L;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -118,4 +126,5 @@ public class StatusCommand extends AbstractStartCommand
     System.out.println("   -watchdog-port <port> : override the watchdog-port");
     System.out.println("   -verbose              : print verbose starting information");
   }
+  */
 }

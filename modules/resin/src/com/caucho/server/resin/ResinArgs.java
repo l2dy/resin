@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,12 +30,14 @@
 package com.caucho.server.resin;
 
 import java.net.Socket;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.VersionFactory;
+import com.caucho.config.ConfigException;
 import com.caucho.log.EnvironmentStream;
 import com.caucho.log.RotateStream;
 import com.caucho.server.util.JniCauchoSystem;
@@ -49,45 +51,52 @@ import com.caucho.vfs.WriteStream;
 /**
  * The parsed Resin command-line arguments
  */
-class ResinArgs
+public class ResinArgs
 {
   private static final Logger log = Logger.getLogger(ResinArgs.class.getName());
   private static final L10N L = new L10N(ResinArgs.class);
 
-  private String _serverId = "default";
+  private String _serverId;
 
   private Path _resinHome;
   private Path _rootDirectory;
   private Path _dataDirectory;
+  private Path _licenseDirectory;
 
   private String _resinConf;
   
   private Socket _pingSocket;
   
-  private String _joinCluster;
+  private String _homeCluster;
   private String _serverAddress;
   private int _serverPort;
   
-  private boolean _isRestart;
-
   private ArrayList<BoundPort> _boundPortList
     = new ArrayList<BoundPort>();
 
-  private String _stage = null;
+  private boolean _isOpenSource;
+  
+  private String _stage = "production";
   private boolean _isDumpHeapOnExit;
   
-  public ResinArgs(String []args)
-    throws Exception
+  public ResinArgs()
   {
-    preConfigureInit();
+    this(new String[0]);
+  }
+  
+  public ResinArgs(String []args)
+    throws ConfigException
+  {
+    try {
+      initEnvironmentDefaults();
     
-    parseCommandLine(args);
+      parseCommandLine(args);
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
   }
 
-  /**
-   * Must be called after the Resin.create()
-   */
-  private void preConfigureInit()
+  private void initEnvironmentDefaults()
   {
     String resinHome = System.getProperty("resin.home");
 
@@ -109,8 +118,22 @@ class ResinArgs
 
     if (resinRoot != null)
       _rootDirectory = Vfs.lookup(resinRoot);
+
+    try {
+      URL.setURLStreamHandlerFactory(ResinURLStreamHandlerFactory.create());
+    } catch (java.lang.Error e) {
+      //operation permitted once per jvm; catching for harness.
+    }
   }
   
+  public void setServerId(String serverId)
+  {
+    if ("".equals(serverId))
+      serverId = "default";
+    
+    _serverId = serverId;
+  }
+
   public String getServerId()
   {
     return _serverId;
@@ -129,6 +152,21 @@ class ResinArgs
     return _rootDirectory;
   }
   
+  public void setRootDirectory(Path root)
+  {
+    _rootDirectory = root;
+  }
+
+  public Path getLicenseDirectory()
+  {
+    return _licenseDirectory;
+  }
+
+  public void setLicenseDirectory(Path licenseDirectory)
+  {
+    _licenseDirectory = licenseDirectory;
+  }
+
   /**
    * Gets the root directory.
    */
@@ -137,9 +175,27 @@ class ResinArgs
     return _dataDirectory;
   }
   
+  /**
+   * Sets the root directory.
+   */
+  public void setDataDirectory(Path path)
+  {
+    _dataDirectory = path;
+  }
+  
   public Socket getPingSocket()
   {
     return _pingSocket;
+  }
+  
+  public void setOpenSource(boolean isOpenSource)
+  {
+    _isOpenSource = isOpenSource;
+  }
+  
+  public boolean isOpenSource()
+  {
+    return _isOpenSource;
   }
 
   /**
@@ -148,6 +204,11 @@ class ResinArgs
   public String getResinConf()
   {
     return _resinConf;
+  }
+  
+  public void setResinConf(String resinConf)
+  {
+    _resinConf = resinConf;
   }
 
   public Path getResinConfPath()
@@ -211,9 +272,19 @@ class ResinArgs
     return _stage;
   }
   
-  public String getJoinCluster()
+  public void setStage(String stage)
   {
-    return _joinCluster;
+    _stage = stage;
+  }
+  
+  public void setHomeCluster(String homeCluster)
+  {
+    _homeCluster = homeCluster;
+  }
+  
+  public String getHomeCluster()
+  {
+    return _homeCluster;
   }
   
   public String getServerAddress()
@@ -221,9 +292,29 @@ class ResinArgs
     return _serverAddress;
   }
   
+  public void setServerAddress(String address)
+  {
+    _serverAddress = address;
+  }
+  
   public int getServerPort()
   {
     return _serverPort;
+  }
+  
+  public void setServerPort(int port)
+  {
+    _serverPort = port;
+  }
+  
+  public String getUser()
+  {
+    return null;
+  }
+  
+  public String getPassword()
+  {
+    return null;
   }
   
   public boolean isDumpHeapOnExit()
@@ -239,6 +330,11 @@ class ResinArgs
 
     while (i < len) {
       // RandomUtil.addRandom(argv[i]);
+      
+      String arg = argv[i];
+      
+      if (arg.startsWith("-") && ! arg.startsWith("--"))
+        arg = "-" + arg;
 
       if (i + 1 < len
           && (argv[i].equals("-stdout")
@@ -325,9 +421,11 @@ class ResinArgs
         i += 1;
       }
       else if (i + 1 < len
-          && (argv[i].equals("-join-cluster")
-              || argv[i].equals("--join-cluster"))) {
-        _joinCluster = argv[i + 1];
+               && (argv[i].equals("-cluster")
+                   || argv[i].equals("--cluster")
+                   || argv[i].equals("-join-cluster")
+                   || argv[i].equals("--join-cluster"))) {
+        _homeCluster = argv[i + 1];
    
         i += 2;
       }
@@ -455,6 +553,16 @@ class ResinArgs
       }
       else if ("-jmx-port".equals(argv[i])
                || "--jmx-port".equals(argv[i])) {
+        i += 2;
+      }
+      else if ("-jmx-port".equals(argv[i])
+               || "--jmx-port".equals(argv[i])) {
+        i += 2;
+      }
+      else if ("--user-properties".equals(arg)) {
+        i += 2;
+      }
+      else if ("--mode".equals(arg)) {
         i += 2;
       }
       else {

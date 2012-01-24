@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,6 +38,12 @@ public class DeployListCommand extends AbstractRepositoryCommand
   private static final L10N L = new L10N(DeployListCommand.class);
   
   @Override
+  public String getDescription()
+  {
+    return "lists deployed applications";
+  }
+  
+  @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
                        WebAppDeployClient deployClient)
@@ -56,17 +62,14 @@ public class DeployListCommand extends AbstractRepositoryCommand
   }
 
   @Override
-  public void usage()
+  public String getUsageArgs()
   {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] [-server <id>] deploy-list -user <user> -password <password> [options] [pattern]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   lists all applications deployed on the server or those that match the [pattern]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -conf <file>          : resin configuration file"));
-    System.err.println(L.l("   -server <id>          : id of a server"));
-    System.err.println(L.l("   -address <address>    : ip or host name of the server"));
-    System.err.println(L.l("   -port <port>          : server http port"));
+    return " [<pattern>]";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
   }
 }

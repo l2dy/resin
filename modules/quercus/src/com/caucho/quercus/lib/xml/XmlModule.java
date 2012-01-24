@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -325,8 +325,7 @@ public class XmlModule extends AbstractQuercusModule {
     if (parser == null)
       return false;
 
-    return parser.xml_set_element_handler(env,
-        startElementHandler, endElementHandler);
+    return parser.xml_set_element_handler(env, startElementHandler, endElementHandler);
   }
 
   /**

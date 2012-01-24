@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,8 @@ package com.caucho.remote.websocket;
 import java.io.IOException;
 import java.io.InputStream;
 
+import com.caucho.websocket.WebSocketContext;
+
 /**
  * WebSocketInputStream reads a single WebSocket packet.
  *
@@ -42,11 +44,9 @@ import java.io.InputStream;
  * 
  * OPCODES
  *   0 - cont
- *   1 - close
- *   2 - ping
- *   3 - pong
- *   4 - text
- *   5 - binary
+ *   1 - text
+ *   2 - binary
+ *   8 - close
  * </pre></code>
  */
 public class UnmaskedFrameInputStream extends FrameInputStream
@@ -62,8 +62,10 @@ public class UnmaskedFrameInputStream extends FrameInputStream
   }
   
   @Override
-  public void init(InputStream is)
+  public void init(WebSocketContext cxt, InputStream is)
   {
+    super.init(cxt, is);
+    
     if (is == null)
       throw new NullPointerException();
     
@@ -145,6 +147,13 @@ public class UnmaskedFrameInputStream extends FrameInputStream
 
     boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
     _op = frame1 & 0xf;
+    
+    int rsv = frame1 & 0x70;
+    
+    if (rsv != 0) {
+      getContext().close(CLOSE_ERROR, "illegal request");
+      return false;
+    }
 
     _isFinal = isFinal;
 

@@ -1109,6 +1109,10 @@ r_versioning =
   attribute versioning { r_boolean-Type }
   | element versioning { r_boolean-Type }
 
+r_multiversion-routing =
+  attribute multiversion-routing { r_boolean-Type }
+  | element multiversion-routing { r_boolean-Type }
+
 r_web-app-default = element web-app-default {
   attribute metadata-complete { r_boolean-Type }?,
   r_web-app-Content
@@ -1152,6 +1156,8 @@ r_web-app-deploy = element web-app-deploy {
   & r_redeploy-mode?
 
   & r_versioning?
+
+  & r_multiversion-routing?
 
   & r_web-app-default*
 
@@ -1214,6 +1220,9 @@ r_web-app-Basis =
   & r_filter*
 
   & r_filter-mapping*
+
+  & (attribute form-parameter-max { r_int-Type }
+     | element form-parameter-max { r_int-Type })?
 
   & (attribute idle-time { r_period-Type }
      | element idle-time { r_period-Type })?

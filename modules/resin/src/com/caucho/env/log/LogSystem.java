@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -61,6 +61,15 @@ public class LogSystem extends AbstractResinSubSystem
     throws ConfigException
   {
     throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  public void setExpireTimeout(long timeout)
+  {
+  }
+  
+  public long getExpireTimeout()
+  {
+    return -1;
   }
   
   public String createFullType(String name)

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -52,11 +52,15 @@ public class StartWithForegroundCommand extends AbstractStartCommand
   }
 
   @Override
+  public String getDescription()
+  {
+    return "starts the watchdog in foreground mode (for MacOS-X)";
+  }
+
+  @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       Process process = client.startWatchdog(args.getArgv());
 
@@ -129,6 +133,7 @@ public class StartWithForegroundCommand extends AbstractStartCommand
     return _L;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -148,4 +153,5 @@ public class StartWithForegroundCommand extends AbstractStartCommand
     System.out.println("   -debug-port <port>    : configure a debug port");
     System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");
   }
+  */
 }

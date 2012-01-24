@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -28,10 +28,11 @@
 
 package com.caucho.server.admin;
 
-import com.caucho.bam.actor.ActorSender;
-
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
+
+import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
 
 /**
  * Deploy Client API
@@ -52,9 +53,9 @@ public class HmuxClientFactory
     _password = password;
   }
 
-  public ActorSender create()
+  public RemoteActorSender create()
   {
-    ActorSender sender;
+    RemoteActorSender sender;
 
     try {
       ClassLoader loader = Thread.currentThread().getContextClassLoader();
@@ -67,8 +68,8 @@ public class HmuxClientFactory
                                                            String.class,
                                                            String.class);
 
-      sender = (ActorSender) ctor.newInstance(_address, _port,
-                                              _userName, _password);
+      sender = (RemoteActorSender) ctor.newInstance(_address, _port,
+                                                    _userName, _password);
     } catch (ClassNotFoundException e) {
       sender = null;
     } catch (InvocationTargetException e) {

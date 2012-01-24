@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -60,10 +60,13 @@ public class JstlCoreRemove extends JstlNode {
    *
    * @param os write stream to the generated XML.
    */
+  @Override
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<c:remove var=\"" + xmlText(_var) + "\"");
+    printXmlOpen(os, JSTL_CORE_NS, "remove");
+    
+    os.print(" var=\"" + xmlText(_var) + "\"");
 
     if (_scope != null)
       os.print(" scope=\"" + xmlText(_scope) + "\"");

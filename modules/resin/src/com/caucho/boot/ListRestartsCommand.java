@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,17 @@ public class ListRestartsCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(ListRestartsCommand.class);
 
+  public ListRestartsCommand()
+  {
+    addValueOption("period", "period", "specifies look back period of time. e.g. '-period 1D' will list restarts since same time yesterday.");
+  }
+
+  @Override
+  public String getDescription()
+  {
+    return "lists the most recent Resin server restart times";
+  }
+
   @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
@@ -56,6 +67,7 @@ public class ListRestartsCommand extends AbstractManagementCommand
     return 0;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -68,4 +80,5 @@ public class ListRestartsCommand extends AbstractManagementCommand
     System.err.println(L.l("options:"));
     System.err.println(L.l("   -period             : specifies look back period of time. e.g. '-period 1D' will list restarts since same time yesterday."));
   }
+  */
 }

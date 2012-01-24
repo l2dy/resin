@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -90,7 +90,7 @@ public class JstlXmlIf extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<x:if");
+    String prefix = printXmlOpen(os, JSTL_XML_NS, "if");
 
     if (_select != null) {
       os.print(" select=\"");
@@ -108,7 +108,7 @@ public class JstlXmlIf extends JstlNode {
 
     printXmlChildren(os);
 
-    os.print("</x:if>");
+    os.print("</" + prefix + ":if>");
   }
   
   /**

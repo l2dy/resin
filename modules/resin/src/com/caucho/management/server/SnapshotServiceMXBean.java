@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -49,6 +49,9 @@ public interface SnapshotServiceMXBean extends ManagedObjectMXBean
   @Description("take a snapshot of the threads")
   public void snapshotThreadDump();
   
+  @Description("take a snapshot of the health checks")
+  public void snapshotHealth();
+
   @Description("start CPU profiling")
   public void startProfile(long samplingRate, int stackDepth);
   

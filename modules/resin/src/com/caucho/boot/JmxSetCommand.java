@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,6 +40,32 @@ public class JmxSetCommand extends JmxCommand
 {
   private static final L10N L = new L10N(JmxSetCommand.class);
 
+  public JmxSetCommand()
+  {
+    addValueOption("pattern", "pattern",
+      "pattern to match MBean, adheres to the rules defined for javax.managment.ObjectName e.g. qa:type=Foo");
+
+    addValueOption("attribute", "attribute", "name of the attribute");
+  }
+  
+  @Override
+  public String getDescription()
+  {
+    return "sets a JMX value for a server MBean";
+  }
+  
+  @Override
+  public String getUsageArgs()
+  {
+    return " value";
+  }
+
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
+
   @Override
   public int doCommand(WatchdogArgs args,
                        WatchdogClient client,
@@ -76,20 +102,5 @@ public class JmxSetCommand extends JmxCommand
     System.out.println(result);
 
     return 0;
-  }
-
-
-
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] jmx-set -user <user> -password <password> -pattern <pattern> -attribute <attribute> value"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   sets value on a MBeans attribute to <value>"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -pattern               : pattern to match MBean, adheres to the rules defined for javax.managment.ObjectName e.g. qa:type=Foo"));
-    System.err.println(L.l("   -attribute             : name of the attribute"));
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -119,6 +119,16 @@ abstract public class RandomAccessStream
    */
   abstract public long getFilePointer()
     throws IOException;
+  
+  public final boolean isOpen()
+  {
+    return _useCount.get() > 0;
+  }
+  
+  public final long getUseCount()
+  {
+    return _useCount.get();
+  }
 
   public final boolean allocate()
   {
@@ -127,8 +137,9 @@ abstract public class RandomAccessStream
     do {
       count = _useCount.get();
       
-      if (count <= 0)
+      if (count <= 0) {
         return false;
+      }
     } while (! _useCount.compareAndSet(count, count + 1));
     
     return true;

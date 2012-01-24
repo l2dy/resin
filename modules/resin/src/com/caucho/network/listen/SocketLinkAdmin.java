@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -143,6 +143,18 @@ public class SocketLinkAdmin extends AbstractManagedObject
   public long getSocketTimeout()
   {
     return _port.getSocketTimeout();
+  }
+  
+  @Override
+  public boolean isTcpKeepalive()
+  {
+    return _port.isTcpKeepalive();
+  }
+  
+  @Override
+  public boolean isTcpNoDelay()
+  {
+    return _port.isTcpNoDelay();
   }
 
   @Override

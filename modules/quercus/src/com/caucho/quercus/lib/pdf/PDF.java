@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,26 +36,23 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.TempStream;
-import com.caucho.vfs.TempBuffer;
-import com.caucho.vfs.WriteStream;
+import com.caucho.vfs.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.*;
 import java.util.logging.Logger;
 
 /**
  * pdf object oriented API facade
  */
-public class PDF {
+public class PDF 
+{
   private static final Logger log = Logger.getLogger(PDF.class.getName());
   private static final L10N L = new L10N(PDF.class);
 
   private static final double KAPPA = 0.5522847498;
 
-  private static final int PAGE_GROUP = 8;
+  private static final int PAGE_GROUP_SIZE = 8;
 
   private static HashMap<String,Font> _faceMap = new HashMap<String,Font>();
 
@@ -73,8 +70,11 @@ public class PDF {
   private ArrayList<Integer> _pagesGroupList = new ArrayList<Integer>();
   private int _pageCount;
 
+  private PDFOutline _outline = null;
+  
   private int _catalogId;
 
+  private int _rootId;
   private int _pageParentId;
 
   private PDFPage _page;
@@ -95,11 +95,12 @@ public class PDF {
     _tempStream = new TempStream();
     _tempStream.openWrite();
     _os = new WriteStream(_tempStream);
-
+    
     _out = new PDFWriter(_os);
     _out.beginDocument();
 
     _catalogId = _out.allocateId(1);
+    _rootId = _out.allocateId(1);
     _pageParentId = _out.allocateId(1);
 
     return true;
@@ -108,8 +109,8 @@ public class PDF {
   public boolean begin_page(double width, double height)
     throws IOException
   {
-    if (PAGE_GROUP <= _pageGroup.size()) {
-      _out.writePageGroup(_pageParentId, _pageGroup);
+    if (PAGE_GROUP_SIZE <= _pageGroup.size()) {
+      _out.writePageGroup(_pageParentId, _rootId, _pageGroup);
       _pageGroup.clear();
 
       _pagesGroupList.add(_pageParentId);
@@ -130,6 +131,35 @@ public class PDF {
     throws IOException
   {
     return begin_page(width, height);
+  }
+  
+  public int add_page_to_outline(String title)
+  {
+    return add_page_to_outline(title, -1);
+  }
+  
+  public int add_page_to_outline(String title, int parentId)
+  {
+    return add_page_to_outline(title, _page.getHeight(), parentId);
+  }
+
+  public int add_page_to_outline(String title, double pos, int parentId)
+  {
+    if (_outline == null) {
+      int outlineId = _out.allocateId(1);
+      _outline = new PDFOutline(outlineId);
+    }
+    
+    int id = _out.allocateId(1);
+    
+    PDFDestination dest = new PDFDestination(id, 
+                                             title, 
+                                             _page.getId(), 
+                                             pos);
+    
+    _outline.addDestination(dest, parentId);
+    
+    return id;
   }
 
   public boolean set_info(String key, String value)
@@ -458,7 +488,19 @@ public class PDF {
 
     return size * font.stringWidth(string) / 1000.0;
   }
-
+  
+  /*
+   * An ESTIMATE of the number of chars that will fit in the space based 
+   * on the avg glyph size.  This only works properly with fixed-width fonts!
+   * 
+   */
+  public int charCount(double width, @NotNull PDFFont font, double size)
+  {
+    if (font == null)
+      return 0;
+    
+    return (int) Math.round(width / (font.getAvgCharWidth() / 1000 * size));
+  }
 
   /**
    * Sets the text position.
@@ -1061,15 +1103,26 @@ public class PDF {
       // output stream already closed;
       return false;
     }
+    
     if (_pageGroup.size() > 0) {
-      _out.writePageGroup(_pageParentId, _pageGroup);
+      _out.writePageGroup(_pageParentId, _rootId, _pageGroup);
       _pageGroup.clear();
 
-      if (_pagesGroupList.size() > 0)
-        _pagesGroupList.add(_pageParentId);
+      _pagesGroupList.add(_pageParentId);
+    }
+    
+    int outlineId = -1;
+    
+    if (_outline != null) {
+      outlineId = _outline.getId();
+      _out.writeOutline(_outline);
     }
 
-    _out.writeCatalog(_catalogId, _pageParentId, _pagesGroupList, _pageCount);
+    _out.writeCatalog(_catalogId, 
+                      _rootId, 
+                      outlineId,
+                      _pagesGroupList, 
+                      _pageCount);
 
     _out.endDocument();
 

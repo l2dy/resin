@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -362,7 +362,8 @@ public class HostController
     for (int i = _hostAliasRegexps.size() - 1; i >= 0; i--) {
       Pattern alias = _hostAliasRegexps.get(i);
 
-      if (alias.matcher(name).find())
+      // server/1f60
+      if (alias.matcher(name).matches())
         return true;
     }
 

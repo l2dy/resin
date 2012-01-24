@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,5 +36,5 @@ import javax.cache.OptionalFeature;
  */
 public interface AnnotationProvider
 {
-  public boolean isSupported(OptionalFeature feature);
+  public boolean isSupported();
 }

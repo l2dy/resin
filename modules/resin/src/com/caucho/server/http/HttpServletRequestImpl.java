@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1700,7 +1700,11 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       }
     }
     
+    _cookiesIn = null;
     _request = null;
+
+    // server/1lg0
+    _response.closeImpl();
   }
 
   public void cleanup()

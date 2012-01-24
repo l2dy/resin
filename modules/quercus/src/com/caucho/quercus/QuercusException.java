@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -35,6 +35,7 @@ import java.lang.reflect.*;
 /**
  * Parent of PHP exceptions
  */
+@SuppressWarnings("serial")
 public class QuercusException extends RuntimeException
 {
   private ArrayList<String> _quercusStackTrace;
@@ -78,6 +79,7 @@ public class QuercusException extends RuntimeException
     return qExn;
   }
 
+  @Override
   public String getMessage()
   {
     String msg = super.getMessage();
@@ -105,5 +107,10 @@ public class QuercusException extends RuntimeException
   public void setQuercusStackTrace(ArrayList<String> stackTrace)
   {
     _quercusStackTrace = stackTrace;
+  }
+  
+  public String __toString()
+  {
+    return toString();
   }
 }

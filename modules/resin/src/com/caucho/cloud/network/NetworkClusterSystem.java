@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,15 +29,25 @@
 
 package com.caucho.cloud.network;
 
+import java.net.InetAddress;
+import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import com.caucho.cloud.topology.*;
+import com.caucho.cloud.topology.AbstractCloudClusterListener;
+import com.caucho.cloud.topology.AbstractCloudPodListener;
+import com.caucho.cloud.topology.AbstractCloudServerListener;
+import com.caucho.cloud.topology.CloudCluster;
+import com.caucho.cloud.topology.CloudPod;
+import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
-import com.caucho.env.service.*;
-import com.caucho.network.balance.ClientSocketFactory;
-import com.caucho.network.listen.*;
+import com.caucho.env.service.AbstractResinSubSystem;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.network.listen.SocketPollService;
+import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.server.hmux.HmuxProtocol;
+import com.caucho.util.HostUtil;
 import com.caucho.util.L10N;
 
 /**
@@ -65,22 +75,24 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
   private CopyOnWriteArrayList<ClusterLinkListener> _linkListeners
     = new CopyOnWriteArrayList<ClusterLinkListener>();
 
-  private NetworkClusterSystem(CloudServer selfServer)
+  public NetworkClusterSystem(CloudServer selfServer)
   {
     _selfServer = selfServer;
     _selfServer.setSelf(true);
     
     _selfServer.getSystem().addClusterListener(new NetworkClusterListener());
     
-    if (_selfServer.getPort() >= 0) {
-      _clusterListener = new ClusterListener(_selfServer.getAddress(), 
-                                             _selfServer.getPort());
+    ClusterServer clusterServer = selfServer.getData(ClusterServer.class);
+    
+    if (clusterServer.getPort() >= 0) {
+      _clusterListener = new ClusterListener(clusterServer);
      }
   }
 
   /**
    * Creates a new network cluster service.
    */
+  /*
   public static NetworkClusterSystem
   createAndAddService(CloudServer selfServer)
   {
@@ -90,6 +102,14 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     system.addService(NetworkClusterSystem.class, service);
 
     return service;
+  }
+  */
+  public static void
+  createAndAddService(NetworkClusterSystem clusterSystem)
+  {
+    ResinSystem resinSystem = preCreate(NetworkClusterSystem.class);
+
+    resinSystem.addService(NetworkClusterSystem.class, clusterSystem);
   }
 
   /**
@@ -214,6 +234,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     
     selfServer.notifyHeartbeatStart();
 
+    /*
     CloudSystem cloudSystem = TopologyService.getCurrent().getSystem();
     
     for (CloudCluster cluster : cloudSystem.getClusterList()) {
@@ -237,6 +258,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
         }
       }
     }
+      */
     
     validateTriad(_selfServer.getPod());
   }
@@ -290,6 +312,15 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);
     }
+  }
+
+  /**
+   * Returns the local ip address for a server configured with
+   * external-address.
+   */
+  public String getLocalSocketAddress(ClusterServer clusterServer)
+  {
+    return null;
   }
 
   /**
@@ -384,6 +415,11 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
                                     server.getLoadBalanceIdleTime(),
                                     listener.getKeepaliveTimeout()));
     }
+  }
+  
+  public static ArrayList<InetAddress> getLocalAddresses()
+  {
+    return HostUtil.getLocalAddresses();
   }
 
   @Override

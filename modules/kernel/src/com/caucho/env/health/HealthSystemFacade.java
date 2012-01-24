@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,9 @@ package com.caucho.env.health;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.env.shutdown.ExitCode;
+import com.caucho.env.shutdown.ShutdownSystem;
+
 /**
  * A facade for sending health events.
  */
@@ -39,10 +42,22 @@ public class HealthSystemFacade {
   private static final Logger log
     = Logger.getLogger(HealthSystemFacade.class.getName());
   
+  public static final String RESIN_EXIT_MESSAGE = "resin.exit.message";
+  
   private static final HealthSystemFacade _facade;
   
   protected HealthSystemFacade()
   {
+  }
+  
+  public static String getExitMessage()
+  {
+    String msg = System.getProperty(RESIN_EXIT_MESSAGE);
+    
+    if (msg != null)
+      return msg;
+    else
+      return "";
   }
   
   public static void fireEvent(String eventName, String eventMessage)
@@ -50,8 +65,18 @@ public class HealthSystemFacade {
     _facade.fireEventImpl(eventName, eventMessage);
   }
   
+  public static void fireFatalEvent(String eventName, String eventMessage)
+  {
+    _facade.fireFatalEventImpl(eventName, eventMessage);
+  }
+  
   protected void fireEventImpl(String eventName, String eventMessage)
   {
+  }
+  
+  protected void fireFatalEventImpl(String eventName, String eventMessage)
+  {
+    ShutdownSystem.shutdownActive(ExitCode.HEALTH, eventName + ": " + eventMessage);
   }
   
   static {

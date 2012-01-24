@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,17 +44,15 @@ public final class WatchdogCommand extends AbstractStartCommand
   private static L10N _L;
 
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "watchdog";
+    return "(deprecated) starts the watchdog in foreground mode (MacOS-X)";
   }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-
     try {
       WatchdogManager.main(args.getRawArgv());
 
@@ -80,6 +78,7 @@ public final class WatchdogCommand extends AbstractStartCommand
     return _log;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -100,4 +99,5 @@ public final class WatchdogCommand extends AbstractStartCommand
     System.out.println("   -debug-port <port>    : configure a debug port");
     System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");
   }
+  */
 }

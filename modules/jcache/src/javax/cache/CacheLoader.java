@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,7 +29,6 @@
 
 package javax.cache;
 
-import java.util.Collection;
 import java.util.Map;
 
 public interface CacheLoader<K,V>
@@ -48,7 +47,5 @@ public interface CacheLoader<K,V>
    * @return a map of key-value pairs that will be loaded into the cache.
    * @throws CacheException
    */
-  public Map<K,V> loadAll(Collection<? extends K> keys);
-  
-  public boolean canLoad(Object key);
+  public Map<K,V> loadAll(Iterable<? extends K> keys);
 }

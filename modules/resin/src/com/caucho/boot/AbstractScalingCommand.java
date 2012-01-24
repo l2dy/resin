@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,6 +40,14 @@ public abstract class AbstractScalingCommand extends AbstractBootCommand
 {
   private static final L10N L = new L10N(AbstractScalingCommand.class);
   private static Class scalingClientClass = null;
+
+  protected AbstractScalingCommand()
+  {
+     addValueOption("address", "address", "ip or host name of the server");
+     addIntValueOption("port", "port", "server http port");
+     addValueOption("user", "user", "user name used for authentication to the server");
+     addValueOption("password", "password", "password used for authentication to the server");
+  }
 
   protected ResinScalingClient getScalingClient(WatchdogArgs args,
                                                 WatchdogClient client)
@@ -105,6 +113,12 @@ public abstract class AbstractScalingCommand extends AbstractBootCommand
     }
 
     return 0;
+  }
+
+  @Override
+  public boolean isProOnly()
+  {
+    return true;
   }
 
   public boolean isPro()

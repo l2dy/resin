@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,6 +31,7 @@ package com.caucho.license;
 import com.caucho.config.ConfigException;
 
 import java.io.IOException;
+import java.util.Collection;
 
 public interface LicenseCheck
 {

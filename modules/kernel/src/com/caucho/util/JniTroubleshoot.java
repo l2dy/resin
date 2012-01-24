@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -148,6 +148,11 @@ public class JniTroubleshoot {
       _cause = cause;
     
     _isValid = false;
+  }
+  
+  public Throwable getCause()
+  {
+    return _cause;
   }
 
   private boolean isMacOSX()

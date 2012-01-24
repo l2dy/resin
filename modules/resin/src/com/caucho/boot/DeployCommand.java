@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,7 +37,22 @@ import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
 public class DeployCommand extends AbstractRepositoryCommand {
-  private static final L10N L = new L10N(DeployConfigCommand.class);
+  private static final L10N L = new L10N(ConfigDeployCommand.class);
+
+  public DeployCommand()
+  {
+    addValueOption("host", "host", "virtual host to make application available on");
+    addValueOption("name", "name", "name of the context to deploy to, defaults to war-file name");
+    addValueOption("stage", "stage", "tage to deploy application to, defaults to production");
+    addValueOption("version", "version", "version of application formatted as <major.minor.micro.qualifier>");
+    addValueOption("m", "message", "commit message");
+  }
+
+  @Override
+  public String getDescription()
+  {
+    return "deploys an application";
+  }
   
   @Override
   public int doCommand(WatchdogArgs args,
@@ -121,7 +136,20 @@ public class DeployCommand extends AbstractRepositoryCommand {
 
     return 0;
   }
+  
+  @Override
+  public String getUsageArgs()
+  {
+    return " <war-file>";
+  }
 
+  @Override
+  public boolean isDefaultArgsAccepted()
+  {
+    return true;
+  }
+
+  /*
   @Override
   public void usage()
   {
@@ -143,4 +171,5 @@ public class DeployCommand extends AbstractRepositoryCommand {
     System.err.println(L.l("   -version <version>    : version of application formatted as <major.minor.micro.qualifier>"));
     System.err.println(L.l("   -m <message>          : commit message"));
   }
+  */
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -60,7 +60,7 @@ abstract public class AbstractWebSocketListener implements WebSocketListener
   public void onReadBinary(WebSocketContext context, InputStream is)
     throws IOException
   {
-      throw new UnsupportedOperationException(getClass().getName());
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /**

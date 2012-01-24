@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,7 +36,9 @@ import java.util.logging.Logger;
 
 import com.caucho.bam.NotAuthorizedException;
 import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
 import com.caucho.hmtp.HmtpClient;
@@ -45,10 +47,14 @@ import com.caucho.server.admin.HmuxClientFactory;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
 
-public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
+public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
   private static final L10N L = new L10N(AbstractRepositoryCommand.class);
   private static final Logger log
     = Logger.getLogger(AbstractRepositoryCommand.class.getName());
+
+  protected AbstractRepositoryCommand()
+  {
+  }
 
   @Override
   public final int doCommand(WatchdogArgs args,
@@ -106,31 +112,30 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
   protected WebAppDeployClient getDeployClient(WatchdogArgs args,
                                                WatchdogClient client)
   {
-    ActorSender sender = createBamClient(args, client);
+    RemoteActorSender sender = createBamClient(args, client);
     
     // return new WebAppDeployClient(address, port, user, password);
     
-    return new WebAppDeployClient(sender);
+    return new WebAppDeployClient(sender.getUrl(), sender);
   }
   
-  private ActorSender createBamClient(WatchdogArgs args,
-                                      WatchdogClient client)
+  private ActorSender createBamzClient(WatchdogArgs args,
+                                        WatchdogClient client)
   {
     String address = args.getArg("-address");
 
     int port = -1;
+    
+    if (address != null) {
+      int p = address.lastIndexOf(':');
 
-    String portArg = args.getArg("-port");
-
-    try {
-      if (portArg != null && ! portArg.isEmpty())
-        port = Integer.parseInt(portArg);
-    } catch (NumberFormatException e) {
-      NumberFormatException e1 = new NumberFormatException("-port argument is not a number '" + portArg + "'");
-      e1.setStackTrace(e.getStackTrace());
-
-      throw e;
+      if (p >= 0) {
+        port = Integer.parseInt(address.substring(p + 1));
+        address = address.substring(0, p);
+      }
     }
+    
+    port = args.getArgInt("-port", port);
     
     String user = args.getArg("-user");
     String password = args.getArg("-password");
@@ -174,7 +179,8 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
     return createHmtpClient(address, port, userName, password);
   }
   
-  private ActorSender createHmtpClient(String address, int port,
+  private RemoteActorSender createHmtpClient(String address, 
+                                       int port,
                                        String userName,
                                        String password)
   {
@@ -188,7 +194,11 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
 
       return client;
     } catch (RemoteConnectionFailedException e) {
-      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    url, e.getMessage()),
+                                                e);
+    } catch (RemoteListenerUnavailableException e) {
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote deploy because no RemoteAdminService (HMTP) was configured. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
                                                     url, e.getMessage()),
                                                 e);
     }
@@ -214,8 +224,12 @@ public abstract class AbstractRepositoryCommand extends AbstractBootCommand {
     try {
       return hmuxFactory.create();
     } catch (RemoteConnectionFailedException e) {
-      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
                                                     triad, e.getMessage()),
+                                                e);
+    } catch (RemoteListenerUnavailableException e) {
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote deploy because the RemoteAdminService (HMTP) is not enabled. Check the server to sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                       triad, e.getMessage()),
                                                 e);
     }
   }

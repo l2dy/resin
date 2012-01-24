@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -33,6 +33,7 @@ package javax.cache.transaction;
  * Transaction modes.
  */
 public enum Mode {
+  NONE,
   LOCAL,
   XA;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,31 +29,36 @@
 
 package com.caucho.server.resin;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.cloud.security.SecurityService;
+import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudSystem;
+import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.DependencyBean;
 import com.caucho.config.SchemaBean;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
-import com.caucho.loader.EnvironmentBean;
-import com.caucho.vfs.Path;
+import com.caucho.env.service.ResinSystem;
+import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.vfs.PersistentDependency;
-import com.caucho.vfs.Vfs;
 
 /**
  * The Resin class represents the top-level container for Resin.
  * It exactly matches the &lt;resin> tag in the resin.xml
  */
-public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentBean
+public class BootResinConfig implements SchemaBean, DependencyBean
 {
   private static final Logger log
     = Logger.getLogger(BootResinConfig.class.getName());
-  private Resin _resin;
+  
+  private ResinSystem _resinSystem;
+  
+  private String _resinSystemAuthKey;
   
   private ContainerProgram _resinProgram
     = new ContainerProgram();
@@ -67,19 +72,14 @@ public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentB
   /**
    * Creates a new resin server.
    */
-  public BootResinConfig(Resin resin)
+  public BootResinConfig(ResinSystem resinSystem)
   {
-    _resin = resin;
+    _resinSystem = resinSystem;
   }
   
-  public CloudSystem getCloudSystem()
+  public EnvironmentClassLoader getClassLoader()
   {
-    return _resin.getCloudSystem();
-  }
-  
-  public ClassLoader getClassLoader()
-  {
-    return _resin.getClassLoader();
+    return _resinSystem.getClassLoader();
   }
 
   /**
@@ -91,28 +91,15 @@ public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentB
     return "com/caucho/server/resin/resin.rnc";
   }
   
-  /**
-   * Returns the configured root directory.
-   */
-  public Path getRootDirectory()
+  @Configurable
+  public void setResinSystemAuthKey(String key)
   {
-    return _resin.getRootDirectory();
+    _resinSystemAuthKey = key;
   }
   
-  /**
-   * Sets the configured root directory
-   */
-  public void setRootDirectory(Path rootDirectory)
+  public String getResinSystemAuthKey()
   {
-    _resin.setRootDirectory(rootDirectory);
-    
-    Vfs.setPwd(rootDirectory);
-  }
-  
-  public void setJoinCluster(String joinCluster)
-  {
-    if (! "".equals(joinCluster))
-      _resin.setJoinCluster(joinCluster);
+    return _resinSystemAuthKey;
   }
   
   /**
@@ -123,29 +110,33 @@ public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentB
   {
     _clusterDefaults.add(program);
   }
-  
-  /**
-   * Sets the resin system key
-   */
-  @Configurable
-  public void setResinSystemAuthKey(String key)
-  {
-    SecurityService security = SecurityService.getCurrent();
-
-    security.setSignatureSecret(key);
-  }
 
   @Configurable
-  public BootClusterConfig createCluster()
+  public void addCluster(BootClusterProxy clusterProxy)
     throws ConfigException
   {
-    BootClusterConfig cluster = new BootClusterConfig(this);
+    BootClusterConfig cluster = addClusterById(clusterProxy.getId());
     
-    _clusters.add(cluster);
+    clusterProxy.getProgram().configure(cluster);
+  }
 
-    for (int i = 0; i < _clusterDefaults.size(); i++)
-      _clusterDefaults.get(i).configure(cluster);
+  BootClusterConfig addClusterById(String id)
+    throws ConfigException
+  {
+    BootClusterConfig cluster = findCluster(id);
 
+    if (cluster == null) {
+      cluster = new BootClusterConfig(this);
+      cluster.setId(id);
+    
+      _clusters.add(cluster);
+
+      for (int i = 0; i < _clusterDefaults.size(); i++)
+        _clusterDefaults.get(i).configure(cluster);
+      
+      cluster.init();
+    }
+    
     return cluster;
   }
 
@@ -192,17 +183,65 @@ public class BootResinConfig implements SchemaBean, DependencyBean, EnvironmentB
   @Override
   public void addDependency(PersistentDependency dependency)
   {
-    _resin.getClassLoader().addDependency(dependency);
+    getClassLoader().addDependency(dependency);
   }
   
-  void configureServers()
+  //
+  // topology init
+  //
+  
+  CloudSystem initTopology()
   {
-    /*
+    TopologyService topology  = _resinSystem.getService(TopologyService.class);
+    
+    if (topology == null) {
+      _resinSystem.addServiceIfAbsent(new TopologyService(_resinSystem.getId()));
+      
+      topology  = _resinSystem.getService(TopologyService.class);
+    }
+    
+    initTopology(topology.getSystem());
+    
+    return topology.getSystem();
+  }
+  
+  private void initTopology(CloudSystem cloudSystem)
+  {
+    for (BootClusterConfig bootCluster : _clusters) {
+      CloudCluster cloudCluster;
+      
+      cloudCluster = cloudSystem.findCluster(bootCluster.getId());
+      
+      if (cloudCluster == null)
+        cloudCluster = cloudSystem.createCluster(bootCluster.getId());
+      
+      bootCluster.initTopology(cloudCluster);
+    }
+  }
+
+  public BootServerConfig findLocalServer()
+  {
     for (BootClusterConfig cluster : getClusterList()) {
-      for (BootServerConfig server : cluster.getServerList()) {
-        server.configureServer();
+      for (BootPodConfig pod : cluster.getPodList()) {
+        for (BootServerConfig  server : pod.getServerList()) {
+          if (server.isRequireExplicitId())
+            continue;
+          
+          try {
+            InetAddress address = InetAddress.getByName(server.getAddress());
+
+            if (address.isAnyLocalAddress()
+                || address.isLinkLocalAddress()
+                || address.isLoopbackAddress()) {
+              return server;
+            }
+          } catch (Exception e) {
+            log.log(Level.WARNING, e.toString(), e);
+          }
+        }
       }
     }
-    */
+    
+    return null;
   }
 }

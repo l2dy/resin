@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,12 @@ import com.caucho.util.L10N;
 public class EnableCommand extends AbstractScalingCommand
 {
   private static final L10N L = new L10N(EnableCommand.class);
+  
+  @Override
+  public String getDescription()
+  {
+    return "enable a Resin server to receive load-balance requests";
+  }
 
   @Override
   public int doCommand(WatchdogArgs args, WatchdogClient client)
@@ -73,6 +79,7 @@ public class EnableCommand extends AbstractScalingCommand
     return 0;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -87,6 +94,6 @@ public class EnableCommand extends AbstractScalingCommand
     System.err.println(L.l("   -port <port>           : server http port"));
     System.err.println(L.l("   -user <user>           : user name used for authentication to the server"));
     System.err.println(L.l("   -password <password>   : password used for authentication to the server"));
-    System.err.println(L.l("   <server>               : virtual host to make application available on"));
   }
+  */
 }

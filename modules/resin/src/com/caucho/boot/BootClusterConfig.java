@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ package com.caucho.boot;
 import java.util.ArrayList;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.env.service.ResinSystem;
@@ -62,7 +63,13 @@ public class BootClusterConfig {
     _system = system;
     _resin = resin;
   }
+  
+  public BootResinConfig getResin()
+  {
+    return _resin;
+  }
 
+  @Configurable
   public void setId(String id)
   {
     _id = id;
@@ -115,9 +122,10 @@ public class BootClusterConfig {
     if (_resin.isWatchdogManagerConfig())
       return;
       
-    if (_resin.findClient(config.getId()) != null)
+    if (_resin.findClient(config.getId()) != null) {
       throw new ConfigException(L.l("<server id='{0}'> is a duplicate server.  servers must have unique ids.",
                                     config.getId()));
+    }
       
     _resin.addServer(config);
     
@@ -136,12 +144,24 @@ public class BootClusterConfig {
       
       server.setId(multiServer.getIdPrefix() + index++);
       
+      boolean isExternal = false;
+      
+      if (address.startsWith("ext:")) {
+        isExternal = true;
+        address = address.substring("ext:".length());
+      }
+      
       int p = address.lastIndexOf(':');
-      int port = Integer.parseInt(address.substring(p + 1));
-      address = address.substring(0, p);
+      int port = multiServer.getPort();
+      
+      if (p > 0) {
+        port = Integer.parseInt(address.substring(p + 1));
+        address = address.substring(0, p);
+      }
       
       server.setAddress(address);
       server.setPort(port);
+      // server.setExternalAddress(isExternal);
       
       multiServer.getServerProgram().configure(server);
       
@@ -173,5 +193,11 @@ public class BootClusterConfig {
     
     if (qName != null && qName.getLocalName().equals("ElasticCloudService"))
       _isDynamicServerEnable = true;
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _id + "]";
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -95,8 +95,8 @@ public class Table extends BlockStore {
   public final static byte ROW_ALLOC = 0x2;
   public final static byte ROW_MASK = 0x3;
 
-  private final static String DB_VERSION = "Resin-DB 4.0.6";
-  private final static String MIN_VERSION = "Resin-DB 4.0.6";
+  private final static String DB_VERSION = "Resin-DB 4.0.25";
+  private final static String MIN_VERSION = "Resin-DB 4.0.25";
 
   private final Row _row;
 
@@ -486,6 +486,14 @@ public class Table extends BlockStore {
           try {
             long rowAddress = iter.getRowAddress();
             int rowOffset = iter.getRowOffset();
+            
+            if (! isValid(blockBuffer, rowOffset, columns)) {
+              log.warning(this + ": removing corrupted row"
+                          + " (0x" + Long.toHexString(rowAddress) + ")");
+              
+              iter.delete();
+              continue;
+            }
 
             for (int i = 0; i < columns.length; i++) {
               Column column = columns[i];
@@ -505,6 +513,19 @@ public class Table extends BlockStore {
     } finally {
       xa.commit();
     }
+  }
+  
+  private boolean isValid(byte []blockBuffer,
+                          int rowOffset,
+                          Column []columns)
+  {
+    for (int i = 0; i < columns.length; i++) {
+      if (! columns[i].isValid(blockBuffer, rowOffset)) {
+        return false;
+      }
+    }
+    
+    return true;
   }
 
   /**
@@ -536,9 +557,11 @@ public class Table extends BlockStore {
   /**
    * Rebuilds the indexes
    */
-  public void validateIndexes()
+  private boolean validateIndexes()
     throws IOException, SQLException
   {
+    boolean isValid = false;
+    
     DbTransaction xa = DbTransaction.create();
     xa.setAutoCommit(true);
 
@@ -557,20 +580,20 @@ public class Table extends BlockStore {
         byte []blockBuffer = iter.getBuffer();
 
         while (iter.nextRow()) {
-          try {
-            long rowAddress = iter.getRowAddress();
-            int rowOffset = iter.getRowOffset();
+          long rowAddress = iter.getRowAddress();
+          int rowOffset = iter.getRowOffset();
 
-            for (int i = 0; i < columns.length; i++) {
-              Column column = columns[i];
+          for (int i = 0; i < columns.length; i++) {
+            Column column = columns[i];
 
-              column.validateIndex(xa, blockBuffer, rowOffset, rowAddress);
-            }
-          } catch (Exception e) {
-            log.log(Level.WARNING, e.toString(), e);
+            column.validateIndex(xa, blockBuffer, rowOffset, rowAddress);
           }
         }
       }
+      
+      isValid = true;
+    } catch (Exception e) {
+      log.log(Level.WARNING, e.toString(), e);
     } finally {
       if (iter != null)
         iter.free();
@@ -578,6 +601,8 @@ public class Table extends BlockStore {
       xa.commit();
       
     }
+    
+    return isValid;
   }
 
   private void writeTableHeader(WriteStream os)

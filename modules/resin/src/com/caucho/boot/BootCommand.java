@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,21 +29,31 @@
 
 package com.caucho.boot;
 
-import java.util.Set;
 
 public interface BootCommand {
+  public boolean isProOnly();
+
   public String getName();
+  
+  public String getDescription();
 
   public int doCommand(ResinBoot resinBoot, WatchdogArgs args)
     throws BootArgumentException;
 
   public boolean isRetry();
 
-  public Set<String> getOptions();
+  public boolean isValueOption(String key);
 
-  public Set<String> getValueKeys();
+  public boolean isIntValueOption(String key);
 
-  public Set<String> getIntValueKeys();
+  public boolean isFlag(String key);
+
+  public boolean isDefaultArgsAccepted();
 
   public void usage();
+  public boolean isStart();
+  public boolean isShutdown();
+  public boolean isConsole();
+
+  public boolean isRemote(WatchdogArgs args);
 }

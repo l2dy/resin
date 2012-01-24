@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -231,12 +231,14 @@ public class PreparedStatementImpl extends StatementImpl
     throw new UnsupportedOperationException();
   }
 
+  @Override
   public void setUnicodeStream(int parameter, InputStream is, int len)
     throws SQLException
   {
     throw new UnsupportedOperationException();
   }
 
+  @Override
   public void setBinaryStream(int parameter, InputStream is, int len)
     throws SQLException
   {
@@ -440,8 +442,11 @@ public class PreparedStatementImpl extends StatementImpl
         throw new UnsupportedOperationException("Not supported yet.");
     }
 
-    public void setBinaryStream(int parameterIndex, InputStream x, long length) throws SQLException {
-        throw new UnsupportedOperationException("Not supported yet.");
+    @Override
+    public void setBinaryStream(int parameterIndex, InputStream is, long length)
+      throws SQLException
+    {
+      getQueryContext().setBinaryStream(parameterIndex, is, (int) length);
     }
 
     public void setCharacterStream(int parameterIndex, Reader reader, long length) throws SQLException {

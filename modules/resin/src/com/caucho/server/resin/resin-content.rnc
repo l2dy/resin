@@ -524,8 +524,11 @@ r_port-Parameters =
    & (attribute suspend-reaper-timeout { r_period-Type }
       | element suspend-reaper-timeout { r_period-Type })?
 
-   & (attribute tcp-no-delay { string }
-      | element tcp-no-delay { string })?
+   & (attribute tcp-keepalive { r_boolean-Type }
+      | element tcp-keepalive { r_boolean-Type })?
+
+   & (attribute tcp-no-delay { r_boolean-Type }
+      | element tcp-no-delay { r_boolean-Type })?
 
    & (attribute throttle-concurrent-max { r_int-Type }
       | element throttle-concurrent-max { r_int-Type })?
@@ -579,8 +582,11 @@ r_resin-Content =
   & (attribute environment-system-properties { r_boolean-Type }
      | element environment-system-properties { r_boolean-Type })?
 
-  & (attribute join-cluster { string }
-     | element join-cluster { string })?
+  & (attribute home-cluster { string }
+     | element home-cluster { string })?
+
+  & (attribute home-cluster { string }
+     | element home-cluster { string })?
 
   & r_management?
 
@@ -629,8 +635,14 @@ r_server = element server {
   & (attribute address { string }
      | element address { string })?
 
+  & (attribute external-address { r_boolean-Type }
+     | element external-address { r_boolean-Type })?
+
   & (attribute port { string }
      | element port { string })?
+
+  & (attribute require-explicit-id { r_boolean-Type }
+     | element require-explicit-id { r_boolean-Type })?
 
   & r_server-Content
 }
@@ -641,6 +653,9 @@ r_server-multi = element server-multi {
    
   & (attribute address-list { string }
      | element address-list { string })?
+
+  & (attribute require-explicit-id { r_boolean-Type }
+     | element require-explicit-id { r_boolean-Type })?
 
   & (attribute port { string }
      | element port { string })?

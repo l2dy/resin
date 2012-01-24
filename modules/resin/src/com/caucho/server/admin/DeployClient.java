@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,16 +30,20 @@ package com.caucho.server.admin;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.caucho.admin.RemoteAdminService;
 import com.caucho.bam.BamError;
 import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.ServiceUnavailableException;
 import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.query.QueryCallback;
 import com.caucho.cloud.deploy.CopyTagQuery;
@@ -47,6 +51,7 @@ import com.caucho.cloud.deploy.RemoveTagQuery;
 import com.caucho.cloud.deploy.SetTagQuery;
 import com.caucho.env.git.GitCommitJar;
 import com.caucho.env.git.GitCommitTree;
+import com.caucho.env.git.GitObjectStream;
 import com.caucho.env.repository.CommitBuilder;
 import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositoryException;
@@ -55,10 +60,13 @@ import com.caucho.env.repository.RepositoryTagListener;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.cluster.Server;
 import com.caucho.util.Alarm;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.InputStreamSource;
 import com.caucho.vfs.Path;
+import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.StreamSource;
+import com.caucho.vfs.Vfs;
 
 /**
  * Deploy Client API
@@ -78,19 +86,12 @@ public class DeployClient implements Repository
   private String _deployAddress;
   
   private String _url;
-  
+
   public DeployClient()
   {
-    Server server = Server.getCurrent();
-
-    if (server == null)
-      throw new IllegalStateException(L.l("DeployClient was not called in a Resin context. For external clients, use the DeployClient constructor with host,port arguments."));
-    
-    _bamClient = server.createAdminClient(getClass().getSimpleName());
-
-    _deployAddress = "deploy@resin.caucho";
+    this(null);
   }
-
+  
   public DeployClient(String serverId)
   {
     Server server = Server.getCurrent();
@@ -100,14 +101,16 @@ public class DeployClient implements Repository
     
     _bamClient = server.createAdminClient(getClass().getSimpleName());
 
-    _deployAddress = "deploy@" + serverId + ".resin.caucho";
+    //_deployAddress = "deploy@" + serverId + ".resin.caucho";
+    _deployAddress = "deploy@resin.caucho";
   }
   
-  public DeployClient(ActorSender client)
+  public DeployClient(String url, ActorSender client)
   {
     _bamClient = client;
     
-    _url = client.getAddress();
+    _url = url;
+
     _deployAddress = "deploy@resin.caucho";
   }
   
@@ -128,7 +131,11 @@ public class DeployClient implements Repository
     
       _deployAddress = "deploy@resin.caucho";
     } catch (RemoteConnectionFailedException e) {
-      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure the server has started and that <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
+                                                    url, e.getMessage()),
+                                                e);
+    } catch (RemoteListenerUnavailableException e) {
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
                                                     url, e.getMessage()),
                                                 e);
     }
@@ -228,13 +235,14 @@ public class DeployClient implements Repository
     GitCommitJar gitCommit = null;
 
     try {
-      gitCommit = new GitCommitJar(path);
+      gitCommit = GitCommitJar.createDirectory(path);
       
       String tag = commit.getId();
       
       return deployJar(tag, gitCommit, commit.getAttributes());
     }
     catch (IOException e) {
+      e.printStackTrace();
       throw new RepositoryException(e);
     }
     finally {
@@ -362,8 +370,51 @@ public class DeployClient implements Repository
     DeployCommitListQuery query = new DeployCommitListQuery(commitList);
     
     DeployCommitListQuery result = (DeployCommitListQuery) query(query);
+    
+    if (result != null)
+      return result.getCommitList();
+    else
+      return null;
+  }
 
-    return result.getCommitList();
+  public boolean getFile(String tagName, String fileName, OutputStream os)
+    throws IOException
+  {
+    DeployGetFileQuery query = new DeployGetFileQuery(tagName, fileName);
+    
+    DeployGetFileQuery result = (DeployGetFileQuery) query(query);
+
+    if (result.isValid()) {
+      StreamSource source = result.getStream();
+      
+      ReadStream is = null;
+      GitObjectStream gitIs = new GitObjectStream(source.getInputStream());
+      
+      try {
+        is = Vfs.openRead(gitIs);
+        
+        is.writeToStream(os);
+      } finally {
+        gitIs.close();
+        
+        IoUtil.close(is);
+      }
+      
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+
+  public String []listFiles(String tagName, String fileName)
+    throws IOException
+  {
+    DeployListFilesQuery query = new DeployListFilesQuery(tagName, fileName);
+    
+    DeployListFilesQuery result = (DeployListFilesQuery) query(query);
+    
+    return result.getFileList();
   }
 
   public String calculateFileDigest(InputStream is, long length)
@@ -469,7 +520,7 @@ public class DeployClient implements Repository
   /**
    * Undeploy a controller based on a deployment tag: wars/foo.com/my-war
    *
-   * @param tag the encoded controller name
+   * @param commit the encoded controller name
    */
   public boolean undeploy(CommitBuilder commit)
   {
@@ -515,9 +566,9 @@ public class DeployClient implements Repository
   protected Serializable query(Serializable query)
   {
     try {
-      return (Serializable) _bamClient.query(_deployAddress, query);
+      return _bamClient.query(_deployAddress, query);
     } catch (ServiceUnavailableException e) {
-      throw new ServiceUnavailableException("Deploy service is not available, possibly because the resin.xml is missing a <resin:DeployService> tag\n  " + e.getMessage(),
+      throw new ServiceUnavailableException("Deploy service is not available, possibly because the resin.xml is missing a <resin:AdminServices> or a <resin:DeployService> tag\n  " + e.getMessage(),
                                             e);
     }
   }

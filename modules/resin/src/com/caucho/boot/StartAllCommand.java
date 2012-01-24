@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,17 +47,21 @@ public class StartAllCommand extends AbstractStartCommand
   private static L10N _L;
 
   @Override
-  public String getName()
+  public String getDescription()
   {
-    return "start-all";
+    return "starts all servers listening to the machine's IP interfaces";
+  }
+  
+  @Override
+  public boolean isStart()
+  {
+    return true;
   }
 
   @Override
   public int doCommand(ResinBoot boot, WatchdogArgs args)
     throws BootArgumentException
   {
-    validateArgs(args.getArgv());
-    
     ArrayList<WatchdogClient> clientList = boot.findLocalClients();
     
     if (clientList.size() == 0) {
@@ -120,6 +124,7 @@ public class StartAllCommand extends AbstractStartCommand
     return _L;
   }
 
+  /*
   @Override
   public void usage()
   {
@@ -137,5 +142,7 @@ public class StartAllCommand extends AbstractStartCommand
     System.out.println("   -verbose              : print verbose starting information");
     System.out.println("   -preview              : run as a preview server");
     System.out.println("   -debug-port <port>    : configure a debug port");
-    System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");  }
+    System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");  
+  }
+  */
 }

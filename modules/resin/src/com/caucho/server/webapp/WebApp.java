@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -161,6 +161,7 @@ import com.caucho.server.dispatch.FilterMapping;
 import com.caucho.server.dispatch.Invocation;
 import com.caucho.server.dispatch.InvocationBuilder;
 import com.caucho.server.dispatch.InvocationDecoder;
+import com.caucho.server.dispatch.RedirectFilterChain;
 import com.caucho.server.dispatch.ServletConfigImpl;
 import com.caucho.server.dispatch.ServletManager;
 import com.caucho.server.dispatch.ServletMapper;
@@ -299,6 +300,7 @@ public class WebApp extends ServletContextImpl
   private boolean _isInheritSession;
 
   private String _characterEncoding;
+  private int _formParameterMax = 10000;
 
   // The cache
   private AbstractProxyCache _cache;
@@ -1808,6 +1810,20 @@ public class WebApp extends ServletContextImpl
 
     _accessLogLocal.set(log);
   }
+  
+  /**
+   * Sets the maximum number of form parameters
+   */
+  @Configurable
+  public void setFormParameterMax(int max)
+  {
+    _formParameterMax = max;
+  }
+  
+  public int getFormParameterMax()
+  {
+    return _formParameterMax;
+  }
 
   /**
    * Adds a mime-mapping
@@ -2079,7 +2095,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Returns true if a listener with the given type exists.
    */
-  public boolean hasListener(Class listenerClass)
+  public boolean hasListener(Class<?> listenerClass)
   {
     for (int i = 0; i < _listeners.size(); i++) {
       ListenerConfig listener = _listeners.get(i);
@@ -2563,7 +2579,7 @@ public class WebApp extends ServletContextImpl
   {
     _shutdownWaitTime = wait.getPeriod();
 
-    Resin resin = Resin.getLocal();
+    Resin resin = Resin.getCurrent();
     if (resin != null &&
         resin.getShutdownWaitMax() < _shutdownWaitTime) {
       log.warning(L.l("web-app shutdown-wait-max '{0}' is longer than resin shutdown-wait-max '{1}'.",
@@ -3870,8 +3886,13 @@ public class WebApp extends ServletContextImpl
   private FilterChain applyWelcomeFile(DispatcherType type,
                                        Invocation invocation, 
                                        FilterChain chain)
-  throws ServletException
-{
+    throws ServletException
+  {
+    if ("".equals(invocation.getContextURI())) {
+      // server/1u3l
+      return new RedirectFilterChain(getContextPath() + "/");
+    }
+
     if (_welcomeFile != null) {
       chain = _welcomeFile.map(type,
                                invocation.getContextURI(),

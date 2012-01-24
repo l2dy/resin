@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -40,21 +40,20 @@ public class ReflectionException extends QuercusLanguageException
   
   public ReflectionException()
   {
-    super(NullValue.NULL);
   }
 
   public ReflectionException(String msg)
   {
-    super(NullValue.NULL);
-    
     _message = msg;
   }
-  
+
+  @Override
   public String getMessage()
   {
     return _message;
   }
 
+  @Override
   public String getMessage(Env env)
   {
     return getMessage();

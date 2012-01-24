@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -557,6 +557,24 @@ public abstract class JspNode {
    */
   abstract public void printXml(WriteStream os)
     throws IOException;
+  
+  protected String printXmlOpen(WriteStream os,
+                                String ns,
+                                String localName)
+    throws IOException
+  {
+    String prefix = getNamespacePrefix(ns);
+
+    if (prefix == null) {
+      prefix = "c";
+      os.print("<c:" + localName + " xmlns:c='" + ns + "'");
+    }
+    else {
+      os.print("<" + prefix + ":" + localName);
+    }
+    
+    return prefix;
+  }
 
   /**
    * Prints the jsp:id

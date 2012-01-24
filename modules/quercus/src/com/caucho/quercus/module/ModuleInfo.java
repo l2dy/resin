@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -214,7 +214,7 @@ public class ModuleInfo {
         continue;
        */
 
-      Class []params = method.getParameterTypes();
+      Class<?> []params = method.getParameterTypes();
 
       // php/1a10
       if ("getLoadedExtensions".equals(method.getName()))

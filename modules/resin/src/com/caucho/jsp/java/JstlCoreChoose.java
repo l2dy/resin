@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -83,11 +83,13 @@ public class JstlCoreChoose extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<c:choose>");
+    String prefix = printXmlOpen(os, JSTL_CORE_NS, "choose");
+    
+    os.print(">");
 
     printXmlChildren(os);
 
-    os.print("</c:choose>");
+    os.print("</" + prefix + ":choose>");
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -38,6 +38,9 @@ package com.caucho.management.server;
  */
 public interface LogServiceMXBean extends ManagedObjectMXBean
 {
+  public long getExpireTimeout();
+  public void setExpireTimeout(long timeout);
+  
   public LogMessage []findMessages(String level, long minTime, long maxTime);
   
   public LogMessage []findMessagesByName(String name,

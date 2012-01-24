@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -86,13 +86,15 @@ public class JstlXmlWhen extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<x:when select=\"");
+    String prefix = printXmlOpen(os, JSTL_XML_NS, "when");
+
+    os.print(" select=\"");
     printXmlText(os, _select);
     os.print("\">");
 
     printXmlChildren(os);
 
-    os.print("</x:when>");
+    os.print("</" + prefix + ":when>");
   }
   
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,16 +29,13 @@
 
 package javax.cache.spi;
 
-import javax.cache.CacheManager;
 import javax.cache.OptionalFeature;
 
 /**
  * Creates a new CacheManager.
  */
 public interface CachingProvider {
-  public CacheManager createCacheManager(ClassLoader classLoader, String name);
-  
-  public ClassLoader getDefaultClassLoader();
+  public CacheManagerFactory getCacheManagerFactory();
   
   public boolean isSupported(OptionalFeature feature);
 }

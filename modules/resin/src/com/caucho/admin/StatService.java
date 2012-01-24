@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -44,8 +44,6 @@ import com.caucho.util.L10N;
 @Configurable
 public class StatService
 {
-  private static final L10N L = new L10N(StatService.class);
-  
   private StatSystem _statSystem;
   
   public StatService()

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,6 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.VersionFactory;
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.InjectManager;
@@ -60,7 +61,7 @@ public class ResinSystem
   private static final EnvironmentLocal<ResinSystem> _serverLocal
     = new EnvironmentLocal<ResinSystem>();
 
-  private final String _id;
+  private String _id;
   private EnvironmentClassLoader _classLoader;
   
   private final ConcurrentHashMap<Class<?>,ResinSubSystem> _serviceMap
@@ -99,7 +100,7 @@ public class ResinSystem
    */
   public ResinSystem(String id, ClassLoader loader)
   {
-    if (id == null || id.isEmpty())
+    if (id == null)
       id = "default";
     
     _id = id;
@@ -157,7 +158,7 @@ public class ResinSystem
       throws IOException
   {
     this(id);
-    
+
     configureRoot(rootDirectory, dataDirectory);
   }
 
@@ -176,7 +177,12 @@ public class ResinSystem
       thread.setContextClassLoader(oldLoader);
     }
   }
- 
+
+  public void setId(String id)
+  {
+    _id = id;
+  }
+
   /**
    * Returns the current server
    */
@@ -462,6 +468,10 @@ public class ResinSystem
       if (! Alarm.isTest()) {
         log.info("");
 
+        log.info(VersionFactory.getFullVersion());
+        
+        log.info("");
+
         log.info(System.getProperty("os.name")
                  + " " + System.getProperty("os.version")
                  + " " + System.getProperty("os.arch"));
@@ -476,7 +486,7 @@ public class ResinSystem
                  + ", " + System.getProperty("sun.arch.data.model")
                  + ", " + System.getProperty("java.vm.info")
                  + ", " + System.getProperty("java.vm.vendor"));
-
+        
         log.info("");
 
         log.info("user.name  = " + System.getProperty("user.name"));

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This interface is defined in JSR 107.
  *
@@ -40,9 +40,9 @@ package javax.cache;
  * The lifecycle status of the Cache.
  */
 public interface CacheLifecycle {
-  public void start() throws CacheException;
+  public void start();
   
-  public void stop() throws CacheException;
+  public void stop();
   
   public Status getStatus();
 }

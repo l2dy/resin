@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -34,6 +34,7 @@ import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.logging.Logger;
 
 /**
@@ -87,25 +88,29 @@ public class PDFWriter {
     println("#\u00c0\u00c3\u00c4\u00c9");
   }
 
-  public void writeCatalog(int catalogId, int pagesId,
-                           ArrayList<Integer> pagesList, int pageCount)
+  public void writeCatalog(int catalogId, 
+                           int rootId, 
+                           int outlineId,
+                           ArrayList<Integer> pagesList, 
+                           int pageCount)
     throws IOException
   {
-    int pageId = pagesId;
-
-    if (pagesList.size() > 0)
-      pageId = allocateId(1);
-
     beginObject(catalogId);
 
     println("  << /Type /Catalog");
-    println("     /Pages " + pageId + " 0 R");
+    println("     /Pages " + rootId + " 0 R");
+    
+    if (outlineId > 0) {
+      println("     /PageMode /UseOutlines");
+      println("     /Outlines " + outlineId + " 0 R");
+    }
+    
     println("  >>");
 
     endObject();
 
     if (pagesList.size() > 0) {
-      beginObject(pageId);
+      beginObject(rootId);
 
       println("  << /Type /Pages");
       print("     /Kids [");
@@ -124,8 +129,56 @@ public class PDFWriter {
       endObject();
     }
   }
+  
+  public void writeOutline(PDFOutline outline)
+    throws IOException
+  {
+    List<PDFDestination> roots = outline.getRootDestinations();
+    
+    beginObject(outline.getId());
+    
+    println("  << /Type /Outlines");
+    println("     /First " + roots.get(0).getId() + " 0 R");
+    println("     /Last " + roots.get(roots.size()-1).getId() + " 0 R");
+    println("  >>");    
+    
+    for(int i=0; i<roots.size(); i++)
+      writeOutlineItem(roots, i);
+  }
+  
+  private void writeOutlineItem(List<PDFDestination> destinations, int index)
+    throws IOException
+  {
+    PDFDestination dest = destinations.get(index);
+    
+    List<PDFDestination> children = dest.getChildren();
+    for(int i=0; i<children.size(); i++)
+      writeOutlineItem(children, i);
+    
+    beginObject(dest.getId());
+      
+    println("  << /Title (" + PDFStream.pdfEscapeText(dest.getTitle()) + ")");
+    println("     /Parent " + dest.getParentId() + " 0 R");
+    println("     /Dest [" + dest.getPageId() + " 0 R /XYZ 0 " + dest.getPos() + " 0]");
 
-  public void writePageGroup(int id, ArrayList<PDFPage> pages)
+    if (index > 0)
+      println("     /Prev " + destinations.get(index-1).getId() + " 0 R");
+    
+    if (index < (destinations.size()-1))
+      println("     /Next " + destinations.get(index+1).getId() + " 0 R");
+    
+    if (! children.isEmpty()) {
+      println("     /First " + children.get(0).getId() + " 0 R");
+      println("     /Last " + children.get(children.size()-1).getId() + " 0 R");
+      println("     /Count " + (children.size() * -1));
+    }
+    
+    println("  >>");
+    
+    endObject();
+  }
+
+  public void writePageGroup(int id, int parentId, ArrayList<PDFPage> pages)
     throws IOException
   {
     beginObject(id);
@@ -141,6 +194,8 @@ public class PDFWriter {
 
     println("]");
     println("     /Count " + pages.size());
+    println("     /Parent " + parentId + " 0 R");
+    
     println("  >>");
     endObject();
 
@@ -173,7 +228,7 @@ public class PDFWriter {
 
     println("xref");
     println("0 " + (_xref.size() + 1) + "");
-    println("0000000000 65535 f");
+    print("0000000000 65535 f \n");
 
     for (int i = 0; i < _xref.size(); i++)
       _xref.get(i).write();
@@ -332,10 +387,9 @@ public class PDFWriter {
       _out.print(_offset / 10L % 10);
       _out.print(_offset % 10);
 
-      _out.print(' ');
-      _out.println("00000 n");
+      _out.print(" 00000 n \n");
 
-      _offset += 19;
+      _offset += 20;
     }
   }
 }

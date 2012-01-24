@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -79,7 +79,7 @@ public class JstlXmlSet extends JstlNode {
   public void printXml(WriteStream os)
     throws IOException
   {
-    os.print("<x:set");
+    String prefix = printXmlOpen(os, JSTL_XML_NS, "set");
 
     if (_select != null) {
       os.print(" select=\"");
@@ -97,7 +97,7 @@ public class JstlXmlSet extends JstlNode {
 
     printXmlChildren(os);
 
-    os.print("</x:set>");
+    os.print("</" + prefix + ":set>");
   }
   
   /**

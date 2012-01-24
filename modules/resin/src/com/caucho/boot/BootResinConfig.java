@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,11 +29,8 @@
 
 package com.caucho.boot;
 
-import java.io.IOException;
 import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -45,8 +42,8 @@ import com.caucho.config.Configurable;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
 import com.caucho.env.service.ResinSystem;
-import com.caucho.loader.EnvironmentBean;
 import com.caucho.security.AdminAuthenticator;
+import com.caucho.util.HostUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
@@ -81,7 +78,7 @@ public class BootResinConfig // implements EnvironmentBean
   
   private BootManagementConfig _management;
   private String _resinSystemKey;
-  private String _joinCluster;
+  private String _homeCluster;
   
   BootResinConfig(ResinSystem system,
                   WatchdogArgs args)
@@ -162,17 +159,23 @@ public class BootResinConfig // implements EnvironmentBean
   @Configurable
   public void setJoinCluster(String joinCluster)
   {
-    _joinCluster = joinCluster;
+    setHomeCluster(joinCluster);
   }
   
-  public String getJoinCluster()
+  @Configurable
+  public void setHomeCluster(String homeCluster)
   {
-    return _joinCluster;
+    _homeCluster = homeCluster;
   }
   
-  public boolean isJoinCluster()
+  public String getHomeCluster()
   {
-    return _joinCluster != null && ! "".equals(_joinCluster);
+    return _homeCluster;
+  }
+  
+  public boolean isHomeCluster()
+  {
+    return _homeCluster != null && ! "".equals(_homeCluster);
   }
 
   /*
@@ -232,51 +235,75 @@ public class BootResinConfig // implements EnvironmentBean
   WatchdogClient findClient(String serverId, WatchdogArgs args)
   {
     WatchdogClient client = null;
-    
+
     if (serverId != null) {
       client = findClient(serverId);
-      
+
       if (client != null)
         return client;
       
-      // cloud/1292
-      if (args.isDynamicServer())
-        return null;
+      // cloud/1292, server/6e11
+      if (args.isDynamicServer()) {
+        client = findShutdownClient(_args.getClusterId());
+        
+        if (client != null)
+          return client;
+        
+        throw new ConfigException(L.l("Resin/{0}: {1} -cluster '{2}' does not match any defined <server>\nin {3}.",
+                                      VersionFactory.getVersion(),
+                                      _args.getCommand(),
+                                      _args.getClusterId(), 
+                                      _args.getResinConf()));
+      }
       
-      if (! args.isStart() && ! args.isConsole())
-        throw new ConfigException(L.l("Resin/{0}: -server '{1}' does not match any defined <server>\nin {2}.",
-                                      VersionFactory.getVersion(), _args.getServerId(), _args.getResinConf()));
+      if (! args.getCommand().isStart() && ! args.getCommand().isConsole()) {
+        throw new ConfigException(L.l("Resin/{0}: {1} -server '{2}' does not match any defined <server>\nin {3}.",
+                                      VersionFactory.getVersion(),
+                                      _args.getCommand(),
+                                      _args.getServerId(), 
+                                      _args.getResinConf()));
+      }
     }
     
     // backward-compat default behavior
-    client = findClient("");
+    if (serverId == null)
+      client = findClient("");
     
     if (client != null)
       return client;
     
     ArrayList<WatchdogClient> clientList = findLocalClients();
     
-    if (clientList.size() == 1)
-      return clientList.get(0);
-
-    /*
-    // server/6e10
-    if (args.isDynamicServer())
-      return null;
-      */
-
-    if (client == null && _args.isShutdown()) {
-      client = findShutdownClient(_args.getClusterId());
+    if (clientList.size() == 1) {
+      client = clientList.get(0);
+      
+      // server/6e10
+      if (client.getConfig().isRequireExplicitId())
+        client = null;
     }
 
-    if (client == null && ! (_args.isStart() || _args.isConsole())) {
+    // server/6e10
+    if (args.isDynamicServer() || getHomeCluster() != null)
+      return null;
+
+    /*
+    if (client == null && _args.getCommand().isShutdown()) {
+      client = findShutdownClient(_args.getClusterId());
+    }
+    */
+
+    if (client == null
+        && (! _args.getCommand().isStart()
+            && ! _args.getCommand().isConsole()
+            || _args.isDynamicServer())) {
       client = findShutdownClient(_args.getClusterId());
     }
 
     if (client == null) {
       throw new ConfigException(L.l("Resin/{0}: default server cannot find a unique <server> or <server-multi>\nin {2}.",
                                     VersionFactory.getVersion(), 
-                                    _args.getServerId(), _args.getResinConf()));
+                                    _args.getServerId(), 
+                                    _args.getResinConf()));
     }
     
     return client;
@@ -319,41 +346,30 @@ public class BootResinConfig // implements EnvironmentBean
     for (WatchdogClient client : _watchdogMap.values()) {
       if (client == null)
         continue;
-      
-      String address = client.getConfig().getAddress();
-      
-      if (isLocalAddress(localAddresses, address))
-        clientList.add(client);
-    }
-  }
-  
-  private ArrayList<InetAddress> getLocalAddresses()
-  {
-    ArrayList<InetAddress> localAddresses = new ArrayList<InetAddress>();
-    
-    try {
-      Enumeration<NetworkInterface> ifaceEnum
-        = NetworkInterface.getNetworkInterfaces();
-    
-      while (ifaceEnum.hasMoreElements()) {
-        NetworkInterface iface = ifaceEnum.nextElement();
 
-        Enumeration<InetAddress> addrEnum = iface.getInetAddresses();
-      
-        while (addrEnum.hasMoreElements()) {
-          InetAddress addr = addrEnum.nextElement();
-        
-          localAddresses.add(addr);
-        }
+      if (isLocalClient(localAddresses, client.getConfig())) {
+        clientList.add(client);
       }
-    } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
     }
-    
-    return localAddresses;
   }
   
-  private boolean isLocalAddress(ArrayList<InetAddress> localAddresses,
+  public static boolean isLocalClient(ArrayList<InetAddress> localAddresses,
+                                      WatchdogConfig config)
+  {
+    if (config.isRequireExplicitId())
+      return false;
+    
+    String address = config.getAddress();
+    
+    return isLocalAddress(localAddresses, address);
+  }
+  
+  static ArrayList<InetAddress> getLocalAddresses()
+  {
+    return HostUtil.getLocalAddresses();
+  }
+  
+  private static boolean isLocalAddress(ArrayList<InetAddress> localAddresses,
                                  String address)
   {
     if (address == null || "".equals(address))
@@ -407,25 +423,26 @@ public class BootResinConfig // implements EnvironmentBean
    */
   WatchdogClient addDynamicClient(WatchdogArgs args)
   {
-    if (! args.isDynamicServer() && ! isJoinCluster())
+    if (! args.isDynamicServer() && ! isHomeCluster())
       throw new IllegalStateException();
 
-    String clusterId = getJoinCluster();
+    String clusterId = args.getClusterId();
     
-    if (args.isDynamicServer())
-      clusterId = args.getDynamicCluster();
+    if (clusterId == null)
+      clusterId = getHomeCluster();
     
     String address = args.getDynamicAddress();
     int port = args.getDynamicPort();
     
     BootClusterConfig cluster = findCluster(clusterId);
 
-    if (cluster == null)
-      throw new ConfigException(L.l("'{0}' is an unknown cluster. -join-cluster must specify an existing cluster",
+    if (cluster == null) {
+      throw new ConfigException(L.l("'{0}' is an unknown cluster. --cluster must specify an existing cluster",
                                     clusterId));
+    }
 
     if (! cluster.isDynamicServerEnable()) {
-      throw new ConfigException(L.l("cluster '{0}' does not have <resin:ElasticCloudService>. -join-cluster requires a <resin:ElasticCloudService> tag.",
+      throw new ConfigException(L.l("cluster '{0}' does not have <resin:ElasticCloudService>. --home-cluster requires a <resin:ElasticCloudService> tag.",
                                     clusterId));
     }
 
@@ -463,20 +480,29 @@ public class BootResinConfig // implements EnvironmentBean
     _clusterDefaultList.add(program);
   }
 
-  public BootClusterConfig createCluster()
+  public void addCluster(BootClusterProxy proxy)
   {
-    BootClusterConfig cluster = new BootClusterConfig(_system, this);
-
-    for (int i = 0; i < _clusterDefaultList.size(); i++)
-      _clusterDefaultList.get(i).configure(cluster);
-
-    _clusterList.add(cluster);
+    BootClusterConfig cluster = findCluster(proxy.getId());
     
-    return cluster;
+    if (cluster == null) {
+      cluster = new BootClusterConfig(_system, this);
+      cluster.setId(proxy.getId());
+
+      for (int i = 0; i < _clusterDefaultList.size(); i++) {
+        _clusterDefaultList.get(i).configure(cluster);
+      }
+
+      _clusterList.add(cluster);
+    }
+    
+    proxy.getProgram().configure(cluster);
   }
 
   BootClusterConfig findCluster(String id)
   {
+    if (id == null)
+      return null;
+
     for (int i = 0; i < _clusterList.size(); i++) {
       BootClusterConfig cluster = _clusterList.get(i);
 

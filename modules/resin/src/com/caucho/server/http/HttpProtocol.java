@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -51,6 +51,6 @@ public class HttpProtocol extends AbstractHttpProtocol {
   @Override
   public ProtocolConnection createConnection(SocketLink conn)
   {
-    return new HttpRequest(getServer(), conn);
+    return new HttpRequest(getServletSystem(), conn);
   }
 }

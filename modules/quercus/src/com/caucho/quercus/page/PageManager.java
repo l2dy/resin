@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -39,6 +39,8 @@ import com.caucho.vfs.IOExceptionWrapper;
 import com.caucho.vfs.Path;
 
 import java.io.IOException;
+import java.lang.ref.SoftReference;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.*;
 
 /**
@@ -59,9 +61,12 @@ public class PageManager
   private boolean _isCompileFailover = Alarm.isActive();
 
   private boolean _isRequireSource = true;
+  
+  private ConcurrentHashMap<String,Object> _programLockMap
+    = new ConcurrentHashMap<String,Object>();
 
-  protected LruCache<Path,QuercusProgram> _programCache
-    = new LruCache<Path,QuercusProgram>(1024);
+  protected LruCache<Path,SoftReference<QuercusProgram>> _programCache
+    = new LruCache<Path,SoftReference<QuercusProgram>>(1024);
 
   private boolean _isClosed;
   
@@ -164,7 +169,7 @@ public class PageManager
   public void setPageCacheSize(int size)
   {
     if (size >= 0 && size != _programCache.getCapacity())
-      _programCache = new LruCache<Path,QuercusProgram>(size);
+      _programCache = new LruCache<Path,SoftReference<QuercusProgram>>(size);
   }
 
   /**
@@ -223,12 +228,38 @@ public class PageManager
    * @throws IOException
    */
   public QuercusPage parse(Path path, String fileName, int line)
+  throws IOException
+  {
+    String fullName = path.getFullPath();
+    
+    try {
+      Object lock = _programLockMap.get(fullName);
+      
+      while (lock == null) {
+        lock = new Object();
+        _programLockMap.putIfAbsent(fullName, lock);
+        
+        lock = _programLockMap.get(fullName);
+      }
+
+      synchronized (lock) {
+        return parseImpl(path, fileName, line);
+      }
+    } finally {
+      _programLockMap.remove(fullName);
+    }
+  }
+  
+  public QuercusPage parseImpl(Path path, String fileName, int line)
     throws IOException
   {
     try {
-      QuercusProgram program;
+      
+      SoftReference<QuercusProgram> programRef;
 
-      program = _programCache.get(path);
+      programRef = _programCache.get(path);
+      
+      QuercusProgram  program = programRef != null ? programRef.get() : null;
 
       boolean isModified = false;
       
@@ -263,7 +294,7 @@ public class PageManager
                                         line);
         }
 
-        _programCache.put(path, program);
+        _programCache.put(path, new SoftReference<QuercusProgram>(program));
       }
 
       if (program.getCompiledPage() != null)

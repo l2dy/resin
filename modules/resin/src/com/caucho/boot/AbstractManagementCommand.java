@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,11 +30,11 @@
 package com.caucho.boot;
 
 import com.caucho.bam.NotAuthorizedException;
-import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.bam.actor.ActorSender;
 import com.caucho.server.admin.ManagerClient;
 import com.caucho.util.L10N;
 
-public abstract class AbstractManagementCommand extends AbstractBootCommand {
+public abstract class AbstractManagementCommand extends AbstractRemoteCommand {
   private static final L10N L = new L10N(AbstractManagementCommand.class);
   
   @Override
@@ -45,7 +45,7 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
     ManagerClient managerClient = null;
 
     try {
-      managerClient = getManagerClient(args, client);
+      managerClient = createManagerClient(args, client);
 
       return doCommand(args, client, managerClient);
     } catch (Exception e) {
@@ -64,10 +64,24 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
     }
   }
 
+  @Override
+  public boolean isProOnly()
+  {
+    return true;
+  }
+
   protected abstract int doCommand(WatchdogArgs args,
                                    WatchdogClient client,
                                    ManagerClient managerClient);
 
+  protected ManagerClient createManagerClient(WatchdogArgs args,
+                                              WatchdogClient client)
+  {
+    ActorSender bamSender = createBamClient(args, client);
+   
+    return new ManagerClient(bamSender);
+  }
+  /*
   protected ManagerClient getManagerClient(WatchdogArgs args,
                                            WatchdogClient client)
   {
@@ -99,12 +113,6 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
     if (httpPort < 0)
       httpPort = findPort(client);
 
-    /*
-    if (port == 0) {
-      throw new ConfigException(L.l("HTTP listener {0}:{1} was not found",
-                                    address, port));
-    }*/
-
     String user = args.getArg("-user");
     String password = args.getArg("-password");
     
@@ -130,4 +138,5 @@ public abstract class AbstractManagementCommand extends AbstractBootCommand {
     
     return 0;
   }
+  */
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,6 +29,7 @@
 
 package com.caucho.boot;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -40,12 +41,9 @@ import javax.management.ObjectName;
 
 import com.caucho.admin.RemoteAdminService;
 import com.caucho.cloud.network.NetworkListenSystem;
-import com.caucho.cloud.topology.CloudCluster;
-import com.caucho.cloud.topology.CloudPod;
-import com.caucho.cloud.topology.CloudSystem;
-import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
+import com.caucho.config.core.ResinProperties;
 import com.caucho.config.inject.BeanBuilder;
 import com.caucho.config.inject.DefaultLiteral;
 import com.caucho.config.inject.InjectManager;
@@ -67,7 +65,9 @@ import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.Server;
 import com.caucho.server.http.HttpProtocol;
 import com.caucho.server.resin.Resin;
+import com.caucho.server.resin.ResinArgs;
 import com.caucho.server.resin.ResinELContext;
+import com.caucho.server.resin.ResinWatchdog;
 import com.caucho.server.util.JniCauchoSystem;
 import com.caucho.server.webbeans.ResinServerConfigLibrary;
 import com.caucho.util.Alarm;
@@ -109,7 +109,22 @@ class WatchdogManager implements AlarmListener {
 
     _args = new WatchdogArgs(argv);
     
-    _system = new ResinSystem("watchdog");
+    String serverId = _args.getServerId();
+
+    if (_args.isDynamicServer()) {
+      serverId = _args.getDynamicServerId();
+    }
+    
+    ResinArgs resinArgs = new ResinArgs();
+    resinArgs.setRootDirectory(_args.getRootDirectory());
+    resinArgs.setServerId(serverId);
+    
+    if (_args.getDataDirectory() != null)
+      resinArgs.setDataDirectory(_args.getDataDirectory());
+    
+    Resin resin = new ResinWatchdog(resinArgs);
+    
+    _system = resin.getResinSystem();
 
     Vfs.setPwd(_args.getRootDirectory());
     
@@ -153,13 +168,8 @@ class WatchdogManager implements AlarmListener {
     ThreadPool.getThreadPool().setPriorityIdleMin(4);
 
     ResinELContext elContext = _args.getELContext();
-    
-    Resin resin = Resin.createWatchdog(_system);
-    
-    if (_args.getDataDirectory() != null)
-      resin.setDataDirectory(_args.getDataDirectory());
-    
-    resin.preConfigureInit();
+
+    // resin.preConfigureInit();
     
     // XXX: needs to be config
 
@@ -171,26 +181,33 @@ class WatchdogManager implements AlarmListener {
     Config.setProperty("java", elContext.getJavaVar());
     Config.setProperty("system", System.getProperties());
     Config.setProperty("getenv", System.getenv());
+    
+    Config.setProperty("rvar0", _args.getServerId());
 
     ResinConfigLibrary.configure(cdiManager);
     ResinServerConfigLibrary.configure(cdiManager);
 
-    _watchdogPort = _args.getWatchdogPort();
-    
-    String serverId = _args.getServerId();
-
-    if (_args.isDynamicServer()) {
-      serverId = _args.getDynamicServerId();
+    // read $HOME/.resin
+    if (_args.getUserProperties() != null && _args.getUserProperties().canRead()) {
+      ResinProperties properties = new ResinProperties();
+      properties.setPath(_args.getUserProperties());
+      properties.setMode(_args.getMode());
+      
+      properties.init();
     }
     
-    resin.setServerId(serverId);
+    _watchdogPort = _args.getWatchdogPort();
     
     readConfig(serverId, _args);
     
     WatchdogChild server = null;
+    
+    if (serverId == null)
+      server = findLocalServer();
       
-    server = _watchdogMap.get(serverId);
-
+    if (server == null)
+      server = _watchdogMap.get(serverId);
+    
     if (server == null)
       throw new IllegalStateException(L().l("'{0}' is an unknown server",
                                             serverId));
@@ -208,17 +225,19 @@ class WatchdogManager implements AlarmListener {
 
     server.getConfig().logInit(logStream);
 
-    resin.preConfigureInit();
-    resin.setConfigFile(_args.getResinConf().getNativePath());
+    // resin.preConfigureInit();
+    // resin.setConfigFile(_args.getResinConf().getNativePath());
 
     thread = Thread.currentThread();
     thread.setContextClassLoader(resin.getClassLoader());
 
+    /*
     CloudSystem cloudSystem = TopologyService.getCurrent().getSystem();
     
     CloudCluster cluster = cloudSystem.createCluster("watchdog");
     CloudPod pod = cluster.createPod();
     pod.createStaticServer("default", "localhost", -1, false);
+    */
 
     _server = resin.createServer();
     
@@ -434,13 +453,8 @@ class WatchdogManager implements AlarmListener {
       } catch (Exception e) {
         throw ConfigException.create(e);
       }
-
-      if (serverId == null)
-        serverId = args.getServerId();
-
-      if (args.isDynamicServer())
-        serverId = args.getDynamicServerId();
-
+      
+      serverId = getServerId(serverId, args);
       WatchdogChild watchdog = _watchdogMap.get(serverId);
 
       if (watchdog == null)
@@ -458,15 +472,31 @@ class WatchdogManager implements AlarmListener {
    */
   void stopServer(String serverId)
   {
+    serverId = getServerId(serverId, _args);
+    
     synchronized (_watchdogMap) {
       WatchdogChild watchdog = getWatchdog(serverId);
       
-            if (watchdog == null)
+      if (watchdog == null)
         throw new ConfigException(L().l("No matching <server> found for stop -server '{0}' in {1}",
                                         serverId, _args.getResinConf()));
 
       watchdog.stop();
     }
+  }
+  
+  private String getServerId(String serverId, WatchdogArgs args)
+  {
+    if (serverId == null)
+      serverId = args.getServerId();
+
+    if (args.isDynamicServer())
+      serverId = args.getDynamicServerId();
+    
+    if (serverId == null)
+      serverId = "default";
+
+    return serverId;
   }
   
   private WatchdogChild getWatchdog(String serverId)
@@ -547,6 +577,8 @@ class WatchdogManager implements AlarmListener {
 
     Vfs.setPwd(args.getRootDirectory());
     BootResinConfig resin = new BootResinConfig(_system, args);
+    
+    Config.setProperty("rvar0", args.getServerId());
 
     config.configure(resin,
                      args.getResinConf(),
@@ -566,12 +598,26 @@ class WatchdogManager implements AlarmListener {
       serverId = args.getServerId();
     
     WatchdogConfig serverConfig = null;
+    
+    WatchdogClient client;
+    
+    if (serverId != null)
+      client = resin.findClient(serverId);
+    else
+      client = resin.findClient(serverId, args); 
+    
+    //resin.findClient(serverId);
+    if (client != null)
+      serverConfig = client.getConfig();
+    else
+      serverConfig = resin.findServer(serverId);
 
-    if (args.isDynamicServer() || resin.isJoinCluster()) {
-      String clusterId = resin.getJoinCluster();
+    if (serverConfig == null 
+        && (args.isDynamicServer() || resin.isHomeCluster())) {
+      String clusterId = resin.getHomeCluster();
       
       if (args.isDynamicServer())
-        clusterId = args.getDynamicCluster();
+        clusterId = args.getClusterId();
       
       String address = args.getDynamicAddress();
       int port = args.getDynamicPort();
@@ -589,16 +635,6 @@ class WatchdogManager implements AlarmListener {
       serverConfig.setAddress(address);
       serverConfig.setPort(port);
       cluster.addServer(serverConfig);
-    }
-    else {
-      WatchdogClient client = resin.findClient(serverId, args); 
-        
-        //resin.findClient(serverId);
-
-      if (client != null)
-        serverConfig = client.getConfig();
-      else
-        serverConfig = resin.findServer(serverId);
     }
 
     WatchdogChild watchdog = _watchdogMap.get(serverId);
@@ -621,6 +657,9 @@ class WatchdogManager implements AlarmListener {
     }
 
     watchdog = new WatchdogChild(_system, serverConfig);
+    
+    if (serverId == null || "".equals(serverId))
+      serverId = "default";
 
     _watchdogMap.put(serverId, watchdog);
 
@@ -667,7 +706,21 @@ class WatchdogManager implements AlarmListener {
       }
     }
   }
+  
+  private WatchdogChild findLocalServer()
+  {
+    ArrayList<InetAddress> localAddresses = BootResinConfig.getLocalAddresses();
+    
+    for (WatchdogChild child : _watchdogMap.values()) {
+      if (BootResinConfig.isLocalClient(localAddresses, child.getConfig())) {
+        return child;
+      }
+    }
+    
+    return null;
+  }
 
+  @Override
   public void handleAlarm(Alarm alarm)
   {
     try {
@@ -716,7 +769,7 @@ class WatchdogManager implements AlarmListener {
   private static L10N L()
   {
     if (_L == null)
-      _L = new L10N(ResinBoot.class);
+      _L = new L10N(WatchdogManager.class);
 
     return _L;
   }
@@ -724,7 +777,7 @@ class WatchdogManager implements AlarmListener {
   private static Logger log()
   {
     if (_log == null)
-      _log = Logger.getLogger(ResinBoot.class.getName());
+      _log = Logger.getLogger(WatchdogManager.class.getName());
 
     return _log;
   }
