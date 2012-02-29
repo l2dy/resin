@@ -48,6 +48,8 @@ import javax.cache.CacheManager;
 import javax.cache.CacheStatistics;
 import javax.cache.Status;
 import javax.cache.event.CacheEntryListener;
+import javax.cache.event.Filter;
+import javax.cache.mbeans.CacheMXBean;
 
 import com.caucho.cloud.loadbalance.LoadBalanceBuilder;
 import com.caucho.cloud.loadbalance.LoadBalanceManager;
@@ -66,6 +68,7 @@ import com.caucho.server.distcache.DistCacheSystem;
 import com.caucho.server.distcache.MnodeUpdate;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
 import com.caucho.util.L10N;
 import com.caucho.vfs.ReadStream;
@@ -180,7 +183,7 @@ public class MemcachedClient implements Cache
       throw new CacheException("Cannot open client");
 
     boolean isValid = false;
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     
     try {
       WriteStream out = client.getOutputStream();
@@ -288,7 +291,7 @@ public class MemcachedClient implements Cache
   
     long version = entry.getVersion();
   
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
   
     if (version < now)
       version = now;
@@ -301,7 +304,7 @@ public class MemcachedClient implements Cache
       throw new CacheException("Cannot open client");
 
     boolean isValid = false;
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     
     try {
       WriteStream out = client.getOutputStream();
@@ -424,7 +427,7 @@ public class MemcachedClient implements Cache
   private void putImpl(Object key, Object value) throws CacheException
   {
     ClientSocket client = null;
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     
     
     boolean isValid = false;
@@ -486,7 +489,7 @@ public class MemcachedClient implements Cache
   void putResin(String key, MnodeUpdate update) throws CacheException
   {
     ClientSocket client = null;
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     
     CacheImpl cache = getLocalCache();
     
@@ -579,7 +582,7 @@ public class MemcachedClient implements Cache
   void removeImpl(Object key) throws CacheException
   {
     ClientSocket client = null;
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     
     
     boolean isValid = false;
@@ -698,7 +701,7 @@ public class MemcachedClient implements Cache
     if (client == null)
       return;
 
-    long idleStartTime = Alarm.getCurrentTime();
+    long idleStartTime = CurrentTime.getCurrentTime();
     boolean isValid = false;
     
     try {
@@ -874,7 +877,7 @@ public class MemcachedClient implements Cache
    * @see javax.cache.Cache#loadAll(java.util.Collection)
    */
   @Override
-  public Future loadAll(Collection keys) throws CacheException
+  public Future loadAll(Set keys) throws CacheException
   {
     // TODO Auto-generated method stub
     return null;
@@ -922,7 +925,7 @@ public class MemcachedClient implements Cache
    */
   @Override
   public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            boolean synchronous)
+                                            Filter filter)
   {
     // TODO Auto-generated method stub
     return false;
@@ -1007,6 +1010,12 @@ public class MemcachedClient implements Cache
   {
     // TODO Auto-generated method stub
     
+  }
+
+  @Override
+  public CacheMXBean getMBean()
+  {
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /* (non-Javadoc)
@@ -1116,5 +1125,15 @@ public class MemcachedClient implements Cache
   {
     // TODO Auto-generated method stub
     
+  }
+
+  /* (non-Javadoc)
+   * @see javax.cache.Cache#getCacheManager()
+   */
+  @Override
+  public CacheManager getCacheManager()
+  {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

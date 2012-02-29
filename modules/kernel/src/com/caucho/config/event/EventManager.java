@@ -262,7 +262,7 @@ public class EventManager
       
       parentManager.fillObserverMethodList(list, type, qualifiers);
     }
-    
+
     fillLocalObserverList(_observerMap, list, type, qualifiers);
   }
 

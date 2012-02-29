@@ -47,6 +47,7 @@ import com.caucho.env.service.ResinSystem;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 
@@ -293,11 +294,17 @@ class WatchdogClient
     Process process = launchManager(argv);
     
     long timeout = 15 * 1000L;
-    long expireTime = Alarm.getCurrentTimeActual() + timeout;
+    long expireTime = CurrentTime.getCurrentTimeActual() + timeout;
     
-    while (Alarm.getCurrentTimeActual() <= expireTime) {
-      if (pingWatchdog())
+    while (CurrentTime.getCurrentTimeActual() <= expireTime) {
+      if (pingWatchdog()) {
         return process;
+      }
+      
+      try {
+        Thread.sleep(10);
+      } catch (Exception e) {
+      }
     }
     
     return null;
@@ -309,7 +316,6 @@ class WatchdogClient
 
     try {
       conn = getConnection();
-
       
       return true;
     } catch (Exception e) {
@@ -376,7 +382,7 @@ class WatchdogClient
                  BAM_TIMEOUT);
 
       if (! status.isSuccess())
-        throw new RuntimeException(L.l("{0}: watchdog restartfailed because of '{1}'",
+        throw new RuntimeException(L.l("{0}: watchdog restart failed because of '{1}'",
                                        this, status.getMessage()));
     } catch (RuntimeException e) {
       throw e;
@@ -408,22 +414,31 @@ class WatchdogClient
 
   private ActorSender getConnection()
   {
-    if (_conn == null) {
-      String url = ("http://" + getWatchdogAddress()
-                    + ":" + getWatchdogPort()
-                    + "/hmtp");
-      
-      HmtpClient client = new HmtpClient(url);
+    synchronized (this) {
+      if (_conn == null) {
+        String url = ("http://" + getWatchdogAddress()
+            + ":" + getWatchdogPort()
+            + "/hmtp");
+        
+        HmtpClient client = new HmtpClient(url);
 
-      client.setVirtualHost("admin.resin");
+        try {
+          client.setVirtualHost("admin.resin");
+        
+          String uid = "";
       
-      String uid = "";
-      
-      client.setEncryptPassword(true);
+          client.setEncryptPassword(true);
 
-      client.connect(uid, getResinSystemAuthKey());
+          client.connect(uid, getResinSystemAuthKey());
 
-      _conn = client;
+          _conn = client;
+          client = null;
+        } finally {
+          if (client != null) {
+            client.close();
+          }
+        }
+      }
     }
 
     return _conn;

@@ -29,6 +29,7 @@
 
 package com.caucho.boot;
 
+import com.caucho.server.admin.ControllerStateActionQueryReply;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
 
@@ -39,7 +40,7 @@ public class WebAppRestartCommand extends WebAppCommand
   public WebAppRestartCommand()
   {
     addValueOption("host", "host", "virtual host to make application available on");
-    addValueOption("stage", "stage", "tage to deploy application to, defaults to production");
+    addValueOption("stage", "stage", "stage to deploy application to, defaults to production");
     addValueOption("version", "version", "version of application formatted as <major.minor.micro.qualifier>");
   }
 
@@ -53,20 +54,11 @@ public class WebAppRestartCommand extends WebAppCommand
   protected int doCommand(WebAppDeployClient deployClient,
                           String tag)
   {
-    int code = 0;
+    ControllerStateActionQueryReply result = deployClient.restart(tag);
 
-    if (deployClient.restart(tag)) {
-      System.out.println(L.l("'{0}' is restarted", tag));
+    System.out.println(L.l("'{0}' is restarted", tag));
 
-      code = 0;
-    }
-    else {
-      System.out.println(L.l("'{0}' failed to restart", tag));
-
-      code = 3;
-    }
-
-    return code;
+    return 0;
   }
 
   @Override

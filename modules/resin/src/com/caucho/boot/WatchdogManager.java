@@ -62,7 +62,7 @@ import com.caucho.log.RotateStream;
 import com.caucho.network.listen.TcpSocketLinkListener;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.Authenticator;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.http.HttpProtocol;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.resin.ResinArgs;
@@ -96,7 +96,7 @@ class WatchdogManager implements AlarmListener {
   private BootManagementConfig _management;
   private final ResinSystem _system;
 
-  private Server _server;
+  private ServletService _server;
   private TcpSocketLinkListener _httpPort;
 
   private HashMap<String,WatchdogChild> _watchdogMap
@@ -208,9 +208,15 @@ class WatchdogManager implements AlarmListener {
     if (server == null)
       server = _watchdogMap.get(serverId);
     
-    if (server == null)
-      throw new IllegalStateException(L().l("'{0}' is an unknown server",
-                                            serverId));
+    if (server == null) {
+      if (serverId == null) {
+        throw new IllegalStateException(L().l("Cannot find any <server> or <server-multi> matching a local IP address"));
+      }
+      else {
+        throw new IllegalStateException(L().l("'{0}' is an unknown server",
+                                              serverId));
+      }
+    }
     
     JniBoot boot = new JniBoot();
     Path logDirectory = getLogDirectory();
@@ -456,6 +462,11 @@ class WatchdogManager implements AlarmListener {
       
       serverId = getServerId(serverId, args);
       WatchdogChild watchdog = _watchdogMap.get(serverId);
+      
+      if (watchdog == null) {
+        // env/0fp7
+        watchdog = _watchdogMap.get("default");
+      }
 
       if (watchdog == null)
         throw new ConfigException(L().l("No matching <server> found for start -server '{0}' in '{1}'",

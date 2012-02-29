@@ -61,12 +61,13 @@ import com.caucho.hessian.io.HessianDebugInputStream;
 import com.caucho.hessian.io.SerializerFactory;
 import com.caucho.management.server.SessionManagerMXBean;
 import com.caucho.security.Authenticator;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.PersistentStoreConfig;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.util.RandomUtil;
@@ -101,7 +102,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   private final WebApp _webApp;
   private final SessionManagerAdmin _admin;
 
-  private final Server _servletContainer;
+  private final ServletService _servletContainer;
   private final ClusterServer _selfServer;
   private final int _selfIndex;
 
@@ -1287,12 +1288,12 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     }
 
     if (length > 0) {
-      long time = Alarm.getCurrentTime();
+      long time = CurrentTime.getCurrentTime();
 
       // The QA needs to add a millisecond for each server start so the
       // clustering test will work, but all the session ids are generated
       // based on the timestamp.  So QA sessions don't have milliseconds
-      if (Alarm.isTest())
+      if (CurrentTime.isTest())
         time -= time % 1000;
 
       for (int i = 0; i < 7 && length-- > 0; i++) {
@@ -1716,7 +1717,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
       if (_isClosed)
         return;
 
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
 
       synchronized (_sessions) {
         _sessionIter = _sessions.values(_sessionIter);

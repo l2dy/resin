@@ -30,6 +30,7 @@
 package com.caucho.admin.action;
 
 import com.caucho.security.AdminAuthenticator;
+import com.caucho.security.PasswordUser;
 import com.caucho.util.L10N;
 
 import java.util.logging.Logger;
@@ -43,13 +44,13 @@ public class AddUserAction implements AdminAction
 
   private AdminAuthenticator _adminAuth;
   private String _user;
-  private char []_password;
-  private String []_roles;
+  private char[] _password;
+  private String[] _roles;
 
   public AddUserAction(AdminAuthenticator adminAuth,
                        String user,
-                       char []password,
-                       String []roles)
+                       char[] password,
+                       String[] roles)
   {
     _adminAuth = adminAuth;
     _user = user;
@@ -57,14 +58,12 @@ public class AddUserAction implements AdminAction
     _roles = roles;
   }
 
-  public String execute()
+  public PasswordUser execute()
   {
-    try {
-      _adminAuth.addUser(_user, _password, _roles);
+    _adminAuth.addUser(_user, _password, _roles);
 
-      return L.l("user `{0}' added", _user);
-    } catch (IllegalArgumentException e) {
-      return e.getMessage();
-    }
+    PasswordUser user = _adminAuth.getUserMap().get(_user);
+
+    return user;
   }
 }

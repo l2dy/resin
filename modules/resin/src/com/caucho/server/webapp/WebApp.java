@@ -119,7 +119,6 @@ import com.caucho.env.deploy.EnvironmentDeployInstance;
 import com.caucho.env.deploy.RepositoryDependency;
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.java.WorkDir;
-import com.caucho.jsf.cfg.JsfPropertyGroup;
 import com.caucho.jsp.JspServlet;
 import com.caucho.jsp.cfg.JspConfig;
 import com.caucho.jsp.cfg.JspPropertyGroup;
@@ -149,8 +148,7 @@ import com.caucho.security.Authenticator;
 import com.caucho.security.BasicLogin;
 import com.caucho.security.Login;
 import com.caucho.security.RoleMapManager;
-import com.caucho.server.cache.AbstractProxyCache;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.ExceptionFilterChain;
 import com.caucho.server.dispatch.FilterChainBuilder;
@@ -172,6 +170,7 @@ import com.caucho.server.dispatch.UrlMap;
 import com.caucho.server.dispatch.VersionInvocation;
 import com.caucho.server.host.Host;
 import com.caucho.server.http.StubSessionContextRequest;
+import com.caucho.server.httpcache.AbstractProxyCache;
 import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
@@ -187,6 +186,7 @@ import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webbeans.SessionContextContainer;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.vfs.Dependency;
@@ -223,7 +223,7 @@ public class WebApp extends ServletContextImpl
   // The environment class loader
   private EnvironmentClassLoader _classLoader;
 
-  private Server _server;
+  private ServletService _server;
   private Host _host;
   // The parent
   private WebAppContainer _parent;
@@ -391,7 +391,6 @@ public class WebApp extends ServletContextImpl
   // special
   private int _jspState;
   private JspPropertyGroup _jsp;
-  private JsfPropertyGroup _jsf;
 
   private ArrayList<JspTaglib> _taglibList;
   private JspApplicationContextImpl _jspApplicationContext;
@@ -413,7 +412,7 @@ public class WebApp extends ServletContextImpl
   private final Lifecycle _lifecycle;
 
   private final AtomicInteger _requestCount = new AtomicInteger();
-  private long _lastRequestTime = Alarm.getCurrentTime();
+  private long _lastRequestTime = CurrentTime.getCurrentTime();
   private Pattern _cookieDomainPattern = null;
 
   //
@@ -445,7 +444,7 @@ public class WebApp extends ServletContextImpl
     if (_server == null) {
       throw new IllegalStateException(L.l("{0} requires an active {1}",
                                           getClass().getSimpleName(),
-                                          Server.class.getSimpleName()));
+                                          ServletService.class.getSimpleName()));
     }
     
     _host = controller.getHost();
@@ -666,7 +665,7 @@ public class WebApp extends ServletContextImpl
   /**
    * Gets the dispatch server.
    */
-  public Server getServer()
+  public ServletService getServer()
   {
     return _server;
   }
@@ -696,7 +695,7 @@ public class WebApp extends ServletContextImpl
       _invocationDecoder = _server.getInvocationDecoder();
 
     if (_invocationDecoder == null && _server == null)
-      _invocationDecoder = Server.getCurrent().getInvocationDecoder();
+      _invocationDecoder = ServletService.getCurrent().getInvocationDecoder();
 
     return _invocationDecoder;
   }
@@ -2260,26 +2259,6 @@ public class WebApp extends ServletContextImpl
     return _jsp;
   }
 
-  /**
-   * jsf configuration
-   */
-  public JsfPropertyGroup createJsf()
-  {
-    if (_jsf == null)
-      _jsf = new JsfPropertyGroup();
-
-    return _jsf;
-  }
-
-  /**
-   * Returns the JSF configuration
-   */
-  @Configurable
-  public JsfPropertyGroup getJsf()
-  {
-    return _jsf;
-  }
-
   public boolean isFacesServletConfigured()
   {
     return _servletManager.isFacesServletConfigured();
@@ -2620,6 +2599,24 @@ public class WebApp extends ServletContextImpl
     rImport.init();
 
     log.config("<config-file> is deprecated.  Please use resin:import.");
+  }
+  
+  public boolean isSendfileEnabled()
+  {
+    return _server.isSendfileEnable();
+  }
+  
+  public void addSendfileCount()
+  {
+    _server.addSendfileCount();
+  }
+  
+  /**
+   * Returns the minimum length for a caching sendfile
+   */
+  public long getSendfileMinLength()
+  {
+    return _server.getSendfileMinLength();
   }
 
   /**
@@ -3508,7 +3505,7 @@ public class WebApp extends ServletContextImpl
 
       String serverId = null;
       
-      Server server = Server.getCurrent();
+      ServletService server = ServletService.getCurrent();
       
       if (server != null)
         serverId = server.getServerId();
@@ -3694,7 +3691,7 @@ public class WebApp extends ServletContextImpl
     if (_idleTime < 0)
       return false;
     else
-      return _lastRequestTime + _idleTime < Alarm.getCurrentTime();
+      return _lastRequestTime + _idleTime < CurrentTime.getCurrentTime();
   }
 
   /**
@@ -3855,7 +3852,7 @@ public class WebApp extends ServletContextImpl
       }
 
       if (_oldWebApp != null
-          && Alarm.getCurrentTime() < _oldWebAppExpireTime) {
+          && CurrentTime.getCurrentTime() < _oldWebAppExpireTime) {
         Invocation oldInvocation = new Invocation();
         oldInvocation.copyFrom(invocation);
         oldInvocation.setWebApp(_oldWebApp);
@@ -4533,7 +4530,7 @@ public class WebApp extends ServletContextImpl
   final boolean enterWebApp()
   {
     _requestCount.incrementAndGet();
-    _lastRequestTime = Alarm.getCurrentTime();
+    _lastRequestTime = CurrentTime.getCurrentTime();
 
     return _lifecycle.isActive();
   }
@@ -4689,13 +4686,13 @@ public class WebApp extends ServletContextImpl
       if (! _lifecycle.toStopping())
         return;
 
-      long beginStop = Alarm.getCurrentTime();
+      long beginStop = CurrentTime.getCurrentTime();
 
       clearCache();
       
       while (_requestCount.get() > 0
-             && Alarm.getCurrentTime() < beginStop + _shutdownWaitTime
-             && ! Alarm.isTest()) {
+             && CurrentTime.getCurrentTime() < beginStop + _shutdownWaitTime
+             && ! CurrentTime.isTest()) {
         try {
           Thread.interrupted();
           Thread.sleep(100);
@@ -4821,7 +4818,7 @@ public class WebApp extends ServletContextImpl
   {
     synchronized (this) {
       _status500CountTotal++;
-      _status500LastTime = Alarm.getExactTime();
+      _status500LastTime = CurrentTime.getCurrentTime();
     }
   }
 

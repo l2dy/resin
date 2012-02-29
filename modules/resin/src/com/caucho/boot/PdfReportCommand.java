@@ -31,7 +31,15 @@ package com.caucho.boot;
 
 import com.caucho.config.types.Period;
 import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.PdfReportQueryReply;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
+import com.caucho.vfs.StreamSource;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 
 public class PdfReportCommand extends AbstractManagementCommand
 {
@@ -39,13 +47,14 @@ public class PdfReportCommand extends AbstractManagementCommand
   
   public PdfReportCommand()
   {
-    addValueOption("path", "file", "path to a PDF-generating .php file");
     addValueOption("period", "time", "specifies look-back period of time (default 7D)");
     addValueOption("report", "value", "specifies the report-type key (default Snapshot)");
     addValueOption("logdir", "dir", "PDF output directory (default to resin log)");
+    addValueOption("local-dir", "dir", "writes a local copy of PDF report to a specified directory");
     addFlagOption("snapshot", "saves heap-dump, thread-dump, jmx-dump before generating report");
     addValueOption("profile-time", "time", "turns code profiling on for a time before generating report");
     addValueOption("profile-sample", "time", "specifies profiling sampling frequency (100ms)");
+    addFlagOption("local", "writes a local copy of PDF report");
     addFlagOption("watchdog", "specifies look-back period starting at last Resin start");
   }
   
@@ -89,18 +98,65 @@ public class PdfReportCommand extends AbstractManagementCommand
 
     boolean isSnapshot = args.getArgBoolean("-snapshot", true);
     boolean isWatchdog = args.getArgBoolean("-watchdog", false);
+    boolean isLocal = args.getArgBoolean("-local", false);
+    String localDir = args.getArg("-local-dir");
+    boolean isReturnPdf = isLocal || localDir != null;
 
-    String result = managerClient.pdfReport(path,
-                                            report,
-                                            period,
-                                            logDirectory,
-                                            profileTime,
-                                            samplePeriod,
-                                            isSnapshot,
-                                            isWatchdog);
+    PdfReportQueryReply result = managerClient.pdfReport(path,
+                                                           report,
+                                                           period,
+                                                           logDirectory,
+                                                           profileTime,
+                                                           samplePeriod,
+                                                           isSnapshot,
+                                                           isWatchdog,
+                                                           isReturnPdf);
 
-    System.out.println(result);
+    System.out.println(result.getMessage());
 
+    if (isReturnPdf) {
+      StreamSource streamSource = result.getPdf();
+      try {
+        InputStream in = streamSource.getInputStream();
+        File file;
+
+        String fileName = result.getFileName();
+        if (fileName.lastIndexOf('/') > 0)
+          fileName = fileName.substring(fileName.lastIndexOf('/'));
+        else if (fileName.lastIndexOf('\\') > 0)
+          fileName = fileName.substring(fileName.lastIndexOf('\\'));
+
+        if (localDir != null) {
+          file = new File(localDir, fileName);
+
+          file.getParentFile().mkdirs();
+        }
+        else {
+          file = new File(fileName);
+        }
+
+        FileOutputStream out = null;
+        try {
+          out = new FileOutputStream(file);
+          byte []buffer = new byte[1024];
+          int len = -1;
+          while ((len = in.read(buffer)) > 0)
+            out.write(buffer, 0, len);
+
+          out.flush();
+          System.out.println(L.l("Local copy is written to '{0}'",
+                                 file.toString()));
+        } catch (IOException e) {
+          System.out.println(L.l("Can't write a local copy '{0}'",
+                                 file.toString()));
+        } finally {
+          IoUtil.close(out);
+        }
+
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
     return 0;
   }
 }

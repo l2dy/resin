@@ -41,6 +41,7 @@ import com.caucho.loader.EnvironmentLocal;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.Crc64;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.ThreadDump;
 import com.caucho.vfs.CaseInsensitive;
 import com.caucho.vfs.Path;
@@ -280,7 +281,7 @@ public class CauchoSystem {
 
   public static boolean isTest()
   {
-    return Alarm.isTest();
+    return CurrentTime.isTest();
   }
 
   public static boolean isCaseInsensitive()
@@ -479,9 +480,10 @@ public class CauchoSystem {
   {
     for (String prop : PROPERTIES_64) {
       String value = System.getProperty(prop);
-      
-      if (value != null)
-        return value.indexOf("64") >= 0;
+
+      if (value != null && value.indexOf("64") >= 0) {
+        return true;
+      }
     }
     
     return false;

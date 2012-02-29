@@ -31,7 +31,6 @@ package com.caucho.util;
 
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.logging.Logger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,9 +41,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>LongKeyLruCache is synchronized.
  */
 public class LongKeyLruCache<V> {
-  private static final Logger log
-    = Logger.getLogger(LongKeyLruCache.class.getName());
-  
   private static final int LRU_MASK = 0x3fffffff;
   
   // maximum allowed entries
@@ -86,6 +82,7 @@ public class LongKeyLruCache<V> {
   private final int _lruTimeout;
 
   private final AtomicBoolean _isLruTailRemove = new AtomicBoolean();
+  private final AtomicBoolean _isWaitForTailRemove = new AtomicBoolean();
 
   // counts group 2 updates, rolling over at 0x3fffffff
   private volatile int _lruCounter;
@@ -116,7 +113,7 @@ public class LongKeyLruCache<V> {
     _capacity1 = _capacity / 2;
 
     if (capacity > 32)
-      _lruTimeout = capacity / 32;
+      _lruTimeout = capacity / 8;
     else
       _lruTimeout = 1;
   }
@@ -370,8 +367,9 @@ public class LongKeyLruCache<V> {
       }
     }
 
-    if (replace && oldValue instanceof CacheListener)
+    if (replace && oldValue instanceof CacheListener) {
       ((CacheListener) oldValue).removeEvent();
+    }
 
     return oldValue;
   }
@@ -383,14 +381,21 @@ public class LongKeyLruCache<V> {
       item._lruCounter = _lruCounter;
           
       _size1++;
+      
+      if (_size1 + _size2 - _capacity > 1024) {
+        System.out.println("OVERFLOW: " + _size1 + " " + _size2 + " " + _capacity);
+      }
 
       item._nextLru = _head1;
-      if (_head1 != null)
+      if (_head1 != null) {
         _head1._prevLru = item;
+      }
+      
       _head1 = item;
           
-      if (_tail1 == null)
+      if (_tail1 == null) {
         _tail1 = item;
+      }
     }
   }
 
@@ -488,9 +493,9 @@ public class LongKeyLruCache<V> {
 
   private void removeLru()
   {
-    int overflow = _size1 + _size2 - _capacity;
+    int overflow;
     
-    if (overflow > 0) {
+    while ((overflow = _size1 + _size2 - _capacity) > 0) {
       if (_isLruTailRemove.compareAndSet(false, true)) {
         try {
           // remove LRU items until we're below capacity
@@ -498,6 +503,32 @@ public class LongKeyLruCache<V> {
           }
         } finally {
           _isLruTailRemove.set(false);
+        }
+        
+        if (_isWaitForTailRemove.get()) {
+          synchronized (_isWaitForTailRemove) {
+            _isWaitForTailRemove.set(false);
+            
+            _isWaitForTailRemove.notifyAll();
+          }
+        }
+        
+        return;
+      }
+      else if (overflow < 512) {
+        return;
+      }
+      else {
+        synchronized (_isWaitForTailRemove) {
+          _isWaitForTailRemove.set(true);
+          
+          overflow = _size1 + _size2 - _capacity;
+          if (overflow >= 512) {
+            try {
+              _isWaitForTailRemove.wait(250L);
+            } catch (Exception e) {
+            }
+          }
         }
       }
     }
@@ -575,7 +606,7 @@ public class LongKeyLruCache<V> {
             syncListener = (SyncCacheListener) value;
             
             if (isTail && ! syncListener.startLruRemove()) {
-              item._lruCounter = _lruCounter - _lruTimeout - 2;
+              item._lruCounter = (_lruCounter - _lruTimeout - 2) & LRU_MASK;
               updateLruImpl(item);
               return null;
             }

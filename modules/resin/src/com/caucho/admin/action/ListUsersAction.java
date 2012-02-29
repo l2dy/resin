@@ -34,7 +34,6 @@ import com.caucho.security.PasswordUser;
 import com.caucho.util.L10N;
 
 import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.logging.Logger;
 
 public class ListUsersAction implements AdminAction
@@ -51,36 +50,10 @@ public class ListUsersAction implements AdminAction
     _adminAuth = adminAuth;
   }
 
-  public String execute()
+  public Hashtable<String,PasswordUser> execute()
   {
-    Hashtable<String, PasswordUser> users = _adminAuth.getUserMap();
+    Hashtable<String,PasswordUser> userMap = _adminAuth.getUserMap();
 
-    if (users.size() == 0)
-      return "no users found";
-
-    StringBuilder builder = new StringBuilder();
-
-    for (Iterator<PasswordUser> it = users.values().iterator();
-         it.hasNext(); ) {
-      PasswordUser user = it.next();
-
-      builder.append(user.getPrincipal().getName());
-
-      String []roles = user.getRoles();
-
-      if (roles != null && roles.length > 0) {
-        builder.append(": ");
-        for (int i = 0; i < roles.length; i++) {
-          builder.append(roles[i]);
-          if ((i + 1) < roles.length)
-            builder.append(", ");
-        }
-      }
-
-      if (it.hasNext())
-        builder.append('\n');
-    }
-
-    return builder.toString();
+    return userMap;
   }
 }

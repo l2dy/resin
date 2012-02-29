@@ -29,13 +29,14 @@
 
 package com.caucho.boot;
 
+import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.StringQueryReply;
+import com.caucho.util.IoUtil;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
-
-import com.caucho.server.admin.ManagerClient;
-import com.caucho.util.IoUtil;
 
 public class ThreadDumpCommand extends AbstractManagementCommand
 {
@@ -55,12 +56,12 @@ public class ThreadDumpCommand extends AbstractManagementCommand
                        WatchdogClient client,
                        ManagerClient managerClient)
   {
-    String dump = managerClient.doThreadDump();
+    StringQueryReply result = managerClient.doThreadDump();
 
     String fileName = args.getArg("-file");
 
     if (fileName == null) {
-      System.out.println(dump);
+      System.out.println(result.getValue());
 
       return 0;
     }
@@ -70,7 +71,7 @@ public class ThreadDumpCommand extends AbstractManagementCommand
     try {
       File file = new File(fileName);
       out = new FileWriter(file);
-      out.write(dump);
+      out.write(result.getValue());
       out.flush();
 
       System.out.println("Thread dump was written to `"

@@ -40,6 +40,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -49,6 +50,7 @@ import com.caucho.db.index.SqlIndexAlreadyExistsException;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.ConcurrentArrayList;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
 import com.caucho.util.IoUtil;
@@ -90,6 +92,8 @@ public class DataStore {
   
   private final ConcurrentArrayList<MnodeOrphanListener> _orphanListeners
     = new ConcurrentArrayList<MnodeOrphanListener>(MnodeOrphanListener.class);
+  
+  private final AtomicLong _entryCount = new AtomicLong();
 
   private Alarm _alarm;
 
@@ -155,6 +159,12 @@ public class DataStore {
     throws Exception
   {
     initDatabase();
+    
+    long count = getCountImpl();
+    
+    if (count > 0) {
+      _entryCount.set(count);
+    }
 
     _alarm = new Alarm(new ExpireAlarm());
     // _alarm.queue(_expireTimeout);
@@ -229,7 +239,7 @@ public class DataStore {
   {
     try {
       Blob blob = loadBlob(id);
-      
+
       if (blob != null) {
         InputStream is = blob.getBinaryStream();
 
@@ -500,7 +510,7 @@ public class DataStore {
 
       PreparedStatement stmt = conn.prepareInsert();
       stmt.setBytes(1, id.getHash());
-      stmt.setLong(2, _expireTimeout + Alarm.getCurrentTime());
+      stmt.setLong(2, _expireTimeout + CurrentTime.getCurrentTime());
       stmt.setBinaryStream(3, is, length);
 
       if (is == null)
@@ -512,6 +522,10 @@ public class DataStore {
         log.finer(this + " insert " + id + " length:" + length);
 
       // System.out.println("INSERT: " + id);
+      
+      if (count > 0) {
+        _entryCount.addAndGet(1);
+      }
 
       return count > 0;
     } catch (SqlIndexAlreadyExistsException e) {
@@ -547,7 +561,7 @@ public class DataStore {
       conn = getConnection();
       PreparedStatement pstmt = conn.prepareUpdateExpires();
 
-      long expireTime = _expireTimeout + Alarm.getCurrentTime();
+      long expireTime = _expireTimeout + CurrentTime.getCurrentTime();
 
       pstmt.setLong(1, expireTime);
       pstmt.setBytes(2, id.getHash());
@@ -583,7 +597,7 @@ public class DataStore {
   {
     validateDatabase();
 
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     updateExpire(now);
     
@@ -600,8 +614,11 @@ public class DataStore {
 
       int count = pstmt.executeUpdate();
 
-      if (count > 0)
+      if (count > 0) {
         log.finer(this + " expired " + count + " old data");
+      
+        _entryCount.addAndGet(-count);
+      }
 
       // System.out.println(this + " EXPIRE: " + count);
     } catch (SQLException e) {
@@ -704,8 +721,13 @@ public class DataStore {
   //
   // statistics
   //
-
+  
   public long getCount()
+  {
+    return _entryCount.get();
+  }
+
+  private long getCountImpl()
   {
     DataConnection conn = null;
     ResultSet rs = null;

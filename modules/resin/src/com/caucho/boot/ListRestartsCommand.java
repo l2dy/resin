@@ -29,8 +29,11 @@
 
 package com.caucho.boot;
 
+import java.util.Date;
+
 import com.caucho.config.types.Period;
 import com.caucho.server.admin.ManagerClient;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 
 public class ListRestartsCommand extends AbstractManagementCommand
@@ -39,7 +42,9 @@ public class ListRestartsCommand extends AbstractManagementCommand
 
   public ListRestartsCommand()
   {
-    addValueOption("period", "period", "specifies look back period of time. e.g. '-period 1D' will list restarts since same time yesterday.");
+    addValueOption("period",
+                   "period",
+                   "specifies look back period of time. e.g. '-period 1D' will list restarts since same time yesterday.");
   }
 
   @Override
@@ -60,25 +65,42 @@ public class ListRestartsCommand extends AbstractManagementCommand
 
     final long period = Period.toPeriod(listPeriod);
 
-    String message = managerClient.listRestarts(period);
+    Date since = new Date(CurrentTime.getCurrentTime() - period);
+
+    Date []restarts = managerClient.listRestarts(period);
+    
+    String message;
+
+    if (restarts.length == 0) {
+      message = L.l("Server hasn't restarted since '{1}'",
+                    since);
+    }
+    else if (restarts.length == 1) {
+      StringBuilder resultBuilder = new StringBuilder(L.l(
+        "Server started 1 time since '{0}'", since));
+
+      resultBuilder.append("\n  ");
+      resultBuilder.append(restarts[0]);
+
+      message = resultBuilder.toString();
+    }
+    else {
+      StringBuilder resultBuilder = new StringBuilder(L.l(
+        "Server restarted {0} times since '{1}'",
+        restarts.length,
+        since));
+
+      for (Date restart : restarts) {
+        resultBuilder.append("\n  ");
+        resultBuilder.append(restart);
+      }
+
+      message = resultBuilder.toString();
+    }
+
 
     System.out.println(message);
 
     return 0;
   }
-
-  /*
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l(
-      "usage: bin/resin.sh [-conf <file>] list-restarts -user <user> -password <password> [-period <period>]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   lists server restart times for last 7 days or a period of time if specified"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -period             : specifies look back period of time. e.g. '-period 1D' will list restarts since same time yesterday."));
-  }
-  */
 }

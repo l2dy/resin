@@ -39,7 +39,7 @@ import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.host.Host;
 import com.caucho.server.host.HostController;
 import com.caucho.server.webapp.WebApp;
@@ -49,6 +49,7 @@ import com.caucho.util.Alarm;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.Crc64;
+import com.caucho.util.CurrentTime;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.WriteStream;
 
@@ -79,7 +80,7 @@ public class HmuxDispatchRequest {
   private CharBuffer _cb = new CharBuffer();
 
   private HmuxRequest _request;
-  private Server _server;
+  private ServletService _server;
 
   public HmuxDispatchRequest(HmuxRequest request)
   {
@@ -264,7 +265,7 @@ public class HmuxDispatchRequest {
     
     long crc64 = 0;
 
-    if (! Alarm.isTest())
+    if (! CurrentTime.isTest())
       crc64 = Crc64.generate(crc64, VersionFactory.getFullVersion());
     
     queryServer(os);
@@ -413,7 +414,7 @@ public class HmuxDispatchRequest {
       ClusterServer server = cloudServer.getData(ClusterServer.class);
 
       if (server != null) {
-        String srunHost = server.getAddress() + ":" + server.getPort();
+        String srunHost = server.getIp() + ":" + server.getPort();
 
         boolean isSSL = false; // server.isSSL();
         

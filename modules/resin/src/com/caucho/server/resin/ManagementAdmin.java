@@ -31,30 +31,47 @@ package com.caucho.server.resin;
 
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.LocalActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.boot.LogLevelCommand;
-import com.caucho.boot.WatchdogStatusQuery;
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.NetworkClusterSystem;
 import com.caucho.cloud.topology.CloudServer;
+import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
+import com.caucho.env.repository.CommitBuilder;
+import com.caucho.jmx.MXParam;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ManagementMXBean;
+import com.caucho.quercus.lib.reflection.ReflectionException;
+import com.caucho.server.admin.AddUserQueryReply;
+import com.caucho.server.admin.ControllerStateActionQueryReply;
+import com.caucho.server.admin.DeployClient;
 import com.caucho.server.admin.HmuxClientFactory;
-import com.caucho.server.admin.JmxCallQuery;
-import com.caucho.server.admin.JmxDumpQuery;
-import com.caucho.server.admin.JmxListQuery;
-import com.caucho.server.admin.JmxSetQuery;
-import com.caucho.server.admin.LogLevelQuery;
-import com.caucho.server.admin.PdfReportQuery;
-import com.caucho.server.admin.ThreadDumpQuery;
+import com.caucho.server.admin.JmxCallQueryReply;
+import com.caucho.server.admin.JmxSetQueryReply;
+import com.caucho.server.admin.JsonQueryReply;
+import com.caucho.server.admin.ListJmxQueryReply;
+import com.caucho.server.admin.ListUsersQueryReply;
+import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.PdfReportQueryReply;
+import com.caucho.server.admin.RemoveUserQueryReply;
+import com.caucho.server.admin.StatServiceValuesQueryReply;
+import com.caucho.server.admin.StringQueryReply;
+import com.caucho.server.admin.TagResult;
+import com.caucho.server.admin.WebAppDeployClient;
+import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
+import com.caucho.vfs.ReadStream;
+import com.caucho.vfs.TempOutputStream;
+import com.caucho.vfs.Vfs;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -83,52 +100,208 @@ public class ManagementAdmin extends AbstractManagedObject
     return null;
   }
 
-  /**
-   * Test interface
-   */
   @Override
-  public String hello()
+  public String configDeploy(String serverId,
+                             String stage,
+                             String version,
+                             String message,
+                             InputStream is) throws ReflectionException
   {
-    return "hello, world";
+    CommitBuilder commit = new CommitBuilder();
+
+    if (stage != null)
+      commit.stage(stage);
+
+    commit.type("config");
+    commit.tagKey("resin");
+
+
+    if (message == null)
+      message = "deploy config via REST";
+
+    commit.message(message);
+
+    if (version != null)
+      DeployClient.fillInVersion(commit, version);
+
+    DeployClient client = getWebappDeployClient(serverId);
+
+    client.commitArchive(commit, is);
+
+    return "Deployed config " + commit.getId() + " to " + client.getUrl();
   }
 
   @Override
-  public String listJmx(String serverId,
-                        String pattern,
-                        boolean isPrintAttributes,
-                        boolean isPrintValues,
-                        boolean isPrintOperations,
-                        boolean isPrintAllBeans,
-                        boolean isPrintPlatformBeans)
+  public InputStream configCat(String serverId,
+                                String name,
+                                String stage,
+                                String version,
+                                String message)
+    throws ReflectionException
   {
-    JmxListQuery query = new JmxListQuery(pattern,
-                                          isPrintAttributes,
-                                          isPrintValues,
-                                          isPrintOperations,
-                                          isPrintAllBeans,
-                                          isPrintPlatformBeans);
+    CommitBuilder commit = new CommitBuilder();
+    if (stage != null)
+      commit.stage(stage);
 
-    return (String) query(serverId, query);
-  }
-
-  @Override
-  public String logLevel(String serverId,
-                         String loggersValue,
-                         String levelValue,
-                         String activeTime)
-  {
-    String []loggers = null;
+    commit.type("config");
+    commit.tagKey("resin");
 
     try {
-      loggers = parseValues(loggersValue);
-    } catch (IllegalArgumentException e) {
-      log.log(Level.FINER, e.getMessage(), e);
+      TempOutputStream out = new TempOutputStream();
 
-      return e.toString();
+      DeployClient client = getWebappDeployClient(serverId);
+
+      client.getFile(commit.getId(), name, out);
+
+      out.flush();
+
+      return out.getInputStream();
+    } catch (IOException e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  @Override
+  public String []configLs(String serverId,
+                         String name,
+                         String stage,
+                         String version,
+                         String message)
+    throws ReflectionException
+  {
+
+    CommitBuilder commit = new CommitBuilder();
+    if (stage != null)
+      commit.stage(stage);
+
+    commit.type("config");
+    commit.tagKey("resin");
+
+    try {
+      DeployClient client = getWebappDeployClient(serverId);
+
+      String []files = client.listFiles(commit.getId(), name);
+
+      return files;
+    } catch (IOException e) {
+      throw ConfigException.create(e);
+    }
+  }
+
+  @Override
+  public String configUndeploy(String serverId,
+                               String stage,
+                               String version,
+                               String message)
+    throws ReflectionException
+  {
+    CommitBuilder commit = new CommitBuilder();
+    if (stage != null)
+      commit.stage(stage);
+
+    commit.type("config");
+    commit.tagKey("resin");
+
+    if (message == null)
+      message = "undeploy config via REST";
+
+    commit.message(message);
+
+    if (version != null)
+      DeployClient.fillInVersion(commit, version);
+
+    DeployClient client = getWebappDeployClient(serverId);
+
+    client.undeploy(commit);
+
+    return "Undeployed " + commit.getId() + " from " + client.getUrl();
+  }
+
+  @Override
+  public StringQueryReply addLicense(String serverId,
+                                      boolean isOverwrite,
+                                      String to,
+                                      boolean isRestart,
+                                      InputStream in) throws ReflectionException
+  {
+    String licenseContent = null;
+
+    ReadStream is = Vfs.openRead(in);
+    CharBuffer cb = new CharBuffer();
+    try {
+      int ch;
+      while ((ch = is.read()) >= 0)
+        cb.append((char) ch);
+
+      licenseContent = cb.toString();
+    } catch (IOException e) {
+      throw new ConfigException(L.l(
+        "Failed to read license from request input stream: {0}",
+        e.toString()), e);
+    } finally {
+      if (cb != null)
+        cb.close();
+      if (is != null)
+        is.close();
     }
 
+    if (licenseContent == null || licenseContent.isEmpty()) {
+      throw new ConfigException(L.l(
+        "Failed to read license from request input stream: empty"));
+    }
+
+    ManagerClient client = getManagerClient(serverId);
+
+    return client.addLicense(licenseContent, to, isOverwrite, isRestart);
+  }
+
+  @Override public Date []listRestarts(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "period")
+    String periodStr)
+    throws ReflectionException
+  {
+    final long period = Period.toPeriod(periodStr);
+
+    ManagerClient client = getManagerClient(serverId);
+
+    Date []result = client.listRestarts(period);
+
+    return result;
+  }
+
+  @Override
+  public ListJmxQueryReply listJmx(String serverId,
+                                   String pattern,
+                                   boolean isPrintAttributes,
+                                   boolean isPrintValues,
+                                   boolean isPrintOperations,
+                                   boolean isPrintAllBeans,
+                                   boolean isPrintPlatformBeans)
+  {
+    ManagerClient managerClient = getManagerClient(serverId);
+
+    return managerClient.listJmx(pattern,
+                                 isPrintAttributes,
+                                 isPrintValues,
+                                 isPrintOperations,
+                                 isPrintAllBeans,
+                                 isPrintPlatformBeans);
+
+  }
+
+  @Override
+  public StringQueryReply setLogLevel(String serverId,
+                                       String loggersValue,
+                                       String levelValue,
+                                       String activeTime)
+  {
+    String[] loggers = null;
+
+    loggers = parseValues(loggersValue);
+
     if (loggers.length == 0)
-      loggers = new String []{"", "com.caucho"};
+      loggers = new String[]{"", "com.caucho"};
 
     long period = 0;
 
@@ -137,29 +310,29 @@ public class ManagementAdmin extends AbstractManagedObject
 
     Level level = LogLevelCommand.getLevel("-" + levelValue);
 
-    LogLevelQuery query = new LogLevelQuery(loggers, level, period);
+    ManagerClient managerClient = getManagerClient(serverId);
 
-    return (String) query(serverId, query);
+    return managerClient.setLogLevel(loggers, level, period);
   }
 
   @Override
-  public String dumpThreads(String serverId) {
+  public JsonQueryReply doThreadDump(String serverId)
+  {
+    ManagerClient managerClient = getManagerClient(serverId);
 
-    ThreadDumpQuery query = new ThreadDumpQuery();
-
-    return (String) query(serverId, query);
+    return managerClient.doJsonThreadDump();
   }
 
   @Override
-  public String pdfReport(String serverId,
-                          String path,
-                          String report,
-                          String periodStr,
-                          String logDirectory,
-                          String profileTimeStr,
-                          String samplePeriodStr,
-                          boolean isSnapshot,
-                          boolean isWatchdog)
+  public PdfReportQueryReply pdfReport(String serverId,
+                                        String report,
+                                        String periodStr,
+                                        String logDirectory,
+                                        String profileTimeStr,
+                                        String samplePeriodStr,
+                                        boolean isSnapshot,
+                                        boolean isWatchdog,
+                                        boolean isLoadPdf)
   {
     long period = -1;
 
@@ -176,71 +349,364 @@ public class ManagementAdmin extends AbstractManagedObject
     if (samplePeriodStr != null)
       samplePeriod = Period.toPeriod(samplePeriodStr, 1);
 
-    PdfReportQuery query = new PdfReportQuery(path,
-                                              report,
-                                              period,
-                                              logDirectory,
-                                              profileTime,
-                                              samplePeriod,
-                                              isSnapshot,
-                                              isWatchdog);
+    ManagerClient managerClient = getManagerClient(serverId);
 
-    return (String) query(serverId, query);
+    return managerClient.pdfReport(null,
+                                   report,
+                                   period,
+                                   logDirectory,
+                                   profileTime,
+                                   samplePeriod,
+                                   isSnapshot,
+                                   isWatchdog,
+                                   isLoadPdf);
   }
 
   @Override
-  public String setJmx(String serverId,
-                       String pattern,
-                       String attribute,
-                       String value)
+  public StatServiceValuesQueryReply getStats(String serverId,
+                                               String metersStr,
+                                               String periodStr)
+  throws ReflectionException
   {
-    JmxSetQuery query = new JmxSetQuery(pattern, attribute, value);
+    Date to = new Date(CurrentTime.getCurrentTime());
 
-    return (String) query(serverId, query);
+    ManagerClient managerClient = getManagerClient(serverId);
+    
+    long period = Period.toPeriod(periodStr);
+
+    Date from = new Date(to.getTime() - period);
+
+    String []meters = metersStr.split(",");
+
+    return managerClient.getStats(meters, from, to);
   }
 
   @Override
-  public String callJmx(String serverId,
-                        String pattern,
-                        String operation,
-                        String operationIdx,
-                        String values)
+  public JmxSetQueryReply setJmx(String serverId,
+                                  String pattern,
+                                  String attribute,
+                                  String value)
   {
-    String []params;
-    try {
-      params = parseValues(values);
-    } catch(IllegalArgumentException e) {
-      log.log(Level.FINER, e.getMessage(), e);
+    ManagerClient managerClient = getManagerClient(serverId);
 
-      return e.toString();
-    }
+    return managerClient.setJmx(pattern, attribute, value);
+  }
+
+  @Override
+  public JmxCallQueryReply callJmx(String serverId,
+                                   String pattern,
+                                   String operation,
+                                   String operationIdx,
+                                   String values)
+  {
+    String[] params;
+    params = parseValues(values);
     //
     int operationIndex = -1;
     if (operationIdx != null)
       operationIndex = Integer.parseInt(operationIdx);
 
-    JmxCallQuery query = new JmxCallQuery(pattern,
-                                          operation,
-                                          operationIndex,
-                                          params);
+    ManagerClient managerClient = getManagerClient(serverId);
 
-    return (String) query(serverId, query);
+    return managerClient.callJmx(pattern, operation, operationIndex, params);
   }
 
   @Override
-  public String dumpJmx(String serverId)
+  public ControllerStateActionQueryReply startWebApp(String serverId,
+                                                      String tag,
+                                                      String name,
+                                                      String stage,
+                                                      String host,
+                                                      String version)
+    throws ReflectionException
   {
-    JmxDumpQuery query = new JmxDumpQuery();
+    if (tag != null && name != null)
+      throw new IllegalArgumentException(L.l(
+        "can't specify name '{0}' with tag {1}",
+        name,
+        tag));
 
-    return (String) query(serverId, query);
+    if (tag == null)
+      tag = makeTag(name, stage, host, version);
+
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    ControllerStateActionQueryReply result = deployClient.start(tag);
+
+    return result;
   }
 
   @Override
-  public String getStatus(String serverId)
+  public ControllerStateActionQueryReply stopWebApp(String serverId,
+                                                     String tag,
+                                                     String name,
+                                                     String stage,
+                                                     String host,
+                                                     String version)
+    throws ReflectionException
   {
-    WatchdogStatusQuery query = new WatchdogStatusQuery();
+    if (tag != null && name != null)
+      throw new IllegalArgumentException(L.l(
+        "can't specify name '{0}' with tag {1}",
+        name,
+        tag));
 
-    return (String) query(serverId, query);
+    if (tag == null)
+      tag = makeTag(name, stage, host, version);
+
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    ControllerStateActionQueryReply result = deployClient.stop(tag);
+
+    return result;
+  }
+
+  @Override
+  public ControllerStateActionQueryReply restartWebApp(String serverId,
+                                                        String tag,
+                                                        String name,
+                                                        String stage,
+                                                        String host,
+                                                        String version)
+    throws ReflectionException
+  {
+    if (tag != null && name != null)
+      throw new IllegalArgumentException(L.l(
+        "can't specify name '{0}' with tag {1}",
+        name,
+        tag));
+
+    if (tag == null)
+      tag = makeTag(name, stage, host, version);
+
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    ControllerStateActionQueryReply result = deployClient.restart(tag);
+
+    return result;
+  }
+
+  @Override
+  public String webappDeploy(String serverId,
+                             String context,
+                             String host,
+                             String stage,
+                             String version,
+                             String message,
+                             InputStream is)
+    throws ReflectionException
+  {
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    CommitBuilder commit = new CommitBuilder();
+
+    commit.type("webapp");
+
+    if (stage != null)
+      commit.stage(stage);
+
+    commit.tagKey(host + "/" + context);
+
+    if (version != null)
+      DeployClient.fillInVersion(commit, version);
+
+    if (message == null)
+      message = "deploy " + context + " via REST interface";
+
+    commit.message(message);
+
+    commit.attribute("user", System.getProperty("user.name"));
+
+    deployClient.commitArchive(commit, is);
+
+    String result = "Deployed "
+                    + commit.getId()
+                    + " to "
+                    + deployClient.getUrl();
+
+    return result;
+  }
+
+  @Override
+  public String deployCopy(String serverId,
+                           String sourceContext,
+                           String sourceHost,
+                           String sourceStage,
+                           String sourceVersion,
+                           String targetContext,
+                           String targetHost,
+                           String targetStage,
+                           String targetVersion,
+                           String message) throws ReflectionException
+  {
+
+    if (sourceContext == null)
+      throw new IllegalArgumentException(L.l("missing source parameter"));
+
+    if (sourceHost == null)
+      sourceHost = "default";
+
+    CommitBuilder source = new CommitBuilder();
+    source.type("webapp");
+
+    if (sourceStage != null)
+      source.stage(sourceStage);
+
+    source.tagKey(sourceHost + "/" + sourceContext);
+
+
+    if (targetContext == null)
+      throw new IllegalArgumentException(L.l("missing target parameter"));
+
+    if (targetHost == null)
+      targetHost = "default";
+
+    CommitBuilder target = new CommitBuilder();
+    target.type("webapp");
+
+    if (targetStage != null)
+      target.stage(targetStage);
+
+    target.tagKey(targetHost + "/" + targetContext);
+
+    if (sourceVersion != null)
+      DeployClient.fillInVersion(source, sourceVersion);
+
+    if (targetVersion != null)
+      DeployClient.fillInVersion(source, sourceVersion);
+
+    if (message == null)
+      message = L.l("copy '{0}' to '{1}'", source.getTagKey(), target.getTagKey());
+
+    target.message(message);
+
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    deployClient.copyTag(target, source);
+
+    String result = L.l("copied {0} to {1}", source.getId(), target.getId());
+
+    return result;
+  }
+
+  @Override
+  public TagResult []deployList(String serverId, String pattern)
+    throws ReflectionException
+  {
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    TagResult []result = deployClient.queryTags(pattern);
+
+    return result;
+  }
+
+  @Override
+  public String undeploy(String serverId,
+                         String context,
+                         String host,
+                         String stage,
+                         String version,
+                         String message)
+  throws ReflectionException
+  {
+    if (context == null) {
+      throw new IllegalArgumentException(L.l("missing context parameter"));
+    }
+
+    CommitBuilder commit = new CommitBuilder();
+    commit.type("webapp");
+
+    if (stage != null)
+      commit.stage(stage);
+
+    commit.tagKey(host + "/" + context);
+
+    if (message == null)
+      message = "undeploy " + context + " via REST interface";
+
+    commit.message(message);
+
+    if (version != null)
+      DeployClient.fillInVersion(commit, version);
+
+    WebAppDeployClient deployClient = getWebappDeployClient(serverId);
+
+    deployClient.removeTag(commit);
+
+    String result = L.l("Undeployed {0} from {1}",
+                        context,
+                        deployClient.getUrl());
+
+    return result;
+  }
+
+  @Override
+  public JsonQueryReply doJmxDump(String serverId)
+  {
+    ManagerClient managerClient = getManagerClient(serverId);
+
+    return managerClient.doJmxDump();
+  }
+
+  @Override
+  public AddUserQueryReply addUser(String serverId,
+                                    String user,
+                                    String password,
+                                    String rolesStr)
+  throws ReflectionException
+  {
+    String[] roles;
+    if (rolesStr != null)
+      roles = rolesStr.split("(,|;)");
+    else
+      roles = new String[]{};
+
+    ManagerClient managerClient = getManagerClient(serverId);
+
+    return managerClient.addUser(user, password.toCharArray(), roles);
+  }
+
+  @Override
+  public ListUsersQueryReply listUsers(String serverId)
+    throws ReflectionException
+  {
+    ManagerClient managerClient = getManagerClient(serverId);
+
+    return managerClient.listUsers();
+  }
+
+  @Override
+  public RemoveUserQueryReply removeUser(String serverId,
+                                          String user)
+  throws ReflectionException
+  {
+    ManagerClient managerClient = getManagerClient(serverId);
+
+    return managerClient.removeUser(user);
+  }
+
+  @Override
+  public StringQueryReply getStatus(String serverId)
+  {
+    return null;
+  }
+
+  private String makeTag(String name,
+                         String stage,
+                         String host,
+                         String version)
+  {
+    String tag = stage + "/webapp/" + host;
+
+    if (name.startsWith("/"))
+      tag = tag + name;
+    else
+      tag = tag + '/' + name;
+
+    if (version != null)
+      tag = tag + '-' + version;
+
+    return tag;
   }
 
   private CloudServer getServer(String server)
@@ -264,7 +730,7 @@ public class ManagementAdmin extends AbstractManagedObject
     StringBuilder builder = null;
 
     if (values != null) {
-      char []chars = values.toCharArray();
+      char[] chars = values.toCharArray();
 
       for (int i = 0; i < chars.length; i++) {
         char c = chars[i];
@@ -335,11 +801,13 @@ public class ManagementAdmin extends AbstractManagedObject
     return params.toArray(new String[params.size()]);
   }
 
-  private Object query(String serverId, Serializable query)
-  {
+  private ManagerClient getManagerClient(String serverId) {
     final ActorSender sender;
 
     CloudServer server = getServer(serverId);
+
+    if (server == null)
+      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
 
     if (server.isSelf()) {
       sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
@@ -356,7 +824,40 @@ public class ManagementAdmin extends AbstractManagedObject
       sender = hmuxFactory.create();
     }
 
-    return sender.query("manager@resin.caucho", query);
+    return new ManagerClient(sender);
+  }
+
+  private WebAppDeployClient getWebappDeployClient(String serverId)
+  {
+    final ActorSender sender;
+
+    CloudServer server = getServer(serverId);
+
+    if (server == null)
+      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
+
+    if (server.isSelf()) {
+      sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
+    }
+    else {
+      String authKey = Resin.getCurrent().getResinSystemAuthKey();
+
+      HmuxClientFactory hmuxFactory
+        = new HmuxClientFactory(server.getAddress(),
+                                server.getPort(),
+                                "",
+                                authKey);
+
+      sender = hmuxFactory.create();
+    }
+
+    String url;
+    if (sender instanceof RemoteActorSender)
+      url = ((RemoteActorSender) sender).getUrl();
+    else
+      url = sender.getAddress();
+
+    return new WebAppDeployClient(url, sender);
   }
 
   public InputStream test(String value, InputStream is)

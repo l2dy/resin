@@ -58,7 +58,7 @@ import com.caucho.i18n.CharacterEncoding;
 import com.caucho.java.LineMap;
 import com.caucho.java.LineMapException;
 import com.caucho.java.ScriptStackTrace;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.dispatch.BadRequestException;
 import com.caucho.server.host.Host;
 import com.caucho.server.http.CauchoRequest;
@@ -70,6 +70,7 @@ import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CompileException;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.DisplayableException;
 import com.caucho.util.L10N;
 import com.caucho.util.LineCompileException;
@@ -92,7 +93,7 @@ public class ErrorPageManager {
 
   public static String SHUTDOWN = "com.caucho.shutdown";
   
-  private final Server _server;
+  private final ServletService _server;
   private final Host _host;
   private final WebApp _webApp;
   private WebAppContainer _appContainer;
@@ -104,7 +105,7 @@ public class ErrorPageManager {
   /**
    * Create error page manager.
    */
-  public ErrorPageManager(Server server)
+  public ErrorPageManager(ServletService server)
   {
     this(server, null, null);
   }
@@ -112,7 +113,7 @@ public class ErrorPageManager {
   /**
    * Create error page manager.
    */
-  public ErrorPageManager(Server server, WebApp webApp)
+  public ErrorPageManager(ServletService server, WebApp webApp)
   {
     this(server, null, webApp);
   }
@@ -120,7 +121,7 @@ public class ErrorPageManager {
   /**
    * Create error page manager.
    */
-  public ErrorPageManager(Server server, Host host, WebApp app)
+  public ErrorPageManager(ServletService server, Host host, WebApp app)
     {
     _webApp = app;
 
@@ -130,7 +131,7 @@ public class ErrorPageManager {
     if (_server == null)
       throw new IllegalStateException(L.l("{0} requires an active {1}",
                                           getClass().getSimpleName(),
-                                          Server.class.getSimpleName()));
+                                          ServletService.class.getSimpleName()));
   }
 
   /**
@@ -479,7 +480,7 @@ public class ErrorPageManager {
 
       out.println("<code><pre>");
 
-      if (log.isLoggable(Level.FINE) && ! Alarm.isTest())
+      if (log.isLoggable(Level.FINE) && ! CurrentTime.isTest())
         doStackTrace = true;
 
       if (doStackTrace) {
@@ -528,7 +529,7 @@ public class ErrorPageManager {
       out.println("of this problem.</p>");
 
       out.println("<pre><code>");
-      out.println("Date: " + QDate.formatISO8601(Alarm.getCurrentTime()));
+      out.println("Date: " + QDate.formatISO8601(CurrentTime.getCurrentTime()));
       
       out.println("</code></pre>");
       
@@ -549,7 +550,7 @@ public class ErrorPageManager {
   private void printVersion(PrintWriter out)
     throws IOException
   {
-    Server server = _server;
+    ServletService server = _server;
     String version = null;
 
     if (server == null) {
@@ -863,7 +864,7 @@ public class ErrorPageManager {
     if (s == null)
       return null;
 
-    if (Alarm.isTest()) {
+    if (CurrentTime.isTest()) {
       s = normalizeForTesting(s);
     }
 

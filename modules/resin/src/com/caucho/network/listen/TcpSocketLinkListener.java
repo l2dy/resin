@@ -55,14 +55,16 @@ import com.caucho.env.thread.ThreadPool;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.PortMXBean;
 import com.caucho.management.server.TcpConnectionInfo;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeList;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JsseSSLFactory;
+import com.caucho.vfs.OpenSSLFactory;
 import com.caucho.vfs.QJniServerSocket;
 import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.QSocket;
@@ -80,7 +82,7 @@ public class TcpSocketLinkListener
   private static final Logger log
     = Logger.getLogger(TcpSocketLinkListener.class.getName());
   
-  private static final int ACCEPT_IDLE_MIN = 16;
+  private static final int ACCEPT_IDLE_MIN = 4;
   private static final int ACCEPT_IDLE_MAX = 64;
   
   private static final int ACCEPT_THROTTLE_LIMIT = 1024;
@@ -214,7 +216,7 @@ public class TcpSocketLinkListener
     
     _launcher = new SocketLinkThreadLauncher(this);
     
-    if (Alarm.isTest()) {
+    if (CurrentTime.isTest()) {
       _launcher.setIdleMin(2);
       _launcher.setIdleMax(ACCEPT_IDLE_MAX);
     }
@@ -374,11 +376,13 @@ public class TcpSocketLinkListener
     throws ConfigException
   {
     try {
+      /*
       ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
       Class<?> cl = Class.forName("com.caucho.vfs.OpenSSLFactory", false, loader);
+      */
 
-      _sslFactory = (SSLFactory) cl.newInstance();
+      _sslFactory = new OpenSSLFactory(); // (SSLFactory) cl.newInstance();
 
       return _sslFactory;
     } catch (Throwable e) {
@@ -693,8 +697,8 @@ public class TcpSocketLinkListener
       _throttle = Throttle.createPro();
 
       if (_throttle == null
-          && Server.getCurrent() != null
-          && ! Server.getCurrent().isWatchdog())
+          && ServletService.getCurrent() != null
+          && ! ServletService.getCurrent().isWatchdog())
         throw new ConfigException(L.l("throttle configuration requires Resin Professional"));
     }
 
@@ -1266,7 +1270,7 @@ public class TcpSocketLinkListener
     connections = new TcpSocketLink[_activeConnectionSet.size()];
     _activeConnectionSet.toArray(connections);
 
-    long now = Alarm.getExactTime();
+    long now = CurrentTime.getExactTime();
     TcpConnectionInfo []infoList = new TcpConnectionInfo[connections.length];
 
     for (int i = 0 ; i < connections.length; i++) {
@@ -1361,7 +1365,7 @@ public class TcpSocketLinkListener
   {
     if (! _lifecycle.isActive())
       return false;
-    else if (connectionStartTime + _keepaliveTimeMax < Alarm.getCurrentTime())
+    else if (connectionStartTime + _keepaliveTimeMax < CurrentTime.getCurrentTime())
       return false;
     else if (_keepaliveMax <= _keepaliveAllocateCount.get())
       return false;
@@ -1435,7 +1439,15 @@ public class TcpSocketLinkListener
     _keepaliveThreadCount.incrementAndGet();
 
     try {
-      int result = is.fillWithTimeout(timeout);
+      int result;
+      
+      if (false && _keepaliveThreadCount.get() < 32) {
+        // benchmark perf with memcache
+        result = is.fillWithTimeout(-1);
+      }
+      else {
+        result = is.fillWithTimeout(timeout);
+      }
 
       if (isClosed()) {
         return -1;
@@ -1652,7 +1664,7 @@ public class TcpSocketLinkListener
     if (log.isLoggable(Level.FINE))
       log.fine(this + " closing");
 
-    _launcher.destroy();
+    _launcher.close();
 
     Alarm suspendAlarm = _suspendAlarm;
     _suspendAlarm = null;
@@ -1818,7 +1830,7 @@ public class TcpSocketLinkListener
         _timeoutSet.clear();
         _completeSet.clear();
 
-        long now = Alarm.getCurrentTime();
+        long now = CurrentTime.getCurrentTime();
         
         // wake the launcher in case of freeze
         _launcher.wake();

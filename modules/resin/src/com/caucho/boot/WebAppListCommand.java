@@ -29,10 +29,6 @@
 
 package com.caucho.boot;
 
-import com.caucho.server.admin.TagResult;
-import com.caucho.server.admin.WebAppDeployClient;
-import com.caucho.util.L10N;
-
 public class WebAppListCommand extends DeployListCommand
 {
 }

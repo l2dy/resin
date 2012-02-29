@@ -35,6 +35,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -43,6 +44,7 @@ import javax.sql.DataSource;
 import com.caucho.db.jdbc.DataSourceImpl;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
 import com.caucho.util.JdbcUtil;
@@ -81,7 +83,9 @@ public class MnodeStore implements AlarmListener {
 
   private long _serverVersion;
   private long _startupLastUpdateTime;
-
+  
+  private AtomicLong _entryCount = new AtomicLong();
+  
   private Alarm _alarm;
   
   // private long _expireReaperTimeout = 60 * 60 * 1000L;
@@ -223,6 +227,12 @@ public class MnodeStore implements AlarmListener {
 
     _serverVersion = initVersion();
     _startupLastUpdateTime = initLastUpdateTime();
+    
+    long initCount = getCountImpl();
+    
+    if (initCount > 0) {
+      _entryCount.set(initCount);
+    }
 
     _alarm = new Alarm(this);
     handleAlarm(_alarm);
@@ -519,7 +529,7 @@ public class MnodeStore implements AlarmListener {
         long accessedExpireTimeout = rs.getLong(7);
         long modifiedExpireTimeout = rs.getLong(8);
         long updateTime = rs.getLong(9);
-        long accessTime = Alarm.getExactTime();
+        long accessTime = CurrentTime.getCurrentTime();
         
         HashKey cacheHashKey
           = cacheHash != null ? new HashKey(cacheHash) : null;
@@ -588,12 +598,16 @@ public class MnodeStore implements AlarmListener {
       stmt.setLong(7, _serverVersion);
       stmt.setLong(8, mnodeUpdate.getAccessedExpireTimeout());
       stmt.setLong(9, mnodeUpdate.getModifiedExpireTimeout());
-      stmt.setLong(10, Alarm.getCurrentTime());
+      stmt.setLong(10, CurrentTime.getCurrentTime());
 
       int count = stmt.executeUpdate();
 
       if (log.isLoggable(Level.FINER))
         log.finer(this + " insert key=" + id + " " + mnodeUpdate + " count=" + count);
+      
+      if (count > 0) {
+        _entryCount.addAndGet(1);
+      }
 
       return true;
     } catch (SQLException e) {
@@ -629,7 +643,7 @@ public class MnodeStore implements AlarmListener {
       stmt.setLong(3, _serverVersion);
       stmt.setLong(4, mnodeUpdate.getVersion());
       stmt.setLong(5, mnodeUpdate.getAccessedExpireTimeout());
-      stmt.setLong(6, Alarm.getCurrentTime());
+      stmt.setLong(6, CurrentTime.getCurrentTime());
 
       stmt.setBytes(7, key);
       stmt.setLong(8, mnodeUpdate.getVersion());
@@ -702,15 +716,18 @@ public class MnodeStore implements AlarmListener {
       conn = getConnection();
       PreparedStatement pstmt = conn.prepareExpire();
 
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
 
       pstmt.setLong(1, now);
       pstmt.setLong(2, now);
       
       int count = pstmt.executeUpdate();
 
-      if (count > 0)
+      if (count > 0) {
         log.finer(this + " expired " + count + " old data");
+      
+        _entryCount.addAndGet(-count);
+      }
     } catch (Exception e) {
       e.printStackTrace();
       log.log(Level.FINE, e.toString(), e);
@@ -722,8 +739,13 @@ public class MnodeStore implements AlarmListener {
   //
   // statistics
   //
-
+  
   public long getCount()
+  {
+    return _entryCount.get();
+  }
+
+  private long getCountImpl()
   {
     CacheMapConnection conn = null;
     ResultSet rs = null;
@@ -754,6 +776,7 @@ public class MnodeStore implements AlarmListener {
     return -1;
   }
 
+  @Override
   public void handleAlarm(Alarm alarm)
   {
     if (_dataSource != null) {

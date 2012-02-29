@@ -159,6 +159,45 @@ public class JniStream extends StreamImpl {
     _totalWriteBytes += result;
   }
 
+  @Override
+  public boolean isMmapEnabled()
+  {
+    return _socket.isMmapEnabled();
+  }
+  
+  /*
+  @Override
+  public void writeMmap(long mmapAddress, long mmapOffset, int mmapLength)
+    throws IOException
+  {
+    _socket.writeMmap(mmapAddress, mmapOffset, mmapLength);
+  }
+  */
+  
+  @Override
+  public void writeMmap(long mmapAddress, 
+                        long []mmapBlocks,
+                        long mmapOffset, 
+                        long mmapLength)
+    throws IOException
+  {
+    _socket.writeMmap(mmapAddress, mmapBlocks, mmapOffset, mmapLength);
+  }
+
+  @Override
+  public boolean isSendfileEnabled()
+  {
+    return _socket.isSendfileEnabled();
+  }
+  
+  @Override
+  public void writeSendfile(int fd, long fdOffset, int fdLength)
+    throws IOException
+  {
+    _socket.writeSendfile(fd, fdOffset, fdLength);
+  }
+
+  @Override
   public void flush()
     throws IOException
   {

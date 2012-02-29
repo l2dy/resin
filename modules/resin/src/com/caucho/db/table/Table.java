@@ -40,9 +40,10 @@ import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.Parser;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.xa.DbTransaction;
-import com.caucho.env.thread.TaskWorker;
+import com.caucho.env.thread.AbstractTaskWorker;
 import com.caucho.inject.Module;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.SQLExceptionWrapper;
 import com.caucho.vfs.Path;
@@ -1181,7 +1182,7 @@ public class Table extends BlockStore {
 
     super.close();
 
-    _rowAllocator.destroy();
+    _rowAllocator.close();
   }
 
   private void writeLong(WriteStream os, long value)
@@ -1200,12 +1201,12 @@ public class Table extends BlockStore {
   @Override
   public String toString()
   {
-    int id = Alarm.isTest() ? 1 : getId();
+    int id = CurrentTime.isTest() ? 1 : getId();
     
     return getClass().getSimpleName() + "[" + getName() + ":" + id + "]";
   }
 
-  class RowAllocator extends TaskWorker {
+  class RowAllocator extends AbstractTaskWorker {
     @Override
     public long runTask()
     {

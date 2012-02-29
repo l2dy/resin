@@ -47,6 +47,7 @@ import javax.management.openmbean.CompositeType;
 import com.caucho.config.ConfigException;
 import com.caucho.jmx.Jmx;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.QDate;
 
 public class JmxDumpAction extends AbstractJmxAction implements AdminAction
@@ -62,21 +63,22 @@ public class JmxDumpAction extends AbstractJmxAction implements AdminAction
     MBeanServer server = Jmx.getMBeanServer();
     if (server == null)
       server = ManagementFactory.getPlatformMBeanServer();
+    
+    if (server == null)
+      return null;
 
     StringBuilder sb = new StringBuilder();
     
-    sb.append("{");
-    sb.append("\"create_time\": \""
-              + new Date(Alarm.getCurrentTime()) + "\"\n");
+    long timestamp = CurrentTime.getCurrentTime();
     
-    if (server != null) {
-      sb.append(", \"jmx\": {\n");
-      
-      fillServer(sb, server);
-      
-      sb.append("\n}");
-    }
+    sb.append("{\n");
+    sb.append("  \"create_time\": \"" + new Date(timestamp) + "\",\n");
+    sb.append("  \"timestamp\": " + timestamp + ",\n");
+    sb.append("  \"jmx\" : {\n");
     
+    fillServer(sb, server);
+
+    sb.append("\n  }");
     sb.append("\n}");
     
     return sb.toString();

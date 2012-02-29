@@ -29,7 +29,9 @@
 
 package com.caucho.boot;
 
+import com.caucho.server.admin.JsonQueryReply;
 import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.StringQueryReply;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 
@@ -58,12 +60,14 @@ public class JmxDumpCommand extends JmxCommand
                        WatchdogClient client,
                        ManagerClient managerClient)
   {
-    String dump = managerClient.doJmxDump();
+    JsonQueryReply result = managerClient.doJmxDump();
+
+    JsonQueryReply queryResult = result;
 
     String fileName = args.getArg("-file");
 
     if (fileName == null) {
-      System.out.println(dump);
+      System.out.println(queryResult.getValue());
       return 0;
     }
 
@@ -72,10 +76,10 @@ public class JmxDumpCommand extends JmxCommand
     try {
       File file = new File(fileName);
       out = new FileWriter(file);
-      out.write(dump);
+      out.write(queryResult.getValue());
       out.flush();
 
-      System.out.println(L.l("JMX dump was written to '{0}'", 
+      System.out.println(L.l("JMX dump was written to '{0}'",
                              file.getCanonicalPath()));
 
       return 0;
@@ -86,19 +90,4 @@ public class JmxDumpCommand extends JmxCommand
       IoUtil.close(out);
     }
   }
-
-  /*
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l(
-      "usage: bin/resin.sh [-conf <file>] jmx-dump -user <user> -password <password> [-file <file>]"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   prints a jmx dump taken on remote server"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -file <file>          : file name where jmx dump will be stored"));
-  }
-  */
 }

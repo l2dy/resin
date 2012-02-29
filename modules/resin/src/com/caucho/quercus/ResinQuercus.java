@@ -36,7 +36,7 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.module.ModuleContext;
 import com.caucho.quercus.module.ResinModuleContext;
 import com.caucho.server.webapp.*;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.CacheManagerImpl;
 import com.caucho.server.distcache.DistCacheSystem;
@@ -98,7 +98,7 @@ public class ResinQuercus extends QuercusContext
   @Override
   public long getCurrentTime()
   {
-    return Alarm.getCurrentTime();
+    return CurrentTime.getCurrentTime();
   }
   
   /**
@@ -107,7 +107,7 @@ public class ResinQuercus extends QuercusContext
   @Override
   public long getExactTimeNanoseconds()
   {
-    return Alarm.getExactTimeNanoseconds();
+    return CurrentTime.getExactTimeNanoseconds();
   }
   
   /**
@@ -116,7 +116,7 @@ public class ResinQuercus extends QuercusContext
   @Override
   public long getExactTime()
   {
-    return Alarm.getExactTime();
+    return CurrentTime.getExactTime();
   }
 
   @Override
@@ -165,7 +165,7 @@ public class ResinQuercus extends QuercusContext
   @Override
   public Cache getSessionCache()
   {
-    if (_sessionCache == null && Server.getCurrent() != null) {
+    if (_sessionCache == null && ServletService.getCurrent() != null) {
       ClusterCache cache = new ClusterCache();
       cache.setName("resin:quercus:session");
 

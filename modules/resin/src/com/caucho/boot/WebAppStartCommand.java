@@ -29,6 +29,7 @@
 
 package com.caucho.boot;
 
+import com.caucho.server.admin.ControllerStateActionQueryReply;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
 
@@ -39,7 +40,7 @@ public class WebAppStartCommand extends WebAppCommand
   public WebAppStartCommand()
   {
     addValueOption("host", "host", "virtual host to make application available on");
-    addValueOption("stage", "stage", "tage to deploy application to, defaults to production");
+    addValueOption("stage", "stage", "stage to deploy application to, defaults to production");
     addValueOption("version", "version", "version of application formatted as <major.minor.micro.qualifier>");
   }
 
@@ -53,20 +54,11 @@ public class WebAppStartCommand extends WebAppCommand
   protected int doCommand(WebAppDeployClient deployClient,
                           String tag)
   {
-    int code = 0;
+    ControllerStateActionQueryReply result = deployClient.start(tag);
 
-    if (deployClient.start(tag)) {
-      System.out.println(L.l("'{0}' is started", tag));
+    System.out.println(L.l("'{0}' is started", tag));
 
-      code = 0;
-    }
-    else {
-      System.out.println(L.l("'{0}' failed to start", tag));
-
-      code = 3;
-    }
-
-    return code;
+    return 0;
   }
 
   @Override

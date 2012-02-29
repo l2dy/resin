@@ -177,8 +177,6 @@ class WebSocketContextImpl
     if (_isWriteClosed.getAndSet(true))
       return;
     
-    Thread.dumpStack();
-
     WriteStream out = _controller.getWriteStream();
     
     try {
@@ -405,6 +403,16 @@ class WebSocketContextImpl
     throws IOException
   {
     _listener.onTimeout(this);
+  }
+
+  @Override
+  public void onClose(int closeCode, String closeMessage)
+  {
+    try {
+      _listener.onClose(this);
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
   }
 
   @Override

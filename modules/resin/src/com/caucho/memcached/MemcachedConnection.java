@@ -41,6 +41,7 @@ import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.util.Alarm;
 import com.caucho.util.CharBuffer;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempStream;
@@ -60,6 +61,7 @@ public class MemcachedConnection implements ProtocolConnection
   private CharBuffer _method = new CharBuffer();
   private SetInputStream _setInputStream = new SetInputStream();
   private GetOutputStream _getOutputStream = new GetOutputStream();
+  private StringBuilder _sb = new StringBuilder();
   
   MemcachedConnection(MemcachedProtocol memcache, SocketLink link)
   {
@@ -130,7 +132,7 @@ public class MemcachedConnection implements ProtocolConnection
     } while ((ch = is.read()) >= 0 && ! Character.isWhitespace(ch));
     
     Command command = _commandMap.get(_method);
-    
+
     if (command == null) {
       WriteStream out = getWriteStream();
       
@@ -289,7 +291,7 @@ public class MemcachedConnection implements ProtocolConnection
         timeout = 1000L * expTime;
       }
       else {
-        timeout = expTime * 1000L - Alarm.getCurrentTime();
+        timeout = expTime * 1000L - CurrentTime.getCurrentTime();
       }
 
       boolean isStored = doCommand(conn, key, bytes, timeout, flags);
@@ -524,7 +526,8 @@ public class MemcachedConnection implements ProtocolConnection
       WriteStream out = conn.getWriteStream();
       out.setDisableClose(true);
       
-      CharBuffer cb = new CharBuffer();
+      StringBuilder cb = conn._sb;
+      cb.setLength(0);
       
       while (readKey(rs, cb)) {
         getCache(out, conn.getCache(), cb.toString(), conn, 0);
@@ -543,15 +546,15 @@ public class MemcachedConnection implements ProtocolConnection
       }
 
       out.print("END\r\n");
-      out.flush();
+      // out.flush();
       
       return true;
     }
     
-    private boolean readKey(ReadStream rs, CharBuffer cb)
+    private boolean readKey(ReadStream rs, StringBuilder cb)
       throws IOException
     {
-      cb.clear();
+      cb.setLength(0);
       int ch;
       
       while ((ch = rs.read()) >= 0 && ch == ' ') {
@@ -579,13 +582,13 @@ public class MemcachedConnection implements ProtocolConnection
                             long hash)
       throws IOException
     {
-      ExtCacheEntry entry = cache.getExtCacheEntry(key);
+      ExtCacheEntry entry = cache.getLiveCacheEntry(key);
 
       if (entry == null || entry.isValueNull()) {
         return;
       }
       
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
       
       if (entry.isExpired(now)) {
         return;
@@ -595,7 +598,7 @@ public class MemcachedConnection implements ProtocolConnection
       long unique = getCasKey(valueKey);
       
       if (hash != 0 && hash == unique) {
-        out.print("NOT_MODIFIED\r\n");
+        // out.print("NOT_MODIFIED\r\n");
         // get-if-modified
         return;
       }
@@ -608,11 +611,16 @@ public class MemcachedConnection implements ProtocolConnection
       long bytes = entry.getValueLength();
       out.print(" ");
       out.print(bytes);
+      /*
       out.print(" ");
       out.print(unique);
+      */
       out.print("\r\n");
 
-      cache.loadData(valueKey, out);
+      // cache.loadData(valueKey, out);
+      if (! entry.readData(out, cache.getConfig())) {
+        System.out.println("FAILED_WRITE:");
+      }
 
       out.print("\r\n");
     }
@@ -627,7 +635,7 @@ public class MemcachedConnection implements ProtocolConnection
       WriteStream out = conn.getWriteStream();
       out.setDisableClose(true);
       
-      CharBuffer cb = new CharBuffer();
+      StringBuilder sb = new StringBuilder();
       
       int ch = 0;
       
@@ -635,7 +643,7 @@ public class MemcachedConnection implements ProtocolConnection
       }
       
       for (; ch >= 0 && ch != ' ' && ch != '\n'; ch = rs.read()) {
-        cb.append((char) ch);
+        sb.append((char) ch);
       }
       
       for (; ch == ' '; ch = rs.read()) {
@@ -647,7 +655,7 @@ public class MemcachedConnection implements ProtocolConnection
         hash = 10 * hash + ch - '0';
       }
       
-      getCache(out, conn.getCache(), cb.toString(), conn, hash);
+      getCache(out, conn.getCache(), sb.toString(), conn, hash);
 
       for (; ch >= 0 && ch != '\r' && ch != '\n'; ch = rs.read()) {
       }

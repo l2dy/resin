@@ -86,6 +86,17 @@ abstract public class RandomAccessStream
     throws IOException;
 
   /**
+   * Writes data to the file.
+   */
+  public boolean writeToStream(SendfileOutputStream os, 
+                               long offset, long length,
+                               long []blockAddresses, long blockLength)
+    throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+
+  /**
    * Seeks to the given position in the file.
    */
   abstract public boolean seek(long position);
@@ -120,6 +131,16 @@ abstract public class RandomAccessStream
   abstract public long getFilePointer()
     throws IOException;
   
+  public boolean isMmap()
+  {
+    return false;
+  }
+  
+  public long getMmapAddress() throws IOException
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
   public final boolean isOpen()
   {
     return _useCount.get() > 0;
@@ -147,9 +168,9 @@ abstract public class RandomAccessStream
   
   public final void free()
   {
-    long value = _useCount.getAndDecrement();
+    long value = _useCount.decrementAndGet();
 
-    if (value == 1) {
+    if (value == 0) {
       try {
         closeImpl();
       } catch (IOException e) {
@@ -169,7 +190,7 @@ abstract public class RandomAccessStream
   /**
    * Closes the stream.
    */
-  public void closeImpl() throws IOException
+  protected void closeImpl() throws IOException
   {
   }
 

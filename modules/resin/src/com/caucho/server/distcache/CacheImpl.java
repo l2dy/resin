@@ -34,16 +34,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collection;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Locale;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicLong;
 
-import javax.annotation.PostConstruct;
 import javax.cache.Cache;
 import javax.cache.CacheConfiguration;
 import javax.cache.CacheException;
@@ -51,18 +53,28 @@ import javax.cache.CacheLoader;
 import javax.cache.CacheManager;
 import javax.cache.CacheStatistics;
 import javax.cache.Status;
+import javax.cache.event.CacheEntryEvent;
+import javax.cache.event.CacheEntryExpiredListener;
 import javax.cache.event.CacheEntryListener;
+import javax.cache.event.CacheEntryListenerException;
+import javax.cache.event.CacheEntryReadListener;
+import javax.cache.event.CacheEntryRemovedListener;
+import javax.cache.event.CacheEntryUpdatedListener;
+import javax.cache.event.Filter;
+import javax.cache.mbeans.CacheMXBean;
 
 import com.caucho.config.ConfigException;
-import com.caucho.config.Configurable;
-import com.caucho.config.types.Period;
 import com.caucho.distcache.ByteStreamCache;
-import com.caucho.distcache.CacheSerializer;
 import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.distcache.ObjectCache;
 import com.caucho.env.distcache.CacheDataBacking;
+import com.caucho.env.thread.AbstractWorkerQueue;
 import com.caucho.loader.Environment;
+import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.server.distcache.CacheStoreManager.DataItem;
+import com.caucho.util.Alarm;
+import com.caucho.util.ConcurrentArrayList;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
@@ -73,8 +85,8 @@ import com.caucho.vfs.WriteStream;
  * Implements the distributed cache
  */
 
-public class CacheImpl
-  implements ObjectCache, ByteStreamCache, Closeable
+public class CacheImpl<K,V>
+  implements ObjectCache<K,V>, ByteStreamCache, Closeable
 {
   private static final L10N L = new L10N(CacheImpl.class);
 
@@ -82,28 +94,40 @@ public class CacheImpl
   private CacheStoreManager _manager;
 
   private final String _name;
+  private final String _managerName;
   private final String _guid;
 
   private final CacheConfig _config;
 
-  private Collection<CacheEntryListener> _listeners
-    = new ConcurrentLinkedQueue<CacheEntryListener>();
+  private ConcurrentArrayList<ReadListener<K,V>> _readListeners;
+  private ConcurrentArrayList<UpdatedListener<K,V>> _updatedListeners;
+  private ConcurrentArrayList<CacheEntryExpiredListener> _expiredListeners;
+  private ConcurrentArrayList<RemovedListener<K,V>> _removedListeners;
+  
+  private LoadQueueWorker<K,V> _loadQueue;
 
-  private LruCache<Object,DistCacheEntry> _entryCache;
+  // private LruCache<Object,DistCacheEntry> _entryCache;
+  
+  private final AtomicLong _getCount = new AtomicLong();
+  private final AtomicLong _hitCount = new AtomicLong();
+  private final AtomicLong _missCount = new AtomicLong();
+  private final AtomicLong _putCount = new AtomicLong();
+  private final AtomicLong _removeCount = new AtomicLong();
+  
+  private CacheAdmin _admin = new CacheAdmin();
 
   private boolean _isInit;
   private boolean _isClosed;
 
-  private long _priorMisses = 0;
-  private long _priorHits = 0;
-
   public CacheImpl(CacheManagerImpl localManager,
                    String name,
+                   String managerName,
                    String guid,
                    CacheConfig config)
   {
     _localManager = localManager;
     _name = name;
+    _managerName = managerName;
     _guid = guid;
     _config = config;
     
@@ -116,6 +140,17 @@ public class CacheImpl
   public String getName()
   {
     return _name;
+  }
+  
+  public String getManagerName()
+  {
+    return _managerName;
+  }
+  
+  @Override
+  public CacheManager getCacheManager()
+  {
+    throw new UnsupportedOperationException(getClass().getSimpleName());
   }
   
   public String getGuid()
@@ -208,12 +243,14 @@ public class CacheImpl
       _config.setCacheKey(_manager.createSelfHashKey(_config.getGuid(),
                                                      _config.getKeySerializer()));
 
-      _entryCache = new LruCache<Object,DistCacheEntry>(512);
+      // _entryCache = new LruCache<Object,DistCacheEntry>(512);
       
       Environment.addCloseListener(this);
     }
     
     _manager.initCache(this);
+    
+    _admin.register();
   }
 
   /**
@@ -221,7 +258,7 @@ public class CacheImpl
    */
   public Object peek(Object key)
   {
-    DistCacheEntry cacheEntry = _entryCache.get(key);
+    DistCacheEntry cacheEntry = getDistCacheEntry(key);
 
     return (cacheEntry != null) ? cacheEntry.peek() : null;
   }
@@ -239,11 +276,21 @@ public class CacheImpl
    * store if necessary.
    */
   @Override
-  public Object get(Object key)
+  public V get(Object key)
   {
     DistCacheEntry entry = getDistCacheEntry(key);
+
+    _getCount.incrementAndGet();
+    if (! entry.isValueNull()) {
+      _hitCount.incrementAndGet();
+    }
+    else {
+      _missCount.incrementAndGet();
+    }
+
+    V value = (V) entry.get(_config);
     
-    Object value = entry.get(_config);
+    entryRead(key, value);
     
     return value;
   }
@@ -252,6 +299,7 @@ public class CacheImpl
    * Returns the object with the given key always checking the backing
    * store .
    */
+  @Override
   public Object getExact(Object key)
   {
     DistCacheEntry entry = getDistCacheEntry(key);
@@ -260,18 +308,6 @@ public class CacheImpl
     
     return value;
   }
-
-  /**
-   * Returns the object with the given key, updating the backing
-   * store if necessary.
-   */
-  /*
-  @Override
-  public Object getLazy(Object key)
-  {
-    return getDistCacheEntry(key).getLazy(_config);
-  }
-  */
 
   /**
    * Fills an output stream with the value for a key.
@@ -326,11 +362,12 @@ public class CacheImpl
    * @param value the value of the item to put
    */
   @Override
-  public void put(Object key, Object value)
+  public void put(K key, V value)
   {
     getDistCacheEntry(key).put(value, _config);
 
-    notifyPut(key);
+    _putCount.incrementAndGet();
+    entryUpdate(key, value);
   }
 
   /**
@@ -350,10 +387,10 @@ public class CacheImpl
                            int flags)
     throws IOException
   {
-    return getDistCacheEntry(key).put(is, _config, 
-                                      accessedExpireTimeout,
-                                      modifiedExpireTimeout,
-                                      flags);
+      return getDistCacheEntry(key).put(is, _config, 
+                                        accessedExpireTimeout,
+                                        modifiedExpireTimeout,
+                                        flags);
   }
 
   /**
@@ -404,7 +441,7 @@ public class CacheImpl
                                long version,
                                Object value)
   {
-    put(key, value);
+    put((K) key, (V) value);
 
     return true;
   }
@@ -424,7 +461,7 @@ public class CacheImpl
                                InputStream inputStream)
     throws IOException
   {
-    put(key, inputStream);
+    // put(key, inputStream);
 
     return true;
   }
@@ -435,8 +472,6 @@ public class CacheImpl
                             long version)
   {
     getDistCacheEntry(key).compareAndPut(version, value, valueLength, _config);
-    
-    notifyPut(key);
   }
 
   @Override
@@ -460,11 +495,16 @@ public class CacheImpl
     
     HashKey result = entry.compareAndPut(oldHash, value, _config);
     
+    boolean isChanged;
+    
     if (oldHash == null || oldHash.isNull()) {
-      return result == null || result.isNull();
+      isChanged = (result == null || result.isNull());
     }
-    else
-      return oldHash.equals(result);
+    else {
+      isChanged = oldHash.equals(result);
+    }
+    
+    return isChanged;
   }
 
   @Override
@@ -476,7 +516,12 @@ public class CacheImpl
     
     HashKey result = entry.compareAndPut(oldHash, value, _config);
     
-    return result != null && ! result.isNull();
+    boolean isChanged = result != null && ! result.isNull();
+    
+    if (isChanged)
+      entryUpdate((K) key, (V) value);
+    
+    return isChanged;
   }
 
   @Override
@@ -486,11 +531,7 @@ public class CacheImpl
     
     HashKey oldHash = MnodeEntry.ANY_KEY;
     
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
-    
-    // return result != null && ! result.isNull();
-    
-    return null;
+    return entry.getAndReplace(oldHash, value, _config);
   }
 
   /**
@@ -501,11 +542,14 @@ public class CacheImpl
   @Override
   public boolean remove(Object key)
   {
-    notifyRemove(key);
+    boolean isRemoved = getDistCacheEntry(key).remove(_config);
     
-    getDistCacheEntry(key).remove(_config);
+    if (isRemoved) {
+      entryRemoved(key);
+      _removeCount.incrementAndGet();
+    }
     
-    return true;
+    return isRemoved;
   }
 
   /**
@@ -516,8 +560,6 @@ public class CacheImpl
   @Override
   public boolean remove(Object key, Object oldValue)
   {
-    notifyRemove(key);
-    
     getDistCacheEntry(key).remove(_config);
     
     return true;
@@ -526,9 +568,7 @@ public class CacheImpl
   @Override
   public Object getAndRemove(Object key) throws CacheException
   {
-    notifyRemove(key);
-    
-    return getDistCacheEntry(key).remove(_config);
+    return getDistCacheEntry(key).getAndRemove(_config);
   }
 
   /**
@@ -587,7 +627,8 @@ public class CacheImpl
    *
    * @note If a cacheLoader is configured if an item is not found in the cache.
    */
-  public Map getAll(Collection keys)
+  @Override
+  public Map getAll(Set keys)
   {
     Map result = new HashMap();
 
@@ -603,61 +644,45 @@ public class CacheImpl
   }
 
   /**
-   * Loads an item into the cache if not already there and was returned from  in the optional cache loader.
-   *
-   * @param key
-   */
-  /*
-  @Override
-  public void load(Object key)
-  {
-    if (containsKey(key) || get(key) != null)
-      return;
-
-    Object loaderValue = cacheLoader(key);
-
-    if (loaderValue != null)
-      put(key, loaderValue);
-
-    notifyLoad(key);
-  }
-  */
-
-  /**
-   * Implements the loadAll method for a collection of keys.
-   */
-  /*
-  public void loadAll(Collection keys)
-  {
-    Map<Object, Object> entries = null;
-    CacheLoader loader = _config.getCacheLoader();
-
-    if (loader == null || keys == null || keys.size() == 0)
-      return;
-
-    entries = loader.loadAll(keys);
-
-    if (entries.isEmpty())
-      return;
-
-    for (Entry loaderEntry : entries.entrySet()) {
-      Object loaderKey = loaderEntry.getKey();
-      if (!containsKey(loaderKey) && (get(loaderKey) != null)) {
-        put(loaderKey, loaderEntry.getValue());
-        notifyLoad(loaderKey);
-      }
-    }
-  }
-  */
-
-  /**
    * Adds a listener to the cache.
    */
   @Override
-  public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            boolean synchronous)
+  public boolean registerCacheEntryListener(CacheEntryListener<? super K,? super V> listener,
+                                            Filter filter)
   {
-    _listeners.add(listener);
+    if (listener instanceof CacheEntryReadListener<?,?>) {
+      synchronized (this) {
+        if (_readListeners == null)
+          _readListeners = new ConcurrentArrayList(ReadListener.class);
+      }
+      
+      _readListeners.add(new ReadListener<K,V>(listener, filter));
+    }
+    
+    if (listener instanceof CacheEntryUpdatedListener) {
+      synchronized (this) {
+        if (_updatedListeners == null)
+          _updatedListeners = new ConcurrentArrayList(UpdatedListener.class);
+      }
+      
+      _updatedListeners.add(new UpdatedListener<K,V>(listener, filter));
+    }
+    
+    if (listener instanceof CacheEntryRemovedListener) {
+      synchronized (this) {
+        if (_removedListeners == null)
+          _removedListeners = new ConcurrentArrayList(RemovedListener.class);
+        
+        _removedListeners.add(new RemovedListener<K,V>(listener, filter));
+      }
+    }
+    
+    if (listener instanceof CacheEntryExpiredListener) {
+      synchronized (this) {
+        if (_expiredListeners == null)
+          _expiredListeners = new ConcurrentArrayList<CacheEntryExpiredListener>(CacheEntryExpiredListener.class);
+      }
+    }
     
     return true;
   }
@@ -668,9 +693,33 @@ public class CacheImpl
   @Override
   public boolean unregisterCacheEntryListener(CacheEntryListener listener)
   {
-    _listeners.remove(listener);
+    boolean result = false;
     
-    return true;
+    if (unregister(_readListeners, listener))
+      result = true;
+    
+    if (unregister(_updatedListeners, listener))
+      result = true;
+    
+    if (unregister(_removedListeners, listener))
+      result = true;
+    
+    return result;
+  }
+  
+  private boolean unregister(ConcurrentArrayList<? extends Listener> listeners,
+                             CacheEntryListener listener)
+  {
+    if (listeners != null) {
+      for (Listener<K,V> testListener : listeners) {
+        if (testListener.isMatch(listener)) {
+          listeners.remove(testListener);
+          return true;
+        }
+      }
+    }
+    
+    return false;
   }
 
   /**
@@ -679,7 +728,7 @@ public class CacheImpl
   @Override
   public CacheStatistics getStatistics()
   {
-    return null; // this;
+    return getMBean();
   }
 
   /**
@@ -694,7 +743,7 @@ public class CacheImpl
 
     for (Object item : entries) {
       Map.Entry entry = (Map.Entry) item;
-      put(entry.getKey(), entry.getValue());
+      put((K) entry.getKey(), (V) entry.getValue());
     }
   }
 
@@ -707,7 +756,9 @@ public class CacheImpl
   @Override
   public boolean containsKey(Object key)
   {
-    return _entryCache.get(key) != null;
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    return entry != null && entry.isValid();
   }
 
   public boolean isBackup()
@@ -742,55 +793,9 @@ public class CacheImpl
     value = (loader != null) ? loader.load(key) : null;
 
     if (value != null)
-      put(key, value);
-    notifyLoad(key);
+      put((K) key, (V) value);
 
     return value;
-  }
-
-  protected void notifyLoad(Object key)
-  {
-    /*
-    for (CacheEntryListener listener : _listeners) {
-      listener.onLoad(key);
-    }
-    */
-  }
-
-  protected void notifyEvict(Object key)
-  {
-    /*
-    for (CacheEntryListener listener : _listeners) {
-      listener.onEvict(key);
-    }
-    */
-  }
-
-  protected void notifyClear(Object key)
-  {
-    /*
-    for (CacheEntryListener listener : _listeners) {
-      listener.onClear();
-    }
-    */
-  }
-
-  protected void notifyPut(Object key)
-  {
-    /*
-    for (CacheEntryListener listener : _listeners) {
-      listener.onPut(key);
-    }
-    */
-  }
-
-  protected void notifyRemove(Object key)
-  {
-    /*
-    for (CacheEntryListener listener : _listeners) {
-      listener.onRemove(key);
-    }
-    */
   }
 
   @Override
@@ -804,9 +809,12 @@ public class CacheImpl
   {
     _isClosed = true;
     
+    _admin.unregister();
+    
     _localManager.remove(_guid);
     
     _manager.closeCache(_guid);
+    
   }
   
   public boolean loadData(HashKey valueHash, WriteStream os)
@@ -860,7 +868,7 @@ public class CacheImpl
   public void saveData(Object value)
   {
     ((CacheStoreManager) _manager).writeData(null, value, 
-                                                _config.getValueSerializer());
+                                             _config.getValueSerializer());
   }
   
   public HashKey saveData(InputStream is)
@@ -897,43 +905,165 @@ public class CacheImpl
       throw new IllegalStateException("distributed cache manager not available");
   }
 
-  /**
-   * Provides an iterator over the entries in the the local cache.
-   */
-  protected static class CacheEntrySetIterator<K, V>
-    implements Iterator<Cache.Entry<K, V>>
+  @Override
+  public CacheMXBean getMBean()
   {
-    private Iterator<LruCache.Entry<K, V>> _iterator;
+    return _admin;
+  }
 
-    protected CacheEntrySetIterator(LruCache<K, V> lruCache)
-    {
-      _iterator = lruCache.iterator();
+  @Override
+  public CacheConfiguration getConfiguration()
+  {
+    return _config;
+  }
+
+  @Override
+  public Object invokeEntryProcessor(Object key, 
+                                     EntryProcessor entryProcessor)
+  {
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    if (entry == null || entry.isValueNull())
+      return null;
+    
+    return entryProcessor.process(new MutableEntry(entry));
+  }
+
+  @Override
+  public Future<V> load(K key)
+    throws CacheException
+  {
+      LoadQueueWorker<K,V> loadQueue;
+      
+      synchronized (this) {
+        loadQueue = _loadQueue;
+        
+        if (loadQueue == null) {
+          loadQueue = new LoadQueueWorker<K,V>(this);
+          _loadQueue = loadQueue;
+        }
+      }
+      
+      LoadFuture<K,V> loadFuture = new LoadFuture<K,V>(this, key);
+      
+      loadQueue.offer(loadFuture);
+      loadQueue.wake();
+
+      return loadFuture;
+  }
+
+  @Override
+  public Future<Map<K,? extends V>> loadAll(Set<? extends K> keys)
+    throws CacheException
+  {
+    LoadQueueWorker<K,V> loadQueue;
+    
+    synchronized (this) {
+      loadQueue = _loadQueue;
+      
+      if (loadQueue == null) {
+        loadQueue = new LoadQueueWorker<K,V>(this);
+        _loadQueue = loadQueue;
+      }
     }
+    
+    LoadFuture loadFuture = new LoadFuture(this, keys);
+    
+    loadQueue.offer(loadFuture);
+    loadQueue.wake();
 
-    public Cache.Entry<K,V> next()
-    {
-      if (!hasNext())
-        throw new NoSuchElementException();
+    return loadFuture;
+  }
 
-      LruCache.Entry<K, V> entry = _iterator.next();
-      Cache.Entry<K,V> cacheEntry = (Cache.Entry<K, V>) entry.getValue();
-
-      return new EntryImpl<K, V>(cacheEntry.getKey(),
-                                 cacheEntry.getValue());
+  @Override
+  public void removeAll(Set keys)
+  {
+    for (Object key : keys) {
+      remove(key);
     }
+  }
 
-    public boolean hasNext()
-    {
-      return _iterator.hasNext();
-    }
+  @Override
+  public void removeAll() throws CacheException
+  {
+    for (Object entryObj : this) {
+      Cache.Entry entry = (Cache.Entry) entryObj;
+      
+      remove(entry.getKey());
+    }    
+  }
 
-    /**
-     *
-     */
-    public void remove()
-    {
-      throw new UnsupportedOperationException(getClass().getName());
+  @Override
+  public Iterator<Cache.Entry<K, V>> iterator()
+  {
+    return new EntryIterator<K,V>(_manager.getEntries(), getCacheKey());
+  }
+
+  @Override
+  public Status getStatus()
+  {
+    return Status.STARTED;
+  }
+  
+  private void entryRead(Object key, V value)
+  {
+    ConcurrentArrayList<ReadListener<K,V>> readListeners = _readListeners;
+    
+    if (readListeners == null || readListeners.size() == 0)
+      return;
+    
+    CacheEntryEvent<K,V> event
+      = new CacheEntryEventImpl<K,V>(this, (K) key, value);
+    
+    for (ReadListener<K,V> listener : readListeners) {
+      listener.entryRead(event);
     }
+  }
+  
+  private void entryUpdate(Object key, V value)
+  {
+    ConcurrentArrayList<UpdatedListener<K,V>> updatedListeners = _updatedListeners;
+    
+    if (updatedListeners == null || updatedListeners.size() == 0)
+      return;
+    
+    CacheEntryEvent<K,V> event
+      = new CacheEntryEventImpl<K,V>(this, (K) key, value);
+    
+    for (UpdatedListener<K,V> listener : updatedListeners) {
+      listener.entryUpdated(event);
+    }
+  }
+  
+  private void entryRemoved(Object key)
+  {
+    ConcurrentArrayList<RemovedListener<K,V>> removedListeners = _removedListeners;
+    
+    if (removedListeners == null || removedListeners.size() == 0)
+      return;
+    
+    CacheEntryEvent<K,V> event
+      = new CacheEntryEventImpl<K,V>(this, (K) key, null);
+    
+    for (RemovedListener<K,V> listener : removedListeners) {
+      listener.entryRemoved(event);
+    }
+  }
+
+  @Override
+  public void start() throws CacheException
+  {
+  }
+
+  @Override
+  public void stop() throws CacheException
+  {
+  }
+
+  @Override
+  public Object unwrap(Class cl)
+  {
+    return null;
   }
 
   @Override
@@ -965,126 +1095,440 @@ public class CacheImpl
       return _value;
     }
   }
+  
+  class MutableEntry implements Cache.MutableEntry {
+    private DistCacheEntry _entry;
+    
+    MutableEntry(DistCacheEntry entry)
+    {
+      _entry = entry;
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#getConfiguration()
-   */
-  @Override
-  public CacheConfiguration getConfiguration()
-  {
-    // TODO Auto-generated method stub
-    return null;
+    @Override
+    public boolean exists()
+    {
+      return ! _entry.isValueNull();
+    }
+
+    @Override
+    public void remove()
+    {
+      _entry.remove(_config);
+    }
+
+    @Override
+    public void setValue(Object value)
+    {
+      _entry.put(value, _config);
+    }
+
+    @Override
+    public Object getKey()
+    {
+      return _entry.getKey();
+    }
+
+    @Override
+    public Object getValue()
+    {
+      return _entry.getValue();
+    }
+  }
+  
+  static class EntryIterator<K,V> implements Iterator<Cache.Entry<K,V>> {
+    private Iterator<DistCacheEntry> _storeIterator;
+    private HashKey _cacheKey;
+    
+    private DistCacheEntry _next;
+    
+    EntryIterator(Iterator<DistCacheEntry> storeIterator,
+                  HashKey cacheKey)
+    {
+      _storeIterator = storeIterator;
+      _cacheKey = cacheKey;
+      
+      findNext();
+    }
+
+    @Override
+    public boolean hasNext()
+    {
+      return _next != null;
+    }
+
+    @Override
+    public Entry<K, V> next()
+    {
+      Entry entry = _next;
+      
+      _next = null;
+      
+      findNext();
+      
+      return entry;
+    }
+
+    @Override
+    public void remove()
+    {
+    }
+    
+    private void findNext()
+    {
+      while (_storeIterator.hasNext()) {
+        DistCacheEntry entry = _storeIterator.next();
+        
+        if (_cacheKey.equals(entry.getCacheHash())) {
+          _next = entry;
+          return;
+        }
+      }
+    }
+  }
+  
+  abstract static class Listener<K,V> {
+    abstract boolean isMatch(CacheEntryListener<K,V> listener);
+  }
+  
+  static class ReadListener<K,V> extends Listener<K,V>
+    implements CacheEntryReadListener<K,V> {
+    private CacheEntryReadListener<K,V> _listener;
+    private Filter _filter;
+    
+    ReadListener(CacheEntryListener<? super K,? super V> listener, Filter filter)
+    {
+      _listener = (CacheEntryReadListener<K,V>) listener;
+      _filter = filter;
+    }
+    
+    @Override
+    public boolean isMatch(CacheEntryListener<K,V> listener)
+    {
+      return _listener == listener;
+    }
+
+    @Override
+    public void entryRead(CacheEntryEvent<? extends K,? extends V> event)
+        throws CacheEntryListenerException
+    {
+      if (_filter.evaluate(event)) {
+        _listener.entryRead(event);
+      }
+    }
+  }
+  
+  static class UpdatedListener<K,V> extends Listener<K,V>
+    implements CacheEntryUpdatedListener<K,V> {
+    private CacheEntryUpdatedListener<K,V> _listener;
+    private Filter _filter;
+    
+    UpdatedListener(CacheEntryListener<? super K,? super V> listener, Filter filter)
+    {
+      _listener = (CacheEntryUpdatedListener<K,V>) listener;
+      _filter = filter;
+    }
+    
+    @Override
+    public boolean isMatch(CacheEntryListener<K,V> listener)
+    {
+      return _listener == listener;
+    }
+
+    @Override
+    public void entryUpdated(CacheEntryEvent<? extends K,? extends V> event)
+        throws CacheEntryListenerException
+    {
+      if (_filter.evaluate(event)) {
+        _listener.entryUpdated(event);
+      }
+    }
+  }
+  
+  static class RemovedListener<K,V> extends Listener<K,V>
+    implements CacheEntryRemovedListener<K,V> {
+    private CacheEntryRemovedListener<K,V> _listener;
+    private Filter _filter;
+    
+    RemovedListener(CacheEntryListener<? super K,? super V> listener, Filter filter)
+    {
+      _listener = (CacheEntryRemovedListener<K,V>) listener;
+      _filter = filter;
+    }
+    
+    @Override
+    public boolean isMatch(CacheEntryListener<K,V> listener)
+    {
+      return _listener == listener;
+    }
+
+    @Override
+    public void entryRemoved(CacheEntryEvent<? extends K,? extends V> event)
+        throws CacheEntryListenerException
+    {
+      if (_filter.evaluate(event)) {
+        _listener.entryRemoved(event);
+      }
+    }
   }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#load(java.lang.Object, javax.cache.CacheLoader, java.lang.Object)
-   */
-  @Override
-  public Future load(Object key)
-      throws CacheException
-  {
-    // TODO Auto-generated method stub
-    return null;
+  @SuppressWarnings("serial")
+  static class CacheEntryEventImpl<K,V> extends CacheEntryEvent<K,V> {
+    private K _key;
+    private V _value;
+    
+    CacheEntryEventImpl(Cache<K,V> cache, K key, V value)
+    {
+      super(cache);
+      
+      _key = key;
+      _value = value;
+    }
+    
+    @Override
+    public K getKey()
+    {
+      return _key;
+    }
+    
+    @Override
+    public V getValue()
+    {
+      return _value;
+    }
   }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#loadAll(java.util.Collection, javax.cache.CacheLoader, java.lang.Object)
-   */
-  @Override
-  public Future loadAll(Collection keys)
-      throws CacheException
-  {
-    // TODO Auto-generated method stub
-    return null;
+  
+  static class LoadQueueWorker<K,V> 
+    extends AbstractWorkerQueue<LoadFuture<K,V>> {
+    private CacheImpl<K,V> _cache;
+    
+    LoadQueueWorker(CacheImpl<K,V> cache)
+    {
+      super(256);
+      
+      _cache = cache;
+    }
+    
+    @Override
+    public void process(LoadFuture<K,V> item)
+    {
+      CacheImpl<K,V> cache = _cache;
+      
+      if (cache != null) {
+        item.process(cache);
+      }
+    }
+    
+    void close()
+    {
+      _cache = null;
+    }
   }
+  
+  static class LoadFuture<K,V> implements Future<V> {
+    private CacheImpl<K,V> _cache;
+    
+    private K _key;
+    private Set<K> _keySet;
+    private V _value;
+    
+    private volatile boolean _isDone;
+    
+    LoadFuture(CacheImpl<K,V> cache, K key)
+    {
+      _cache = cache;
+      _key = key;
+    }
+    
+    LoadFuture(CacheImpl<K,V> cache, Set<K> keySet)
+    {
+      _cache = cache;
+      _keySet = keySet;
+    }
+    
+    void process(CacheImpl<K,V> cache)
+    {
+      try {
+        if (_keySet != null) {
+          _value = (V) cache.getAll(_keySet);
+        }
+        else {
+          _value = cache.get(_key);
+        }
+      } finally {
+        _cache = null;
+        
+        synchronized (this) {
+          _isDone = true;
+          notifyAll();
+        }
+      }
+    }
+    
+    @Override
+    public boolean cancel(boolean isCancel)
+    {
+      return false;
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#removeAll()
-   */
-  @Override
-  public void removeAll() throws CacheException
-  {
-    // TODO Auto-generated method stub
+    @Override
+    public V get() throws InterruptedException, ExecutionException
+    {
+      synchronized (this) {
+        while (! _isDone && ! _cache.isClosed()) {
+          try {
+            wait();
+          } catch (Exception e) {
+          }
+        }
+      }
+      
+      return _value;
+    }
+
+    @Override
+    public V get(long time, TimeUnit timeUnit)
+      throws InterruptedException,
+        ExecutionException, TimeoutException
+    {
+      long timeout = timeUnit.toMillis(time);
+      long expireTime = CurrentTime.getCurrentTimeActual() + timeout;
+      
+      synchronized (this) {
+        long now;
+        
+        while (! _isDone
+               && ! _cache.isClosed()
+               && ((now = CurrentTime.getCurrentTimeActual()) < expireTime)) {
+          try {
+            long delta = expireTime - now;
+            
+            wait(delta);
+          } catch (Exception e) {
+          }
+        }
+      }
+      
+      return _value;
+    }
+
+    @Override
+    public boolean isCancelled()
+    {
+      return false;
+    }
+
+    @Override
+    public boolean isDone()
+    {
+      return _isDone;
+    }
     
   }
-
-  /* (non-Javadoc)
-   * @see java.lang.Iterable#iterator()
-   */
-  @Override
-  public Iterator iterator()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#getStatus()
-   */
-  @Override
-  public Status getStatus()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#start()
-   */
-  @Override
-  public void start() throws CacheException
-  {
-    // TODO Auto-generated method stub
+  
+  class CacheAdmin extends AbstractManagedObject implements CacheMXBean {
+    protected void register()
+    {
+      super.registerSelf();
+    }
     
-  }
-
-  /* (non-Javadoc)
-   * @see javax.cache.Lifecycle#stop()
-   */
-  @Override
-  public void stop() throws CacheException
-  {
-    // TODO Auto-generated method stub
+    void unregister()
+    {
+      super.unregisterSelf();
+    }
     
-  }
+    @Override
+    public String getName()
+    {
+      return CacheImpl.this.getName()  + "|" + CacheImpl.this.getManagerName();
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#unwrap(java.lang.Class)
-   */
-  @Override
-  public Object unwrap(Class cl)
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
+    @Override
+    public Status getStatus()
+    {
+      return CacheImpl.this.getStatus();
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#getAll(java.util.Set)
-   */
-  @Override
-  public Map getAll(Set keys)
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
+    @Override
+    public Date getStartAccumulationDate()
+    {
+      return null;
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#invokeEntryProcessor(java.lang.Object, javax.cache.Cache.EntryProcessor)
-   */
-  @Override
-  public Object invokeEntryProcessor(Object key, EntryProcessor entryProcessor)
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
+    @Override
+    public long getCacheHits()
+    {
+      return _hitCount.get();
+    }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#removeAll(java.util.Set)
-   */
-  @Override
-  public void removeAll(Set keys)
-  {
-    // TODO Auto-generated method stub
-    
+    @Override
+    public long getCacheMisses()
+    {
+      return _missCount.get();
+    }
+
+    @Override
+    public float getCacheHitPercentage()
+    {
+      return 100 - getCacheMissPercentage();
+    }
+
+    @Override
+    public float getCacheMissPercentage()
+    {
+      long hits = getCacheHits();
+      long misses = getCacheMisses();
+      
+      if (hits == 0)
+        hits = 1;
+      
+      return (float) (100.0 * misses / (hits + misses));
+    }
+
+    @Override
+    public long getCacheGets()
+    {
+      return _getCount.get();
+    }
+
+    @Override
+    public long getCachePuts()
+    {
+      return _putCount.get();
+    }
+
+    @Override
+    public long getCacheRemovals()
+    {
+      return _removeCount.get();
+    }
+
+    @Override
+    public float getAverageGetMillis()
+    {
+      return 0;
+    }
+
+    @Override
+    public float getAveragePutMillis()
+    {
+      return 0;
+    }
+
+    @Override
+    public float getAverageRemoveMillis()
+    {
+      return 0;
+    }
+
+    @Override
+    public long getCacheEvictions()
+    {
+      return 0;
+    }
+
+    @Override
+    public void clearStatistics()
+    {
+    }
   }
 }

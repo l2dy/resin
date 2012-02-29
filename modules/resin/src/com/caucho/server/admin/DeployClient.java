@@ -37,18 +37,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import com.caucho.admin.RemoteAdminService;
 import com.caucho.bam.BamError;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.ServiceUnavailableException;
 import com.caucho.bam.actor.ActorSender;
-import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.query.QueryCallback;
 import com.caucho.cloud.deploy.CopyTagQuery;
 import com.caucho.cloud.deploy.RemoveTagQuery;
 import com.caucho.cloud.deploy.SetTagQuery;
+import com.caucho.config.ConfigException;
 import com.caucho.env.git.GitCommitJar;
 import com.caucho.env.git.GitCommitTree;
 import com.caucho.env.git.GitObjectStream;
@@ -58,8 +57,8 @@ import com.caucho.env.repository.RepositoryException;
 import com.caucho.env.repository.RepositoryTagEntry;
 import com.caucho.env.repository.RepositoryTagListener;
 import com.caucho.hmtp.HmtpClient;
-import com.caucho.server.cluster.Server;
-import com.caucho.util.Alarm;
+import com.caucho.server.cluster.ServletService;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.InputStreamSource;
@@ -94,7 +93,7 @@ public class DeployClient implements Repository
   
   public DeployClient(String serverId)
   {
-    Server server = Server.getCurrent();
+    ServletService server = ServletService.getCurrent();
 
     if (server == null)
       throw new IllegalStateException(L.l("DeployClient was not called in a Resin context. For external clients, use the DeployClient constructor with host,port arguments."));
@@ -102,7 +101,7 @@ public class DeployClient implements Repository
     _bamClient = server.createAdminClient(getClass().getSimpleName());
 
     //_deployAddress = "deploy@" + serverId + ".resin.caucho";
-    _deployAddress = "deploy@resin.caucho";
+    _deployAddress = DeployActor.address;
   }
   
   public DeployClient(String url, ActorSender client)
@@ -111,7 +110,7 @@ public class DeployClient implements Repository
     
     _url = url;
 
-    _deployAddress = "deploy@resin.caucho";
+    _deployAddress = DeployActor.address;
   }
   
   public DeployClient(String host, int port,
@@ -129,7 +128,7 @@ public class DeployClient implements Repository
 
       _bamClient = client;
     
-      _deployAddress = "deploy@resin.caucho";
+      _deployAddress = DeployActor.address;
     } catch (RemoteConnectionFailedException e) {
       throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server and make sure the server has started and that <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
                                                     url, e.getMessage()),
@@ -468,11 +467,11 @@ public class DeployClient implements Repository
    * @param tag the encoded controller name
    *
    */
-  public Boolean restart(String tag)
+  public ControllerStateActionQueryReply restart(String tag)
   {
     ControllerRestartQuery query = new ControllerRestartQuery(tag);
 
-    return (Boolean) query(query);
+    return (ControllerStateActionQueryReply) query(query);
   }
 
   /**
@@ -482,11 +481,11 @@ public class DeployClient implements Repository
    *
    * @deprecated
    */
-  public Boolean start(String tag)
+  public ControllerStateActionQueryReply start(String tag)
   {
     ControllerStartQuery query = new ControllerStartQuery(tag);
 
-    return (Boolean) query(query);
+    return (ControllerStateActionQueryReply) query(query);
   }
 
   /**
@@ -496,11 +495,11 @@ public class DeployClient implements Repository
    *
    * @deprecated
    */
-  public Boolean stop(String tag)
+  public ControllerStateActionQueryReply stop(String tag)
   {
     ControllerStopQuery query = new ControllerStopQuery(tag);
 
-    return (Boolean) query(query);
+    return (ControllerStateActionQueryReply) query(query);
   }
 
   /**
@@ -572,7 +571,7 @@ public class DeployClient implements Repository
                                             e);
     }
   }
-  
+
   public void close()
   {
     _bamClient.close();
@@ -585,6 +584,30 @@ public class DeployClient implements Repository
       return getClass().getSimpleName() + "[" + _deployAddress + "]";
     else
       return getClass().getSimpleName() + "[" + _bamClient + "]";
+  }
+
+  public static final void fillInVersion(CommitBuilder commit,
+                                         String version)
+  {
+    String []parts = version.split("\\.");
+    if (parts.length < 2)
+      throw new ConfigException(L.l(
+        "erroneous version '{0}'. Version expected in format %d.%d[.%d[.%s]]",
+        version));
+
+    int major = Integer.parseInt(parts[0]);
+    int minor = Integer.parseInt(parts[1]);
+    int micro = 0;
+
+    if (parts.length > 2)
+      micro = Integer.parseInt(parts[2]);
+
+    String qualifier = null;
+
+    if (parts.length == 4)
+      qualifier = parts[3];
+
+    commit.version(major, minor, micro, qualifier);
   }
 
   /* (non-Javadoc)
@@ -722,13 +745,13 @@ public class DeployClient implements Repository
     
     boolean waitForDone(long timeout)
     {
-      long expires = Alarm.getCurrentTimeActual() + timeout;
+      long expires = CurrentTime.getCurrentTimeActual() + timeout;
 
       synchronized (this) {
         long delta;
         
         while (! isDone()
-               && (delta = (expires - Alarm.getCurrentTimeActual())) > 0) {
+               && (delta = (expires - CurrentTime.getCurrentTimeActual())) > 0) {
           try {
             Thread.interrupted();
             wait(delta);

@@ -88,9 +88,10 @@ abstract public class FrameInputStream extends InputStream
     throws IOException
   {
     long length = getLength();
-    
-    if (length > 0)
+
+    if (length > 0) {
       skip(length);
+    }
 
     while (true) {
       if (! readFrameHeaderImpl())
@@ -215,7 +216,9 @@ abstract public class FrameInputStream extends InputStream
           closeCode = 1000;
           closeMessage = "ok";
         }
-
+        
+        _cxt.onClose(closeCode, closeMessage);
+        
         return false;
       } finally {
         closeError(closeCode, closeMessage);

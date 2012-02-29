@@ -8,10 +8,12 @@
 require_once "WEB-INF/php/graph_flot.php";
 
 global $g_server_id;
+global $g_server_index;
+global $g_si;
+global $g_label;
 global $g_mbean_server;
 global $g_resin;
 global $g_server;
-global $g_has_graphs;
 global $g_is_professional;
 
 global $g_tail_objects;
@@ -61,6 +63,8 @@ function mbean_init()
 {
   global $g_server_id;
   global $g_server_index;
+  global $g_si;
+  global $g_label;
   global $g_mbean_server;
   global $g_resin;
   global $g_server;
@@ -105,13 +109,29 @@ function mbean_init()
       $is_valid = false;
     }
   }
+  
+  $g_si = sprintf("%02d", $g_server_index);
+  $g_label = "$g_si - $g_server_id";
 
   if ($g_mbean_server) {
     $g_resin = $g_mbean_server->lookup("resin:type=Resin");
     $g_server = $g_mbean_server->lookup("resin:type=Server");
     
     $g_is_professional = $g_resin->Professional;
-
+    
+    /*
+    echo "<!--\n";
+    echo "g_server_id = $g_server_id\n";
+    echo "g_server_index = $g_server_index\n";
+    echo "g_si = $g_si\n";
+    echo "g_label = $g_label\n";
+    echo "g_mbean_server = $g_mbean_server\n";
+    echo "g_resin = $g_resin\n";
+    echo "g_server = $g_server\n";
+    echo "g_is_professional = $g_is_professional\n";
+    echo "-->\n";    
+		*/
+    
     return $is_valid;
   }
   else
@@ -1328,5 +1348,17 @@ function require_professional($msg = "This feature requires Resin Professional a
   
   return true;
 }
+
+function get_param($current, $name, $default=null)
+{
+  if ($current)
+    return $current;
+    
+  if ($_REQUEST[$name])
+    return $_REQUEST[$name];
+    
+  return $default;
+}
+
 
 ?>

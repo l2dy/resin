@@ -10,7 +10,29 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.25 - snapshot">
+<s2 title="4.0.26 - Feb 29, 2012">
+<ul>
+<li>cli: added config-undeploy command</li>
+<li>pdf-report: added option to save reports locally</li>
+<li>debian: changed default Resin Daemon user and group to www-data</li>
+<li>xa: change timeout message to include EXTRA_TIMEOUT (#4927, rep by Shinomiya Nobuaki)</li>
+<li>config: tiered *.xml files belong in ${tier}-inf/*.xml and ${tier}-inf/*.jar (#4952)</li>
+<li>watchdog: improve error message when &lt;user-name> is an invalid user (#4942)</li>
+<li>web-server: HttpProxy needs to query DNS on timeout to pick up changes (#4903, rep by B. Plump)</li>
+<li>kernel: split CurrentTime from Alarm for embedded applications (#4889)</li>
+<li>watchdog: add allow-non-reserved-ip as a &lt;server> argument for private networks (#4941, rep by georgbuschbeck)</li>
+<li>http: added sendfile() for large files</li>
+<li>watchdog: Resin pwd is set to root-directory (#4928, rep by Trung Nguyen)</li>
+<li>mod_caucho: send resolved IP address for cluster (#4945)</li>
+<li>thread: update threading architecture</li>
+<li>cli: password-generate issue with --user (#4938)</li>
+<li>websocket/hessian: websocket frame must be read fully on hessian end (#4943)</li>
+<li>jcache: cache annotations (@CacheResult, @CachePut)</li>
+<li>websocket: debug threaddump not removed (#bhauer, #4940)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.25 - Jan 24, 2012">
 <ul>
 <li>cache: validate/remove corrupted blob rows (#4919, rep by Keith Fetterman)</li>
 <li>cache: remove corrupted database on restart (#4919, rep by Keith Fetterman)</li>

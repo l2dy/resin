@@ -54,7 +54,7 @@ import com.caucho.vfs.i18n.EncodingWriter;
  * streams.
  */
 public class WriteStream extends OutputStreamWithBuffer
-    implements LockableStream
+implements LockableStream, SendfileOutputStream
 {
   private static final byte []lfBytes = new byte[] {'\n'};
   private static final byte []crBytes = new byte[] {'\r'};
@@ -594,9 +594,9 @@ public class WriteStream extends OutputStreamWithBuffer
       return;
 
     byte []writeBuffer = _writeBuffer;
+    int writeLength = _writeLength;
 
     while (length > 0) {
-      int writeLength = _writeLength;
       int sublen = writeBuffer.length - writeLength;
 
       if (sublen <= 0) {
@@ -605,15 +605,40 @@ public class WriteStream extends OutputStreamWithBuffer
         writeLength = 0;
         sublen = writeBuffer.length - writeLength;
       }
+      
       if (length < sublen)
         sublen = length;
 
-      for (int i = sublen - 1; i >= 0; i--)
+      for (int i = sublen - 1; i >= 0; i--) {
         writeBuffer[writeLength + i] = (byte) buffer[offset + i];
+      }
 
-      _writeLength = writeLength + sublen;
+      writeLength += sublen;
       offset += sublen;
       length -= sublen;
+    }
+    
+    _writeLength = writeLength;
+  }
+  
+  public final void printUtf8(String value, int offset, int length)
+    throws IOException
+  {
+    for (int i = 0; i < length; i++) {
+      int ch = value.charAt(offset + i);
+      
+      if (ch < 0x80) {
+        write(ch);
+      }
+      else if (ch < 0x800) {
+        write(0xc0 | (ch >> 6));
+        write(0x80 | (ch & 0x3f));
+      }
+      else {
+        write(0xe0 | (ch >> 12));
+        write(0x80 | ((ch >> 6) & 0x3f));
+        write(0x80 | (ch & 0x3f));
+      }
     }
   }
 
@@ -1451,6 +1476,74 @@ public class WriteStream extends OutputStreamWithBuffer
       else
         return false;
     }
+  }
+
+  @Override
+  public boolean isMmapEnabled()
+  {
+    return _source.isMmapEnabled();
+  }
+
+  @Override
+  public boolean isSendfileEnabled()
+  {
+    return _source.isSendfileEnabled();
+  }
+
+  /*
+  @Override
+  public void writeMmap(long mmapAddress, long mmapOffset, int mmapLength)
+    throws IOException
+  {
+    if (_writeLength > 0) {
+      int writeLength = _writeLength;
+      _writeLength = 0;
+      _position += writeLength;
+      
+      _source.write(_writeBuffer, 0, writeLength, false);
+    }
+
+    _source.writeMmap(mmapAddress, mmapOffset, mmapLength);
+    
+    _position += mmapLength;
+  }
+  */
+  
+  @Override
+  public void writeMmap(long mmapAddress,
+                        long []mmapBlocks,
+                        long mmapOffset, 
+                        long mmapLength)
+    throws IOException
+  {
+    if (_writeLength > 0) {
+      int writeLength = _writeLength;
+      _writeLength = 0;
+      _position += writeLength;
+      
+      _source.write(_writeBuffer, 0, writeLength, false);
+    }
+
+    _source.writeMmap(mmapAddress, mmapBlocks, mmapOffset, mmapLength);
+    
+    _position += mmapLength;
+  }
+
+  @Override
+  public void writeSendfile(int fd, long fdOffset, int fdLength)
+    throws IOException
+  {
+    if (_writeLength > 0) {
+      int writeLength = _writeLength;
+      _writeLength = 0;
+      _position += writeLength;
+      
+      _source.write(_writeBuffer, 0, writeLength, false);
+    }
+    
+    _source.writeSendfile(fd, fdOffset, fdLength);
+    
+    _position += fdLength;
   }
 
   @Override

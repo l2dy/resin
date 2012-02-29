@@ -33,6 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.caucho.env.meter.ActiveTimeSensor;
 import com.caucho.env.meter.AbstractMeter;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 
 public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSensor {
   private final double _scale;
@@ -55,6 +56,8 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
   // for 95%
   private long _lastStdTotalCount;
   private double _lastStdSum;
+  
+  private double _avg;
 
   public ActiveTimeMeter(String name)
   {
@@ -63,9 +66,10 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
     _scale = 1.0;
   }
 
+  @Override
   public final long start()
   {
-    long startTime = Alarm.getCurrentTime();
+    long startTime = CurrentTime.getCurrentTime();
 
     long activeCount = _activeCount.incrementAndGet();
 
@@ -78,12 +82,13 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
     return startTime;
   }
 
+  @Override
   public final void end(long startTime)
   {
     _totalCount.incrementAndGet();
     _activeCount.decrementAndGet();
 
-    long endTime = Alarm.getCurrentTime();
+    long endTime = CurrentTime.getCurrentTime();
 
     long value = endTime - startTime;
 
@@ -125,7 +130,7 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
   /**
    * Return the probe's next average.
    */
-  public final double sample()
+  public final void sample()
   {
     synchronized (_lock) {
       long count = _totalCount.get();
@@ -136,11 +141,19 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
       double lastSum = _lastAvgSum;
       _lastAvgSum = sum;
 
-      if (count == lastCount)
-        return 0;
-      else
-        return _scale * (sum - lastSum) / (double) (count - lastCount);
+      if (count == lastCount) {
+        _avg =  0;
+      }
+      else {
+        _avg = _scale * (sum - lastSum) / (double) (count - lastCount);
+      }
     }
+  }
+  
+  @Override
+  public final double calculate()
+  {
+    return _avg;
   }
 
   /**
@@ -214,55 +227,93 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
   }
 
   class ActiveCountProbe extends AbstractMeter {
+    private double _value;
+    
     ActiveCountProbe(String name)
     {
       super(name);
     }
 
-    public double sample()
+    @Override
+    public void sample()
     {
-      return sampleActiveCount();
+      _value = sampleActiveCount();
+    }
+    
+    @Override
+    public double calculate()
+    {
+      return _value;
     }
   }
 
   class ActiveCountMaxProbe extends AbstractMeter {
+    private double _value;
+    
     ActiveCountMaxProbe(String name)
     {
       super(name);
     }
 
-    public double sample()
+    @Override
+    public void sample()
     {
-      return sampleActiveCountMax();
+      _value = sampleActiveCountMax();
+    }
+    
+    @Override
+    public double calculate()
+    {
+      return _value;
     }
   }
 
   class TotalCountProbe extends AbstractMeter {
+    private double _value;
+    
     TotalCountProbe(String name)
     {
       super(name);
     }
 
-    public double sample()
+    @Override
+    public void sample()
     {
-      return sampleTotalCount();
+      _value = sampleTotalCount();
+    }
+    
+    @Override
+    public double calculate()
+    {
+      return _value;
     }
   }
 
   class MaxProbe extends AbstractMeter {
+    private double _value;
+    
     MaxProbe(String name)
     {
       super(name);
     }
 
-    public double sample()
+    @Override
+    public void sample()
     {
-      return sampleMax();
+      _value = sampleMax();
+    }
+    
+    @Override
+    public double calculate()
+    {
+      return _value;
     }
   }
 
   class SigmaProbe extends AbstractMeter {
     private final int _n;
+    
+    private double _value;
 
     SigmaProbe(String name, int n)
     {
@@ -271,9 +322,16 @@ public final class ActiveTimeMeter extends AbstractMeter implements ActiveTimeSe
       _n = n;
     }
 
-    public double sample()
+    @Override
+    public void sample()
     {
-      return sampleSigma(_n);
+      _value = sampleSigma(_n);
+    }
+    
+    @Override
+    public double calculate()
+    {
+      return _value;
     }
   }
 }

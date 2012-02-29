@@ -75,7 +75,7 @@ import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.server.admin.Management;
 import com.caucho.server.admin.StatSystem;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.cluster.ServerConfig;
 import com.caucho.server.cluster.ServletContainerConfig;
 import com.caucho.server.cluster.ServletSystem;
@@ -83,6 +83,7 @@ import com.caucho.server.resin.BootConfig.BootType;
 import com.caucho.server.resin.ResinArgs.BoundPort;
 import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 import com.caucho.vfs.MemoryPath;
@@ -140,7 +141,7 @@ public class Resin
   private CloudServer _selfServer;
   
   private ServletContainerConfig _servletContainerConfig;
-  private Server _servletSystem;
+  private ServletService _servletSystem;
 
   private long _initialStartTime;
   private long _startTime;
@@ -177,7 +178,7 @@ public class Resin
    */
   public Resin(ResinArgs args)
   {
-    _startTime = Alarm.getCurrentTime();
+    _startTime = CurrentTime.getCurrentTime();
     
     _args = args;
     
@@ -522,7 +523,7 @@ public class Resin
   /**
    * Returns the active server.
    */
-  public Server getServer()
+  public ServletService getServer()
   {
     return _servletSystem;
   }
@@ -540,7 +541,7 @@ public class Resin
     return _selfServer;
   }
 
-  public Server createServer()
+  public ServletService createServer()
   {
     if (_servletSystem == null) {
       configure();
@@ -720,7 +721,7 @@ public class Resin
       
       _resinSystem.start();
 
-      log().info(this + " started in " + (Alarm.getExactTime() - _startTime) + "ms");
+      log().info(this + " started in " + (CurrentTime.getExactTime() - _startTime) + "ms");
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -898,7 +899,7 @@ public class Resin
     else if (isEmbedded()) { 
       _bootServerConfig = joinEmbed();
     }
-    else if (Alarm.isTest()) {
+    else if (CurrentTime.isTest()) {
       _bootServerConfig = joinTest();
     }
     else if (isWatchdog()) {

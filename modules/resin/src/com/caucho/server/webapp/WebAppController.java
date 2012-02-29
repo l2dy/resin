@@ -45,10 +45,11 @@ import com.caucho.env.deploy.DeployConfig;
 import com.caucho.env.deploy.DeployControllerAdmin;
 import com.caucho.env.deploy.EnvironmentDeployController;
 import com.caucho.inject.Module;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.host.Host;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.vfs.Path;
 
 /**
@@ -261,7 +262,7 @@ public class WebAppController
     return _container;
   }
   
-  public Server getWebManager()
+  public ServletService getWebManager()
   {
     return _container.getServer();
   }
@@ -566,7 +567,7 @@ public class WebAppController
     webApp.setDynamicDeploy(isDynamicDeploy());
 
     if (_oldWebAppController != null
-        && Alarm.getCurrentTime() < _oldWebAppExpireTime) {
+        && CurrentTime.getCurrentTime() < _oldWebAppExpireTime) {
       webApp.setOldWebApp(_oldWebAppController.request(),
                           _oldWebAppExpireTime);
     }
@@ -692,7 +693,7 @@ public class WebAppController
   @Override
   public String toString()
   {
-    if (com.caucho.util.Alarm.isTest())
+    if (com.caucho.util.CurrentTime.isTest())
       return getClass().getSimpleName() + "[" + getId() + "]";
     else
       return getClass().getSimpleName() + "$" + System.identityHashCode(this) + "[" + getId() + "]";

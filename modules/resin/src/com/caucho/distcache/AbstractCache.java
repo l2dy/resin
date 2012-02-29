@@ -51,6 +51,8 @@ import javax.cache.CacheManager;
 import javax.cache.CacheStatistics;
 import javax.cache.Status;
 import javax.cache.event.CacheEntryListener;
+import javax.cache.event.Filter;
+import javax.cache.mbeans.CacheMXBean;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
@@ -119,6 +121,12 @@ public class AbstractCache
   public void setManagerName(String managerName)
   {
     _managerName = managerName;
+  }
+  
+  @Override
+  public CacheManagerFacade getCacheManager()
+  {
+    return _cacheManager;
   }
   
   public void setCacheManager(CacheManagerFacade cacheManager)
@@ -459,6 +467,11 @@ public class AbstractCache
   {
     return _delegate.getExtCacheEntry(key);
   }
+  
+  public ExtCacheEntry getLiveCacheEntry(Object key)
+  {
+    return _delegate.getLiveCacheEntry(key);
+  }
 
   /**
    * Puts a new item in the cache.
@@ -542,7 +555,7 @@ public class AbstractCache
   }
 
   @Override
-  public Future loadAll(Collection keys)
+  public Future loadAll(Set keys)
       throws CacheException
   {
     return _delegate.loadAll(keys);
@@ -789,9 +802,9 @@ public class AbstractCache
    */
   @Override
   public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            boolean synchronous)
+                                            Filter filter)
   {
-    return _delegate.registerCacheEntryListener(listener, synchronous);
+    return _delegate.registerCacheEntryListener(listener, filter);
   }
 
   /**
@@ -809,7 +822,7 @@ public class AbstractCache
   @Override
   public CacheStatistics getStatistics()
   {
-    return null; // this;
+    return _delegate.getStatistics();
   }
 
   /**
@@ -1034,6 +1047,11 @@ public class AbstractCache
   {
     return _delegate.getConfiguration();
   }
+  
+  public CacheConfig getConfig()
+  {
+    return _config;
+  }
 
   /* (non-Javadoc)
    * @see javax.cache.Cache#getAll(java.util.Set)
@@ -1053,15 +1071,17 @@ public class AbstractCache
     return _delegate.invokeEntryProcessor(key, entryProcessor);
   }
 
-  /* (non-Javadoc)
-   * @see javax.cache.Cache#removeAll(java.util.Set)
-   */
   @Override
   public void removeAll(Set keys)
   {
     _delegate.removeAll(keys);
   }
-  
+
+  @Override
+  public CacheMXBean getMBean()
+  {
+    return _delegate.getMBean();
+  }
 
   @Override
   public String toString()

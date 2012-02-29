@@ -34,9 +34,17 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.server.webapp.WebApp;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.SendfileOutputStream;
 import com.caucho.vfs.WriteStream;
 
-public class HttpResponseStream extends ResponseStream {
+public class HttpResponseStream
+  extends ResponseStream
+  implements SendfileOutputStream
+{
+  private static final L10N L = new L10N(HttpResponseStream.class);
   private static final Logger log
     = Logger.getLogger(HttpResponseStream.class.getName());
 
@@ -294,5 +302,85 @@ public class HttpResponseStream extends ResponseStream {
       return (byte) ('0' + value);
     else
       return (byte) ('a' + value - 10);
+  }
+
+  @Override
+  public boolean isMmapEnabled()
+  {
+    return _nextStream.isMmapEnabled();
+  }
+
+  @Override
+  public boolean isSendfileEnabled()
+  {
+    return _nextStream.isSendfileEnabled();
+  }
+
+  /**
+   * Sends a file.
+   *
+   * @param path the path to the file
+   * @param length the length of the file (-1 if unknown)
+   */
+  @Override
+  public void sendFile(Path path, long offset, long length)
+    throws IOException
+  {
+    AbstractHttpRequest request = _response.getRequest();
+    WebApp webApp = request.getWebApp();
+    
+    if (! isSendfileEnabled()
+        || ! webApp.isSendfileEnabled()
+        || (request.getResponseFacade().isCaching()
+            && length < webApp.getSendfileMinLength())) {
+      path.writeToStream(this);
+      return;
+    }
+    
+    webApp.addSendfileCount();
+    
+    path.sendfile(this, offset, length);
+  }
+
+  /*
+  @Override
+  public void writeMmap(long mmapAddress, long mmapOffset, int mmapLength)
+    throws IOException
+  {
+    if (_isChunkedEncoding) {
+      throw new IllegalStateException(L.l("writeMmap cannot use chunked"));
+    }
+    
+    flush(); // XXX:
+    
+    _nextStream.writeMmap(mmapAddress, mmapOffset, mmapLength);
+  }
+  */
+  
+  @Override
+  public void writeMmap(long mmapAddress, long []mmapBlocks, 
+                        long mmapOffset, long mmapLength)
+    throws IOException
+  {
+    if (_isChunkedEncoding) {
+      throw new IllegalStateException(L.l("writeMmap cannot use chunked"));
+    }
+    
+    flush(); // XXX:
+    
+    _nextStream.writeMmap(mmapAddress, mmapBlocks, mmapOffset, mmapLength);
+  }
+
+  @Override
+  public void writeSendfile(int fd, long fdOffset, int fdLength)
+    throws IOException
+  {
+    if (_isChunkedEncoding) {
+      throw new IllegalStateException(L.l("writeSendfile cannot use chunked"));
+    }
+    
+    flush(); // XXX:
+    
+    _nextStream.writeSendfile(fd, fdOffset, fdLength);
   }
 }

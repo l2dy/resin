@@ -48,6 +48,12 @@ public interface BlockManagerMXBean extends ManagedObjectMXBean {
   @Description("The number of blocks in the block manager")
   public long getBlockCapacity();
   
+  /**
+   * Returns the number of bytes in the block manager
+   */
+  @Description("The number of bytes in the block manager")
+  public long getMemorySize();
+  
   //
   // Statistics
   //
@@ -72,9 +78,16 @@ public interface BlockManagerMXBean extends ManagedObjectMXBean {
   public long getHitCountTotal();
 
   /**
-   * Returns the proxy cache miss count.
+   * Returns the block cache miss count.
    */
-  @Description("The hit count is the number of block accesses missing in"
+  @Description("The miss count is the number of block accesses missing in"
                + " the cache.")
   public long getMissCountTotal();
+
+  /**
+   * Returns the block cache miss rate.
+   */
+  @Description("The miss rate is the number of block accesses missing in"
+               + " the cache.")
+  public double getMissRate();
 }

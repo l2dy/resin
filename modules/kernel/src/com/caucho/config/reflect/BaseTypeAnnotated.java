@@ -29,6 +29,7 @@
 
 package com.caucho.config.reflect;
 
+import java.lang.annotation.Annotation;
 import java.util.HashMap;
 import java.util.Set;
 
@@ -45,4 +46,9 @@ public interface BaseTypeAnnotated {
    * Returns the type variables local to the type.
    */
   public Set<VarType<?>> getTypeVariables();
+  
+  /**
+   * Overrides, e.g. for analysis
+   */
+  public void addOverrideAnnotation(Annotation ann);
 }

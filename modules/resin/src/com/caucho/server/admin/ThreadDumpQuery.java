@@ -33,9 +33,20 @@ package com.caucho.server.admin;
 public class ThreadDumpQuery implements java.io.Serializable
 {
 
+  private boolean _isJson;
   @SuppressWarnings("unused")
   public ThreadDumpQuery()
   {
+  }
+
+  public ThreadDumpQuery(boolean json)
+  {
+    _isJson = json;
+  }
+
+  public boolean isJson()
+  {
+    return _isJson;
   }
 
   @Override

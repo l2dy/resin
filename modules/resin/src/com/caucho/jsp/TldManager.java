@@ -43,7 +43,6 @@ import java.util.zip.ZipFile;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.FileSetType;
-import com.caucho.jsf.cfg.JsfPropertyGroup;
 import com.caucho.jsp.cfg.JsfTldPreload;
 import com.caucho.jsp.cfg.JspPropertyGroup;
 import com.caucho.jsp.cfg.TldPreload;
@@ -53,6 +52,7 @@ import com.caucho.loader.EnvironmentLocal;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JarPath;
 import com.caucho.vfs.Path;
@@ -103,11 +103,6 @@ public class TldManager {
       JspPropertyGroup jsp = app.getJsp();
       if (jsp != null)
         _tldFileSet = jsp.getTldFileSet();
-
-
-      JsfPropertyGroup jsf = app.getJsf();
-      if (jsf != null)
-        _isFastJsf = jsf.isFastJsf();
     }
 
     // JSF has a global listener hidden in one of the *.tld which
@@ -252,7 +247,7 @@ public class TldManager {
     // loads tag libraries from the global context (so there's no
     // need to reparse the jars for each web-app
     if (_globalTaglibs == null) {
-      if (! Alarm.isTest()) {
+      if (! CurrentTime.isTest()) {
         log.info("Loading .tld files from global classpath");
       }
 

@@ -46,6 +46,7 @@ import com.caucho.env.health.HealthSystemFacade;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
+import com.caucho.vfs.RandomAccessStream;
 
 /**
  * The store manages the block-based persistent store file.  Each table
@@ -357,6 +358,11 @@ public class BlockStore {
   BlockWriter getWriter()
   {
     return _writer;
+  }
+  
+  public RandomAccessStream getMmap()
+  {
+    return _readWrite.getMmap();
   }
 
   /*
@@ -883,9 +889,9 @@ public class BlockStore {
     if (blockId == 0)
       return;
 
-    synchronized (_allocationLock) {
-      long index = blockIdToIndex(blockId);
+    long index = blockIdToIndex(blockId);
 
+    synchronized (_allocationLock) {
       if (getAllocation(index) == ALLOC_FREE) {
         throw new IllegalStateException(L.l("{0} double free of {1}",
                                             this, Long.toHexString(blockId)));
@@ -1828,7 +1834,7 @@ public class BlockStore {
       _blockManager.freeStore(this);
     }
     
-    _writer.destroy();
+    _writer.close();
     
     _writer.waitForComplete(60000);
 

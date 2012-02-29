@@ -38,8 +38,8 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
-import com.caucho.server.cache.AbstractCacheEntry;
-import com.caucho.server.cache.AbstractCacheFilterChain;
+import com.caucho.server.httpcache.AbstractCacheEntry;
+import com.caucho.server.httpcache.AbstractCacheFilterChain;
 
 /**
  * Wraps a servlet response in another response.  Filters may
@@ -495,11 +495,16 @@ public class ResponseWrapper implements ServletResponse {
     return false;
   }
 
-  public void setCacheInvocation(AbstractCacheFilterChain cacheFilterChain)
+  public void setMatchCacheEntry(AbstractCacheEntry cacheEntry)
   {
   }
 
-  public void setMatchCacheEntry(AbstractCacheEntry cacheEntry)
+  public void setCacheInvocation(AbstractCacheFilterChain cacheFilterChain)
   {
+  }
+  
+  public boolean isCaching()
+  {
+    return false;
   }
 }

@@ -1,4 +1,4 @@
-<?php
+  <?php
 
 require_once "WEB-INF/php/inc.php";
 require_once 'PdfCanvas.php';
@@ -22,44 +22,38 @@ $g_pdf_colors = array(
     new RGBColor(0xe0, 0x90, 0xff), // indigo
     new RGBColor(0xc0, 0xc0, 0xc0), // gray
     new RGBColor(0x40, 0x80, 0x40)); // forest green
-
-$x = 20;
-$y = 750;
-$yinc = 12;
+    
+    
+$g_health_colors = array(
+    new RGBColor(0x90, 0x90, 0x90), // UNKNOWN
+    new RGBColor(0x00, 0xc0, 0x00), // OK
+    new RGBColor(0xCC, 0x88, 0x11), // WARNING
+    new RGBColor(0xC0, 0x00, 0x00), // CRITICAL
+    new RGBColor(0xC0, 0x00, 0x00)); // FATAL
 
 if (! mbean_init()) {
   debug("Failed to load admin, die");
   return;
 }
 
-$mbean_server = $g_mbean_server;
-$resin = $g_resin;
-$server = $g_server;
-
-if ($g_mbean_server)
-  $stat = $g_mbean_server->lookup("resin:type=StatService");
-
+$stat = get_stats_service();
 if (! $stat) {
   debug("Postmortem analysis:: requires Resin Professional and a <resin:StatService/> and <resin:LogService/> defined in the resin.xml.");
   return;
 }
 
-$mbean_server = $g_mbean_server;
-$resin = $g_resin;
-$server = $g_server;
-$runtime = $g_mbean_server->lookup("java.lang:type=Runtime");
-$os = $g_mbean_server->lookup("java.lang:type=OperatingSystem");
-$log_mbean = $mbean_server->lookup("resin:type=LogService");
+$log_mbean = $g_mbean_server->lookup("resin:type=LogService");
 
 function debug($msg) 
 {
-  #System::out->println($msg);
+  System::out->println($msg);
 }
 
-function  my_error_handler($error_type, $error_msg, $errfile, $errline) {
-  if(!startsWith($error_msg,"Can't access private field")) {
-    //debug("ERROR HANDLER: type $error_type, msg $error_msg, file $errfile, lineno $errline");
-  }
+function  my_error_handler($error_type, $error_msg, $errfile, $errline) 
+{
+  #if(!startsWith($error_msg,"Can't access private field")) {
+  #  debug("ERROR HANDLER: type $error_type, msg $error_msg, file $errfile, lineno $errline");
+  #}
 }
 
 set_error_handler('my_error_handler'); 
@@ -83,16 +77,36 @@ function initPDF()
   
   $g_canvas = new PdfCanvas();
   $g_canvas->setMargins(40, 30, 40, 30);
-  $g_canvas->graph_padding_x = 25;
 }
 
-function admin_pdf_summary()
+function pdf_header()
 {
-  global $x, $y, $yinc, $server, $runtime, $os, $log_mbean, $g_canvas, $resin;
-  global $pageName, $si;
+  global $g_start, $g_end, $g_title, $g_canvas, $g_jmx_dump_time;
+  
+  $g_canvas->writeSection("$g_title Report", false);
+  
+  $col1 = 85;
+  $col2 = 300;
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Report Generated:");
+  $g_canvas->writeTextColumn($col2, 'l', date("Y-m-d H:i", time()));
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Snapshot Time:");
+  $g_canvas->writeTextColumn($col2, 'l', $g_jmx_dump_time);
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Data Range:");
+  $g_canvas->writeTextColumn($col2, 'l', date("Y-m-d H:i", $g_start) . " through " . date("Y-m-d H:i", $g_end));
+  $g_canvas->newLine();
+  
+}
 
-  $summary = admin_pdf_summary_fill();
+function pdf_summary()
+{
+  global $g_si, $g_canvas;
 
+  $summary = pdf_summary_fill();
   if (! $summary)
     return;
     
@@ -102,30 +116,30 @@ function admin_pdf_summary()
   $g_canvas->writeTextLine($summary["jvm"]);
   $g_canvas->writeTextLine($summary["machine"]);
   
-  $g_canvas->writeSubsection("Available Resources");
+  $g_canvas->writeSubsection("System Resources");
   
-  $col1 = 85;  
+  $col1 = 85;
   $col2 = 300;
   
   $g_canvas->writeTextColumn($col1, 'r', "JVM Heap:");
-  $g_canvas->writeTextColumn($col2, 'l', "{$summary['freeHeap']} of {$summary['totalHeap']}");
+  $g_canvas->writeTextColumn($col2, 'l', "{$summary['usedHeap']} used of {$summary['totalHeap']} ({$summary['freeHeap']} free)");
   $g_canvas->newLine();
   
   $g_canvas->writeTextColumn($col1, 'r', "Physical Memory:");
-  $g_canvas->writeTextColumn($col2, 'l', "{$summary['freePhysical']} of {$summary['totalPhysical']}");
+  $g_canvas->writeTextColumn($col2, 'l', "{$summary['usedPhysical']} used of {$summary['totalPhysical']} ({$summary['freePhysical']} free)");
   $g_canvas->newLine();
   
   $g_canvas->writeTextColumn($col1, 'r', "Swap Space:");
-  $g_canvas->writeTextColumn($col2, 'l', "{$summary['freeSwap']} of {$summary['totalSwap']}");
+  $g_canvas->writeTextColumn($col2, 'l', "{$summary['usedSwap']} used of {$summary['totalSwap']} ({$summary['freeSwap']} free)");
   $g_canvas->newLine();
   
   $g_canvas->writeTextColumn($col1, 'r', "File Descriptors:");
-  $g_canvas->writeTextColumn($col2, 'l', "{$summary['freeFd']} of {$summary['totalFd']}");
+  $g_canvas->writeTextColumn($col2, 'l', "{$summary['usedFd']} used of {$summary['totalFd']} ({$summary['freeFd']} free)");
   $g_canvas->newLine();
 
   $g_canvas->writeSubsection("Resin Instance");
   
-  $g_canvas->writeTextLine("$si - {$summary['serverID']}, {$summary['cluster']} Cluster");
+  $g_canvas->writeTextLine("$g_si - {$summary['serverID']}, {$summary['cluster']} Cluster");
   
   $col1 = 50;
   $col2 = 300;
@@ -153,9 +167,9 @@ function admin_pdf_summary()
   $g_canvas->newLine();
   
   $g_canvas->writeTextLine($summary["resinVersion"]);
-  $g_canvas->writeTextLine("Up {$summary['ups']}");
-  $g_canvas->writeTextLine($summary['watchdogStartMessage'] ?: "Normal startup");
-  $g_canvas->writeTextLine($summary["server_state"]);
+  $g_canvas->writeTextLine("Up for {$summary['ups']}");
+  $g_canvas->writeTextLine("Startup Message: " . ($summary['watchdogStartMessage'] ?: "Normal Startup"));
+  $g_canvas->writeTextLine("Load Balance Status: {$summary["server_state"]}");
   
   $g_canvas->writeSubsection("Licenses");
   
@@ -166,10 +180,10 @@ function admin_pdf_summary()
     $g_canvas->writeTextLineIndent(20, $license_data[2]);
   }
   
-  admin_pdf_ports($summary);
+  pdf_ports($summary);
 }
 
-function admin_pdf_ports($summary)
+function pdf_ports($summary)
 {
   global $g_canvas;
   
@@ -216,22 +230,15 @@ function admin_pdf_ports($summary)
   }
 }
 
-function admin_pdf_summary_fill()
+function pdf_summary_fill()
 {
-  $dump = admin_pdf_snapshot("Resin|JmxDump");
-  $jmx =& $dump["jmx"];
-
-  if (! $jmx) {
-    $g_canvas->setTextFont();
-    $g_canvas->writeTextLineIndent(20, "No Data");
-    return;
-  }
+  global $g_jmx_dump;
   
-  $server = $jmx["resin:type=Server"];
-  $resin = $jmx["resin:type=Resin"];  
-  $runtime = $jmx["java.lang:type=Runtime"];
-  $os = $jmx["java.lang:type=OperatingSystem"];
-  $licenseStore = $jmx["resin:type=LicenseStore"];
+  $server = $g_jmx_dump["resin:type=Server"];
+  $resin = $g_jmx_dump["resin:type=Resin"];  
+  $runtime = $g_jmx_dump["java.lang:type=Runtime"];
+  $os = $g_jmx_dump["java.lang:type=OperatingSystem"];
+  $licenseStore = $g_jmx_dump["resin:type=LicenseStore"];
 
   $summary = array();
 
@@ -252,7 +259,7 @@ function admin_pdf_summary_fill()
   $summary["resinData"] = $resin["DataDirectory"];
   
   $cluster_mbean_name = $server["Cluster"];
-  $cluster = $jmx[$cluster_mbean_name];
+  $cluster = $g_jmx_dump[$cluster_mbean_name];
   
   $summary["cluster"] = $cluster["Name"];
   
@@ -274,22 +281,25 @@ function admin_pdf_summary_fill()
 
   $summary["totalHeap"] = pdf_format_memory($server["RuntimeMemory"]);
   $summary["freeHeap"] = pdf_format_memory($server["RuntimeMemoryFree"]);
+  $summary["usedHeap"] = pdf_format_memory($server["RuntimeMemory"] - $server["RuntimeMemoryFree"]);
   
   $summary["totalSwap"] = pdf_format_memory($os["TotalSwapSpaceSize"]);
   $summary["freeSwap"] = pdf_format_memory($os["FreeSwapSpaceSize"]);
+  $summary["usedSwap"] = pdf_format_memory($os["TotalSwapSpaceSize"] - $os["FreeSwapSpaceSize"]);
   
   $summary["totalPhysical"] = pdf_format_memory($os["TotalPhysicalMemorySize"]);
   $summary["freePhysical"] = pdf_format_memory($os["FreePhysicalMemorySize"]);
+  $summary["usedPhysical"] = pdf_format_memory($os["TotalPhysicalMemorySize"] - $os["FreePhysicalMemorySize"]);
   
   $summary["totalFd"] = $os["MaxFileDescriptorCount"];
-  $summary["openFd"] = $os["OpenFileDescriptorCount"];
+  $summary["usedFd"] = $os["OpenFileDescriptorCount"];
   $summary["freeFd"] = $os["MaxFileDescriptorCount"] - $os["OpenFileDescriptorCount"];
   
   $licenses = array();
   
   $license_names = $licenseStore["ValidLicenses"];
   foreach($license_names as $license_name) {
-    $license = $jmx[$license_name];
+    $license = $g_jmx_dump[$license_name];
     $license_data = array($license['Description'], $license['ExpireMessage'], $license['Path']);
     array_push($licenses, $license_data);
   }
@@ -300,7 +310,7 @@ function admin_pdf_summary_fill()
   
   $port_names = $server["Ports"];
   foreach($port_names as $port_name) {
-    $port = $jmx[$port_name];
+    $port = $g_jmx_dump[$port_name];
     
     $port_data = array();
     
@@ -344,34 +354,49 @@ function getMeterGraphPage($pdfName)
   }
 }
 
-function admin_pdf_snapshot($name)
+function pdf_load_json_dump($name)
 {
-  global $si, $log_mbean, $g_start, $g_end;
+  global $g_si, $log_mbean, $g_start, $g_end;
   
-  $times = $log_mbean->findMessageTimesByType("$si|$name",
+  $key = "$g_si|$name";
+  
+  $times = $log_mbean->findMessageTimesByType($key,
                                               "info",
                                               $g_start * 1000,
                                               $g_end * 1000);
+                                              
+  //debug("pdf_load_json_dump found " . count($times). " logs for $key (" . date('Y-m-d H:i', $g_start) . " - " . date('Y-m-d H:i', $g_end) . ")");
+  
   if (! $times || sizeof($times) == 0)
     return;
-    
-  //debug("admin_pdf_snapshot found " . count($times) . " logs for " . $name);
 
   $time = $times[sizeof($times) - 1];
 
   if (! $time)
     return;
   
-  //debug("admin_pdf_snapshot using time $time");
+  //debug("pdf_load_json_dump using time " . date('Y-m-d H:i', $time/1000));
     
-  $msgs = $log_mbean->findMessagesByType("$si|$name",
+  $msgs = $log_mbean->findMessagesByType("$g_si|$name",
                                          "info", $time, $time);
 
   $msg = $msgs[0];
   if (! $msg)
     return;
     
+  //debug($msg->getMessage());
+    
   return json_decode($msg->getMessage(), true);
+}
+
+function pdf_get_dump_data(&$json, $key=null) 
+{
+  $data =& $json["data"];
+  
+  if (! $data && $key) // for BC
+    $data =& $json[$key];
+  
+  return $data;
 }
 
 function pdf_format_memory($memory)
@@ -379,11 +404,66 @@ function pdf_format_memory($memory)
   return sprintf("%.2fMB", $memory / (1024 * 1024))
 }
 
-function admin_pdf_health()
+function pdf_health_status_label($val) 
 {
-  global $si, $log_mbean, $g_start, $g_end, $g_canvas;
+  global $g_jmx_dump;
   
+  $index = (double) $val;
+  
+  if ($index < 0 || floor($index) != $index)
+    return null;
+    
+  $labels_mbean = $g_jmx_dump["resin:type=HealthSystem"];
+  if ($labels_mbean) {
+    $labels = $labels_mbean["Labels"];
+		if ($labels && $index <= count($labels)) {
+		  return $labels[$index];
+		}
+  }
+  
+  return null;
+}
+
+function pdf_health()
+{
+  global $g_jmx_dump, $g_jmx_dump_time, $g_si, $g_start, $g_end, $g_canvas, $g_health_colors;
+
   $g_canvas->writeSection("Health");
+  
+  $resin_health = $g_jmx_dump["resin:type=HealthCheck,name=Resin"];
+  if ($resin_health) {
+    $status_index = $resin_health["StatusOrdinal"];
+    $color = $g_health_colors[$status_index];
+    
+    $g_canvas->setFontAndColor("Courier-Bold", 16, "white");
+    
+    $y = $g_canvas->text_y - ($g_canvas->getLineHeight()/4);
+
+    $g_canvas->setColor($color);
+    $g_canvas->setLineWidth($g_canvas->getLineHeight());
+
+    $g_canvas->moveToXY($g_canvas->getLeftMargin(), $y);
+    $g_canvas->lineToXY($g_canvas->getRightMargin(), $y);
+    $g_canvas->stroke();
+    
+    $g_canvas->setFontAndColor("Courier-Bold", 16, "white");
+    $g_canvas->writeTextLineCenter($resin_health["Status"]);
+  }
+  
+  $g_canvas->setFontAndColor("Courier-Bold", 8, "black");
+  $g_canvas->writeText("Timestamp: $g_jmx_dump_time");
+  
+  $g_canvas->setTextFont();
+  
+  $g_canvas->graph_padding_x = 55;
+  $g_canvas->allocateGraphSpace(4,1);
+  
+  $pattern = "/Resin\|Health/";
+
+  pdf_stat_graph_regexp("", $pattern, $g_si, "pdf_health_status_label");
+  
+  $g_canvas->newLine();
+  $g_canvas->writeSubSection("Health Check Status");
   
   $w1 = 65;
   $w2 = 165;
@@ -399,44 +479,41 @@ function admin_pdf_health()
   
   $g_canvas->setFont("Courier", "8");
   
-  $health_dump = admin_pdf_snapshot("Resin|HealthDump");
+  $health_dump = preg_grep_keys("/type=HealthCheck/", $g_jmx_dump);
   
   if (! $health_dump) {
     $g_canvas->setTextFont();
-    $g_canvas->writeTextLineIndent(20, "No Data");
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "No health checks were enabled in the selected timeframe.");
   } else {
-    $health =& $health_dump["health"];
-  
-    foreach ($health as $check) {
-      $g_canvas->writeTextColumn($w1, 'c', $check["status"]);
-      $g_canvas->writeTextColumn($w2, 'l', $check["name"]);
-      $g_canvas->writeTextColumn($w3, 'l', $check["message"]);
+    foreach ($health_dump as $check) {
+      $g_canvas->writeTextColumn($w1, 'c', $check["Status"]);
+      $g_canvas->writeTextColumn($w2, 'l', $check["Name"]);
+      $g_canvas->writeTextColumn($w3, 'l', $check["Message"]);
       $g_canvas->newLine();
     }
   }
   
-  admin_pdf_log_messages("Recent Warnings",
-                         "/^com.caucho.health.analysis/",
-                         false,
-                         $g_start, $g_end,
-                         5);
+  pdf_log_messages("Recent Warnings",
+                   "/^com.caucho.health.analysis/",
+                   false,
+                   $g_start, $g_end,
+                   5);
   
   
-  admin_pdf_log_messages("Recent Anomolies",
-                         "/^com.caucho.health.analysis/",
-                         true,
-                         $g_start, $g_end,
-                         5);
-                         
-  
+  pdf_log_messages("Recent Anomalies",
+                   "/^com.caucho.health.analysis/",
+                   true,
+                   $g_start, $g_end,
+                   5);
 }
 
-function admin_pdf_log_messages($title,
-                                $regexp,
-                                $match,
-                                $start, 
-                                $end,
-                                $max=-1)
+function pdf_log_messages($title,
+                          $regexp,
+                          $match,
+                          $start, 
+                          $end,
+                          $max=-1)
 {
   global $log_mbean, $g_canvas;
   
@@ -446,87 +523,253 @@ function admin_pdf_log_messages($title,
   $messages = $log_mbean->findMessages("warning",
                                        $start * 1000,
                                        $end * 1000);
+                                       
+                                       
+  //debug("pdf_log_messages:$title,start=$start,end=$end,max=$max,count=" . count($messages));
 
-  if (! $messages || is_empty($message)) {
-    $g_canvas->setTextFont();
-    $g_canvas->writeTextLineIndent(20, "No Data");
-    return;
+  $wrote = false;
+  if (count($messages) > 0) {
+    $messages = array_reverse($messages);
+    
+    $i = 0;
+    foreach ($messages as $message) {
+      if ($regexp && preg_match($regexp, $message->name) != $match) {
+        continue;
+      }
+      
+      if ($max < $i++ && $max >= 0)
+        break;
+        
+      $g_canvas->setFont("Courier-Bold", 8);
+      $ts = strftime("%Y-%m-%d %H:%M:%S", $message->timestamp / 1000);
+      $g_canvas->writeText($ts);
+      
+      $g_canvas->setFont("Courier", 8);
+      $g_canvas->writeTextWrapIndent(100, $message->message);
+      
+      $g_canvas->newLine();
+      
+      $wrote = true;
+    }
   }
   
-  $messages = array_reverse($messages);
+  if (! $wrote) {
+    $g_canvas->setTextFont();
+    $g_canvas->writeTextLineIndent(20, "No Logs");
+  }
+}
+
+function pdf_draw_cluster_graphs($mPage)
+{
+  global $g_jmx_dump, $g_jmx_dump_time, $g_end, $g_canvas, $g_label;
   
-  $i = 0;
-  foreach ($messages as $message) {
-    if ($regexp && preg_match($regexp, $message->name) != $match) {
-      continue;
+  $server = $g_jmx_dump["resin:type=Server"];
+
+  $cluster_name = $server["Cluster"];
+  $cluster = $g_jmx_dump[$cluster_name];
+  
+  $cluster_server_name = $server["SelfServer"];
+  $cluster_server = $g_jmx_dump[$cluster_server_name];
+  
+  $cluster_server_names = $cluster["Servers"];
+  
+  $g_canvas->writeSection("Cluster Status");
+  
+  $g_canvas->setFont("Courier-Bold", "8");
+  $g_canvas->writeTextLine("Timestamp: $g_jmx_dump_time");
+  $g_canvas->newLine();
+  
+  $col1 = 75;
+  $col2 = 500;
+  
+  $g_canvas->setTextFont();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Cluster Name:");
+  $g_canvas->writeTextColumn($col2, 'l', $cluster["Name"]);
+  $g_canvas->newLine();
+
+  $this_server = $g_label;
+  
+  if ($cluster_server["DynamicServer"]) 
+    $this_server .= " (Dynamic Server)";
+  
+  if ($cluster_server["TriadServer"]) 
+    $this_server .= " (Triad Server)";
+    
+  $g_canvas->writeTextColumn($col1, 'r', "This Server:");
+  $g_canvas->writeTextColumn($col2, 'l', $this_server);
+  $g_canvas->newLine();
+
+  $g_canvas->writeTextColumn($col1, 'r', "Total Servers:");
+  $g_canvas->writeTextColumn($col2, 'l', count($cluster_server_names));
+  $g_canvas->newLine();
+  
+  $triad_count = 0;
+  $triad_line = "";
+  
+  $dynamic_count = 0;
+  $dynamic_line = "";
+
+  foreach ($cluster_server_names as $cluster_server_name) {
+    
+    $server = $g_jmx_dump[$cluster_server_name];
+    
+    $si = sprintf("%02d", $server["ClusterIndex"]);
+    $name = "{$si} - {$server["Name"]}";
+    
+    if ($server["TriadServer"]) {
+      $triad_count++;
+      if (strlen($triad_line) > 0) {
+        $triad_line = $triad_line . ", " . $name;
+      } else {
+        $triad_line = $name;
+      }
     }
     
-    if ($max < $i++ && $max >= 0)
-      break;
-      
-    $g_canvas->setFont("Courier-Bold", 8);
-    $ts = strftime("%Y-%m-%d %H:%M:%S", $message->timestamp / 1000);
-    $g_canvas->writeText($ts);
+    if ($server["DynamicServer"]) {
+      $dynamic_count++;
+      if (strlen($dynamic_line) > 0) {
+        $dynamic_line = $dynamic_line . ", " . $name;
+      } else {
+        $dynamic_line = $name;
+      }
+    }
+  }
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Triad Servers:");
+  $g_canvas->writeTextColumn($col2, 'l', $triad_count > 0 ? "$triad_count ($triad_line)" : "None");
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Dynamic Servers:");
+  $g_canvas->writeTextColumn($col2, 'l', $dynamic_count > 0 ? "$dynamic_count ($dynamic_line)" : "None");
+  $g_canvas->newLine();
+
+  $g_canvas->writeSubSection("Cluster Health");
+  
+  $g_canvas->graph_padding_x = 55;
+  $g_canvas->allocateGraphSpace(4,1);
+  
+  $pattern = "/Resin\|Health\|Resin$/";
+
+  pdf_stat_graph_regexp("Cluster Health", $pattern, null, "pdf_health_status_label");
     
-    $g_canvas->setFont("Courier", 8);
-    $g_canvas->writeTextWrapIndent(100, $message->message);
+  $g_canvas->writeSubSection("Cluster Members");
+  
+  $g_canvas->graph_padding_x = 25;
+  $g_canvas->allocateGraphSpace(2,2);
+  
+  $stat_names = Array("Resin|Uptime|Start Count", 
+  									  "Resin|Log|Critical", 
+  									  "Resin|Log|Warning");
+
+  foreach ($cluster_server_names as $cluster_server_name) {
     
-    $g_canvas->newLine();
+    $server = $g_jmx_dump[$cluster_server_name];
+
+    $si = sprintf("%02d", $server["ClusterIndex"]);
+    $title = "{$si} - {$server["Name"]}";
+    
+    pdf_stat_graph($title, $stat_names, $si);
   }
 }
 
-function draw_cluster_graphs($mPage)
+function calcYIncrement($size) 
 {
-  global $g_server, $g_canvas;
+  $size = round($size);
+  if ($size == 0)
+    $size = 1;
   
-  $cluster = $g_server->getCluster();
+  $yincrement = (int) ($size / 4);
+  
+  $div = 5;
 
-  $triad_a = $cluster->getServers()[0];
-
-  $mbean_server = new MBeanServer($triad_a->getName());
-  $stat = $mbean_server->lookup("resin:type=StatService");
-  if (! $stat) {
-    $mbean_server = $g_mbean_server;
-    $stat = $mbean_server->lookup("resin:type=StatService");
+  if ($size > 5000000000) {
+	  $div = 1000000000;
+  } elseif ($size > 5000000000) {
+	  $div = 1000000000;
+  } elseif ($size > 500000000) {
+	  $div = 100000000;
+  } elseif ($size > 50000000) {
+	  $div = 10000000;
+  } elseif ($size > 5000000) {
+	  $div = 1000000;
+  } elseif ($size > 500000) {
+	  $div = 100000;
+  } elseif ($size > 50000) {
+	  $div = 10000;
+  } elseif ($size > 5000) {
+	  $div = 1000;
+  } elseif ($size > 500) {
+	  $div = 100;
+  } elseif ($size > 50) {
+	  $div = 10;
   }
+  
+  $yincrement = $yincrement - ($yincrement % $div);
+  
+  if ($yincrement == 0) {
+      $yincrement = round($size / 4, 2);
+  }
+    
+  return $yincrement;
+}
 
+function pdf_stat_graph_regexp($title, $pattern, $si, $label_func=null)
+{
+  $stat = get_stats_service();
   if (! $stat)
     return;
-
-  $g_canvas->writeSection("Cluster Status Graphs");
-  
-  $g_canvas->allocateGraphSpace(3,2);
-
-  foreach ($cluster->getServers() as $server) {
-    $items = array();
     
-    pdf_cluster_item($items, $stat, $server, "Uptime|Start Count", 0);
-    pdf_cluster_item($items, $stat, $server, "Log|Critical", 1);
-    pdf_cluster_item($items, $stat, $server, "Log|Warning", 2);
-
-    $graph_name = sprintf("Server %02d - %s",
-                          $server->getClusterIndex(),
-                          $server->getName());
-
-    draw_graph($graph_name, $items, $g_canvas);
+  $stat_names = $stat->statisticsNames();
+  
+  if (! is_null($si)) {
+    $stat_names = preg_grep("/^{$si}\|.*/", $stat_names);
   }
+  
+  $stat_names = preg_grep($pattern, $stat_names);
+  
+  sort($stat_names);
+  
+  pdf_stat_graph($title, $stat_names, $si, $label_func);
 }
 
-function pdf_cluster_item(&$items, $stat_mbean, $server, $name, $index)
+function pdf_stat_graph($title, $stat_names, $si, $label_func=null)
 {
   global $g_pdf_colors;
   
-  $full_name = sprintf("%02d|Resin|%s", $server->getClusterIndex(), $name);
-
-  // $items[$name] = get_stat_item($stat_mbean, $full_name);
-  $data = get_stat_item($stat_mbean, $full_name);
+  $stat = get_stats_service();
+  if (! $stat)
+    return;
   
-  $gd = create_graph_data($name, $data, $g_pdf_colors[$index]);
+  $color_counter = 0;
+  $counter = 0;
+  $data_array = array();
+  
+  foreach($stat_names as $stat_name) {
+    if(! is_null($si) && ! preg_match("/^{$si}\|.*/", $stat_name)) {
+      $stat_name = "${si}|{$stat_name}";
+    }
+    
+    if(! is_null($si)) {
+      $name = substr($stat_name, strrpos($stat_name, "|", -1)+1);
+    } else {
+      $name = $stat_name;
+    }
+    
+    $stat_data = pdf_get_stat_data($stat, $stat_name);
+    
+    $color = $g_pdf_colors[$color_counter++];
+    if ($color_counter == sizeof($g_pdf_colors))
+    	$color_counter = 0;
+    
+    $graph_data = pdf_create_graph_data($name, $stat_data, $color);
+    array_push($data_array, $graph_data);
+  }
 
-  $items[] = $gd;
+  pdf_draw_graph($title, $data_array, $label_func);
 }
 
-function get_stat_item($stat_mbean, $full_name)
+function pdf_get_stat_data($stat, $full_name)
 {
   global $g_start, $g_end;
   
@@ -535,20 +778,21 @@ function get_stat_item($stat_mbean, $full_name)
   if ($step < 120)
     $step = 1;
   
-  $data = $stat_mbean->statisticsData($full_name,
-                                      $g_start * 1000, $g_end * 1000,
-                                      $step * 1000);
-                                      
-  //debug("get_stat_item:name=$full_name,data=" . count($data));
+  $data = $stat->statisticsData($full_name,
+                                $g_start * 1000, 
+                                $g_end * 1000,
+                                $step * 1000);
+  
+  //debug("pdf_get_stat_data:name=$full_name,step=$step,data=" . count($data));
 
   return $data;                                      
 }
 
-function create_graph_data($name, $data, $color)
+function pdf_create_graph_data($name, $data, $color)
 {
   $size = count($data);
   
-  //debug("create_graph_data:name=$name,size=$size,color=$color");
+  //debug("pdf_create_graph_data:name=$name,size=$size,color=$color");
   $dataLine = array();
   $max = 0;
   
@@ -580,48 +824,7 @@ function create_graph_data($name, $data, $color)
   return $gd;
 }
 
-function calcYIncrement($range) 
-{
-  $size = $range->size();
-  
-  $yincrement = (int) ($size / 2);
-  
-  $div = 5;
-
-  if ($size > 5000000000) {
-	  $div = 1000000000;
-  } elseif ($size > 5000000000) {
-	  $div = 1000000000;
-  } elseif ($size > 500000000) {
-	  $div = 100000000;
-  } elseif ($size > 50000000) {
-	  $div = 10000000;
-  } elseif ($size > 5000000) {
-	  $div = 1000000;
-  } elseif ($size > 500000) {
-	  $div = 100000;
-  } elseif ($size > 50000) {
-	  $div = 10000;
-  } elseif ($size > 5000) {
-	  $div = 1000;
-  } elseif ($size > 500) {
-	  $div = 100;
-  } elseif ($size > 50) {
-	  $div = 10;
-  }
-  
-  $yincrement = $yincrement - ($yincrement % $div); //make the increment divisible by 5
-
-  if ($yincrement == 0) {
-      $yincrement = round($size / 4, 2);
-  }
-  
-  //debug("calcYincrement:$size = $yincrement");
-    
-  return $yincrement;
-}
-
-function draw_graph($name, $gds)
+function pdf_draw_graph($name, $gds, $label_func=null)
 {
   global $g_start, $g_end, $g_canvas;
   
@@ -630,26 +833,38 @@ function draw_graph($name, $gds)
     $graph = $g_canvas->startGraph($name, new Range(0,1), new Range(0,1));
     $graph->drawLegends($gds);
     $graph->setInvalid("No data");
-    draw_invalid($graph);
+    pdf_draw_invalid($graph);
   } else {
+    
+    $x_range = new Range($g_start * 1000, $g_end * 1000);
     
     $max_gd = get_largest_data($gds);
     $max_y = $max_gd->max + (0.05 * $max_gd->max);
-  
-    $x_range = new Range($g_start * 1000, $g_end * 1000);
     
-    if ($max_y == 0)
-      $y_range = new Range(-1,1);
-    else
-      $y_range = new Range(0, $max_y);
+    $y_range = new Range(0, 1);
+    $yincrement = .25;
+    
+    if ($max_y > 0) {
+      $yincrement = calcYIncrement($max_y);
       
-    $yincrement = calcYIncrement($y_range);
+      $new_max = $yincrement;
+      while($new_max < $max_y) {
+        $new_max += $yincrement;
+      }
+    
+      $max_y = $new_max;
+    
+      $y_range = new Range(0, $max_y);
+    }
+    
+    if($label_func) 
+      $yincrement = 1;
     
     $graph = $g_canvas->startGraph($name, $x_range, $y_range);
     
-    setup_graph($graph, $name, $x_range, $y_range, $yincrement);
+    setup_graph($graph, $name, $x_range, $y_range, $yincrement, true, $label_func);
   
-    draw_graph_lines($graph, $gds);
+    pdf_draw_graph_lines($graph, $gds);
     
     $graph->drawLegends($gds);
   }
@@ -689,55 +904,51 @@ function get_largest_data($gds)
   return $max_gd;
 }
 
-function setup_graph($graph, $title, $x_range, $y_range, $yincrement, $displayYLabels = true)
+function setup_graph($graph, $title, $x_range, $y_range, $yincrement, $displayYLabels=true, $label_func=null)
 {
   global $majorTicks, $minorTicks;
   
-  //debug("setup_graph:title={$title},valid={$graph->valid}");
+  //debug("setup_graph:title={$title},valid={$graph->valid},x_range=$x_range,y_range=$y_range,yincrement=$yincrement");
   
   $graph->drawTitle("black");
 
   $graph->drawGridLines($minorTicks, $yincrement, "light_grey");
 
-  $graph->drawGridLines($majorTicks, $yincrement, "med_grey");
+  $graph->drawGridLines($majorTicks, $yincrement/2, "med_grey");
 
-  $graph->drawGrid("dark_grey");
+  $graph->drawBorder("dark_grey");
 
   if ($displayYLabels)
-    $graph->drawYGridLabels($yincrement);
+    $graph->drawYGridLabels($yincrement, $label_func);
 
   $graph->drawXGridLabels($majorTicks, "formatTime");
 }
 
-function draw_invalid($graph)
+function pdf_draw_invalid($graph)
 {
   global $g_canvas;
   
   $graph->drawTitle("black");
-  $graph->drawGrid("dark_grey");
+  $graph->drawBorder("dark_grey");
 }
 
-function draw_graph_lines($graph, $gds)
+function pdf_draw_graph_lines($graph, $gds)
 {
-  $graph->canvas->setLineWidth(1);
-
   $gds = array_reverse($gds);
 
   foreach($gds as $gd) {
     if (sizeof($gd->dataLine) > 0)
-    	$graph->drawLineGraph($gd->dataLine, $gd->color);
+    	$graph->drawLineGraph($gd->dataLine, $gd->color, 1);
   }
 }
 
-function draw_graphs($mPage)
+function pdf_draw_graphs($mPage)
 {
-  global $g_server, $g_canvas;
+  global $g_si, $g_label, $g_canvas;
 
-  $title = sprintf("Server Graphs: %02d - %s",
-                   $g_server->getClusterIndex(), $g_server->getId());
-                   
-  $g_canvas->writeSection($title);
+  $g_canvas->writeSection("Server Graphs: $g_label");
   
+  $g_canvas->graph_padding_x = 25;
   $g_canvas->allocateGraphSpace(3,2);
 
   $graphs = $mPage->getMeterGraphs();
@@ -745,105 +956,56 @@ function draw_graphs($mPage)
   foreach ($graphs as $graphData) {
     $meterNames = $graphData->getMeterNames();
     //debug("Working on graph " . $graphData->getName() . " with " . count($meterNames) . " meters");
-    $gds = getStatDataForGraphByMeterNames($meterNames);
-    draw_graph($graphData->getName(), $gds, $g_canvas);
+    pdf_stat_graph($graphData->getName(), $meterNames, $g_si);
   }
 }
 
-function getStatDataForGraphByMeterNames($meterNames)
-{
-  global $g_pdf_colors;
-  
-  $cindex = 0;
-
-  $gds = array();   
-  foreach ($meterNames as $name) {
-    $statItem = new Stat();
-    $statItem->statFromName($name);
-    
-    $color = $g_pdf_colors[$cindex++];
-    
-    $gd = getStatDataForGraphByStat($statItem, $color);
-    
-    array_push($gds, $gd);
-  }
-
-  return $gds;
-}
-
-function getStatDataForGraphByStat($theStat, $color)
-{
-  $data = findStatByStat($theStat);
-  return create_graph_data($theStat->name, $data, $color)  
-}
-
-function findStatByStat($theStat) 
-{
-  global $g_start;
-  global $g_end;
-  global $stat;
-  global $si;
-
-  //$step = ($g_end - $g_start) / 1000;
-  $step = ($g_end - $g_start) / 500;
-
-  if ($step < 120)
-    $step = 1;
-    
-  $full_names = $stat->statisticsNames();
-  
-  //debug("findStatByStat:g_start=$g_start,g_end=$g_end,si=$si,step=$step,theStat=$theStat");
-  
-  $statList = array();
-  foreach ($full_names as $full_name)  {
-    array_push($statList, new Stat($full_name));
-  }
-  
-  foreach ($statList as $statItem) {
-    
-    if ($statItem->server != $si) {
-      continue;
-    }
-    
-    if ($statItem->eq($theStat)) {
- 	    return $stat->statisticsData($statItem->fullName,
-                                   $g_start * 1000,
-                                   $g_end * 1000,
-                                   $step * 1000);
-    }
-  }
-}
-
-function admin_pdf_heap_dump()
+function pdf_heap_dump()
 {
   global $g_canvas;
   
   $g_canvas->writeSection("Heap Dump");
   
-  $dump = admin_pdf_snapshot("Resin|HeapDump");
+  $dump = pdf_load_json_dump("Resin|HeapDump");
   if (! $dump) {
-    $g_canvas->writeTextLineIndent(20, "No Data");
+    $g_canvas->setTextFont();
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "A heap dump was not generated during the selected timeframe.");
     return;
   }
   
   $heap =& $dump["heap"];
-  if (! $heap || ! sizeof($heap))
+  if (! $heap || ! sizeof($heap)) {
+    $g_canvas->setTextFont();
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "A heap dump was not generated during the selected timeframe.");
     return;
+  }
     
-  $g_canvas->setFont("Courier-Bold", 8);
+  $timestamp = create_timestamp($dump);
+  $g_canvas->setFont("Courier-Bold", "8");
+  $g_canvas->writeTextLine("Timestamp: $timestamp");
     
-  $create_time = $dump["create_time"];
-  $g_canvas->writeTextLineIndent(10, "Created: " . $create_time);
+  $primitive_filter = "/^(byte|short|int|long|float|double|boolean|char)\[\]/";
+  $java_filter = "/^(java|javax|sun|com\.sun)\./";
+  $caucho_filter = "/^com\.caucho\./";
+  $classloader_filter = "/classloader/i";
+
+  pdf_selected_heap_dump($heap, "Top Classes by Memory Usage", 59);
   
-  $max = 100;
-
-  admin_pdf_selected_heap_dump($heap, "Top Classes by Memory Usage", $max);
-
-  $class_loader_heap = heap_select_classloader($heap);
-  admin_pdf_selected_heap_dump($class_loader_heap, "ClassLoader Memory Usage ", $max);
+  $primitive_heap = preg_grep_keys($primitive_filter, $heap);
+  pdf_selected_heap_dump($primitive_heap, "Primitive Memory Usage ", 50);
+  
+  $classloader_heap = preg_grep_keys($classloader_filter, $heap);
+  pdf_selected_heap_dump($classloader_heap, "ClassLoader Memory Usage ", 50);
+  
+  $user_heap = preg_grep_keys($primitive_filter, $heap, 1);
+  $user_heap = preg_grep_keys($java_filter, $user_heap, 1);
+  $user_heap = preg_grep_keys($caucho_filter, $user_heap, 1);
+  pdf_selected_heap_dump($user_heap, "User Memory Usage ", 50);
 }
 
-function admin_pdf_selected_heap_dump($heap, $title, $max)
+function pdf_selected_heap_dump($heap, $title, $max)
 {
   global $g_canvas;
   
@@ -871,8 +1033,8 @@ function admin_pdf_selected_heap_dump($heap, $title, $max)
     }
     
     $g_canvas->writeTextColumn($cols[0], 'l', $name);
-    $g_canvas->writeTextColumn($cols[1], 'l', admin_pdf_size($value["descendant"]));
-    $g_canvas->writeTextColumn($cols[2], 'l', admin_pdf_size($value["size"]));
+    $g_canvas->writeTextColumn($cols[1], 'l', pdf_size($value["descendant"]));
+    $g_canvas->writeTextColumn($cols[2], 'l', pdf_size($value["size"]));
     $g_canvas->writeTextColumn($cols[3], 'l', $value["count"]);
     $g_canvas->newLine();
   }
@@ -883,7 +1045,7 @@ function heap_descendant_cmp($a, $b)
   return $a->descendant - $b->descendant;
 }
 
-function admin_pdf_size($size)
+function pdf_size($size)
 {
   if (1e9 < $size) {
     return sprintf("%.2fG", $size / 1e9);
@@ -898,47 +1060,59 @@ function admin_pdf_size($size)
     return $size;
 }
 
-function heap_select_classloader(&$values)
+function preg_grep_keys($regexp, &$values, $invert=false)
 {
   $selected = array();
 
   foreach ($values as $name => $value) {
-    if (preg_match("/ClassLoader/", $name)) {
+    $match = false;
+    if (preg_match($regexp, $name))
+      $match = true;
+    if (($match && ! $invert) || (! $match && $invert))
       $selected[$name] = $value;
-    }
   }
 
   return $selected;
 }
 
-function admin_pdf_profile()
+function create_timestamp($dump) 
+{
+  global $g_end_unadjusted;
+  
+  $timestamp = $dump["timestamp"]/1000;
+  if ($timestamp) {
+    $age = round($g_end_unadjusted - $timestamp);
+    return date("Y-m-d H:i", $timestamp) . " (${age}s old)";
+  } else {
+    return $dump["create_time"]; // for bc
+  }
+}
+
+function pdf_profile()
 {
   global $g_canvas;
   
-  $profile = admin_pdf_snapshot("Resin|Profile");
+  $g_canvas->writeSection("CPU Profile");
+  
+  $profile = pdf_load_json_dump("Resin|Profile");
   if (! $profile || intval($profile["ticks"]) == 0) {
+    $g_canvas->setTextFont();
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "A CPU profile was not generated during the selected timeframe.");
     return;
   }
   
-  $g_canvas->writeSection("CPU Profile");
-
-  admin_pdf_profile_section("Active Threads",
-                            $profile,
-                            "admin_thread_active");
-                            
-  admin_pdf_profile_section("All Threads", $profile);
-}
-
-function admin_pdf_profile_section($name, $profile, $filter=null)
-{
-  global $g_canvas;
+  $timestamp = create_timestamp($profile);
+  if (! $timestamp) { 
+    $timestamp = date("Y-m-d H:i", $profile["end_time"] / 1000) // for bc
+  }
   
-  $g_canvas->writeSubSection($name);
-
-  $g_canvas->setFont("Courier-Bold",8);
-  
-  $col1 = 100;
-  $col2 = 300;
+  $g_canvas->setFont("Courier-Bold", "8");
+  $g_canvas->writeTextLine("Timestamp: $timestamp");
+  $g_canvas->newLine();
+      
+  $col1 = 70;
+  $col2 = 400;
 
   $g_canvas->writeTextColumn($col1, 'r', "Time:");
   $g_canvas->writeTextColumn($col2, 'l', $profile["total_time"] / 1000 . "s");
@@ -954,11 +1128,22 @@ function admin_pdf_profile_section($name, $profile, $filter=null)
   
   $g_canvas->writeTextColumn($col1, 'r', "End:");
   $g_canvas->writeTextColumn($col2, 'l', date("Y-m-d H:i", $profile["end_time"] / 1000));
-  $g_canvas->newLine();
+  $g_canvas->newLine();  
+
+  pdf_profile_section("Active Threads",
+                            $profile,
+                            "admin_thread_active");
+                            
+  pdf_profile_section("All Threads", $profile);
+}
+
+function pdf_profile_section($name, $profile, $filter=null)
+{
+  global $g_canvas;
   
+  $g_canvas->writeSubSection($name);
+
   $g_canvas->setDataFont();
-  
-  $g_canvas->newLine();
   
   $g_canvas->writeTextColumnHeader(60, 'r', "% Time");
   $g_canvas->writeTextColumnHeader(60, 'r', "Time Self");
@@ -982,7 +1167,9 @@ function admin_pdf_profile_section($name, $profile, $filter=null)
     $entries = $profile_entries;
     
   if (count($entries) < 1) {
-    $g_canvas->writeTextLineIndent(15, "No Data");
+    $g_canvas->setTextFont();
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "No Data");
     return;
   }
   
@@ -998,7 +1185,7 @@ function admin_pdf_profile_section($name, $profile, $filter=null)
     if ($max <= $i++)
       break;
 
-    $stack = admin_pdf_stack($entry, $max_stack);
+    $stack = pdf_stack($entry, $max_stack);
 
     $g_canvas->setDataFont();
     $g_canvas->writeTextColumn(60, 'r', sprintf("%.2f%%", 100 * $entry["ticks"] / $ticks));
@@ -1051,7 +1238,7 @@ function profile_cmp_ticks($a, $b)
   return $b["ticks"] - $a["ticks"];
 }
 
-function admin_pdf_stack(&$profile_entry, $max)
+function pdf_stack(&$profile_entry, $max)
 {
   $stack =& $profile_entry["stack"];
 
@@ -1069,27 +1256,28 @@ function admin_pdf_stack(&$profile_entry, $max)
   return $string;
 }
 
-function admin_pdf_thread_dump()
+function pdf_thread_dump()
 {
   global $g_canvas;
 
-  $dump = admin_pdf_snapshot("Resin|ThreadDump");
+  $g_canvas->writeSection("Thread Dump");
+  
+  $dump = pdf_load_json_dump("Resin|ThreadDump");
   if (! $dump) {
-    $g_canvas->writeTextLineIndent(20, "No Data");
+    $g_canvas->setTextFont();
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "A thread dump was not generated during the selected timeframe.");
     return;
   }
   
-  $g_canvas->writeSection("Thread Dump");
-  
-  $g_canvas->setFont("Courier-Bold", 8);
-
-  $create_time = $dump["create_time"];
-  $g_canvas->writeTextLine("Created: " . $create_time);
+  $timestamp = create_timestamp($dump);
+  $g_canvas->setFont("Courier-Bold", "8");
+  $g_canvas->writeTextLine("Timestamp: $timestamp");
   $g_canvas->newLine();
-
+    
   $entries =& $dump["thread_dump"];
 
-  admin_pdf_analyze_thread_dump($entries);
+  pdf_analyze_thread_dump($entries);
 
   usort($entries, "thread_dump_cmp");
 
@@ -1105,16 +1293,16 @@ function admin_pdf_thread_dump()
     $entry =& $entries[$i];
 
     $g_canvas->setDataFont(8);
-    $i = admin_pdf_shared_entries($i, &$entries, $g_canvas);
+    $i = pdf_shared_entries($i, &$entries, $g_canvas);
     
-    $stack = admin_pdf_thread_stack($entry, $max_stack);
+    $stack = pdf_thread_stack($entry, $max_stack);
 
     $g_canvas->setDataFont(7);
     $g_canvas->writeTextWrapIndent(20, $stack);
   }
 }
 
-function admin_pdf_analyze_thread_dump(&$entries)
+function pdf_analyze_thread_dump(&$entries)
 {
   foreach ($entries as &$entry) {
     $lock = $entry["lock"];
@@ -1139,7 +1327,7 @@ function stack_fill_owner(&$entries, $id)
   }
 }
 
-function admin_pdf_thread_stack(&$thread_entry, $max)
+function pdf_thread_stack(&$thread_entry, $max)
 {
   $stack =& $thread_entry["stack"];
   $monitors = $thread_entry["monitors"];
@@ -1219,7 +1407,7 @@ function thread_dump_stack(&$info)
   return $trace;
 }
 
-function admin_pdf_shared_entries($i, &$entries, $g_canvas)
+function pdf_shared_entries($i, &$entries, $g_canvas)
 {
   $stack = thread_dump_stack($entries[$i]);
 
@@ -1253,32 +1441,29 @@ function admin_pdf_shared_entries($i, &$entries, $g_canvas)
   return $i;
 }
 
-function admin_pdf_draw_log()
+function pdf_write_log()
 {
-  global $log_mbean, $g_canvas, $g_pdf, $g_end, $g_start;
+  global $g_canvas, $g_end, $g_start;
   
   $g_canvas->writeSection("Full Log");
   
-  admin_pdf_log_messages(null,
-                         null,
-                         true,
-                         $g_start, $g_end,
-                         -1);
+  pdf_log_messages(null,
+                   null,
+                   true,
+                   $g_start, $g_end,
+                   -1);
 }
 
-function admin_pdf_jmx_dump()
+function pdf_jmx_dump()
 {
-  global $g_canvas;
+  global $g_canvas, $g_jmx_dump, $g_jmx_dump_time;
 
-  $dump = admin_pdf_snapshot("Resin|JmxDump");
-  if (! $dump) {
-    return;
-  }
-  
   $g_canvas->writeSection("JMX Dump");
-
-  $entries =& $dump["jmx"];
-
+  
+  $g_canvas->setFont("Courier-Bold", "8");
+  $g_canvas->writeTextLine("Timestamp: $g_jmx_dump_time");
+  $g_canvas->newLine();
+  
   ksort($entries);
   
   $last_domain;
@@ -1286,7 +1471,7 @@ function admin_pdf_jmx_dump()
   
   $last_mbean;
 
-  foreach ($entries as $name => &$values) {
+  foreach ($g_jmx_dump as $name => &$values) {
     
     $domain = substr($name, 0, strpos($name, ":"));
     $mbean = substr($name, 0, strpos($name, ",") ?: strlen($name));
@@ -1302,14 +1487,14 @@ function admin_pdf_jmx_dump()
     
     $g_canvas->setFont("Courier-Bold", 8);
     $g_canvas->writeTextWrap($name);
-
+    
     $g_canvas->setFont("Courier", 8);
-    admin_pdf_jmx_attributes($g_canvas, $values);
+    pdf_jmx_attributes($g_canvas, $values);
     $g_canvas->newLine();
   }
 }
 
-function admin_pdf_jmx_attributes($g_canvas, &$values)
+function pdf_jmx_attributes($g_canvas, &$values)
 {
   ksort($values);
 
@@ -1319,12 +1504,12 @@ function admin_pdf_jmx_attributes($g_canvas, &$values)
   foreach ($values as $key => $value) {
     $g_canvas->writeTextColumn(10, 'l', "");
     $g_canvas->writeTextColumn($col1, 'l', $key);
-    $g_canvas->writeTextColumn($col2, 'l', admin_pdf_attribute_value($value));
+    $g_canvas->writeTextColumn($col2, 'l', pdf_attribute_value($value));
     $g_canvas->newLine();
   }
 }
 
-function admin_pdf_attribute_value($value, $depth = 0)
+function pdf_attribute_value($value, $depth = 0)
 {
   if ($value === true)
     return "true";
@@ -1338,21 +1523,25 @@ function admin_pdf_attribute_value($value, $depth = 0)
     $v = "{";
 
     foreach ($value as $key => $sub_value) {
-      if ($key == "java_class")
+      
+      if (is_string($key) && $key == "java_class") {
         continue;
+      }
         
       if ($i++ != 0 || $depth > 0 && sizeof($value) > 1) {
         $v .= "\n";
       }
       
-      for ($j = 0; $j < $depth + 1; $j++)
+      for ($j = 0; $j < $depth + 1; $j++) {
         $v .= " ";
-
-      if (is_integer($key)) {
-        $v .= admin_pdf_attribute_value($sub_value, $depth + 2);
       }
-      else
-        $v .= $key . " => " . admin_pdf_attribute_value($sub_value, $depth + 2);
+        
+      if (is_integer($key)) {
+        $v .= pdf_attribute_value($sub_value, $depth + 2);
+      }
+      else {
+        $v .= $key . " => " . pdf_attribute_value($sub_value, $depth + 2);
+      }
     }
     
     $v .= "  }";
@@ -1363,153 +1552,6 @@ function admin_pdf_attribute_value($value, $depth = 0)
     return $value;
   }
 }
-
-/*
-
-function findStats(String $category, String $subcategory=null)
-{
-  global $g_start;
-  global $g_end;
-  global $stat;
-  global $statList;
-  global $si;
-
-  $map = array();
-  foreach ($statList as $statItem) {
-    if ($statItem->server != $si) continue;
-    if ($category == $statItem->category) {
-      if ($subcategory && $subcategory == $statItem->subcategory) {
-	$map[$statItem->name]
-          = get_stat_item($stat, $statItem->fullName);
-      }
-    }
-  }
-  return $map;
-}
-
-function getStatDataForGraph($name, $subcategory, $color=$blue, $category="Resin") {
-
-  $data=findStatByName($name, $subcategory, $category);
-  $dataLine = array();
-  $max = -100;
-  foreach($data as $d) {
-    
-    $value = $d->value;
-    $hour = $d->time;
-    array_push($dataLine, new Point($hour, $value));
-    if ($value > $max) $max = $value;
-  }
-
-  $gd = new GraphData();
-  $gd->name = $name;
-  $gd->dataLine = $dataLine;
-  $gd->max = $max + ($max * 0.05) ;
-  $gd->yincrement = calcYincrement($max);
-  $gd->color=$color;
-
-  return $gd;
-}
-
-function getStatDataForGraphBySubcategory($subcategory,
-                                          $category="Resin",
-                                          $nameMatch=null) {
-  global $g_colors;
-  $cindex = 0;
-  $gds = array();	
-  $map = findStats($category, $subcategory);
-
-  foreach ($map as $name => $data) {
-	$dataLine = array();
-  	$max = -100;
-	$process =  true; 
-	if($nameMatch) {
-		if(!strstr($name, $nameMatch)){
-			$process = false;
-		}
-	}
-	if ($process) {
-		//debug(" $name -------------------- ");
-  		foreach($data as $d) {  
-    			$value = $d->value;
-    			$time = $d->time;
-			//debug(" $time  --- $value  ");
-
-    			array_push($dataLine, new Point($time, $value));
-    			if ($value > $max) $max = $value;
-  		}
-  		$gd = new GraphData();
-  		$gd->name = $name;
-  		$gd->dataLine = $dataLine;
-  		$gd->yincrement = calcYincrement($max);
-  		$gd->max = $max + ($max * 0.05) ;
-  		$gd->color=$g_colors[$cindex];
-		array_push($gds, $gd);
-		$cindex++;
-
-	}
-  }
-
-  return $gds;
-}
-
-function findStatByName(String $name,
-                        String $subcategory="Health",
-                        String $category="Resin")
-{
-  global $g_start;
-  global $g_end;
-  global $stat;
-  global $statList;
-  global $si;
-
-  $arr = array();
-  
-  foreach ($statList as $statItem) {
-    if ($statItem->server != $si)
-      continue;
-      
-    if ($subcategory==$statItem->subcateogry) {
-      //debug(" NAME " . $statItem->name); 
-    }
-    
-    if ($name == $statItem->name && $category == $statItem->category) {
-	$arr = $stat->statisticsData($statItem->fullName,
-                                     $g_start * 1000, $g_end * 1000,
-                                     STEP * 1000);
-    }
-  }
-  return $arr;
-}
-
-function getRestartTime($stat) {
-
-  global $g_server;
-
-  $index = $g_server->SelfServer->ClusterIndex;
-  $now = time();
-  $start = $now - 7 * 24 * 3600;
-
-  $restart_list = $stat->getStartTimes($index, $start * 1000, $now * 1000);
-
-  if (empty($restart_list)) {
-    debug( "getRestartTime:: No server restarts have been found in the last 7 days.");
-    return null;
-  }
-
-
-  $form_time = $_REQUEST['time'];
-
-  if (in_array($form_time, $restart_list)) {
-    $restart_ms = $form_time;
-  } else {
-    sort($restart_list);
-    $restart_ms = $restart_list[count($restart_list) - 1];
-  }  
-  $restart_time = floor($restart_ms / 1000);
-
-  return $restart_time;
-}
-*/
 
 class Stat 
 {

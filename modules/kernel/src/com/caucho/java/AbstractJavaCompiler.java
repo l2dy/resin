@@ -28,6 +28,8 @@
 
 package com.caucho.java;
 
+import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.DisplayableException;
 import com.caucho.util.L10N;
 
@@ -35,6 +37,7 @@ import java.io.IOException;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 
 /**
@@ -55,7 +58,7 @@ abstract public class AbstractJavaCompiler implements Runnable {
   private LineMap _lineMap;
 
   private Thread _compileThread;
-  private Thread _waitThread;
+  private AtomicReference<Thread> _waitThreadRef = new AtomicReference<Thread>();
   private Throwable _exception;
   
   public AbstractJavaCompiler(JavaCompilerUtil compiler)
@@ -103,10 +106,11 @@ abstract public class AbstractJavaCompiler implements Runnable {
   @Override
   public void run()
   {
-    _compileThread = Thread.currentThread();
+    Thread thread = Thread.currentThread();
+    _compileThread = thread;
     
     try {
-      Thread.currentThread().setContextClassLoader(_loader);
+      thread.setContextClassLoader(_loader);
 
       compileInt(_path, _lineMap);
     } catch (final Throwable e) {
@@ -124,7 +128,7 @@ abstract public class AbstractJavaCompiler implements Runnable {
       };
       _exception = e;
     } finally {
-      Thread.currentThread().setContextClassLoader(null);
+      thread.setContextClassLoader(null);
 
       notifyComplete();
 
@@ -134,27 +138,28 @@ abstract public class AbstractJavaCompiler implements Runnable {
 
   protected void waitForComplete(long timeout)
   {
-    _waitThread = Thread.currentThread();
-    
-    long endTime = System.currentTimeMillis() + timeout;
+    long endTime = CurrentTime.getCurrentTimeActual() + timeout;
     Thread thread;
 
-    while (! isDone()
-           && System.currentTimeMillis() <= endTime
-           && ((thread = _compileThread) == null || thread.isAlive())) {
-      Thread.currentThread().interrupted();
-      LockSupport.parkUntil(endTime);
+    synchronized (_isDone) {
+      while (! isDone()
+          && CurrentTime.getCurrentTimeActual() <= endTime
+          && ((thread = _compileThread) == null || thread.isAlive())) {
+        Thread.currentThread().interrupted();
+        
+        try {
+          _isDone.wait(endTime - CurrentTime.getCurrentTimeActual());
+        } catch (Exception e) {
+        }
+      }
     }
   }
 
   protected void notifyComplete()
   {
-    _isDone.set(true);
-
-    Thread thread = _waitThread;
-
-    if (thread != null) {
-      LockSupport.unpark(thread);
+    synchronized (_isDone) {
+      _isDone.set(true);
+      _isDone.notifyAll();
     }
   }
 

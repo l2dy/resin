@@ -40,7 +40,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import javax.cache.Cache;
 import javax.cache.CacheLoader;
+import javax.cache.CacheWriter;
 
 import com.caucho.cloud.topology.TriadOwner;
 import com.caucho.db.blob.BlobInputStream;
@@ -50,6 +52,7 @@ import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.inject.Module;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
 import com.caucho.util.L10N;
@@ -209,16 +212,18 @@ public final class CacheStoreManager
                           CacheConfig config,
                           long now,
                           boolean isExact)
-    {
+  {
     MnodeEntry mnodeValue = getMnodeValue(entry, config, now, isExact);
 
-    if (mnodeValue == null)
+    if (mnodeValue == null) {
       return null;
+    }
 
     Object value = mnodeValue.getValue();
 
-    if (value != null)
+    if (value != null) {
       return value;
+    }
 
     HashKey valueHash = mnodeValue.getValueHashKey();
 
@@ -251,7 +256,7 @@ public final class CacheStoreManager
                                  CacheConfig config)
     throws IOException
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     MnodeEntry mnodeValue = getMnodeValue(entry, config, now); // , false);
 
@@ -335,7 +340,7 @@ public final class CacheStoreManager
   // XXX: needs to be moved
   protected void lazyValueUpdate(DistCacheEntry entry, CacheConfig config)
   {
-    reloadValue(entry, config, Alarm.getCurrentTime());
+    reloadValue(entry, config, CurrentTime.getCurrentTime());
   }
 
   protected boolean isLocalExpired(CacheConfig config,
@@ -377,13 +382,13 @@ public final class CacheStoreManager
     if (mnodeValue == null || mnodeValue.isExpired(now)) {
       CacheLoader loader = config.getCacheLoader();
 
-      if (loader != null && entry.getKey() != null) {
+      if (loader != null && config.isReadThrough() && entry.getKey() != null) {
         Object arg = null;
         
-        Object value = loader.load(entry.getKey());
+        Cache.Entry loaderEntry = loader.load(entry.getKey());
 
-        if (value != null) {
-          put(entry, value, config, now, mnodeValue);
+        if (entry != null) {
+          put(entry, loaderEntry.getValue(), config, now, mnodeValue);
 
           return;
         }
@@ -416,7 +421,7 @@ public final class CacheStoreManager
                         Object value,
                         CacheConfig config)
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     // server/60a0 - on server '4', need to read update from triad
     MnodeEntry mnodeValue = getMnodeValue(entry, config, now); // , false);
@@ -458,6 +463,12 @@ public final class CacheStoreManager
       return;
 
     config.getEngine().put(key, mnodeUpdate, mnodeValue);
+    
+    CacheWriter writer = config.getCacheWriter();
+    
+    if (writer != null && config.isWriteThrough()) {
+      writer.write(entry);
+    }
 
     return;
   }
@@ -529,12 +540,26 @@ public final class CacheStoreManager
                                 Object value,
                                 CacheConfig config)
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     // server/60a0 - on server '4', need to read update from triad
     MnodeEntry mnodeValue = getMnodeValue(entry, config, now); // , false);
 
     return getAndPut(entry, value, config, now, mnodeValue);
+  }
+  
+  /**
+   * Sets a cache entry
+   */
+  final public Object getAndRemove(DistCacheEntry entry,
+                                   CacheConfig config)
+  {
+    long now = CurrentTime.getCurrentTime();
+
+    // server/60a0 - on server '4', need to read update from triad
+    MnodeEntry mnodeValue = getMnodeValue(entry, config, now); // , false);
+
+    return getAndPut(entry, null, config, now, mnodeValue);
   }
 
   /**
@@ -611,12 +636,28 @@ public final class CacheStoreManager
     return oldValueHash;
   }
 
-
-  public HashKey compareAndPut(DistCacheEntry entry, 
+  public Object getAndReplace(DistCacheEntry entry, 
                                HashKey testValue,
                                Object value, 
                                CacheConfig config)
   {
+    HashKey result = compareAndPut(entry, testValue, value, config);
+    
+    if (result == null || result.isNull()) {
+      return null;
+    }
+    else {
+      return readData(result,
+                      config.getValueSerializer(),
+                      config);
+    }
+  }
+  
+  public HashKey compareAndPut(DistCacheEntry entry, 
+                                 HashKey testValue,
+                                 Object value, 
+                                 CacheConfig config)
+    {
     DataItem dataItem = writeData(entry.getMnodeEntry(), 
                                   value,
                                   config.getValueSerializer());
@@ -753,7 +794,7 @@ public final class CacheStoreManager
 
     DistCacheEntry entry = getCacheEntry(key);
 
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     if (entry.getMnodeEntry() == null
         || entry.getMnodeEntry().isExpired(now)) {
@@ -782,7 +823,7 @@ public final class CacheStoreManager
     long accessedExpireTimeout = mnodeValue.getAccessedExpireTimeout();
     long accessedTime = mnodeValue.getLastAccessedTime();
 
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
                        
     if (accessedExpireTimeout < CacheConfig.TIME_INFINITY
         && accessedTime + mnodeValue.getAccessExpireTimeoutWindow() < now) {
@@ -965,6 +1006,12 @@ public final class CacheStoreManager
       return oldValueHash != null;
 
     config.getEngine().remove(key, mnodeUpdate, mnodeEntry);
+    
+    CacheWriter writer = config.getCacheWriter();
+    
+    if (writer != null && config.isWriteThrough()) {
+      writer.delete(entry.getKey());
+    }
 
     return oldValueHash != null;
   }
@@ -1025,7 +1072,7 @@ public final class CacheStoreManager
         = oldEntryValue != null ? oldEntryValue.getValueHashKey() : null;
 
       long oldVersion = oldEntryValue != null ? oldEntryValue.getVersion() : 0;
-      long now = Alarm.getCurrentTime();
+      long now = CurrentTime.getCurrentTime();
       
       if (version < oldVersion
           || (version == oldVersion
@@ -1295,7 +1342,8 @@ public final class CacheStoreManager
 
       return false;
     } finally {
-      out.close();
+      if (out != os)
+        out.close();
     }
   }
   
@@ -1329,7 +1377,7 @@ public final class CacheStoreManager
   {
     long newVersion = version + 1;
 
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
   
     if (newVersion < now)
       return now;
@@ -1367,6 +1415,11 @@ public final class CacheStoreManager
   {
   }
   
+  public Iterator<DistCacheEntry> getEntries()
+  {
+    return _entryCache.values();
+  }
+  
   public void start()
   {
     _keyCache = new LruCache<CacheKey,HashKey>(64 * 1024);
@@ -1389,7 +1442,9 @@ public final class CacheStoreManager
 
   protected HashKey createHashKey(Object key, CacheConfig config)
   {
-    CacheKey cacheKey = new CacheKey(config.getGuid(), key);
+    CacheKey cacheKey = new CacheKey(config.getGuid(),
+                                     config.getGuidHash(), 
+                                     key);
     
     HashKey hashKey = _keyCache.get(cacheKey);
     
@@ -1550,16 +1605,12 @@ public final class CacheStoreManager
     }
   }
   
-  static class CacheKey {
-    private String _guid;
-    private Object _key;
+  static final class CacheKey {
+    private final String _guid;
+    private final Object _key;
+    private final int _hashCode;
     
-    CacheKey(String guid, Object key)
-    {
-      init(guid, key);
-    }
-    
-    void init(String guid, Object key)
+    CacheKey(String guid, int guidHash, Object key)
     {
       _guid = guid;
       
@@ -1567,18 +1618,14 @@ public final class CacheStoreManager
         key = NULL_OBJECT;
       
       _key = key;
+      
+      _hashCode = 65521 * (17 + guidHash) + key.hashCode();
     }
     
     @Override
-    public int hashCode()
+    public final int hashCode()
     {
-      int hash = 17;
-      
-      hash += _guid.hashCode();
-      
-      hash = 65521 * hash + _key.hashCode();
-      
-      return hash;
+      return _hashCode;
     }
     
     @Override

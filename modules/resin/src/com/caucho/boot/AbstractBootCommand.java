@@ -35,7 +35,12 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.caucho.config.ConfigException;
+import com.caucho.util.L10N;
+
 public abstract class AbstractBootCommand implements BootCommand {
+  private static final L10N L = new L10N(AbstractBootCommand.class);
+  
   private final Map<String,BootOption> _optionMap
     = new HashMap<String,BootOption>();
 
@@ -47,8 +52,9 @@ public abstract class AbstractBootCommand implements BootCommand {
     addValueOption("server", "id", "select Resin server from config");
     addValueOption("user-properties", "file", "select an alternate $HOME/.resin file");
     
-    addValueOption("root-directory", "file", "alternate root directory");
-    addValueOption("log-directory", "file", "alternate log directory");
+    addValueOption("root-directory", "dir", "alternate root directory");
+    addValueOption("log-directory", "dir", "alternate log directory");
+    addValueOption("license-directory", "dir", "alternate license directory");
     
     addFlagOption("verbose", "produce verbose output");
   }
@@ -106,6 +112,10 @@ public abstract class AbstractBootCommand implements BootCommand {
     
     if (client == null)
       client = boot.findShutdownClient(args);
+    
+    if (client == null) {
+      throw new ConfigException(L.l("No <server> can be found listening to a local IP address"));
+    }
     
     return doCommand(args, client);
   }
@@ -238,13 +248,14 @@ public abstract class AbstractBootCommand implements BootCommand {
     return false;
   }
 
-  private BootOption getBootOption(String key) {
-    if (key.charAt(0) != '-')
+  private BootOption getBootOption(String key)
+  {
+    if (key.length() == 0 || key.charAt(0) != '-')
       return null;
 
     String cleanKey;
 
-    if (key.charAt(0) == '-' && key.charAt(1) == '-')
+    if (key.length() > 1 && key.charAt(0) == '-' && key.charAt(1) == '-')
       cleanKey = key.substring(2);
     else
       cleanKey = key.substring(1);

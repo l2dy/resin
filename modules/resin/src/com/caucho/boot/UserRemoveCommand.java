@@ -30,6 +30,7 @@
 package com.caucho.boot;
 
 import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.RemoveUserQueryReply;
 import com.caucho.util.L10N;
 
 public class UserRemoveCommand extends AbstractManagementCommand
@@ -48,9 +49,11 @@ public class UserRemoveCommand extends AbstractManagementCommand
                        ManagerClient managerClient)
   {
     String user = args.getDefaultArg();
-    String message = managerClient.removeUser(user);
 
-    System.out.println(message);
+    RemoveUserQueryReply result = managerClient.removeUser(user);
+
+    System.out.println(L.l("user `{0}' deleted",
+                           result.getUser().getName()));
 
     return 0;
   }
@@ -58,7 +61,7 @@ public class UserRemoveCommand extends AbstractManagementCommand
   @Override
   public String getUsageArgs()
   {
-     return " <user>";
+    return " <user>";
   }
 
   @Override
@@ -66,22 +69,4 @@ public class UserRemoveCommand extends AbstractManagementCommand
   {
     return true;
   }
-
-  /*
-   @Override
-  public void usage()
-  {
-    System.err.println(L.l(
-      "usage: bin/resin.sh [-conf <file>] user-remove -address <address> -port <port> -user <user> -password <password> user"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   removes specified administrative user\n"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -address <address>      : ip or host name of the server"));
-    System.err.println(L.l("   -port <port>            : server http port"));
-    System.err.println(L.l("   -user <user>            : specifies name to use for authorising the request."));
-    System.err.println(L.l("   -password <password>    : specifies password to use for authorising the request."));
-  }
-   */
 }

@@ -33,10 +33,11 @@ import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.ServiceUnavailableException;
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.hmtp.HmtpClient;
-import com.caucho.server.cluster.Server;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.util.L10N;
 
 import java.io.Serializable;
+import java.util.Date;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -58,7 +59,7 @@ public class ManagerClient
 
   public ManagerClient()
   {
-    Server server = Server.getCurrent();
+    ServletService server = ServletService.getCurrent();
 
     if (server == null)
       throw new IllegalStateException(L.l("ManagerClient was not called in a Resin context. For external clients, use the ManagerClient constructor with host,port arguments."));
@@ -70,7 +71,7 @@ public class ManagerClient
 
   public ManagerClient(String serverId)
   {
-    Server server = Server.getCurrent();
+    ServletService server = ServletService.getCurrent();
 
     if (server == null)
       throw new IllegalStateException(L.l("ManagerClient was not called in a Resin context. For external clients, use the ManagerClient constructor with host,port arguments."));
@@ -153,62 +154,73 @@ public class ManagerClient
   {
     return _bamClient;
   }
-  
-  public String addUser(String user, char []password, String []roles)
+
+  public AddUserQueryReply addUser(String user,
+                                    char []password,
+                                    String []roles)
   {
     AddUserQuery query = new AddUserQuery(user, password, roles);
 
-    return (String) query(query);
+    return (AddUserQueryReply) query(query);
   }
 
-  public String removeUser(String user)
+  public RemoveUserQueryReply removeUser(String user)
   {
     RemoveUserQuery query = new RemoveUserQuery(user);
 
-    return (String) query(query);
+    return (RemoveUserQueryReply) query(query);
   }
 
-  public String listUsers()
+  public ListUsersQueryReply listUsers()
   {
     ListUsersQuery query = new ListUsersQuery();
 
-    return (String) query(query);
+    return (ListUsersQueryReply) query(query);
   }
 
-  public String doThreadDump()
+  public StringQueryReply doThreadDump()
   {
     ThreadDumpQuery query = new ThreadDumpQuery();
 
-    return (String) query(query);
+    return (StringQueryReply) query(query);
   }
 
-  public String doHeapDump(boolean raw)
+  public JsonQueryReply doJsonThreadDump()
+  {
+    ThreadDumpQuery query = new ThreadDumpQuery(true);
+
+    return (JsonQueryReply) query(query);
+  }
+
+  public StringQueryReply doHeapDump(boolean raw)
   {
     HeapDumpQuery query = new HeapDumpQuery(raw);
 
-    return (String) query(query);
+    return (StringQueryReply) query(query);
   }
 
-  public String doJmxDump()
+  public JsonQueryReply doJmxDump()
   {
     JmxDumpQuery query = new JmxDumpQuery();
 
-    return (String) query(query);
+    return (JsonQueryReply) query(query);
   }
 
-  public String setLogLevel(String[] loggers, Level logLevel, long period)
+  public StringQueryReply setLogLevel(String []loggers,
+                                           Level logLevel,
+                                           long period)
   {
     LogLevelQuery query = new LogLevelQuery(loggers, logLevel, period);
 
-    return (String) query(query);
+    return (StringQueryReply) query(query);
   }
 
-  public String listJmx(String pattern,
-                        boolean isPrintAttributes,
-                        boolean isPrintValues,
-                        boolean isPrintOperations,
-                        boolean isAll,
-                        boolean isPlatform)
+  public ListJmxQueryReply listJmx(String pattern,
+                                    boolean isPrintAttributes,
+                                    boolean isPrintValues,
+                                    boolean isPrintOperations,
+                                    boolean isAll,
+                                    boolean isPlatform)
   {
     JmxListQuery query = new JmxListQuery(pattern,
                                           isPrintAttributes,
@@ -217,81 +229,92 @@ public class ManagerClient
                                           isAll,
                                           isPlatform);
 
-    return (String) query(query);
+    return (ListJmxQueryReply) query(query);
   }
 
-  public String setJmx(String pattern, String attribute, String value)
+  public JmxSetQueryReply setJmx(String pattern,
+                                      String attribute,
+                                      String value)
   {
     JmxSetQuery query = new JmxSetQuery(pattern, attribute, value);
 
-    return (String) query(query);
+    return (JmxSetQueryReply) query(query);
   }
 
-  public String callJmx(String pattern,
-                        String operation,
-                        int opIndex,
-                        String []trailingArgs)
+  public JmxCallQueryReply callJmx(String pattern,
+                                   String operation,
+                                   int opIndex,
+                                   String []trailingArgs)
   {
     JmxCallQuery query = new JmxCallQuery(pattern,
                                           operation,
                                           opIndex,
                                           trailingArgs);
 
-    return (String) query(query);
+    return (JmxCallQueryReply) query(query);
   }
-  
-  public String pdfReport(String path, 
-                          String report, 
-                          long period, 
-                          String logDirectory,
-                          long profileTime,
-                          long samplePeriod,
-                          boolean isSnapshot,
-                          boolean isWatchdog)
+
+  public PdfReportQueryReply pdfReport(String path,
+                                        String report,
+                                        long period,
+                                        String logDirectory,
+                                        long profileTime,
+                                        long samplePeriod,
+                                        boolean isSnapshot,
+                                        boolean isWatchdog,
+                                        boolean isReportReturned)
   {
-    PdfReportQuery query = new PdfReportQuery(path, 
-                                              report, 
-                                              period, 
+    PdfReportQuery query = new PdfReportQuery(path,
+                                              report,
+                                              period,
                                               logDirectory,
                                               profileTime,
                                               samplePeriod,
                                               isSnapshot,
-                                              isWatchdog);
-    
+                                              isWatchdog,
+                                              isReportReturned);
+
     long timeout;
-    
+
     if (profileTime > 0)
       timeout = profileTime + 60000L;
     else
       timeout = 60000L;
-      
-    return (String) query(query, timeout);
+
+    return (PdfReportQueryReply) query(query, timeout);
   } 
 
-  public String profile(long activeTime, long period, int depth) 
+  public StringQueryReply profile(long activeTime, long period, int depth)
   {
     ProfileQuery query = new ProfileQuery(activeTime, period, depth);
 
-    return (String) query(query);
+    return (StringQueryReply) query(query);
   }
 
-  public String listRestarts(long period)
+  public Date []listRestarts(long period)
   {
-     ListRestartsQuery query = new ListRestartsQuery(period);
+    ListRestartsQuery query = new ListRestartsQuery(period);
 
-    return (String) query(query);
+    return (Date[]) query(query);
   }
-  
-  public String addLicense(String licenseContent, 
-                           String fileName,
-                           boolean overwrite,
-                           boolean restart)
+
+  public StringQueryReply addLicense(String licenseContent,
+                                      String fileName,
+                                      boolean overwrite,
+                                      boolean restart)
   {
     LicenseAddQuery query = new LicenseAddQuery(licenseContent, 
                                                 fileName,
                                                 overwrite, 
                                                 restart);
-    return (String) query(query);
+    return (StringQueryReply) query(query);
+  }
+
+  public StatServiceValuesQueryReply getStats(String []meters, Date from, Date to)
+  {
+    StatsQuery query = new StatsQuery(meters, from, to);
+
+    return (StatServiceValuesQueryReply) query(query);
   }
 
   protected Serializable query(Serializable query)
@@ -307,7 +330,9 @@ public class ManagerClient
   protected Serializable query(Serializable query, long timeout)
   {
     try {
-      return _bamClient.query(_managerAddress, query, timeout);
+      return _bamClient.query(_managerAddress,
+                              query,
+                              timeout);
     } catch (ServiceUnavailableException e) {
       throw new ServiceUnavailableException("Manager service is not available, possibly because the resin.xml is missing a <resin:ManagerService> tag\n  " + e.getMessage(),
                                             e);

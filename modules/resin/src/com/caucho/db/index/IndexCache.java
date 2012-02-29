@@ -31,7 +31,7 @@ package com.caucho.db.index;
 
 import com.caucho.util.*;
 import com.caucho.db.xa.DbTransaction;
-import com.caucho.env.thread.TaskWorker;
+import com.caucho.env.thread.AbstractTaskWorker;
 
 import java.io.IOException;
 import java.util.*;
@@ -73,7 +73,7 @@ public final class IndexCache
     if (_staticCache == null) {
       int size;
       
-      if (Alarm.isTest())
+      if (CurrentTime.isTest())
         size = 8 * 1024;
       else
         size = 64 * 1024;
@@ -231,7 +231,7 @@ public final class IndexCache
     _indexWriter.wake();
   }
 
-  class IndexCacheWriter extends TaskWorker {
+  class IndexCacheWriter extends AbstractTaskWorker {
     public long runTask()
     {
       DbTransaction xa = DbTransaction.create();

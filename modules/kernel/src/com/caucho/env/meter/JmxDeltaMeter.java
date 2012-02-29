@@ -46,14 +46,14 @@ public final class JmxDeltaMeter extends AbstractMeter {
   private String _attribute;
 
   private double _lastValue;
-  private double _lastSample;
+  private double _value;
 
   public JmxDeltaMeter(String name, String objectName, String attribute)
   {
     super(name);
 
     try {
-        _objectName = new ObjectName(objectName);
+      _objectName = new ObjectName(objectName);
     } catch (Exception e) {
         throw ConfigException.create(e);
     }
@@ -66,30 +66,31 @@ public final class JmxDeltaMeter extends AbstractMeter {
    * Polls the statistics attribute.
    */
   @Override
-  public double sample()
+  public void sample()
   {
     try {
       Object objValue = _server.getAttribute(_objectName, _attribute);
 
-      if (objValue == null)
-        return 0;
+      if (objValue == null) {
+        _value = 0;
+        return;
+      }
       
       double lastValue = _lastValue;
-      _lastValue = lastValue;
       double value = ((Number) objValue).doubleValue();
+      _lastValue = value;
       
-      _lastSample = value - lastValue;
-      
-      return _lastSample;
+      _value = value - lastValue;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
 
-      return 0;
+      _value = 0;
     }
   }
   
-  public double peek()
+  @Override
+  public double calculate()
   {
-    return _lastSample;
+    return _value;
   }
 }

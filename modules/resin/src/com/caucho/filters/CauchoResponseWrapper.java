@@ -45,6 +45,7 @@ import com.caucho.server.http.CauchoResponse;
 import com.caucho.server.http.ResponseWrapper;
 import com.caucho.server.http.ResponseWriter;
 import com.caucho.server.http.ServletOutputStreamImpl;
+import com.caucho.server.httpcache.AbstractCacheFilterChain;
 import com.caucho.vfs.FlushBuffer;
 
 /**

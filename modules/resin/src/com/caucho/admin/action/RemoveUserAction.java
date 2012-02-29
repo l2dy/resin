@@ -30,6 +30,7 @@
 package com.caucho.admin.action;
 
 import com.caucho.security.AdminAuthenticator;
+import com.caucho.security.PasswordUser;
 import com.caucho.util.L10N;
 
 import java.util.logging.Logger;
@@ -50,14 +51,12 @@ public class RemoveUserAction implements AdminAction
     _user = user;
   }
 
-  public String execute()
+  public PasswordUser execute()
   {
-    try {
-      _adminAuth.removeUser(_user);
+    PasswordUser user = _adminAuth.getUserMap().get(_user);
 
-      return L.l("user `{0}' deleted", _user);
-    } catch (IllegalArgumentException e) {
-      return e.getMessage();
-    }
+    _adminAuth.removeUser(_user);
+
+    return user;
   }
 }

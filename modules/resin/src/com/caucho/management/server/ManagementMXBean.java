@@ -31,12 +31,26 @@ package com.caucho.management.server;
 
 import com.caucho.jmx.Description;
 import com.caucho.jmx.MXAction;
-import com.caucho.jmx.MXDefaultValue;
-import com.caucho.jmx.MXName;
-import com.caucho.jmx.MXValueRequired;
+import com.caucho.jmx.MXContentType;
+import com.caucho.jmx.MXParam;
+import com.caucho.server.admin.AddUserQueryReply;
+import com.caucho.server.admin.ControllerStateActionQueryReply;
+import com.caucho.server.admin.JmxCallQueryReply;
+import com.caucho.server.admin.JmxSetQueryReply;
+import com.caucho.server.admin.JsonQueryReply;
+import com.caucho.server.admin.ListJmxQueryReply;
+import com.caucho.server.admin.ListUsersQueryReply;
+import com.caucho.server.admin.PdfReportQueryReply;
+import com.caucho.server.admin.RemoveUserQueryReply;
+import com.caucho.server.admin.StatServiceValuesQueryReply;
+import com.caucho.server.admin.StringQueryReply;
+import com.caucho.server.admin.TagResult;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Date;
+
+import javax.management.ReflectionException;
 
 /**
  * Management facade for Resin, used for REST.
@@ -48,71 +62,291 @@ import java.io.InputStream;
 @Description("Management Facade for Resin")
 public interface ManagementMXBean extends ManagedObjectMXBean
 {
-  @Description("hello, world test interface")
-  @MXAction("hello")
-  public String hello();
+  @Description("deploys configuration")
+  @MXAction(value = "config-deploy", method = "POST")
+  @MXContentType
+  public String configDeploy(@MXParam(name = "server") String serverId,
+                             @MXParam(name = "stage") String stage,
+                             @MXParam(name = "version") String version,
+                             @MXParam(name = "message") String message,
+                             InputStream is)
+    throws ReflectionException;
+
+  @Description("pulls a configuration file")
+  @MXAction(value = "config-cat", method = "GET")
+  @MXContentType("text/xml")
+  public InputStream configCat(@MXParam(name = "server") String serverId,
+                          @MXParam(name = "name", required = true) String name,
+                          @MXParam(name = "stage") String stage,
+                          @MXParam(name = "version") String version,
+                          @MXParam(name = "message") String message)
+    throws ReflectionException;
+
+  @Description("list the configuration files")
+  @MXAction(value = "config-ls", method = "GET")
+  @MXContentType
+  public String []configLs(@MXParam(name = "server") String serverId,
+                         @MXParam(name = "name") String name,
+                         @MXParam(name = "stage") String stage,
+                         @MXParam(name = "version") String version,
+                         @MXParam(name = "message") String message)
+  throws ReflectionException;
+
+  @Description("undeploy configuration")
+  @MXAction(value = "config-undeploy", method = "POST")
+  @MXContentType
+  public String configUndeploy(@MXParam(name = "server") String serverId,
+                               @MXParam(name = "stage") String stage,
+                               @MXParam(name = "version") String version,
+                               @MXParam(name = "message") String message)
+    throws ReflectionException;
 
   @Description("Produces a complete dump of JMX objects and values")
   @MXAction("jmx-dump")
-  public String dumpJmx(@MXName("server") String value);
+  public JsonQueryReply doJmxDump(@MXParam(name = "server") String value)
+    throws ReflectionException;
 
   @Description("lists the JMX MBeans in a Resin server (Resin Pro)")
   @MXAction("jmx-list")
-  public String listJmx(@MXName("server") String serverId,
-                        @MXName("pattern") String pattern,
-                        @MXName("print-attributes") boolean isPrintAttributes,
-                        @MXName("print-values") boolean isPrintValues,
-                        @MXName("print-operations") boolean isPrintOperations,
-                        @MXName("print-all-beans") boolean isPrintAllBeans,
-                        @MXName("print-platform-beans") boolean isPrintPlatformBeans);
+  @MXContentType
+  public ListJmxQueryReply listJmx(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "pattern") String pattern,
+    @MXParam(name = "print-attributes")
+    boolean isPrintAttributes,
+    @MXParam(name = "print-values")
+    boolean isPrintValues,
+    @MXParam(name = "print-operations")
+    boolean isPrintOperations,
+    @MXParam(name = "print-all-beans")
+    boolean isPrintAllBeans,
+    @MXParam(name = "print-platform-beans")
+    boolean isPrintPlatformBeans)
+    throws ReflectionException;
 
   @Description("sets the java.util.logging level for debugging (Resin Pro)")
-  @MXAction("log-level")
-  public String logLevel(@MXName("server") String serverId,
-                         @MXName("loggers") String loggersValue,
-                         @MXValueRequired
-                         @MXName("level") String levelValue,
-                         @MXName("active-time") String activeTime);
+  @MXAction(value = "log-level", method = "POST")
+  @MXContentType
+  public StringQueryReply setLogLevel(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "loggers")
+    String loggersValue,
+    @MXParam(name = "level",
+             required = true)
+    String levelValue,
+    @MXParam(name = "active-time")
+    String activeTime)
+    throws ReflectionException;
 
   @Description("creates a PDF report of a Resin server (Resin Pro)")
-  @MXAction("pdf-report")
-  public String pdfReport(@MXName("server") String serverId,
-                          @MXName("path") String path,
-                          @MXName("report") String report,
-                          @MXName("period") String periodStr,
-                          @MXName("log-directory") String logDirectory,
-                          @MXName("profile-time") String profileTimeStr,
-                          @MXName("sample-period") String samplePeriodStr,
-                          @MXDefaultValue("true")
-                          @MXName("snapshot") boolean isSnapshot,
-                          @MXName("watchdog") boolean isWatchdog);
+  @MXAction(value = "pdf-report", method = "GET")
+  @MXContentType
+  public PdfReportQueryReply pdfReport(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "report") String report,
+    @MXParam(name = "period")
+    String periodStr,
+    @MXParam(name = "log-directory")
+    String logDirectory,
+    @MXParam(name = "profile-time")
+    String profileTimeStr,
+    @MXParam(name = "sample-period")
+    String samplePeriodStr,
+    @MXParam(name = "snapshot",
+             defaultValue = "true")
+    boolean isSnapshot,
+    @MXParam(name = "watchdog")
+    boolean isWatchdog,
+    @MXParam(name = "load-pdf")
+    boolean isLoadPdf)
+    throws ReflectionException;
 
+  @Description("outputs stats collected by a named meter")
+  @MXAction(value = "stats", method = "GET")
+  @MXContentType
+  public StatServiceValuesQueryReply getStats(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "meters", required = true) String metersStr,
+    @MXParam(name = "period", defaultValue = "7D")
+    String periodStr)
+  throws ReflectionException;
 
   @Description("sets JMX Mbean's attribute")
-  @MXAction("jmx-set")
-  public String setJmx(@MXName("server") String serverId,
-                       @MXName("pattern") String pattern,
-                       @MXName("attribute") String attribute,
-                       @MXName("value") String value);
+  @MXAction(value = "jmx-set", method = "POST")
+  @MXContentType
+  public JmxSetQueryReply setJmx(@MXParam(name = "server") String serverId,
+                                  @MXParam(name = "pattern") String pattern,
+                                  @MXParam(name = "attribute")
+                                  String attribute,
+                                  @MXParam(name = "value") String value)
+  throws ReflectionException;
 
   @Description("displays a JVM thread dump summary")
   @MXAction("thread-dump")
-  public String dumpThreads(@MXName("server") String serverId);
+  @MXContentType
+  public JsonQueryReply doThreadDump(
+    @MXParam(name = "server") String serverId)
+    throws ReflectionException;
+
+  @Description("adds a Resin-Professional license to an installation")
+  @MXAction(value = "license-add", method = "POST")
+  @MXContentType
+  public StringQueryReply addLicense(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "overwrite") boolean isOverwrite,
+    @MXParam(name = "to", required = true) String to,
+    @MXParam(name = "restart") boolean isRestart,
+    InputStream in)
+    throws ReflectionException;
+
+  @Description("lists the most recent Resin server restart times")
+  @MXAction(value = "list-restarts", method = "GET")
+  @MXContentType
+  public Date[]listRestarts(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "period", defaultValue = "7D") String periodStr)
+    throws ReflectionException;
 
   @Description("calls a method on a JMX MBean")
-  @MXAction("jmx-call")
-  public String callJmx(@MXName("server") String serverId,
-                        @MXName("pattern") String pattern,
-                        @MXName("operation") String operation,
-                        @MXName("operation-index") String operationIdx,
-                        @MXName("values") String values);
+  @MXAction(value = "jmx-call", method = "POST")
+  @MXContentType
+  public JmxCallQueryReply callJmx(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "pattern") String pattern,
+    @MXParam(name = "operation") String operation,
+    @MXParam(name = "operation-index")
+    String operationIdx,
+    @MXParam(name = "values") String values)
+    throws ReflectionException;
+
+  @Description("starts a deployed application")
+  @MXAction(value = "web-app-start", method = "POST")
+  @MXContentType
+  public ControllerStateActionQueryReply startWebApp(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "tag") String tag,
+    @MXParam(name = "name") String name,
+    @MXParam(name = "stage",
+             defaultValue = "production")
+    String stage,
+    @MXParam(name = "host",
+             defaultValue = "default")
+    String host,
+    @MXParam(name = "version") String version)
+    throws ReflectionException;
+
+  @Description("stops a deployed application")
+  @MXAction(value = "web-app-stop", method = "POST")
+  @MXContentType
+  public ControllerStateActionQueryReply stopWebApp(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "tag") String tag,
+    @MXParam(name = "name") String name,
+    @MXParam(name = "stage",
+             defaultValue = "production")
+    String stage,
+    @MXParam(name = "host",
+             defaultValue = "default")
+    String host,
+    @MXParam(name = "version") String version)
+    throws ReflectionException;
+
+  @Description("restarts a deployed application")
+  @MXAction(value = "web-app-restart", method = "POST")
+  @MXContentType
+  public ControllerStateActionQueryReply restartWebApp(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "tag") String tag,
+    @MXParam(name = "name") String name,
+    @MXParam(name = "stage",
+             defaultValue = "production")
+    String stage,
+    @MXParam(name = "host", defaultValue = "default") String host,
+    @MXParam(name = "version") String version)
+    throws ReflectionException;
+
+  @Description("deploys an application")
+  @MXAction(value = "web-app-deploy", method = "POST")
+  @MXContentType
+  public String webappDeploy(@MXParam(name = "server") String serverId,
+                             @MXParam(name = "context") String context,
+                             @MXParam(name = "host", defaultValue = "default")
+                             String host,
+                             @MXParam(name = "stage") String stage,
+                             @MXParam(name = "version") String version,
+                             @MXParam(name = "message") String message,
+                             InputStream is)
+    throws ReflectionException;
+
+  @Description("copies a deployment to a new tag name")
+  @MXAction(value = "deploy-copy", method = "POST")
+  @MXContentType
+  public String deployCopy(@MXParam(name = "server") String serverId,
+                           @MXParam(name = "source-context")
+                           String sourceContext,
+                           @MXParam(name = "source-host",
+                                    defaultValue = "default") String sourceHost,
+                           @MXParam(name = "source-stage") String sourceStage,
+                           @MXParam(name = "source-version")
+                           String sourceVersion,
+                           @MXParam(name = "target-context")
+                           String targetContext,
+                           @MXParam(name = "target-host",
+                                    defaultValue = "default") String targetHost,
+                           @MXParam(name = "target-stage") String targetStage,
+                           @MXParam(name = "target-version")
+                           String targetVersion,
+                           @MXParam(name = "message") String message)
+    throws ReflectionException;
+
+  @Description("lists deployed applications")
+  @MXAction("deploy-list")
+  @MXContentType
+  public TagResult[] deployList(@MXParam(name = "server") String serverId,
+                                @MXParam(name = "pattern", defaultValue = ".*")
+                                String pattern)
+    throws ReflectionException;
+
+  @Description("undeploys an application")
+  @MXAction(value = "web-app-undeploy", method = "POST")
+  @MXContentType
+  public String undeploy(@MXParam(name = "server") String serverId,
+                         @MXParam(name = "context") String context,
+                         @MXParam(name = "host", defaultValue = "default")
+                         String host,
+                         @MXParam(name = "stage") String stage,
+                         @MXParam(name = "version") String version,
+                         @MXParam(name = "message") String message)
+    throws ReflectionException;
+
+  @Description("adds an administration user and password")
+  @MXAction(value = "user-add", method = "POST")
+  @MXContentType
+  public AddUserQueryReply addUser(@MXParam(name = "server") String serverId,
+                                    @MXParam(name = "user", required = true)
+                                    String user,
+                                    @MXParam(name = "password") String password,
+                                    @MXParam(name = "roles") String rolesStr)
+    throws ReflectionException;
+
+  @Description("lists the administration user")
+  @MXAction(value = "user-list", method = "GET")
+  @MXContentType
+  public ListUsersQueryReply listUsers(
+    @MXParam(name = "server") String serverId)
+    throws ReflectionException;
+
+  @Description("removes an administration user")
+  @MXAction(value = "user-remove", method = "POST")
+  @MXContentType
+  public RemoveUserQueryReply removeUser(
+    @MXParam(name = "server") String serverId,
+    @MXParam(name = "user") String user)
+    throws ReflectionException;
 
   @Description("Prints status of a server")
   @MXAction("status")
-  public String getStatus(@MXName("server") String value);
-
-  // XXX: temporary example until we have a real one
-  public InputStream test(@MXName("test-param") String value,
-                          InputStream is)
-    throws IOException;
+  @MXContentType
+  public StringQueryReply getStatus(@MXParam(name = "server") String value)
+    throws ReflectionException;
 }

@@ -40,6 +40,7 @@ import com.caucho.server.distcache.CacheImpl;
 import com.caucho.util.Alarm;
 import com.caucho.util.Base64;
 import com.caucho.util.Crc64;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 
 import javax.enterprise.inject.Default;
@@ -93,7 +94,8 @@ public class AdminAuthenticator extends XmlAuthenticator
   {
   }
 
-  public final void initCache() {
+  public final void initCache()
+  {
     if (_authStore != null)
       return;
 
@@ -130,7 +132,7 @@ public class AdminAuthenticator extends XmlAuthenticator
 
   private boolean isModified()
   {
-    final long now = Alarm.getCurrentTime();
+    final long now = CurrentTime.getCurrentTime();
     final long lastCheck = _lastCheck;
     _lastCheck = now;
 

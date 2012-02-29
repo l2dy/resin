@@ -813,6 +813,9 @@ public class Env
    */
   public StringValue createBinaryBuilder(byte []buffer)
   {
+    if (buffer == null)
+      return StringBuilderValue.EMPTY;
+    
     if (_isUnicodeSemantics)
       return new BinaryBuilderValue(buffer, 0, buffer.length);
     else
@@ -1172,7 +1175,7 @@ public class Env
   public void checkTimeout()
   {
     /*
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     if (_endTime < now)
       throw new QuercusRuntimeException(L.l("script timed out"));

@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import com.caucho.cloud.topology.TriadOwner;
 import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.util.Alarm;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
 import com.caucho.util.Hex;
 
@@ -116,7 +117,9 @@ public class DistCacheEntry implements ExtCacheEntry {
   @Override
   public boolean isValueNull()
   {
-    return getMnodeEntry().isValueNull();
+    MnodeEntry entry = getMnodeEntry();
+    
+    return entry == null || entry.isValueNull();
   }
 
   /**
@@ -167,7 +170,7 @@ public class DistCacheEntry implements ExtCacheEntry {
    */
   public Object get(CacheConfig config)
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     return _cacheService.get(this, config, now);
   }
@@ -178,7 +181,7 @@ public class DistCacheEntry implements ExtCacheEntry {
    */
   public Object getExact(CacheConfig config)
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     return _cacheService.getExact(this, config, now);
   }
@@ -188,7 +191,7 @@ public class DistCacheEntry implements ExtCacheEntry {
    */
   public MnodeEntry getMnodeValue(CacheConfig config)
   {
-    long now = Alarm.getCurrentTime();
+    long now = CurrentTime.getCurrentTime();
 
     return _cacheService.getMnodeValue(this, config, now); // , false);
   }
@@ -270,6 +273,16 @@ public class DistCacheEntry implements ExtCacheEntry {
   /**
    * Sets the current value
    */
+  public Object getAndReplace(HashKey testValue, 
+                               Object value, 
+                               CacheConfig config)
+  {
+    return _cacheService.getAndReplace(this, testValue, value, config);
+  }
+
+  /**
+   * Sets the current value
+   */
   public boolean compareAndPut(long version,
                                HashKey value,
                                long valueLength,
@@ -284,6 +297,14 @@ public class DistCacheEntry implements ExtCacheEntry {
   public boolean remove(CacheConfig config)
   {
     return _cacheService.remove(this, config);
+  }
+
+  /**
+   * Remove the value
+   */
+  public Object getAndRemove(CacheConfig config)
+  {
+    return _cacheService.getAndRemove(this, config);
   }
 
   /**
@@ -334,6 +355,31 @@ public class DistCacheEntry implements ExtCacheEntry {
   public long getValueLength()
   {
     return getMnodeEntry().getValueLength();
+  }
+  
+  /**
+   * Writes the data to a stream.
+   */
+  @Override
+  public boolean readData(OutputStream os, CacheConfig config)
+    throws IOException
+  {
+    return _cacheService.readData(getMnodeEntry(), os, config);
+    /*
+    MnodeEntry entry = getMnodeEntry();
+    
+    if (entry == null) {
+      return;
+    }
+    
+    BlobImpl blob = (BlobImpl) entry.getBlob();
+    
+    if (blob == null) {
+      entry.gthis....
+    }
+
+    blob.writeToStream(os);
+    */
   }
 
   @Override

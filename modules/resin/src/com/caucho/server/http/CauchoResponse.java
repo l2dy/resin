@@ -34,8 +34,8 @@ import java.io.IOException;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletResponse;
 
-import com.caucho.server.cache.AbstractCacheEntry;
-import com.caucho.server.cache.AbstractCacheFilterChain;
+import com.caucho.server.httpcache.AbstractCacheEntry;
+import com.caucho.server.httpcache.AbstractCacheFilterChain;
 
 public interface CauchoResponse extends HttpServletResponse {
   /* caucho methods */
@@ -69,7 +69,9 @@ public interface CauchoResponse extends HttpServletResponse {
   public void killCache();
   public void setNoCache(boolean killCache);
   public void setPrivateCache(boolean isPrivate);
+  
   public void setCacheInvocation(AbstractCacheFilterChain cacheFilterChain);
+  public boolean isCaching();
 
   public boolean isNoCacheUnlessVary();
   

@@ -30,7 +30,9 @@
 package com.caucho.json;
 
 import java.io.*;
-import com.caucho.util.Utf8;
+
+import com.caucho.json.ser.JsonSerializer;
+import com.caucho.json.ser.JsonSerializerFactory;
 
 /**
  * Abstract output stream for JSON requests.
@@ -71,7 +73,12 @@ public class JsonOutput {
     _os = os;
   }
 
-  public void writeObject(Serializable value)
+  public void writeObject(Serializable value) throws IOException
+  {
+    writeObject(value, false);
+  }
+
+  public void writeObject(Serializable value, boolean annotated)
     throws IOException
   {
     PrintWriter os = _os;
@@ -81,9 +88,9 @@ public class JsonOutput {
       return;
     }
 
-    JsonSerializer ser = _factory.getSerializer(value.getClass());
+    JsonSerializer ser = _factory.getSerializer(value.getClass(), annotated);
 
-    ser.write(this, value);
+    ser.write(this, value, annotated);
   }
 
   public void writeNull()
@@ -234,9 +241,15 @@ public class JsonOutput {
   public void writeMapEntry(String key, Object value)
     throws IOException
   {
+    writeMapEntry(key, value, false);
+  }
+
+  public void writeMapEntry(String key, Object value, boolean annotated)
+    throws IOException
+  {
     writeString(key);
     _os.write(':');
-    writeObject((Serializable) value);
+    writeObject((Serializable) value, annotated);
   }
 
   public void writeMapEnd()
