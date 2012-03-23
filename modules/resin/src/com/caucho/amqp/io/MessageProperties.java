@@ -34,7 +34,7 @@ import java.io.IOException;
 /**
  * The message properties header.
  */
-public class MessageProperties extends AmqpAbstractComposite {
+public final class MessageProperties extends AmqpAbstractComposite {
   private long _messageId; // messageid
   private String _contentType; // symbol
   

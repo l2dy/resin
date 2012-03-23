@@ -49,6 +49,31 @@ public final class FreeRing<T> {
   {
     _ringQueue = new RingValueQueue<T>(capacity);
   }
+
+  public int getSize()
+  {
+    return _ringQueue.getSize();
+  }
+  
+  public int getHead()
+  {
+    return _ringQueue.getHead();
+  }
+  
+  public int getHeadAlloc()
+  {
+    return _ringQueue.getHeadAlloc();
+  }
+  
+  public int getTail()
+  {
+    return _ringQueue.getTail();
+  }
+  
+  public int getTailAlloc()
+  {
+    return _ringQueue.getTailAlloc();
+  }
   
   /**
    * Try to get an object from the free list.  Returns null if the free list
@@ -58,7 +83,7 @@ public final class FreeRing<T> {
    */
   public T allocate()
   {
-    return _ringQueue.take();
+    return _ringQueue.poll();
   }
   
   
@@ -70,7 +95,7 @@ public final class FreeRing<T> {
    */
   public boolean free(T value)
   {
-    return _ringQueue.offer(value, false);
+    return _ringQueue.offer(value);
   }
 
   /**

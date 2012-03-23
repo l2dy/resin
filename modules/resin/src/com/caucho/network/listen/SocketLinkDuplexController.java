@@ -190,8 +190,8 @@ public class SocketLinkDuplexController extends AsyncController {
     } finally {
       thread.setName(oldName);
 
-      if (! isValid)
-        close();
+      if (! isValid) {
+        close();}
     }
 
     return true;
@@ -216,11 +216,10 @@ public class SocketLinkDuplexController extends AsyncController {
   public void onClose()
   {
     _isCompleteRequested = true;
-    
+
     // ReadStream is = _is;
     _is = null;
     
-    TcpSocketLink conn = _conn;
     _conn = null;
     
     SocketLinkDuplexListener listener = _listener;
@@ -236,8 +235,11 @@ public class SocketLinkDuplexController extends AsyncController {
     */
     
     try {
-      if (conn != null)
+      /*
+      if (conn != null) {
         conn.requestClose();
+      }
+      */
 
       /*
       if (conn != null)

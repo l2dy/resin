@@ -47,6 +47,7 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
+import com.caucho.network.listen.AbstractProtocolConnection;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.network.listen.SocketLinkDuplexController;
@@ -81,8 +82,8 @@ import com.caucho.vfs.WriteStream;
  * Abstract request implementing methods common to the different
  * request implementations.
  */
-public abstract class AbstractHttpRequest
-  implements SecurityContextProvider, ProtocolConnection
+public abstract class AbstractHttpRequest extends AbstractProtocolConnection
+  implements SecurityContextProvider
 {
   private static final Logger log
     = Logger.getLogger(AbstractHttpRequest.class.getName());
@@ -148,7 +149,12 @@ public abstract class AbstractHttpRequest
   private final CharBuffer _cbValue = new CharBuffer();
   private final CharBuffer _cb = new CharBuffer();
 
-  private HttpBufferStore _httpBuffer;
+  private byte []_smallUriBuffer = new byte[256];
+  private char []_smallHeaderBuffer = new char[2048];
+  private CharSegment []_smallHeaderKeys = new CharSegment[32];
+  private CharSegment []_smallHeaderValues = new CharSegment[32];
+  
+  private HttpBufferStore _largeHttpBuffer;
 
   private HttpServletRequestImpl _requestFacade;
   private HttpServletResponseImpl _responseFacade;
@@ -194,6 +200,11 @@ public abstract class AbstractHttpRequest
     _readStream.setReuseBuffer(true);
 
     _bufferedReader = new BufferedReaderAdapter(_readStream);
+    
+    for (int i = 0; i < _smallHeaderKeys.length; i++) {
+      _smallHeaderKeys[i] = new CharSegment();
+      _smallHeaderValues[i] = new CharSegment();
+    }
 
     _response = createResponse();
   }
@@ -213,6 +224,7 @@ public abstract class AbstractHttpRequest
   /**
    * Initialization.
    */
+  @Override
   public void init()
   {
   }
@@ -223,6 +235,11 @@ public abstract class AbstractHttpRequest
   public final SocketLink getConnection()
   {
     return _conn;
+  }
+  
+  public final TcpSocketLink getTcpSocketLink()
+  {
+    return _tcpConn;
   }
 
   public final int getConnectionId()
@@ -256,11 +273,17 @@ public abstract class AbstractHttpRequest
    *
    * @param httpBuffer the raw connection stream
    */
-  protected void startRequest(HttpBufferStore httpBuffer)
+  protected void startRequest()
     throws IOException
   {
-    _httpBuffer = httpBuffer;
-
+    /*
+    HttpBufferStore httpBuffer = getHttpBufferStore();
+    
+    if (httpBuffer == null) {
+      _largeHttpBuffer = getServer().allocateHttpBuffer();
+    }
+    */
+    
     _hostHeader = null;
     _expect100Continue = false;
 
@@ -276,8 +299,8 @@ public abstract class AbstractHttpRequest
 
     _requestFacade = new HttpServletRequestImpl(this);
     _responseFacade = _requestFacade.getResponse();
-
-    _response.startRequest(httpBuffer);
+    
+    _response.startRequest();
 
     _startTime = -1;
     _expireTime = -1;
@@ -297,12 +320,43 @@ public abstract class AbstractHttpRequest
     return _requestFacade != null;
   }
 
+  protected final byte []getSmallUriBuffer()
+  {
+    return _smallUriBuffer;
+  }
+  
+  protected final char []getSmallHeaderBuffer()
+  {
+    return _smallHeaderBuffer;
+  }
+  
+  protected final CharSegment []getSmallHeaderKeys()
+  {
+    return _smallHeaderKeys;
+  }
+  
+  protected final CharSegment []getSmallHeaderValues()
+  {
+    return _smallHeaderValues;
+  }
+  
   /**
    * Returns the http buffer store
    */
-  final HttpBufferStore getHttpBufferStore()
+  protected final HttpBufferStore getHttpBufferStore()
   {
-    return _httpBuffer;
+    return _largeHttpBuffer;
+  }
+  
+  protected final HttpBufferStore allocateHttpBufferStore()
+  {
+    if (_largeHttpBuffer != null) {
+      throw new IllegalStateException();
+    }
+
+    _largeHttpBuffer = getServer().allocateHttpBuffer();
+    
+    return _largeHttpBuffer;
   }
 
   public WriteStream getRawWrite()
@@ -1423,9 +1477,27 @@ public abstract class AbstractHttpRequest
   /**
    * Returns the log buffer.
    */
+  /*
   public final byte []getLogBuffer()
   {
     return _httpBuffer.getLogBuffer();
+  }
+  */
+  
+  @Override
+  public final void onAttachThread()
+  {
+  }
+  
+  @Override
+  public final void onDetachThread()
+  {
+    HttpBufferStore httpBuffer = _largeHttpBuffer;
+    _largeHttpBuffer = null;
+    
+    if (httpBuffer != null) {
+      getServer().freeHttpBuffer(httpBuffer);
+    }
   }
 
   protected Invocation getInvocation(CharSequence host,
@@ -1754,20 +1826,19 @@ public abstract class AbstractHttpRequest
 
       _responseFacade = null;
 
-      HttpBufferStore httpBuffer = _httpBuffer;
-      _httpBuffer = null;
-
       /*
       if (_tcpConn != null) {
         _tcpConn.finishRequest();
       }
       */
 
+      /*
       if (httpBuffer != null)
         getServer().freeHttpBuffer(httpBuffer);
+        */
     }
   }
-  
+  /*
   public void beginThreadIdle()
   {
     TcpSocketLink tcpConn = _tcpConn;
@@ -1785,6 +1856,7 @@ public abstract class AbstractHttpRequest
       tcpConn.endThreadIdle();
     }
   }
+  */
 
   @Override
   public void onCloseConnection()
@@ -1793,6 +1865,13 @@ public abstract class AbstractHttpRequest
       finishRequest();
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
+    }
+    
+    HttpBufferStore httpBuffer = _largeHttpBuffer;
+    _largeHttpBuffer = null;
+      
+    if (httpBuffer != null) {
+      getServer().freeHttpBuffer(httpBuffer);
     }
   }
 

@@ -39,8 +39,7 @@ import java.util.logging.*;
 import javax.servlet.*;
 import javax.servlet.http.*;
 
-public class CauchoResponseWrapper extends AbstractCauchoResponse
-  implements CauchoResponse {
+public class CauchoResponseWrapper implements CauchoResponse {
   private static final Logger log
     = Logger.getLogger(CauchoResponseWrapper.class.getName());
 
@@ -311,7 +310,11 @@ public class CauchoResponseWrapper extends AbstractCauchoResponse
 
   public String getHeader(String name)
   {
-    return _response.getHeader(name);
+      try {
+          return _response.getHeader(name);
+      } catch (AbstractMethodError ame) { // #4990 http://bugs.caucho.com/view.php?id=4990
+          return null;
+      }
   }
 
   public Collection<String> getHeaders(String name)
@@ -502,6 +505,11 @@ public class CauchoResponseWrapper extends AbstractCauchoResponse
   public boolean isForwardEnclosed()
   {
     return false;
+  }
+
+  @Override
+  public void writeHeaders(int length) throws IOException
+  {
   }
 
   @Override

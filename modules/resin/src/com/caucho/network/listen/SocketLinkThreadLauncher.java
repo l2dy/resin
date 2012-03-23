@@ -29,9 +29,12 @@
 
 package com.caucho.network.listen;
 
+import java.util.concurrent.atomic.AtomicInteger;
+
 import com.caucho.env.thread.AbstractThreadLauncher;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.inject.Module;
+import com.caucho.util.RingValueQueue;
 
 /**
  * Represents a protocol connection.
@@ -39,10 +42,18 @@ import com.caucho.inject.Module;
 @Module
 class SocketLinkThreadLauncher extends AbstractThreadLauncher
 {
-  private ThreadPool _threadPool = ThreadPool.getThreadPool();
+  private final ThreadPool _threadPool = ThreadPool.getThreadPool();
   private TcpSocketLinkListener _listener;
   
+  private final RingValueQueue<AcceptTask> _acceptTaskQueue
+    = new RingValueQueue<AcceptTask>(1024);
+  
+  private final RingValueQueue<ConnectionTask> _resumeTaskQueue
+    = new RingValueQueue<ConnectionTask>(16 * 1024);
+  
   private String _threadName;
+  
+  private final AtomicInteger _resumeStartCount = new AtomicInteger();
 
   SocketLinkThreadLauncher(TcpSocketLinkListener listener)
   {
@@ -57,18 +68,144 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
     else
       return super.isEnable();
   }
+
+  public void init()
+  {
+    _threadName = generateThreadName() + "-launcher";
+  }
+  
+  boolean offerResumeTask(ConnectionTask task)
+  {
+    if (! _resumeTaskQueue.put(task)) {
+      System.out.println("FAILED_SUBMIT:");
+    }
+    
+    /*
+    if (_resumeTaskQueue.getSize() > 512) {
+      System.out.println("SIZE: " + _resumeTaskQueue.getSize());
+    }
+    */
+    
+    wakeResumeTask(1);
+    
+    return true;
+  }
+  
+  boolean submitResumeTask(ConnectionTask task)
+  {
+    if (! _resumeTaskQueue.put(task)) {
+      System.out.println("FAILED_SUBMIT:");
+    }
+    
+    wakeResumeTask(1);
+    
+    return true;
+  }
+
+  void wakeScheduler()
+  {
+    _threadPool.wakeScheduler();
+  }
   
   @Override
   protected String getThreadName()
   {
     if (_threadName == null) {
-      _threadName = ("resin-port-"
-          + _listener.getAddress()
-          + ":" + _listener.getPort());
+      _threadName = generateThreadName() + "-launcher";
     }
     
     return _threadName;
   }
+
+  String generateThreadName()
+  {
+    String address = _listener.getAddress();
+    int port = _listener.getPort();
+
+    if (address != null) {
+      return ("resin-port-" + address + ":" + port);
+    }
+    else {
+      return ("resin-port-" + port);
+    }
+  }
+ 
+
+  /**
+   * Cycles through task from a thread. 
+   */
+  void handleTasks(boolean isResume)
+  {
+    int retryMax = 8;
+    int retryCount = retryMax;
+    
+    while (retryCount-- >= 0) {
+      ConnectionTask task = _acceptTaskQueue.poll();
+      
+      if (task == null) {
+        if (! isResume) {
+          isResume = true;
+          _resumeStartCount.incrementAndGet();
+        }
+        
+        task = _resumeTaskQueue.poll();
+      }
+      
+      if (! _resumeTaskQueue.isEmpty()) {
+        wakeResumeTask(4);
+      }
+      
+      if (isResume) {
+        isResume = false;
+        _resumeStartCount.decrementAndGet();
+      }
+      
+      if (! _resumeTaskQueue.isEmpty()) {
+        wakeResumeTask(1);
+      }
+      
+      if (task != null) {
+        retryCount = retryMax;
+        task.run();
+      }
+    }
+  }
+
+  void wakeResumeTask(int min)
+  {
+    int startCount = 0;
+
+    while (startCount < min) {
+      int threadCount = getThreadCount();
+      int startingCount = getStartingCount();
+      int resumeCount = _resumeStartCount.get();
+      
+      if (getThreadMax() <= threadCount + startingCount + resumeCount) {
+        return;
+      }
+    
+      int size = _resumeTaskQueue.getSize();
+      if (size < min) {
+        min = size;
+      }
+      
+      if (min <= resumeCount) {
+        return;
+      }
+      
+      if (_resumeStartCount.compareAndSet(resumeCount, resumeCount + 1)) {
+        startCount++;
+
+        _threadPool.schedule(new TcpSocketResumeThread(this));
+      }
+    }
+  }
+  
+  void addResumeStart()
+  {
+    _resumeStartCount.incrementAndGet();
+  }
+
 
   @Override
   protected void launchChildThread(int id)
@@ -82,9 +219,13 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
       
       startConn = _listener.allocateConnection();
 
-      startConn.requestAccept();
+      AcceptTask acceptTask = startConn.requestAccept();
       
-      startConn = null;
+      if (acceptTask != null && _acceptTaskQueue.put(acceptTask)) {
+        startConn = null;
+        
+        _threadPool.schedule(new TcpSocketAcceptThread(this));
+      }
     } catch (RuntimeException e) {
       throw e;
     } catch (Exception e) {

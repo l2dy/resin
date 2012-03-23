@@ -41,12 +41,13 @@ import java.util.logging.Logger;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.memcached.MemcachedProtocol;
+import com.caucho.message.DistributionMode;
 import com.caucho.message.broker.MessageBroker;
-import com.caucho.message.broker.BrokerSubscriber;
-import com.caucho.message.broker.BrokerPublisher;
-import com.caucho.message.broker.SubscriberMessageHandler;
-import com.caucho.message.broker.NullPublisher;
-import com.caucho.message.broker.PublisherSettleHandler;
+import com.caucho.message.broker.BrokerReceiver;
+import com.caucho.message.broker.BrokerSender;
+import com.caucho.message.broker.ReceiverMessageHandler;
+import com.caucho.message.broker.SenderSettleHandler;
+import com.caucho.network.listen.AbstractProtocolConnection;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.util.Alarm;
@@ -59,7 +60,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * Custom serialization for the cache
  */
-public class StompConnection implements ProtocolConnection
+public class StompConnection extends AbstractProtocolConnection
 {
   private static final Logger log
     = Logger.getLogger(StompConnection.class.getName());
@@ -94,17 +95,17 @@ public class StompConnection implements ProtocolConnection
   private static final CharBuffer TRANSACTION
     = new CharBuffer("transaction");
 
-  private static final BrokerPublisher NULL_DESTINATION
-    = new NullPublisher();
+  private static final BrokerSender NULL_DESTINATION
+    = new NullSender();
   
   private StompProtocol _stomp;
   private SocketLink _link;
   
-  private HashMap<String,BrokerPublisher> _destinationMap
-    = new HashMap<String,BrokerPublisher>();
+  private HashMap<String,BrokerSender> _destinationMap
+    = new HashMap<String,BrokerSender>();
   
-  private HashMap<String,BrokerSubscriber> _subscriptionMap
-    = new HashMap<String,BrokerSubscriber>();
+  private HashMap<String,BrokerReceiver> _subscriptionMap
+    = new HashMap<String,BrokerReceiver>();
   
   private CharBuffer _method = new CharBuffer();
   private char []_headerBuffer = new char[4096];
@@ -181,12 +182,12 @@ public class StompConnection implements ProtocolConnection
     return _contentType;
   }
   
-  public BrokerPublisher getDestination()
+  public BrokerSender getDestination()
   {
     if (_destinationName == null)
       return null;
     
-    BrokerPublisher dest = _destinationMap.get(_destinationName);
+    BrokerSender dest = _destinationMap.get(_destinationName);
     
     if (dest == null) {
       dest = _stomp.createDestination(_destinationName);
@@ -218,7 +219,7 @@ public class StompConnection implements ProtocolConnection
     return _receipt;
   }
   
-  public PublisherSettleHandler createReceiptCallback()
+  public SenderSettleHandler createReceiptCallback()
   {
     if (_receipt != null)
       return new ReceiptListener(this, _receipt);
@@ -240,15 +241,16 @@ public class StompConnection implements ProtocolConnection
     if (_destinationName == null)
       throw new IOException("sub requires destination");
     
-    BrokerSubscriber sub = _subscriptionMap.get(_id);
+    BrokerReceiver sub = _subscriptionMap.get(_id);
     
     if (sub != null)
       throw new IOException("sub exists");
     
     MessageBroker broker = _stomp.getBroker();
-    SubscriberMessageHandler listener = new MessageListener(this, _id, _destinationName);
+    ReceiverMessageHandler listener = new MessageListener(this, _id, _destinationName);
     
-    sub = broker.createReceiver(_destinationName, listener);
+    DistributionMode distMode = null;
+    sub = broker.createReceiver(_destinationName, distMode, listener);
     
     _subscriptionMap.put(_id, sub);
 
@@ -257,7 +259,7 @@ public class StompConnection implements ProtocolConnection
   
   public boolean unsubscribe(String id)
   {
-    BrokerSubscriber sub = _subscriptionMap.remove(id);
+    BrokerReceiver sub = _subscriptionMap.remove(id);
     
     if (sub != null) {
       sub.close();
@@ -270,10 +272,10 @@ public class StompConnection implements ProtocolConnection
   
   public boolean ack(String sid, long mid)
   {
-    BrokerSubscriber sub = _subscriptionMap.get(sid);
+    BrokerReceiver sub = _subscriptionMap.get(sid);
     
     if (sub != null) {
-      sub.accept(_xid, mid);
+      sub.accepted(_xid, mid);
       return true;
     }
     else {
@@ -283,10 +285,10 @@ public class StompConnection implements ProtocolConnection
   
   public boolean nack(String sid, long mid)
   {
-    BrokerSubscriber sub = _subscriptionMap.get(sid);
+    BrokerReceiver sub = _subscriptionMap.get(sid);
     
     if (sub != null) {
-      sub.reject(_xid, mid, null);
+      sub.rejected(_xid, mid, null);
       return true;
     }
     else {
@@ -556,22 +558,22 @@ public class StompConnection implements ProtocolConnection
   @Override
   public void onCloseConnection()
   {
-    ArrayList<BrokerPublisher> destList
-      = new ArrayList<BrokerPublisher>(_destinationMap.values());
+    ArrayList<BrokerSender> destList
+      = new ArrayList<BrokerSender>(_destinationMap.values());
   
     _destinationMap.clear();
     
-    ArrayList<BrokerSubscriber> subList
-      = new ArrayList<BrokerSubscriber>(_subscriptionMap.values());
+    ArrayList<BrokerReceiver> subList
+      = new ArrayList<BrokerReceiver>(_subscriptionMap.values());
 
     _destinationMap.clear();
     _subscriptionMap.clear();
     
-    for (BrokerPublisher dest : destList) {
+    for (BrokerSender dest : destList) {
       dest.close();
     }
     
-    for (BrokerSubscriber sub : subList) {
+    for (BrokerReceiver sub : subList) {
       sub.close();
     }
     
@@ -583,7 +585,7 @@ public class StompConnection implements ProtocolConnection
   {
   }
   
-  static class ReceiptListener implements PublisherSettleHandler {
+  static class ReceiptListener implements SenderSettleHandler {
     private StompConnection _conn;
     private String _receipt;
   
@@ -594,18 +596,19 @@ public class StompConnection implements ProtocolConnection
     }
     
     @Override
-    public void onComplete()
+    public void onAccepted(long mid)
     {
       _conn.receipt(_receipt);
     }
     
-    public void onError(String msg)
+    @Override
+    public void onRejected(long mid, String msg)
     {
       
     }
   }
   
-  static class MessageListener implements SubscriberMessageHandler {
+  static class MessageListener implements ReceiverMessageHandler {
     private StompConnection _conn;
     private String _subscription;
     private String _destination;

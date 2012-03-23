@@ -35,8 +35,8 @@ import java.util.logging.Logger;
 
 import com.caucho.env.thread.ActorQueue;
 import com.caucho.env.thread.ActorQueue.ItemProcessor;
-import com.caucho.message.broker.BrokerSubscriber;
-import com.caucho.message.broker.SubscriberMessageHandler;
+import com.caucho.message.broker.BrokerReceiver;
+import com.caucho.message.broker.ReceiverMessageHandler;
 import com.caucho.message.nautilus.NautilusQueue.QueueEntry;
 import com.caucho.util.Friend;
 import com.caucho.util.RingItemFactory;
@@ -44,7 +44,7 @@ import com.caucho.util.RingItemFactory;
 /**
  * Subscription to a destination
  */
-public class NautilusBrokerSubscriber implements BrokerSubscriber
+public class NautilusBrokerSubscriber implements BrokerReceiver
 {
   private static final long MASK = 0xffffffffL;
   
@@ -56,7 +56,7 @@ public class NautilusBrokerSubscriber implements BrokerSubscriber
   
   private final ActorQueue<NautilusRingItem> _nautilusQueue;
   
-  private final SubscriberMessageHandler _subscriberHandler;
+  private final ReceiverMessageHandler _subscriberHandler;
   
   // NautilusMultiQueueActor variables
   private long _deliveryCount;
@@ -65,7 +65,7 @@ public class NautilusBrokerSubscriber implements BrokerSubscriber
   NautilusBrokerSubscriber(String queueName,
                            long qid,
                            ActorQueue<NautilusRingItem> nautilusActorQueue,
-                           SubscriberMessageHandler subscriberHandler)
+                           ReceiverMessageHandler subscriberHandler)
   {
     _queueName = queueName;
     _qid = qid;
@@ -81,18 +81,18 @@ public class NautilusBrokerSubscriber implements BrokerSubscriber
   }
    
   @Override
-  public void accept(long xid, long mid)
+  public void accepted(long xid, long mid)
   {
     NautilusRingItem entry = _nautilusQueue.startOffer(true);
     
-    entry.initAck(_qid, mid, this);
+    entry.initAck(xid, _qid, mid, this);
     
     _nautilusQueue.finishOffer(entry);
     _nautilusQueue.wake();
   }
   
   @Override
-  public void reject(long xid, long mid, String message)
+  public void rejected(long xid, long mid, String message)
   {
     System.out.println("reject: " + mid);
   }
@@ -107,13 +107,13 @@ public class NautilusBrokerSubscriber implements BrokerSubscriber
   
 
   @Override
-  public void release(long xid, long mid)
+  public void released(long xid, long mid)
   {
     System.out.println("releaseE: " + mid);
   }
   
   @Override
-  public void flow(long xid, long deliveryCount, int linkCredit)
+  public void flow(long deliveryCount, int linkCredit)
   {
     NautilusRingItem entry = _nautilusQueue.startOffer(true);
     

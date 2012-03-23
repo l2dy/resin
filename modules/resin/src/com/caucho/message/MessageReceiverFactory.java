@@ -30,20 +30,30 @@
 package com.caucho.message;
 
 /**
- * AMQP client receiver factor
+ * AMQP client receiver factory
  */
 public interface MessageReceiverFactory {
   public MessageReceiverFactory setAddress(String address);
   
   public String getAddress();
   
-  public MessageReceiverFactory setAckMode(boolean isAutoAck);
+  public MessageReceiverFactory setDistributionMode(DistributionMode mode);
   
-  public boolean getAckMode();
+  public DistributionMode getDistributionMode();
   
   public MessageReceiverFactory setPrefetch(int prefetch);
   
   public int getPrefetch();
+  
+  public MessageReceiverFactory setSettleMode(SettleMode settleMode);
+  
+  public SettleMode getSettleMode();
+  
+  public MessageReceiverFactory setSettleTime(SettleTime settleTime);
+  
+  public SettleTime getSettleTime();
+  
+  // public MessageReceiverFactory setMessageListener(MessageListener listener);
   
   public MessageReceiver<?> build();
 }

@@ -56,6 +56,9 @@ public interface ResinMXBean extends ManagedObjectMXBean {
    */
   @Description("The current Server instance")
   public ServerMXBean getServer();
+  
+  @Description("The current Server config MBeans")
+  public ConfigMXBean []getConfigs();
 
   //
   // Configuration Attributes

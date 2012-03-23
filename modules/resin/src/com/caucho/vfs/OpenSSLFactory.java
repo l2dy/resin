@@ -8,7 +8,6 @@ package com.caucho.vfs;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.util.logging.Logger;
 import java.util.regex.Pattern;
 
 import javax.annotation.PostConstruct;
@@ -305,28 +304,34 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
     int protocolFlags = 0;
     for (int i = 0; i < values.length; i++) {
       if (values[i].equalsIgnoreCase("+all"))
-	protocolFlags = ~0;
+        protocolFlags = ~0;
       else if (values[i].equalsIgnoreCase("-all"))
-	protocolFlags = 0;
+        protocolFlags = 0;
       else if (values[i].equalsIgnoreCase("+sslv2"))
-	protocolFlags |= PROTOCOL_SSL2;
+        protocolFlags |= PROTOCOL_SSL2;
       else if (values[i].equalsIgnoreCase("-sslv2"))
-	protocolFlags &= ~PROTOCOL_SSL2;
+        protocolFlags &= ~PROTOCOL_SSL2;
       else if (values[i].equalsIgnoreCase("+sslv3"))
-	protocolFlags |= PROTOCOL_SSL3;
+        protocolFlags |= PROTOCOL_SSL3;
       else if (values[i].equalsIgnoreCase("-sslv3"))
-	protocolFlags &= ~PROTOCOL_SSL3;
+        protocolFlags &= ~PROTOCOL_SSL3;
       else if (values[i].equalsIgnoreCase("+tlsv1"))
-	protocolFlags |= PROTOCOL_TLS1;
+        protocolFlags |= PROTOCOL_TLS1;
       else if (values[i].equalsIgnoreCase("-tlsv1"))
-	protocolFlags &= ~PROTOCOL_TLS1;
+        protocolFlags &= ~PROTOCOL_TLS1;
       else
-	throw new ConfigException(L.l("unknown protocol value '{0}'",
-				      protocol));
+        throw new ConfigException(L.l("unknown protocol value '{0}'",
+                                      protocol));
     }
 
     if (values.length > 0)
       _protocolFlags = protocolFlags;
+  }
+  
+  @Override
+  public boolean isJni()
+  {
+    return _stdServerSocket != null && _stdServerSocket.isJni();
   }
 
   /**
@@ -350,7 +355,7 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
   {
     synchronized (_sslInitLock) {
       if (_stdServerSocket != null)
-	throw new IOException(L.l("Can't create duplicte ssl factory."));
+        throw new IOException(L.l("Can't create duplicte ssl factory."));
 
       initConfig();
     
@@ -370,13 +375,13 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
   {
     synchronized (_sslInitLock) {
       if (_stdServerSocket != null)
-	throw new ConfigException(L.l("Can't create duplicte ssl factory."));
+        throw new ConfigException(L.l("Can't create duplicte ssl factory."));
 
       try {
-	initConfig();
+        initConfig();
       } catch (RuntimeException e) {
-	e.printStackTrace();
-	throw e;
+        e.printStackTrace();
+        throw e;
       }
     
       _stdServerSocket = ss;
@@ -408,11 +413,13 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
       throw new IOException(L.l("Can't create OpenSSL factory."));
   }
   
+  @Override
   public void setTcpNoDelay(boolean delay)
   {
     _stdServerSocket.setTcpNoDelay(delay);
   }
   
+  @Override
   public boolean isTcpNoDelay()
   {
     return _stdServerSocket.isTcpNoDelay();
@@ -421,6 +428,7 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
   /**
    * Sets the socket timeout for connections.
    */
+  @Override
   public void setConnectionSocketTimeout(int ms)
   {
     _stdServerSocket.setConnectionSocketTimeout(ms);
@@ -435,6 +443,7 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
     _stdServerSocket.listen(backlog);
   }
 
+  @Override
   public boolean accept(QSocket socket)
     throws IOException
   {
@@ -459,6 +468,18 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
       return true;
     }
   }
+
+  /*
+  @Override
+  public int acceptInitialRead(QSocket socket, 
+                               byte []buffer, int offset, int length)
+    throws IOException
+  {
+    JniSocketImpl jniSocket = (JniSocketImpl) socket;
+
+    return jniSocket.acceptInit(buffer, offset, length);
+  }
+  */
   
   public QSocket createSocket()
     throws IOException
@@ -562,6 +583,11 @@ public class OpenSSLFactory extends QServerSocket implements SSLFactory {
    * Opens the connection for SSL.
    */
   native long open(long fd, long configFd);
+  
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _stdServerSocket + "]";
+  }
 
   static {
     JniTroubleshoot jniTroubleshoot = null;

@@ -31,48 +31,31 @@ package com.caucho.amqp.client;
 
 import com.caucho.amqp.AmqpReceiver;
 import com.caucho.amqp.AmqpReceiverFactory;
-import com.caucho.amqp.transform.AmqpMessageDecoder;
-import com.caucho.amqp.transform.AmqpStringDecoder;
+import com.caucho.amqp.marshal.AmqpMessageDecoder;
+import com.caucho.amqp.marshal.AmqpStringDecoder;
+import com.caucho.message.SettleMode;
+import com.caucho.message.common.AbstractMessageReceiverFactory;
 
 
 /**
  * AMQP client
  */
-class AmqpClientReceiverFactory implements AmqpReceiverFactory {
-  private AmqpConnectionImpl _client;
+class AmqpClientReceiverFactory extends AbstractMessageReceiverFactory
+  implements AmqpReceiverFactory
+{
+  private AmqpClientConnectionImpl _client;
   
-  private String _address;
-  private int _prefetch = 1;
-  private boolean _isAutoAck = true;
   private AmqpMessageDecoder<?> _decoder = AmqpStringDecoder.DECODER;
   
-  AmqpClientReceiverFactory(AmqpConnectionImpl client)
+  AmqpClientReceiverFactory(AmqpClientConnectionImpl client)
   {
     _client = client;
   }
 
   @Override
-  public boolean getAckMode()
+  public AmqpReceiverFactory setSettleMode(SettleMode settleMode)
   {
-    return _isAutoAck;
-  }
-
-  @Override
-  public String getAddress()
-  {
-    return _address;
-  }
-
-  @Override
-  public int getPrefetch()
-  {
-    return _prefetch;
-  }
-
-  @Override
-  public AmqpReceiverFactory setAckMode(boolean isAutoAck)
-  {
-    _isAutoAck = isAutoAck;
+    super.setSettleMode(settleMode);
 
     return this;
   }
@@ -80,7 +63,7 @@ class AmqpClientReceiverFactory implements AmqpReceiverFactory {
   @Override
   public AmqpReceiverFactory setAddress(String address)
   {
-    _address = address;
+    super.setAddress(address);
     
     return this;
   }
@@ -88,7 +71,7 @@ class AmqpClientReceiverFactory implements AmqpReceiverFactory {
   @Override
   public AmqpReceiverFactory setPrefetch(int prefetch)
   {
-    _prefetch = prefetch;
+    super.setPrefetch(prefetch);
     
     return this;
   }
@@ -111,7 +94,7 @@ class AmqpClientReceiverFactory implements AmqpReceiverFactory {
   }
 
   @Override
-  public AmqpReceiver build()
+  public AmqpReceiver<?> build()
   {
     return _client.buildReceiver(this);
   }

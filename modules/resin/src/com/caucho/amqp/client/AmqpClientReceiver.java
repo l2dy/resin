@@ -32,51 +32,65 @@ package com.caucho.amqp.client;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import com.caucho.amqp.AmqpReceiver;
+import com.caucho.amqp.common.AmqpSession;
 import com.caucho.amqp.io.AmqpReader;
-import com.caucho.amqp.transform.AmqpMessageDecoder;
+import com.caucho.amqp.marshal.AmqpMessageDecoder;
+import com.caucho.message.DistributionMode;
+import com.caucho.message.SettleMode;
+import com.caucho.message.common.AbstractMessageReceiver;
 
 /**
  * AMQP client
  */
-class AmqpClientReceiver<T> implements AmqpReceiver<T> {
+class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
+  implements AmqpReceiver<T> 
+{
   private static final long TIMEOUT_INFINITY = Long.MAX_VALUE / 2;
   
-  private final AmqpConnectionImpl _client;
+  private final AmqpClientConnectionImpl _client;
   
   private final String _address;
-  private final int _handle;
+  private final AmqpClientReceiverLink _link;
   
-  private final boolean _isAutoAck;
+  private final SettleMode _settleMode;
   
-  private final AmqpMessageDecoder<T> _decoder;
-  
-  private long _deliveryCount = -1;
   private int _prefetch;
+  private final AmqpMessageDecoder<T> _decoder;
 
-  private ConcurrentLinkedQueue<T> _valueQueue
-    = new ConcurrentLinkedQueue<T>();
+  private int _linkCredit;
+
+  private LinkedBlockingQueue<ValueNode<T>> _valueQueue
+    = new LinkedBlockingQueue<ValueNode<T>>();
+
+  private long _lastMessageId;
   
-  AmqpClientReceiver(AmqpConnectionImpl client,
-                     AmqpClientReceiverFactory builder,
-                     int handle)
+  AmqpClientReceiver(AmqpClientConnectionImpl client,
+                     AmqpSession session,
+                     AmqpClientReceiverFactory builder)
   {
     _client = client;
     _address = builder.getAddress();
-    _handle = handle;
     
-    _isAutoAck = builder.getAckMode();
+    _settleMode = builder.getSettleMode();
     _decoder = (AmqpMessageDecoder) builder.getDecoder(); 
-    
+
     _prefetch = builder.getPrefetch();
     
-    if (_prefetch > 0) {
-      _client.flow(_handle, _deliveryCount, _prefetch);
-    }
+    _link = new AmqpClientReceiverLink("client-" + _address, _address, this);
     
+    DistributionMode distMode = builder.getDistributionMode();
+    session.addReceiverLink(_link, distMode, _settleMode);
+
+    if (_prefetch > 0) {
+      _linkCredit = _prefetch;
+      _link.setPrefetch(_prefetch);
+    }
   }
   
   public int getPrefetchQueueSize()
@@ -85,325 +99,114 @@ class AmqpClientReceiver<T> implements AmqpReceiver<T> {
   }
   
   @Override
-  public T take()
+  protected T pollMicros(long timeoutMicros)
   {
-    return poll(TIMEOUT_INFINITY);
-  }
-  
-  @Override
-  public T poll()
-  {
-    return poll(0);
-  }
-
-  @Override
-  public T poll(long timeout, TimeUnit unit)
-  {
-    return poll(unit.toMicros(timeout));
-  }
-  
-  private T poll(long timeoutMicros)
-  {
-    T value = _valueQueue.poll();
+    ValueNode<T> value = _valueQueue.poll();
     
     if (value == null) {
-      return null;
+      if (_linkCredit > 0 || _prefetch > 0) {
+        return null;
+      }
+      
+      if (_prefetch == 0) {
+        _link.setPrefetch(1);
+      }
+      try {
+        value = _valueQueue.poll(1000, TimeUnit.MILLISECONDS);
+        
+        if (value == null) {
+          return null;
+        }
+      } catch (InterruptedException e) {
+        e.printStackTrace();
+        return null;
+      } finally {
+        if (_prefetch == 0) {
+          // drain
+          _link.setPrefetch(0);
+        }
+      }
     }
+
+    _link.updateTake();
     
-    _client.flow(_handle, _deliveryCount, _prefetch - _valueQueue.size());
+    _lastMessageId = value.getMessageId();
     
-    if (_isAutoAck) {
-      _client.dispositionAccept(_handle);
-    }
-    
-    return value;
-  }
-
-  @Override
-  public T element()
-  {
-    return poll();
-  }
-
-  @Override
-  public T peek()
-  {
-    return _valueQueue.peek();
-  }
-
-  @Override
-  public T remove()
-  {
-    return poll();
-  }
-
-  @Override
-  public void accepted()
-  {
-    _client.dispositionAccept(_handle);
+    return value.getValue();
   }
   
   @Override
-  public void rejected(String errorMessage)
+  public long getLastMessageId()
   {
-    _client.dispositionReject(_handle, errorMessage);
-  }
-  
-  @Override
-  public void released()
-  {
-    _client.dispositionRelease(_handle);
-  }
-  
-  @Override
-  public void modified(boolean isFailed, boolean isUndeliverableHere)
-  {
-    _client.dispositionModified(_handle, isFailed, isUndeliverableHere);
+    return _lastMessageId;
   }
 
-  void setDeliveryCount(long deliveryCount)
+  @Override
+  public void accepted(long mid)
   {
-    _deliveryCount = deliveryCount;
+    _link.accepted(mid);
+  }
+  
+  @Override
+  public void rejected(long mid, String errorMessage)
+  {
+    _link.rejected(mid, errorMessage);
+  }
+  
+  @Override
+  public void released(long mid)
+  {
+    _link.released(mid);
+  }
+  
+  @Override
+  public void modified(long mid,
+                       boolean isFailed, 
+                       boolean isUndeliverableHere)
+  {
+    _link.modified(mid, isFailed, isUndeliverableHere);
   }
   
   /**
    * @param ain
    */
-  void receive(AmqpReader ain)
+  void receive(long mid, AmqpReader ain)
     throws IOException
   {
-    _deliveryCount++;
-    
     T value = _decoder.decode(ain, null);
-    _valueQueue.add(value);
+    
+    _valueQueue.add(new ValueNode<T>(value, mid));
   }
   
   public void close()
   {
-    _client.closeReceiver(_handle);
+    _link.detach();
   }
   
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _handle + "," + _address + "]";
+    return getClass().getSimpleName() + "[" + _address + "," + _link + "]";
   }
   
-  static class ValueNode {
-    private ValueNode _next;
-    
-    private Object _value;
-    private long _count;
+  static class ValueNode<T> {
+    private final T _value;
+    private final long _mid;
   
-    ValueNode(Object value)
+    ValueNode(T value, long mid)
     {
       _value = value;
+      _mid = mid;
     }
     
-    public Object getValue()
+    public T getValue()
     {
       return _value;
     }
     
-    public ValueNode getNext()
+    public long getMessageId()
     {
-      return _next;
+      return _mid;
     }
-    
-    public void setNext(ValueNode next)
-    {
-      _next = next;
-    }
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#add(java.lang.Object)
-   */
-  @Override
-  public boolean add(Object arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#contains(java.lang.Object)
-   */
-  @Override
-  public boolean contains(Object arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#drainTo(java.util.Collection)
-   */
-  @Override
-  public int drainTo(Collection arg0)
-  {
-    // TODO Auto-generated method stub
-    return 0;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#drainTo(java.util.Collection, int)
-   */
-  @Override
-  public int drainTo(Collection arg0, int arg1)
-  {
-    // TODO Auto-generated method stub
-    return 0;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#offer(java.lang.Object)
-   */
-  @Override
-  public boolean offer(Object arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#offer(java.lang.Object, long, java.util.concurrent.TimeUnit)
-   */
-  @Override
-  public boolean offer(Object arg0, long arg1, TimeUnit arg2)
-    throws InterruptedException
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#put(java.lang.Object)
-   */
-  @Override
-  public void put(Object arg0) throws InterruptedException
-  {
-    // TODO Auto-generated method stub
-    
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#remainingCapacity()
-   */
-  @Override
-  public int remainingCapacity()
-  {
-    // TODO Auto-generated method stub
-    return 0;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.concurrent.BlockingQueue#remove(java.lang.Object)
-   */
-  @Override
-  public boolean remove(Object arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#addAll(java.util.Collection)
-   */
-  @Override
-  public boolean addAll(Collection arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#clear()
-   */
-  @Override
-  public void clear()
-  {
-    // TODO Auto-generated method stub
-    
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#containsAll(java.util.Collection)
-   */
-  @Override
-  public boolean containsAll(Collection arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#isEmpty()
-   */
-  @Override
-  public boolean isEmpty()
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#iterator()
-   */
-  @Override
-  public Iterator iterator()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#removeAll(java.util.Collection)
-   */
-  @Override
-  public boolean removeAll(Collection arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#retainAll(java.util.Collection)
-   */
-  @Override
-  public boolean retainAll(Collection arg0)
-  {
-    // TODO Auto-generated method stub
-    return false;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#size()
-   */
-  @Override
-  public int size()
-  {
-    // TODO Auto-generated method stub
-    return 0;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#toArray()
-   */
-  @Override
-  public Object[] toArray()
-  {
-    // TODO Auto-generated method stub
-    return null;
-  }
-
-  /* (non-Javadoc)
-   * @see java.util.Collection#toArray(T[])
-   */
-  @Override
-  public Object[] toArray(Object[] arg0)
-  {
-    // TODO Auto-generated method stub
-    return null;
   }
 }

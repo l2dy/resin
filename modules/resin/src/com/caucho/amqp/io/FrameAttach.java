@@ -92,9 +92,19 @@ public class FrameAttach extends AmqpAbstractFrame {
     _role = role;
   }
   
+  public void setSenderSettleMode(SenderSettleMode mode)
+  {
+    _senderSettleMode = mode;
+  }
+  
   public SenderSettleMode getSenderSettleMode()
   {
     return _senderSettleMode;
+  }
+  
+  public void setReceiverSettleMode(ReceiverSettleMode mode)
+  {
+    _receiverSettleMode = mode;
   }
   
   public ReceiverSettleMode getReceiverSettleMode()
@@ -137,6 +147,11 @@ public class FrameAttach extends AmqpAbstractFrame {
     return _initialDeliveryCount;
   }
   
+  public void setInitialDeliveryCount(long deliveryCount)
+  {
+    _initialDeliveryCount = deliveryCount;
+  }
+  
   public long getMaxMessageSize()
   {
     return _maxMessageSize;
@@ -170,7 +185,7 @@ public class FrameAttach extends AmqpAbstractFrame {
   }
   
   @Override
-  public void invoke(AmqpFrameReader fin, AmqpFrameHandler receiver)
+  public void invoke(AmqpReader ain, AmqpFrameHandler receiver)
     throws IOException
   {
     receiver.onAttach(this);

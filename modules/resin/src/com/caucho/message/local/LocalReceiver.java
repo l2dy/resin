@@ -29,219 +29,150 @@
 
 package com.caucho.message.local;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-import com.caucho.amqp.transform.AmqpMessageDecoder;
+import com.caucho.amqp.io.AmqpReader;
+import com.caucho.amqp.marshal.AmqpMessageDecoder;
+import com.caucho.message.DistributionMode;
 import com.caucho.message.MessageReceiver;
+import com.caucho.message.broker.BrokerSender;
+import com.caucho.message.broker.BrokerReceiver;
+import com.caucho.message.broker.EnvironmentMessageBroker;
+import com.caucho.message.broker.ReceiverMessageHandler;
+import com.caucho.message.common.AbstractMessageReceiver;
+import com.caucho.util.L10N;
 
 /**
  * local connection to the message store
  */
-public class LocalReceiver<T> implements MessageReceiver<T> {
+public class LocalReceiver<T> extends AbstractMessageReceiver<T> {
+  private static final L10N L = new L10N(LocalReceiver.class);
+  
+  private static final Logger log
+    = Logger.getLogger(LocalReceiver.class.getName());
+  
   private String _address;
   
   private int _prefetch;
+  private int _linkCredit;
   
   private AmqpMessageDecoder<T> _decoder;
+  
+  private LinkedBlockingQueue<QueueEntry> _queue
+    = new LinkedBlockingQueue<QueueEntry>();
+  
+  private BrokerReceiver _sub;
   
   LocalReceiver(LocalReceiverFactory factory)
   {
     _address = factory.getAddress();
     _prefetch = factory.getPrefetch();
     _decoder = (AmqpMessageDecoder) factory.getDecoder();
+    
+    EnvironmentMessageBroker broker = EnvironmentMessageBroker.getCurrent();
+    
+    ReceiverMessageHandler handler = new LocalMessageHandler();
+    
+    DistributionMode distMode = factory.getDistributionMode();
+        
+    _sub = broker.createReceiver(_address, distMode, handler);
+    
+    if (_sub == null) {
+      throw new IllegalArgumentException(L.l("'{0}' is an unknown queue",
+                                             _address));
+    }
+    
+    _linkCredit = _prefetch;
+    if (_prefetch > 0) {
+      _sub.flow(-1, _prefetch);
+    }
   }
   
   public String getAddress()
   {
     return _address;
   }
-
-  @Override
-  public boolean isEmpty()
-  {
-    return false;
-  }
-
-  @Override
-  public int size()
-  {
-    return 0;
-  }
-
-  @Override
-  public T poll(long timeout, TimeUnit unit)
-  {
-    return pollMicros(unit.toMicros(timeout));
-  }
   
-  private T pollMicros(long timeoutMicros)
-  {
-    return null;
-  }
-
   @Override
-  public T take() throws InterruptedException
+  protected T pollMicros(long timeoutMicros)
   {
-    return pollMicros(Integer.MAX_VALUE);
-  }
+    boolean isFlow = false;
+    
+    try {
+      QueueEntry entry = _queue.poll(timeoutMicros, TimeUnit.MICROSECONDS);
+      
+      if (entry == null) {
+        return null;
+      }
+      
+      isFlow = true;
+      
+      InputStream is = entry.getInputStream();
+      AmqpReader ain = new AmqpReader();
+      ain.init(is);
+      
+      T value = _decoder.decode(ain, null);
 
-  @Override
-  public T element()
-  {
-    return peek();
-  }
-
-  @Override
-  public T peek()
-  {
-    return null;
-  }
-
-  @Override
-  public T poll()
-  {
-    return pollMicros(0);
-  }
-
-  @Override
-  public T remove()
-  {
-    return null;
-  }
-
-  @Override
-  public void accepted()
-  {
-  }
-
-  @Override
-  public void rejected(String errorMessage)
-  {
-  }
-
-  @Override
-  public void released()
-  {
-  }
-
-  @Override
-  public void modified(boolean isFailed, boolean isUndeliverableHere)
-  {
-  }
-  
-  //
-  // non-receiving
-  //
-
-  @Override
-  public boolean remove(Object o)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean addAll(Collection<? extends T> c)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public void clear()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public void put(T e) throws InterruptedException
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-
-  }
-
-  @Override
-  public int remainingCapacity()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean containsAll(Collection<?> c)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public Iterator<T> iterator()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean removeAll(Collection<?> c)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean retainAll(Collection<?> c)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public Object[] toArray()
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public <T> T[] toArray(T[] a)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean add(T e)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean contains(Object o)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public int drainTo(Collection<? super T> c)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public int drainTo(Collection<? super T> c, int maxElements)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean offer(T e)
-  {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
-
-  @Override
-  public boolean offer(T e, long timeout, TimeUnit unit)
-      throws InterruptedException
-  {
-    throw new UnsupportedOperationException(getClass().getName());
+      return value;
+    } catch (IOException e) {
+      log.log(Level.FINE, e.toString(), e);
+      
+      return null;
+    } catch (InterruptedException e) {
+      log.log(Level.FINE, e.toString(), e);
+      
+      return null;
+    } finally {
+      if (isFlow) {
+        _linkCredit--;
+        
+        int delta = _prefetch - _linkCredit;
+        
+        if (_linkCredit <= (_prefetch >> 2)) {
+          _sub.flow(-1, _prefetch);
+          _linkCredit = _prefetch;
+        }
+      }
+    }
   }
 
   @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + getAddress() + "]";
+  }
+  
+  class LocalMessageHandler implements ReceiverMessageHandler {
+    @Override
+    public void onMessage(long messageId, 
+                          InputStream bodyIs, 
+                          long contentLength)
+        throws IOException
+    {
+      _queue.add(new QueueEntry(messageId, bodyIs));
+    }
+  }
+  
+  static class QueueEntry {
+    private long _mid;
+    private InputStream _is;
+    
+    QueueEntry(long mid, InputStream is)
+    {
+      _mid = mid;
+      _is = is;
+    }
+    
+    public InputStream getInputStream()
+    {
+      return _is;
+    }
   }
 }

@@ -29,15 +29,12 @@
 
 package com.caucho.server.resin;
 
+import java.util.Collection;
+
 import com.caucho.VersionFactory;
-import com.caucho.cloud.topology.CloudCluster;
-import com.caucho.cloud.topology.CloudSystem;
-import com.caucho.cloud.topology.TopologyService;
-import com.caucho.management.server.AbstractManagedObject;
-import com.caucho.management.server.ClusterMXBean;
-import com.caucho.management.server.ResinMXBean;
-import com.caucho.management.server.ServerMXBean;
-import com.caucho.management.server.ThreadPoolMXBean;
+import com.caucho.cloud.topology.*;
+import com.caucho.config.ConfigAdmin;
+import com.caucho.management.server.*;
 import com.caucho.server.cluster.ServletService;
 import com.caucho.server.util.CauchoSystem;
 
@@ -95,7 +92,17 @@ public class ResinAdmin extends AbstractManagedObject
   {
     return _threadPoolAdmin;
   }
-
+  
+  @Override
+  public ConfigMXBean []getConfigs()
+  {
+    Collection<ConfigMXBean> beans = ConfigAdmin.getMBeans(_resin.getClassLoader());
+    ConfigMXBean[] array = new ConfigMXBean[beans.size()];
+    beans.toArray(array);
+    
+    return array;
+  }
+  
   //
   // Configuration attributes
   //

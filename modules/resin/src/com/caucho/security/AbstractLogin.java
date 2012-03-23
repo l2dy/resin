@@ -82,9 +82,10 @@ import com.caucho.server.session.SessionImpl;
  * @since Resin 4.0.0
  */
 public abstract class AbstractLogin implements Login {
-  protected final static Logger log
+  private final static Logger log
     = Logger.getLogger(AbstractLogin.class.getName());
 
+  
   /**
    * The configured authenticator for the login.  Implementing classes will
    * typically delegate calls to the authenticator after extracting the
@@ -243,25 +244,62 @@ public abstract class AbstractLogin implements Login {
   @Override
   public Principal getUserPrincipal(HttpServletRequest request)
   {
-    Principal user = (Principal) request.getAttribute(LOGIN_USER_NAME);
+    return getUserPrincipal(request, false);
+  }
 
-    if (user != null)
+  /**
+   * Returns the Principal associated with the current request.
+   * getUserPrincipal is called in response to the Request.getUserPrincipal
+   * call.  Login.getUserPrincipal can't modify the response or return
+   * an error page.
+   *
+   * <p/>authenticate is used for the security checks.
+   *
+   * @param request servlet request
+   *
+   * @return the logged in principal on success, null on failure.
+   */
+  private Principal getUserPrincipal(HttpServletRequest request, boolean isLogin)
+  {
+    Principal user = (Principal) request.getAttribute(LOGIN_USER);
+
+    if (user == null) {
+    }
+    else if (user != AbstractAuthenticator.NULL_USER) {
       return user;
+    }
+    else if (! isLogin) {
+      return null;
+    }
 
     Principal savedUser = findSavedUser(request);
-
+    
     // server/12c9 - new login overrides old
     if (savedUser != null && isSavedUserValid(request, savedUser)) {
-      request.setAttribute(LOGIN_USER_NAME, savedUser);
+      request.setAttribute(LOGIN_USER, savedUser);
 
       return savedUser;
     }
 
     // server/12d2
-    user = getUserPrincipalImpl(request);
+    if (isLogin)
+      user = getLoginPrincipalImpl(request);
+    else
+      user = getUserPrincipalImpl(request);
 
-    if (user != null || savedUser != null) {
+    if (user != null) {
+      request.setAttribute(LOGIN_USER, user);
+      
       saveUser(request, user);
+    }
+    else if (savedUser != null) {
+      // clear the saved user
+      request.setAttribute(LOGIN_USER, AbstractAuthenticator.NULL_USER);
+      
+      saveUser(request, null);
+    }
+    else {
+      request.setAttribute(LOGIN_USER, AbstractAuthenticator.NULL_USER);
     }
 
     return user;
@@ -283,26 +321,21 @@ public abstract class AbstractLogin implements Login {
                          HttpServletResponse response,
                          boolean isFail)
   {
-    Principal user = (Principal) request.getAttribute(LOGIN_USER_PRINCIPAL);
-    
-    if (user != null)
-      return user;
-    
-    Principal savedUser = findSavedUser(request);
-
-    // server/12c9 - new login overrides old
-    if (savedUser != null && isSavedUserValid(request, savedUser)) {
-      request.setAttribute(LOGIN_USER_PRINCIPAL, savedUser);
-      
-      return savedUser;
-    }
-
-    user = login(request, response);
-    
-    if (user != null)
-      request.setAttribute(LOGIN_USER_PRINCIPAL, user);
-
     try {
+      // server/123c, 1a25, 1as0
+      Principal savedUser = null;
+      
+      savedUser = findSavedUser(request);
+
+      // server/12c9 - new login overrides old
+      if (savedUser != null && isSavedUserValid(request, savedUser)) {
+        request.setAttribute(LOGIN_USER, savedUser);
+
+        return savedUser;
+      }
+
+      Principal user = login(request, response);
+
       if (user != null || savedUser != null) {
         // server/12h7
         saveUser(request, user);
@@ -316,7 +349,7 @@ public abstract class AbstractLogin implements Login {
 
       if (isFail) {
         log.fine(this + " sending login challenge");
-        
+
         loginChallenge(request, response);
       }
     } catch (RuntimeException e) {
@@ -339,7 +372,23 @@ public abstract class AbstractLogin implements Login {
     // Most login classes will extract the user and password (or some other
     // credentials) from the request and call auth.login.
 
-    return getLoginPrincipalImpl(request);
+    // return getLoginPrincipalImpl(request);
+    // server/1a26
+    // server/123c, 1a25, 1as0
+    /*
+    Principal user = (Principal) request.getAttribute(LOGIN_USER);
+
+    if (user == null) {
+      return getUserPrincipal(request, true);
+    }
+    else if (user == AbstractAuthenticator.NULL_USER) {
+      return null;
+    }
+    else {
+      return user;
+    }
+    */
+    return getUserPrincipal(request, true);
   }
   
   /**
@@ -358,8 +407,9 @@ public abstract class AbstractLogin implements Login {
     else
       sessionId = request.getRequestedSessionId();
 
-    if (sessionId == null)
+    if (sessionId == null) {
       return null;
+    }
     else if (singleSignon != null) {
       Principal user = singleSignon.get(sessionId);
       
@@ -369,7 +419,7 @@ public abstract class AbstractLogin implements Login {
       return user;
     }
     else if (isSessionSaveLogin() && session != null) {
-      Principal user = (Principal) session.getAttribute(LOGIN_USER_PRINCIPAL);
+      Principal user = (Principal) session.getAttribute(LOGIN_USER);
       
       if (user != null && log.isLoggable(Level.FINER))
         log.finer(this + " load user '" + user + "' from session");
@@ -411,10 +461,10 @@ public abstract class AbstractLogin implements Login {
         log.finer(this + " save user '" + user +"' in single signon " + singleSignon);
     }
     else if (isSessionSaveLogin()) {
-      session.setAttribute(LOGIN_USER_PRINCIPAL, user);
+      session.setAttribute(LOGIN_USER, user);
       
       if (log.isLoggable(Level.FINER))
-        log.finer(this + " save user '" + user +"' in session " + singleSignon);
+        log.finer(this + " save user '" + user + "' in session " + session);
     }
   }
 
@@ -505,7 +555,9 @@ public abstract class AbstractLogin implements Login {
     HttpSession session = request.getSession(false);
     
     if (session != null)
-      session.removeAttribute(LOGIN_USER_PRINCIPAL);
+      session.removeAttribute(LOGIN_USER);
+    
+    request.removeAttribute(LOGIN_USER);
 
     SingleSignon singleSignon = getSingleSignon();
 

@@ -32,6 +32,7 @@ package com.caucho.server.http;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.security.Principal;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.Locale;
@@ -48,14 +49,16 @@ import javax.servlet.ServletRequestWrapper;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import javax.servlet.http.Part;
 
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.CharBuffer;
 import com.caucho.vfs.ReadStream;
 
-public class CauchoRequestWrapper extends AbstractCauchoRequest {
+public class CauchoRequestWrapper implements CauchoRequest {
   // the wrapped request
   private HttpServletRequest _request;
   private CauchoResponse _response;
@@ -83,8 +86,20 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     
     _request = request;
   }
-  
+
+  /*
   @Override
+  public HttpSession getSession()
+  {
+    CauchoRequest cRequest = getCauchoRequest();
+
+    if (cRequest != null)
+      return cRequest.getSession();
+    else
+      return null;
+  }
+  */
+
   public HttpServletRequest getRequest()
   {
     return _request;
@@ -95,7 +110,6 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
     _response = response;
   }
   
-  @Override
   public CauchoResponse getResponse()
   {
     return _response;
@@ -569,14 +583,6 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   public Part getPart(String name)
     throws IOException, ServletException
   {
-    if (isDelegateMultipartEnabled())
-      return _request.getPart(name);
-    
-    Part part = super.getPart(name);
-
-    if (part != null)
-      return part;
-
     return _request.getPart(name);
   }
 
@@ -584,41 +590,18 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
   public Collection<Part> getParts()
     throws IOException, ServletException
   {
-    if (isDelegateMultipartEnabled())
-      return _request.getParts();
-    
-    Collection<Part> parts = super.getParts();
-
-    if (parts != null)
-      return parts;
-
     return _request.getParts();
-  }
-  
-  protected boolean isDelegateMultipartEnabled()
-  {
-    if (_request instanceof CauchoRequest) {
-      boolean isEnabled = ((CauchoRequest) _request).isMultipartEnabled();
-      
-      return isEnabled;
-    }
-    
-    return false;
   }
   
   @Override
   public boolean isMultipartEnabled()
   {
-    return isDelegateMultipartEnabled() || super.isMultipartEnabled();
+    if (_request instanceof CauchoRequest) {
+      return ((CauchoRequest) _request).isMultipartEnabled();
+    }
+
+    return false;
   }
-  
-  /*
-  public void login(String username, String password)
-    throws ServletException
-  {
-    _request.login(username, password);
-  }
-  */
 
   @Override
   public void logout()
@@ -950,7 +933,76 @@ public class CauchoRequestWrapper extends AbstractCauchoRequest {
 
     return null;
   }
-  
+
+  @Override
+  public HttpSession getSession(boolean create)
+  {
+    return _request.getSession(create);
+  }
+
+  @Override
+  public HttpSession getSession()
+  {
+    return getSession(true);
+  }
+
+  @Override
+  public boolean isUserInRole(String role)
+  {
+    return _request.isUserInRole(role);
+  }
+
+  @Override
+  public Principal getUserPrincipal()
+  {
+    return _request.getUserPrincipal();
+  }
+
+  @Override
+  public boolean authenticate(HttpServletResponse response)
+    throws IOException, ServletException
+  {
+    return _request.authenticate(response);
+  }
+
+  @Override
+  public void login(String username, String password)
+    throws ServletException
+  {
+    _request.login(username,  password);
+  }
+
+  @Override
+  @SuppressWarnings("deprecation")
+  public String getRealPath(String uri)
+  {
+    return _request.getRealPath(uri);
+  }
+
+  @Override
+  public boolean login(boolean isFail)
+  {
+    CauchoRequest request = getCauchoRequest();
+    
+    if (request != null) {
+      return request.login(isFail);
+    }
+    
+    return false;
+  }
+
+  @Override
+  public SocketLink getSocketLink()
+  {
+    CauchoRequest request = getCauchoRequest();
+    
+    if (request != null) {
+      return request.getSocketLink();
+    }
+    
+    return null;
+  }
+
   @Override
   public String toString()
   {

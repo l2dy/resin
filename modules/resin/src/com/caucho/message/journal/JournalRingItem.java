@@ -44,9 +44,10 @@ public class JournalRingItem extends RingItem
   
   private boolean _isInit = true;
   private boolean _isFin = true;
-  private int _code;
-  private long _id;
-  private long _seq;
+  private long _code;
+  private long _xid;
+  private long _qid;
+  private long _mid;
   
   private byte []_buffer;
   private int _offset;
@@ -54,8 +55,7 @@ public class JournalRingItem extends RingItem
   
   private long _blockAddr;
   
-  private JournalCallback _callback;
-  
+
   private final JournalResult _result = new JournalResult();
   
   private TempBuffer _tBuf;
@@ -65,22 +65,21 @@ public class JournalRingItem extends RingItem
     super(index);
   }
   
-  public final void init(int code, long id, long seq,
+  public final void init(long code, 
+                         long xid, long qid, long mid,
                          byte []buffer, int offset, int length,
-                         JournalCallback callback,
                          TempBuffer tBuf)
   {
     _isData = true;
     
     _code = code;
-    _id = id;
-    _seq = seq;
+    _xid = xid;
+    _qid = qid;
+    _mid = mid;
     
     _buffer = buffer;
     _offset = offset;
     _length = length;
-    
-    _callback = callback;
     
     _tBuf = tBuf;
   }
@@ -89,20 +88,21 @@ public class JournalRingItem extends RingItem
   {
     _isData = false;
     
+    _code = JournalFile.OP_CHECKPOINT;
     _blockAddr = blockAddr;
     _offset = offset;
     _length = length;
   }
   
-  public final void setCode(int code)
+  public final void setCode(long code)
   {
     _code = code;
   }
   
-  public final void init(int code, long id)
+  public final void init(long code, long qid)
   {
     _code = code;
-    _id = id;
+    _qid = qid;
   }
  
   public final boolean isData()
@@ -120,19 +120,24 @@ public class JournalRingItem extends RingItem
     return _isFin;
   }
   
-  public final int getCode()
+  public final long getCode()
   {
     return _code;
   }
   
-  public final long getId()
+  public final long getXid()
   {
-    return _id;
+    return _xid;
   }
   
-  public final long getSequence()
+  public final long getQid()
   {
-    return _seq;
+    return _qid;
+  }
+  
+  public final long getMid()
+  {
+    return _mid;
   }
   
   public final byte []getBuffer()
@@ -158,13 +163,8 @@ public class JournalRingItem extends RingItem
     _buffer = null;
     
     if (tBuf != null) {
-      // tBuf.freeSelf();
+      tBuf.freeSelf();
     }
-  }
-  
-  public final JournalCallback getCallback()
-  {
-    return _callback;
   }
   
   public final JournalResult getResult()
@@ -180,6 +180,6 @@ public class JournalRingItem extends RingItem
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _code + "," + _id + "," + _seq + "]";
+    return getClass().getSimpleName() + "[" + _code + "," + _qid + "," + _mid + "]";
   }
 }

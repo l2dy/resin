@@ -29,21 +29,49 @@
 
 package com.caucho.quercus;
 
-import java.io.IOException;
-import java.util.ArrayList;
-
+import com.caucho.quercus.env.CliEnv;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.page.QuercusPage;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.StdoutStream;
-import com.caucho.vfs.StringPath;
 import com.caucho.vfs.WriteStream;
 
+import java.io.IOException;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 public class CliQuercus extends Quercus
-{
+{ 
+  @Override
+  public Env createEnv(QuercusPage page,
+                       WriteStream out,
+                       HttpServletRequest request,
+                       HttpServletResponse response)
+  {
+    return new CliEnv(this, page, out, getArgv());
+  }
+  
   public static void main(String []args)
     throws IOException
   {
-    Quercus.main(args);
+    CliQuercus quercus = new CliQuercus();
+    
+    quercus.parseArgs(args);
+  
+    quercus.start();
+    
+    if (quercus.getFileName() != null) {
+      quercus.execute();
+    }
+    else {
+      throw new RuntimeException("input file not specified");
+    }
+  }
+  
+  /**
+   * Hard-coded to true for CLI according to php.net.
+   */
+  @Override
+  public boolean isRegisterArgv() {
+    return true;
   }
 }

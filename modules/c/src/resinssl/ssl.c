@@ -42,9 +42,10 @@ typedef struct CRYPTO_dynlock_value {
 
 #include <jni.h>
 
-#include "../resin/resin.h"
+#include "../resin_os/resin_os.h"
 
 static int ssl_open(connection_t *conn, int fd);
+static int ssl_init(connection_t *conn);
 static int ssl_read(connection_t *conn, char *buf, int len, int timeout);
 static int ssl_read_nonblock(connection_t *conn, char *buf, int len);
 static int ssl_write(connection_t *conn, char *buf, int len);
@@ -53,6 +54,7 @@ static void ssl_free(connection_t *conn);
 static int ssl_read_client_certificate(connection_t *conn, char *buf, int len);
 
 struct connection_ops_t ssl_ops = {
+  ssl_init,
   ssl_read,
   ssl_read_nonblock,
   ssl_write,
@@ -202,6 +204,35 @@ read_exception_status(connection_t *conn, int error)
   else {
     return -1;
   }
+}
+
+static int
+calculate_poll_result(connection_t *conn, int poll_result)
+{
+  if (poll_result == 0) {
+    return TIMEOUT_EXN;
+  }
+  else if (poll_result < 0 && errno != EINTR) {
+    return read_exception_status(conn, errno);
+  }
+}
+
+static int
+resin_tcp_set_recv_timeout(connection_t *conn, int timeout_ms)
+{
+  int fd = conn->fd;
+  int result = 0;
+  struct timeval timeout;
+
+#ifdef HAS_SOCK_TIMEOUT
+  timeout.tv_sec = timeout_ms / 1000;
+  timeout.tv_usec = timeout_ms % 1000 * 1000;
+  
+  result = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
+                      (char *) &timeout, sizeof(timeout));
+#endif  
+
+  return result;
 }
 
 static int
@@ -425,7 +456,7 @@ static SSL_CTX *
 ssl_create_context(JNIEnv *env, ssl_config_t *config)
 {
   SSL_CTX *ctx;
-  SSL_METHOD *meth;
+  const SSL_METHOD *meth;
 
   ssl_init_locks();
 
@@ -686,7 +717,7 @@ ssl_open(connection_t *conn, int fd)
   int result;
   SSL_CTX *ctx;
   SSL *ssl;
-  SSL_CIPHER *cipher;
+  const SSL_CIPHER *cipher;
   int algbits;
   int ssl_error;
   server_socket_t *ss;
@@ -705,7 +736,7 @@ ssl_open(connection_t *conn, int fd)
     return -1;
   }
 
-  ctx = conn->context;
+  ctx = conn->ssl_context;
 
   if (! ctx) {
     if (conn->jni_env) {
@@ -719,7 +750,7 @@ ssl_open(connection_t *conn, int fd)
   }
 
   ssl = SSL_new(ctx);
-  conn->sock = ssl;
+  conn->ssl_sock = ssl;
 
   if (! ssl) {
     resin_printf_exception(conn->jni_env, "java/io/IOException",
@@ -774,7 +805,7 @@ ssl_open(connection_t *conn, int fd)
     }
 #endif
       
-    conn->sock = 0;
+    conn->ssl_sock = 0;
     SSL_set_app_data(ssl, 0);
     SSL_free(ssl);
     
@@ -796,14 +827,21 @@ ssl_open(connection_t *conn, int fd)
 }
 
 static int
+ssl_init(connection_t *conn)
+{
+  return conn->ss->init(conn);
+}
+
+static int
 ssl_read(connection_t *conn, char *buf, int len, int timeout)
 {
   int fd;
   SSL *ssl;
   int result;
-  int retry = 5;
+  int retry = 32;
   int ssl_error = 0;
   int code;
+  int poll_timeout;
   int poll_result;
   int is_retry = 0;
   server_socket_t *ss;
@@ -816,7 +854,7 @@ ssl_read(connection_t *conn, char *buf, int len, int timeout)
   
   fd = conn->fd;
   
-  if (fd < 0)
+  if (fd < 0 || conn->is_read_shutdown)
     return -1;
 
   ss = conn->ss;
@@ -836,52 +874,71 @@ ssl_read(connection_t *conn, char *buf, int len, int timeout)
     }
   }
 
-  ssl = conn->sock;
+  ssl = conn->ssl_sock;
   if (! ssl)
     return -1;
 
   if (timeout >= 0) {
-    if (poll_read(conn->fd, timeout) <= 0)
-      return TIMEOUT_EXN;
+    poll_timeout = timeout;
+  }
+  else {
+    poll_timeout = conn->socket_timeout;
+  }
+
+  if (timeout > 0 && conn->is_recv_timeout) {
+    if (conn->recv_timeout != poll_timeout) {
+      conn->recv_timeout = poll_timeout;
+
+      resin_tcp_set_recv_timeout(conn, poll_timeout);
+    }
+  }
+  else {
+    poll_result = poll_read(fd, poll_timeout);
+
+    if (poll_result <= 0) {
+      return calculate_poll_result(conn, poll_result);
+    }
   }
 
   do {
-    if (! conn->is_recv_timeout || is_retry > 0) {
-      if (timeout < 0)
-        timeout = conn->socket_timeout;
-
-      poll_result = poll_read(conn->fd, timeout);
-
-      if (poll_result > 0) {
-      }
-      else if (poll_result == 0) {
-        /* XXX: also EINTR */
-        return TIMEOUT_EXN;
-      }
-      else if (errno == EINTR) {
-        continue;
-      }
-      else {
-        return read_exception_status(conn, errno);
-      }
-    }
-  
     errno = 0;
 
-    /* fprintf(stderr, "ssl-read %d\n", conn->fd); */
     result = SSL_read(ssl, buf, len);
 
-    if (result >= 0)
+    if (result > 0) {
       return result;
+    }
+
+    ssl_error = SSL_get_error(ssl, result);
+
+    if (ssl_error == SSL_ERROR_WANT_READ
+	|| ssl_error == SSL_ERROR_WANT_WRITE) {
+    }
+    else if (errno == EINTR) {
+      poll_result = poll_read(fd, poll_timeout);
+
+      if (poll_result <= 0) {
+	return calculate_poll_result(conn, poll_result);
+      }
+
+      errno = EINTR;
+    }
+    else if (errno == EAGAIN) {
+      return TIMEOUT_EXN;
+    }
 
     is_retry++;
   } while (retry-- > 0
            && (errno == EINTR
-               || (code = SSL_get_error(ssl, result)) == SSL_ERROR_WANT_READ
-               || code == SSL_ERROR_WANT_WRITE));
+               || ssl_error == SSL_ERROR_WANT_READ
+	       || ssl_error == SSL_ERROR_WANT_WRITE));
 
-  ssl_error = SSL_get_error(ssl, result);
-    
+  if (ssl_error == SSL_ERROR_ZERO_RETURN) {
+    ssl_close(conn);
+    /* end of file */
+    return -1;
+  }
+
   if (ssl_error == SSL_ERROR_SYSCALL) {
     return read_exception_status(conn, errno);
   }
@@ -918,7 +975,7 @@ ssl_read_nonblock(connection_t *conn, char *buf, int len)
 static int
 ssl_write(connection_t *conn, char *buf, int len)
 {
-  SSL *ssl = conn->sock;
+  SSL *ssl = conn->ssl_sock;
   int fd;
   int ssl_error;
   int result;
@@ -957,7 +1014,7 @@ ssl_write(connection_t *conn, char *buf, int len)
       int poll_result;
 
       poll_result = poll_write(conn->fd, timeout);
-
+      fprintf(stderr, "WRITE-poll %d\n", poll_result);
       if (poll_result > 0) {
       }
       else if (poll_result == 0) {
@@ -985,6 +1042,7 @@ ssl_write(connection_t *conn, char *buf, int len)
     */
 
     ssl_error = SSL_get_error(ssl, result);
+    fprintf(stderr, "WRITE-error %d %d\n", errno, ssl_error);
 
     /*
     fprintf(stdout,
@@ -1039,15 +1097,14 @@ ssl_close(connection_t *conn)
   fd = conn->fd;
   conn->fd = -1;
 
-  ssl = conn->sock;
-  conn->sock = 0;
+  ssl = conn->ssl_sock;
+  conn->ssl_sock = 0;
 
   conn->ssl_cipher = 0;
   conn->ssl_bits = 0;
 
   if (ssl) {
     SSL_set_app_data(ssl, 0);
-    
     ssl_safe_free(conn, fd, ssl);
   }
 
@@ -1090,7 +1147,7 @@ ssl_read_client_certificate(connection_t *conn, char *buffer, int length)
     }
   }
 
-  cert = SSL_get_peer_certificate(conn->sock);
+  cert = SSL_get_peer_certificate(conn->ssl_sock);
 
   if (! cert)
     return -1;
@@ -1302,7 +1359,7 @@ Java_com_caucho_vfs_OpenSSLFactory_nativeInit(JNIEnv *env,
 {
   server_socket_t *ss = (server_socket_t *) (PTR) p_ss;
   ssl_config_t *config = (ssl_config_t *) (PTR) p_config;
-  
+
   if (! ss) {
     resin_throw_exception(env, "java/lang/IllegalStateException",
 			  "server socket must have valid values.");
@@ -1316,7 +1373,7 @@ Java_com_caucho_vfs_OpenSSLFactory_nativeInit(JNIEnv *env,
 
   if (! g_is_ssl_init) {
     g_is_ssl_init = 1;
-    
+    /* threading */
     OpenSSL_add_all_algorithms();
     SSL_load_error_strings();
     SSL_library_init();
@@ -1324,6 +1381,7 @@ Java_com_caucho_vfs_OpenSSLFactory_nativeInit(JNIEnv *env,
   }
 
   ss->ssl_config = config;
+  ss->tcp_cork = 0;
 
   if (! ss->context) {
     ss->context = ssl_create_context(env, config);
@@ -1345,8 +1403,9 @@ Java_com_caucho_vfs_OpenSSLFactory_open(JNIEnv *env,
   connection_t *conn = (connection_t *) (PTR) p_conn;
   ssl_config_t *config = (ssl_config_t *) (PTR) p_config;
 
-  if (! conn || ! config)
+  if (! conn || ! config) {
     return 0;
+  }
 
   /*
   if (! conn->context)
@@ -1361,10 +1420,10 @@ Java_com_caucho_vfs_OpenSSLFactory_open(JNIEnv *env,
    * is enabled, then we need to share the context.
    */
   if (config->verify_client && config->enable_session_cache) {
-    conn->context = conn->ss->context;
+    conn->ssl_context = conn->ss->context;
   }
-  else if (! conn->context) {
-    conn->context = ssl_create_context(env, config);
+  else if (! conn->ssl_context) {
+    conn->ssl_context = ssl_create_context(env, config);
   }
 
   conn->ops = &ssl_ops;

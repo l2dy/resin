@@ -29,15 +29,12 @@
 
 package com.caucho.server.webapp;
 
-import java.util.Date;
-import java.util.Map;
+import java.util.*;
 
+import com.caucho.config.ConfigAdmin;
 import com.caucho.env.deploy.DeployControllerAdmin;
-import com.caucho.management.server.HostMXBean;
-import com.caucho.management.server.SessionManagerMXBean;
-import com.caucho.management.server.WebAppMXBean;
+import com.caucho.management.server.*;
 import com.caucho.server.host.Host;
-import com.caucho.util.L10N;
 
 /**
  * The admin implementation for a web-app.
@@ -77,6 +74,21 @@ public class WebAppAdmin extends DeployControllerAdmin<WebAppController>
       return null;
 
     return app.getSessionManager().getAdmin();
+  }
+  
+  @Override
+  public ConfigMXBean []getConfigs()
+  {
+    WebApp app = getWebApp();
+
+    if (app == null)
+      return null;
+    
+    Collection<ConfigMXBean> beans = ConfigAdmin.getMBeans(app.getClassLoader());
+    ConfigMXBean[] array = new ConfigMXBean[beans.size()];
+    beans.toArray(array);
+    
+    return array;
   }
 
   //

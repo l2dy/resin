@@ -31,6 +31,7 @@ package com.caucho.message.broker;
 
 import com.caucho.loader.Environment;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.message.DistributionMode;
 import com.caucho.util.ConcurrentArrayList;
 import com.caucho.util.LruCache;
 
@@ -100,7 +101,7 @@ public class EnvironmentMessageBroker implements MessageBroker
   }
   
   @Override
-  public BrokerPublisher createSender(String name)
+  public BrokerSender createSender(String name)
   {
     MessageBroker broker = _brokerMap.get(name);
     
@@ -108,7 +109,7 @@ public class EnvironmentMessageBroker implements MessageBroker
       return broker.createSender(name);
     
     for (MessageBroker registeredBroker : _brokerList) {
-      BrokerPublisher dest = registeredBroker.createSender(name);
+      BrokerSender dest = registeredBroker.createSender(name);
       
       if (dest != null) {
         _brokerMap.put(name, registeredBroker);
@@ -120,12 +121,13 @@ public class EnvironmentMessageBroker implements MessageBroker
   }
   
   @Override
-  public BrokerSubscriber createReceiver(String name,
-                                           SubscriberMessageHandler listener)
+  public BrokerReceiver createReceiver(String name,
+                                       DistributionMode distributionMode,
+                                       ReceiverMessageHandler listener)
   {
     for (MessageBroker registeredBroker : _brokerList) {
-      BrokerSubscriber sub
-        = registeredBroker.createReceiver(name, listener);
+      BrokerReceiver sub
+        = registeredBroker.createReceiver(name, distributionMode, listener);
       
       if (sub != null) {
         return sub;

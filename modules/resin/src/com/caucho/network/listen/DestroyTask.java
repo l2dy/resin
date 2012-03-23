@@ -40,7 +40,7 @@ import com.caucho.inject.Module;
  * <p>Each TcpConnection has its own thread.
  */
 @Module
-class DestroyTask extends ConnectionTask {
+class DestroyTask extends ConnectionResumeTask {
   DestroyTask(TcpSocketLink socketLink)
   {
     super(socketLink);

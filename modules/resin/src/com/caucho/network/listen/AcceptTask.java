@@ -43,26 +43,6 @@ class AcceptTask extends ConnectionTask {
     super(socketLink);
   }
 
-  @Override
-  public void run()
-  {
-    SocketLinkThreadLauncher launcher = getLauncher();
-
-    Thread thread = Thread.currentThread();
-    String oldThreadName = thread.getName();
-    thread.setName(getSocketLink().getDebugId());
-
-    try {
-      launcher.onChildThreadBegin();
-      
-      super.run();
-    } finally {
-      launcher.onChildThreadEnd();
-      
-      thread.setName(oldThreadName);
-    }
-  }
-
   /**
    * Loop to accept new connections.
    */
@@ -70,6 +50,8 @@ class AcceptTask extends ConnectionTask {
   final RequestState doTask()
     throws IOException
   {
-    return getSocketLink().handleAcceptTask();
+    // return getSocketLink().handleAcceptTaskImpl();
+    
+    return RequestState.REQUEST_COMPLETE;
   }
 }

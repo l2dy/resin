@@ -12,8 +12,7 @@ if (! admin_init()) {
   return;
 }
 
-$summary_text = gettext("Summary");
-echo "<h1>$summary_text</h1>\n";
+print_title("summary", "Resin Summary");
 
 $report = "Summary";
 
@@ -21,7 +20,10 @@ echo "<div id='summary-tabs'>\n";
 echo "<ul>\n";
 
 echo "<li><a href='#overview-tab'>" . gettext('Overview') . "</a></li>\n";
+/*
 echo "<li><a href='#meter-tab'>" . gettext('Meters') . "</a></li>\n";
+*/
+echo "<li><a href='#health-tab'>" . gettext('Health') . "</a></li>\n";
 echo "<li><a href='#table-tab'>" . gettext('Tables') . "</a></li>\n";
 echo "<li><a href='#log-tab'>" . gettext('Logs') . " </a></li>\n";
 echo "<li><a href='#pdf-tab'>" . gettext('PDF') . "</a></li>\n";
@@ -31,20 +33,25 @@ echo "<div id='overview-tab'>";
 
 print_overview();
 
+print_overview_graphs();
+
+echo "</div>";
+echo "<div id='health-tab'>";
+
 echo "<h2>" . gettext('Health'); print_Help("Health"); echo "</h2>\n";
 
 display_health_status($g_server->SelfServer);
 
-print_overview_graphs();
+display_health_status_graph($g_server->SelfServer);
 
 echo "</div>";
-
+/*
 echo "<div id='meter-tab'>\n";
 
 print_graphs();
 
 echo "</div><!-- meter-tab -->\n";
-
+*/
 echo "<div id='table-tab'>\n";
 
 print_threads();
@@ -56,7 +63,7 @@ echo "</div>\n";
 
 echo "<div id='log-tab'>";
 
-recent_messages();
+recent_messages(40);
 
 echo "</div>";
 
@@ -305,9 +312,38 @@ function print_graphs()
     meter_display_page($page);  
 }
 
-function recent_messages()
+function display_health_status_graph($s)
 {
-  global $g_mbean_server;
+  $si = sprintf("%02d", $s->ClusterIndex);
+  $server_id = $s->Name;
+  if ($server_id == "")
+  	$server_id = "default";
+
+  $mbean_server = new MBeanServer($server_id);
+
+  $label = "$si - $server_id";
+	
+  display_health_graph($mbean_server, $s, $si, $label);
+}
+
+function display_health_graph($mbean_server, $s, $si, $label)
+{
+  $params = new GraphParams("health_${si}", 600, 200);
+  $params->title = gettext('Server') . "${label}";
+
+  $params->alt
+    = gettext("A line graph representing the status of each health check performed on server $label over the last 24 hours.");
+  $params->alt = preg_replace('/\$label/', $label, $params->alt);
+
+  $params->labels_mbean = "resin:type=HealthSystem";
+  $params->mbean_server = $mbean_server;
+
+  stat_graph_regexp($params, "/^${si}\|Resin\|Health/");
+}
+
+function recent_messages($max)
+{
+  global $g_server, $g_mbean_server;
 
   $mbean = $g_mbean_server->lookup("resin:type=LogService");
   
@@ -341,6 +377,10 @@ function recent_messages()
     if (! empty($messages)) {
       
       $messages = array_reverse($messages);
+
+      if ($max < sizeof($messages)) {
+        $messages = array_slice($array, 0, $max);
+      }
 
       echo "<tbody class='scroll'>\n";
       
@@ -420,7 +460,8 @@ function print_pdf_select()
 {
   global $g_periods;
   global $g_period;
-  
+  global $g_server_index;
+
   $stat = get_stats_service();
   
   if (! require_professional()) {
@@ -434,6 +475,7 @@ function print_pdf_select()
  echo "<form action='pdf-gen.php' method='get' style='display:inline;'>";
   echo "<input type='hidden' name='snapshot' value='true'/>\n";
   echo "<input type='hidden' name='report' value='Snapshot'/>\n";
+  echo "<input type='hidden' name='s' value='$g_server_index'/>\n";
   echo "<div>\n";
   echo "<div style='display:inline-block;float:left;padding-right:0.5em;'>\n";
   echo "<input type='checkbox' id='profiling_enabled' value='true'/> ";
@@ -778,6 +820,6 @@ function conn_time_cmp($conn_a, $conn_b)
   return $conn_b->requestTime - $conn_a->requestTime;
 }
 
-display_footer($g_page, $javascript. javascript_create_tab("summary-tabs"));
+display_footer($g_page, javascript_create_tab("summary-tabs"));
 
 ?>

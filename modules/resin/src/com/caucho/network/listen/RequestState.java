@@ -37,11 +37,17 @@ enum RequestState {
   REQUEST_COMPLETE {
     @Override
     public boolean isRequestKeepalive() { return true; }
+    
+    @Override
+    public boolean isAcceptAllowed() { return true; }
   },
   
   KEEPALIVE_SELECT {
     @Override
     public boolean isDetach() { return true; }
+    
+    @Override
+    public boolean isKeepaliveSelect() { return true; }
   },
   
   ASYNC {
@@ -60,7 +66,18 @@ enum RequestState {
     public boolean isDetach() { return true; }
   },
   
-  EXIT;
+  CLOSED {
+    @Override
+    public boolean isAcceptAllowed() { return true; }
+    
+    @Override
+    public boolean isClosed() { return true; }
+  },
+  
+  EXIT {
+    @Override
+    public boolean isClosed() { return true; }
+  };
   
   public boolean isAsyncOrDuplex()
   {
@@ -73,6 +90,21 @@ enum RequestState {
   }
   
   public boolean isRequestKeepalive()
+  {
+    return false;
+  }
+  
+  public boolean isKeepaliveSelect()
+  {
+    return false;
+  }
+  
+  public boolean isAcceptAllowed()
+  {
+    return false;
+  }
+  
+  public boolean isClosed()
   {
     return false;
   }

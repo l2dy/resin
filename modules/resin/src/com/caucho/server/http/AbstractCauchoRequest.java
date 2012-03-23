@@ -56,7 +56,6 @@ import javax.servlet.http.Part;
 
 import com.caucho.i18n.CharacterEncoding;
 import com.caucho.network.listen.SocketLink;
-import com.caucho.security.AbstractLogin;
 import com.caucho.security.Authenticator;
 import com.caucho.security.Login;
 import com.caucho.security.RoleMapManager;
@@ -100,6 +99,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
   abstract public CauchoResponse getResponse();
 
+  @Override
   public RequestDispatcher getRequestDispatcher(String path)
   {
     if (path == null || path.length() == 0)
@@ -261,7 +261,8 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
   public abstract AbstractHttpRequest getAbstractHttpRequest();
 
-  public ServletService getServer() {
+  public ServletService getServer()
+  {
     return getAbstractHttpRequest().getServer();
   }
 
@@ -465,7 +466,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   }
 
   public final void mergeParameters(Map<String, String[]> source,
-                              Map<String, String[]> target)
+                                    Map<String, String[]> target)
   {
     Set<Map.Entry<String, String[]>> sourceEntries = source.entrySet();
 
@@ -509,6 +510,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     return getAbstractHttpRequest().getStream();
   }
 
+  @Override
   public String getRealPath(String uri)
   {
     WebApp webApp = getWebApp();
@@ -519,6 +521,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   /**
    * Returns the URL for the request
    */
+  @Override
   public StringBuffer getRequestURL()
   {
     StringBuffer sb = new StringBuffer();
@@ -544,6 +547,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   /**
    * Returns the real path of pathInfo.
    */
+  @Override
   public String getPathTranslated()
   {
     // server/106w
@@ -555,6 +559,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       return getRealPath(pathInfo);
   }
 
+  @Override
   public boolean isTop()
   {
     return false;
@@ -573,6 +578,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   /**
    * Returns the memory session.
    */
+  @Override
   public HttpSession getMemorySession()
   {
     if (_session != null && _session.isValid())
@@ -586,6 +592,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
    * Sessions are a convenience for keeping user state
    * across requests.
    */
+  @Override
   public HttpSession getSession()
   {
     return getSession(true);
@@ -605,8 +612,9 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       if (_session.isValid())
         return _session;
     }
-    else if (! create && _sessionIsLoaded)
+    else if (! create && _sessionIsLoaded) {
       return null;
+    }
 
     _sessionIsLoaded = true;
 
@@ -632,6 +640,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
    * Returns true if the HTTP request's session id refers to a valid
    * session.
    */
+  @Override
   public boolean isRequestedSessionIdValid()
   {
     String id = getRequestedSessionId();
@@ -652,11 +661,11 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
    *
    * XXX: duplicated in RequestAdapter
    *
-   * @param create true if a new session should be created
+   * @param isCreate true if a new session should be created
    *
    * @return the current session
    */
-  private SessionImpl createSession(boolean create)
+  private SessionImpl createSession(boolean isCreate)
   {
     SessionManager manager = getSessionManager();
 
@@ -668,7 +677,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     long now = CurrentTime.getCurrentTime();
 
     SessionImpl session
-      = manager.createSession(create, this, id, now,
+      = manager.createSession(isCreate, this, id, now,
                               isSessionIdFromCookie());
 
     if (session != null
@@ -767,7 +776,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       throw new ServletException(L.l("Authentication mechanism '{0}' does not support password authentication", login));
 
     removeAttribute(Login.LOGIN_USER_NAME);
-    removeAttribute(Login.LOGIN_USER_PRINCIPAL);
+    removeAttribute(Login.LOGIN_USER);
     removeAttribute(Login.LOGIN_PASSWORD);
 
     Principal principal = login.getUserPrincipal(this);
@@ -775,9 +784,10 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     if (principal != null)
       throw new ServletException(L.l("UserPrincipal object has already been established"));
 
+    removeAttribute(Login.LOGIN_USER);
     setAttribute(Login.LOGIN_USER_NAME, username);
     setAttribute(Login.LOGIN_PASSWORD, password);
-
+    
     try {
       login.login(this, getResponse(), false);
     }
@@ -787,9 +797,10 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     }
 
     principal = login.getUserPrincipal(this);
-
-    if (principal == null)
+    
+    if (principal == null) {
       throw new ServletException("can't authenticate a user");
+    }
   }
   
   @Override
@@ -822,13 +833,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       if (login != null) {
         Principal user = login.login(this, getResponse(), isFail);
 
-        if (user != null) {
-          setAttribute(Login.LOGIN_USER_PRINCIPAL, user);
-          
-          return true;
-        }
-        else
-          return false;
+        return (user != null);
       }
       else if (isFail) {
         if (log.isLoggable(Level.FINE))
@@ -884,8 +889,6 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
     Principal principal = login.login(this, response, true);
 
     if (principal != null) {
-      setAttribute(Login.LOGIN_USER_PRINCIPAL, principal);
-    
       return true;
     }
 
@@ -900,16 +903,12 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   {
     requestLogin();
 
-    Principal user;
-    user = (Principal) getAttribute(AbstractLogin.LOGIN_USER_NAME);
-
-    if (user != null)
-      return user;
-
     WebApp webApp = getWebApp();
     if (webApp == null)
       return null;
 
+    Principal user = null;
+    
     // If the authenticator can find the user, return it.
     Login login = webApp.getLogin();
 
@@ -1035,8 +1034,9 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       }
     }
 
-    if (session != null)
+    if (session != null) {
       session.finishRequest();
+    }
 
     if (_removeOnExit != null) {
       for (int i = _removeOnExit.size() - 1; i >= 0; i--) {

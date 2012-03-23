@@ -46,13 +46,11 @@ import com.caucho.bam.manager.BamManager;
 import com.caucho.bam.stream.MessageStream;
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.network.ClusterServer;
-import com.caucho.cloud.network.NetworkClusterSystem;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
-import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.env.service.ResinSystem;
@@ -101,7 +99,6 @@ import com.caucho.server.webapp.WebAppConfig;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
-import com.caucho.util.FreeList;
 import com.caucho.util.FreeRing;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Dependency;
@@ -168,7 +165,8 @@ public class ServletService
   private PersistentStoreConfig _persistentStoreConfig;
   
   private boolean _isSendfileEnabled = true;
-  private long _sendfileMinLength = 128 * 1024L;
+  // private long _sendfileMinLength = 128 * 1024L;
+  private long _sendfileMinLength = 32 * 1024L;
   
   private final FreeRing<HttpBufferStore> _httpBufferFreeList
     = new FreeRing<HttpBufferStore>(256);
@@ -1123,8 +1121,7 @@ public class ServletService
 
   public void freeHttpBuffer(HttpBufferStore buffer)
   {
-    if (! _httpBufferFreeList.free(buffer)) {
-    }
+    _httpBufferFreeList.free(buffer);
   }
 
   /**
@@ -1589,7 +1586,7 @@ public class ServletService
       */
 
       try {
-        ThreadPool.getThreadPool().interrupt();
+        ThreadPool.getThreadPool().clearIdleThreads();
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }

@@ -42,7 +42,7 @@ public class ValueActorQueue<T>
   private final ActorQueue<ValueItem<T>> _actorQueue;
  
   public ValueActorQueue(int capacity,
-                             ValueProcessor<T> processor)
+                         ValueProcessor<T> processor)
   {
     if (processor == null)
       throw new NullPointerException();
@@ -69,6 +69,22 @@ public class ValueActorQueue<T>
     ValueItem<T> item = actorQueue.startOffer(true);
     item.init(value);
     actorQueue.finishOffer(item);
+  }
+  
+  public final boolean offer(T value, boolean isWait)
+  {
+    ActorQueue<ValueItem<T>> actorQueue = _actorQueue;
+    
+    ValueItem<T> item = actorQueue.startOffer(isWait);
+    
+    if (item == null) {
+      return false;
+    }
+    
+    item.init(value);
+    actorQueue.finishOffer(item);
+    
+    return true;
   }
   
   public void wake()

@@ -38,6 +38,7 @@ import java.util.logging.Logger;
 import com.caucho.amqp.AmqpException;
 import com.caucho.amqp.io.AmqpAbstractComposite;
 import com.caucho.amqp.io.AmqpAbstractPacket;
+import com.caucho.amqp.io.AmqpConnectionReader;
 import com.caucho.amqp.io.AmqpFrameHandler;
 import com.caucho.amqp.io.FrameBegin;
 import com.caucho.amqp.io.FrameOpen;
@@ -62,46 +63,27 @@ class AmqpClientFrameReader implements Runnable {
   private static final Logger log
     = Logger.getLogger(AmqpClientFrameReader.class.getName());
   
-  private AmqpConnectionImpl _client;
+  private AmqpClientConnectionImpl _client;
   
-  private AmqpFrameReader _fin;
-  private AmqpReader _ain;
+  private AmqpConnectionReader _in;
   
-  AmqpClientFrameReader(AmqpConnectionImpl client,
-                   AmqpFrameReader fin,
-                   AmqpReader ain)
+  AmqpClientFrameReader(AmqpClientConnectionImpl client,
+                        AmqpConnectionReader in)
   {
     _client = client;
-    _fin = fin;
-    _ain = ain;
+    _in = in;
   }
   
   @Override
   public void run()
   {
     try {
-      while (! _client.isDisconnected() && readFrame()) {
+      while (! _client.isDisconnected() && _in.readFrame()) {
       }
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
     } finally {
       _client.onClose();
     }
-  }
-  
-  private boolean readFrame()
-    throws IOException
-  {
-    if (! _fin.startFrame()) {
-      return false;
-    }
-    
-    AmqpAbstractFrame frame = _ain.readObject(AmqpAbstractFrame.class);
-    
-    frame.invoke(_fin, _client);
-    
-    _fin.finishFrame();
-    
-    return true;
   }
 }

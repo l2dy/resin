@@ -29,49 +29,60 @@
 
 package com.caucho.amqp.client;
 
-import com.caucho.amqp.AmqpReceiver;
-import com.caucho.amqp.AmqpReceiverFactory;
 import com.caucho.amqp.AmqpSender;
 import com.caucho.amqp.AmqpSenderFactory;
-import com.caucho.amqp.transform.AmqpMessageDecoder;
-import com.caucho.amqp.transform.AmqpMessageEncoder;
-import com.caucho.amqp.transform.AmqpStringDecoder;
-import com.caucho.amqp.transform.AmqpStringEncoder;
+import com.caucho.amqp.marshal.AmqpMessageEncoder;
+import com.caucho.amqp.marshal.AmqpStringEncoder;
+import com.caucho.message.MessageSettleListener;
+import com.caucho.message.SettleMode;
+import com.caucho.message.common.AbstractMessageSenderFactory;
 
 
 /**
  * AMQP client
  */
-class AmqpClientSenderFactory implements AmqpSenderFactory {
-  private AmqpConnectionImpl _client;
-  
-  private String _address;
+class AmqpClientSenderFactory extends AbstractMessageSenderFactory
+  implements AmqpSenderFactory
+{
+  private AmqpClientConnectionImpl _client;
   
   private AmqpMessageEncoder<?> _encoder = AmqpStringEncoder.ENCODER;
   
-  AmqpClientSenderFactory(AmqpConnectionImpl client)
+  AmqpClientSenderFactory(AmqpClientConnectionImpl client)
   {
     _client = client;
   }
-  
-  public String getAddress()
+
+  @Override
+  public AmqpClientSenderFactory setAddress(String address)
   {
-    return _address;
+    super.setAddress(address);
+    
+    return this;
   }
 
   @Override
-  public AmqpSenderFactory setAddress(String address)
+  public AmqpClientSenderFactory setSettleMode(SettleMode settleMode)
   {
-    _address = address;
+    super.setSettleMode(settleMode);
+    
+    return this;
+  }
+
+  @Override
+  public AmqpClientSenderFactory setSettleListener(MessageSettleListener listener)
+  {
+    super.setSettleListener(listener);
     
     return this;
   }
   
   @Override
-  public AmqpSenderFactory setEncoder(AmqpMessageEncoder<?> encoder)
+  public AmqpClientSenderFactory setEncoder(AmqpMessageEncoder<?> encoder)
   {
-    if (encoder == null)
+    if (encoder == null) {
       throw new NullPointerException();
+    }
     
     _encoder = encoder;
     

@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.26)
+AC_INIT([resin],4.0.27)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 

@@ -43,6 +43,7 @@ import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeRing;
 import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 import com.caucho.vfs.TempStreamApi;
 
 /**
@@ -58,6 +59,7 @@ public class AccessLogWriter extends AbstractRolloverLog
 
   private boolean _isAutoFlush;
   private final Object _bufferLock = new Object();
+  private final Object _offerLock = new Object();
 
   private final Semaphore _logSemaphore = new Semaphore(16 * 1024);
   private final FreeRing<LogBuffer> _freeList
@@ -175,7 +177,7 @@ public class AccessLogWriter extends AbstractRolloverLog
     LogBuffer buffer = _freeList.allocate();
 
     if (buffer == null) {
-      buffer = new LogBuffer();
+      buffer = new LogBuffer(false);
     }
 
     return buffer;
@@ -190,8 +192,11 @@ public class AccessLogWriter extends AbstractRolloverLog
       _semaphoreProbe.release();
 */
     // logBuffer.setNext(null);
-
-    _freeList.free(logBuffer);
+    logBuffer.setLength(0);
+    
+    if (! logBuffer.isPrivate()) {
+      _freeList.free(logBuffer);
+    }
   }
 
   @Override
@@ -253,6 +258,17 @@ public class AccessLogWriter extends AbstractRolloverLog
     public void close()
     {
       wake();
+    }
+    
+    @Override
+    public String toString()
+    {
+      Path path = getPath();
+      
+      if (path != null)
+        return getClass().getSimpleName() + "[" + path.getTail() + "]";
+      else
+        return getClass().getSimpleName() + "[" + path + "]";
     }
   }
 }

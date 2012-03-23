@@ -66,6 +66,15 @@ public class AmqpFrameWriter extends AmqpBaseWriter {
     _offset = 8;
   }
   
+  public void startFrame(int type, int channel)
+  {
+    _buffer[4] = 0x02; // doff
+    _buffer[5] = (byte) type;
+    _buffer[6] = (byte) (channel >> 8);
+    _buffer[7] = (byte) (channel);
+    _offset = 8;
+  }
+
   public void finishFrame()
     throws IOException
   {
@@ -79,7 +88,6 @@ public class AmqpFrameWriter extends AmqpBaseWriter {
     
     _os.write(_buffer, 0, _offset);
     
-
     _offset = 0;
   }
   
@@ -94,8 +102,6 @@ public class AmqpFrameWriter extends AmqpBaseWriter {
       len++;
       write(ch);
     }
-    
-    System.out.println("LEN:"+ len);
     
     return len;
   }

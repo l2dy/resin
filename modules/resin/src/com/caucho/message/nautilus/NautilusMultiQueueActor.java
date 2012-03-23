@@ -47,13 +47,37 @@ class NautilusMultiQueueActor
   private static final Logger log
     = Logger.getLogger(ItemProcessor.class.getName());
   
+  private static final long C_DURABLE = (1L << 45);
+  private static final int C_PRIORITY_OFF = 40; 
+  private static final long C_PRIORITY_MASK = 0xfL;
+  private static final long C_PRIORITY_DEFAULT = 4;
+  
+  private static final long C_EXPIRE_LOSS_BITS = 6;
+  private static final long C_EXPIRE_LOSS_MASK = (1L << C_EXPIRE_LOSS_BITS) - 1;
+  private static final long C_EXPIRE_BITS = 32 - C_EXPIRE_LOSS_BITS;
+  private static final long C_EXPIRE_MASK = (1L << C_EXPIRE_BITS) - 1;
+  private static final int C_EXPIRE_OFF = 6;
+  
+  private static final long C_OP = 0x1f;
+  
   private HashMap<Long,NautilusQueue> _queueMap
     = new HashMap<Long,NautilusQueue>();
+  
+  private NautilusCheckpointPublisher _checkpointPub;
   
   private long _enqueueCount;
   private long _dequeueCount;
   
+  private long _messageCount;
+  private long _lastAddress;
+  private long _lastCheckpoint;
+  
   private int _size;
+
+  void setNautilusCheckpointPublisher(NautilusCheckpointPublisher pub)
+  {
+    _checkpointPub = pub;
+  }
   
   public int getSize()
   {
@@ -74,20 +98,26 @@ class NautilusMultiQueueActor
   public void process(NautilusRingItem entry)
     throws Exception
   {
-    NautilusQueue queue = getQueue(entry.getId());
-    JournalResult result = entry.getResult();
+    long qid = entry.getQid();
+    NautilusQueue queue = getQueue(qid);
     
-    int code = entry.getCode();
-    long mid = entry.getSequence();
+    long code = entry.getCode();
     
-    switch (code) {
+    int op = decodeOp(code);
+    long mid = entry.getMid();
+    
+    switch (op) {
     case NautilusRingItem.JE_MESSAGE:
+    {
+      JournalResult result = entry.getResult();
       queue.processData(mid,
                         entry.isInit(), entry.isFin(),
                         result.getBlockStore(),
                         result.getBlockAddr1(),
                         result.getOffset1(),
                         result.getLength1());
+      
+      _lastAddress = result.getBlockAddr1();
       
       if (result.getLength2() > 0) {
         queue.processData(mid, false, entry.isFin(),
@@ -96,7 +126,14 @@ class NautilusMultiQueueActor
                           result.getOffset2(),
                           result.getLength2());
       }
+      
+      long count = ++_messageCount;
+      
+      if ((count & 0x3fff) == 0) {
+        updateCheckpoint(_lastAddress);
+      }
       break;
+    }
       
     case NautilusRingItem.JE_SUBSCRIBE:
       queue.subscribe(entry.getSubscriber());
@@ -107,7 +144,7 @@ class NautilusMultiQueueActor
       break;
       
     case NautilusRingItem.JE_ACCEPTED:
-      queue.ack(entry.getSequence());
+      queue.ack(entry.getMid());
       queue.ack(entry.getSubscriber());
       break;
       
@@ -118,10 +155,69 @@ class NautilusMultiQueueActor
       }
       break;
       
+    case NautilusRingItem.JE_CHECKPOINT:
+      break;
+      
     default:
-      System.out.println("UNKNOWN: " + (char) code);
-      log.warning("Unknown code: " + (char) code
-                  + " " + Integer.toHexString(code));
+      System.out.println("UNKNOWN: " + Integer.toHexString(op));
+      log.warning("Unknown code: " + " " + Integer.toHexString(op));
+    }
+  }
+  
+  private int decodeOp(long code)
+  {
+    return (int) (code & C_OP);
+  }
+
+  static long encode(int op, 
+                     boolean isDurable, 
+                     int priority,
+                     long expireTime)
+  {
+    long code = op;
+    
+    if (isDurable) {
+      code |= C_DURABLE;
+    }
+    
+    long priorityBits;
+    
+    if (priority < 0) {
+      priorityBits = C_PRIORITY_DEFAULT;
+    }
+    else if (C_PRIORITY_MASK < priority) {
+      priorityBits = C_PRIORITY_MASK;
+    }
+    else {
+      priorityBits = (priority & C_PRIORITY_MASK);
+    }
+    
+    code |= priorityBits << C_PRIORITY_OFF;
+    
+    long expireBits = (expireTime + C_EXPIRE_LOSS_MASK) >> C_EXPIRE_LOSS_BITS;
+    expireBits &= C_EXPIRE_MASK;
+    
+    code |= expireBits << C_EXPIRE_OFF;
+    
+    return code;
+  }
+
+  private void updateCheckpoint(long tailAddress)
+  {
+    long checkpointAddress = tailAddress;
+    
+    for (NautilusQueue queue : _queueMap.values()) {
+      if (checkpointAddress > 0) {
+        checkpointAddress = queue.updateCheckpoint(checkpointAddress);
+      }
+    }
+    
+    if (checkpointAddress > 0 && checkpointAddress != _lastCheckpoint) {
+      NautilusCheckpointPublisher checkpointPub = _checkpointPub;
+      if (checkpointPub != null
+          && checkpointPub.checkpoint(checkpointAddress)) {
+        _lastCheckpoint = checkpointAddress;
+      }
     }
   }
   
@@ -140,7 +236,7 @@ class NautilusMultiQueueActor
   @Override
   public void onProcessComplete() throws Exception
   {
-    
+//    updateCheckpoint(_lastAddress);
   }
    
   @Override

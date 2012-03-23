@@ -32,12 +32,14 @@ package com.caucho.remote.websocket;
 import com.caucho.util.*;
 import com.caucho.vfs.*;
 import com.caucho.websocket.WebSocketContext;
+import com.caucho.websocket.WebSocketEncoder;
 import com.caucho.websocket.WebSocketListener;
 
 import java.io.*;
 import java.net.Socket;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.concurrent.BlockingQueue;
 import java.util.logging.*;
 
 /**
@@ -254,12 +256,35 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
       log.log(Level.WARNING, e.toString(), e);
     }
   }
+
+  @Override
+  public <T> BlockingQueue<T> createOutputQueue(WebSocketEncoder<T> encoder)
+  {
+    return new WebSocketBlockingQueue<T>(this, encoder, 256);
+  }
+
+  @Override
+  public void setAutoFlush(boolean isAutoFlush)
+  {
+  }
+
+  @Override
+  public boolean isAutoFlush()
+  {
+    return false;
+  }
+
+  @Override
+  public void flush() throws IOException
+  {
+  }
   
   public boolean isClosed()
   {
     return _isClosed;
   }
   
+  @Override
   public void close()
   {
     close(1000, "ok");
@@ -322,20 +347,24 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
     return _wsOs;
   }
 
+  @Override
   public PrintWriter startTextMessage()
   {
     throw new UnsupportedOperationException();
   }
 
+  @Override
   public long getTimeout()
   {
     return 0;
   }
 
+  @Override
   public void setTimeout(long timeout)
   {
   }
   
+  @Override
   public void pong(byte []message)
     throws IOException
   {
@@ -350,6 +379,7 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
 
   class ClientContext implements Runnable
   {
+    @Override
     public void run()
     {
       Thread thread = Thread.currentThread();
@@ -407,13 +437,10 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
     }
   }
 
-  /* (non-Javadoc)
-   * @see com.caucho.websocket.WebSocketContext#onClose(int, java.lang.String)
-   */
   @Override
   public void onClose(int closeCode, String closeMessage)
   {
-    // TODO Auto-generated method stub
-    
+
   }
+
 }

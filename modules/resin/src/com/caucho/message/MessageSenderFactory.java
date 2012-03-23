@@ -37,5 +37,13 @@ public interface MessageSenderFactory {
   
   public String getAddress();
   
+  public MessageSenderFactory setSettleMode(SettleMode settleMode);
+  
+  public SettleMode getSettleMode();
+  
+  public MessageSenderFactory setSettleListener(MessageSettleListener listener);
+  
+  public MessageSettleListener getSettleListener();
+  
   public MessageSender<?> build();
 }

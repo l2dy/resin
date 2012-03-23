@@ -9,6 +9,8 @@ function meter_display_page($page)
 {
   global $g_period, $g_periods;
   
+  $count = 0;
+  
   enable_graph_controls();
   
   $name = preg_replace('/ /', '_', $page->name);
@@ -55,33 +57,41 @@ function meter_display_page($page)
   echo " <div style='float:right;font-size:smaller;font-style:italic;'>" . gettext('Period') . ": $period_name</div>\n";
   echo "</div>\n";
   
-  echo "<table border='0'>\n";
+  foreach ($page->meterSections as $section) {
+    if ($section->name) {
+      echo "<h2>" . $section->name . "</h2>";
+    }
+    echo "<table border='0'>\n";
 
-  foreach ($page->meterGraphs as $graph) {
-    $graph_name = $page_name . "_" . $count;
+    $section_graph_count = 0;
 
-    if ($count % $columns == 0) {
-      if ($is_column)
-        echo "</tr>";
+    foreach ($section->meterGraphs as $graph) {
+      $graph_name = $page_name . "_" . $count;
+
+      if ($section_graph_count % $columns == 0) {
+        if ($is_column)
+          echo "</tr>";
         
-      echo "<tr>";
+        echo "<tr>";
 
-      $is_column = true;
+        $is_column = true;
+      }
+
+      if ($graph) {
+        echo "<td valign='top'>";
+        meter_display_graph($graph_name, $graph, $width, $height, $period);
+        echo "</td>";
+      }
+
+      $count++;
+      $section_graph_count++;
     }
 
-    if ($graph) {
-      echo "<td valign='top'>";
-      meter_display_graph($graph_name, $graph, $width, $height, $period);
-      echo "</td>";
-    }
-
-    $count++;
-  }
-
-  if ($is_column)
-    echo "</tr>";
+    if ($is_column)
+      echo "</tr>";
     
-  echo "</table>";
+    echo "</table>";
+  }
 }  
 
 function meter_display_graph($name, $graph, $width, $height, $period, $mbean_server = null)
@@ -89,7 +99,7 @@ function meter_display_graph($name, $graph, $width, $height, $period, $mbean_ser
 //  echo " <div style='float:top;padding:.5em;'>\n"
 
   global $g_server;
-  $si = sprintf("%02d", $g_server->Index);
+  $si = sprintf("%02d", $g_server->ServerIndex);
 
   $meters = array();
 

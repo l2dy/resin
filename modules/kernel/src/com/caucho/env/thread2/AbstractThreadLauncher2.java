@@ -122,6 +122,10 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
    */
   public void setThreadMax(int max)
   {
+    if (max <= 0) {
+      max = DEFAULT_THREAD_MAX;
+    }
+    
     if (max < _idleMin)
       throw new ConfigException(L.l("IdleMin ({0}) must be less than ThreadMax ({1})", _idleMin, max));
     if (max < 1)
@@ -146,6 +150,10 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
    */
   public void setIdleMin(int min)
   {
+    if (min <= 0) {
+      min = DEFAULT_IDLE_MIN;
+    }
+    
     if (_threadMax < min)
       throw new ConfigException(L.l("IdleMin ({0}) must be less than ThreadMax ({1})", min, _threadMax));
     if (min <= 0)
@@ -169,7 +177,10 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
    */
   public void setIdleMax(int max)
   {
-    if (_threadMax < max)
+    if (max <= 0) {
+      max = DEFAULT_IDLE_MAX;
+    }
+        if (_threadMax < max)
       throw new ConfigException(L.l("IdleMax ({0}) must be less than ThreadMax ({1})", max, _threadMax));
     if (max <= 0)
       throw new ConfigException(L.l("IdleMax ({0}) must be greater than 0.", max));
@@ -261,17 +272,25 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
 
   public boolean isThreadMax()
   {
-    return _threadMax <= _threadCount.get() && _startingCount.get() == 0;
+    return _threadMax <= (_threadCount.get() + _startingCount.get());
+  }
+  
+  public boolean isThreadHigh()
+  {
+    int threadCount = _threadCount.get();
+    int startCount = _startingCount.get();
+    
+    return _threadMax < 2 * (threadCount + startCount);
   }
   
   /**
-   * Thread activity management
+   * Callback from the launched thread's run().
+   * 
+   * Must _not_ be called by any other method, including other spawning.
    */
-  public void onChildThreadBegin()
+  public void onChildThreadLaunchBegin()
   {
     _threadCount.incrementAndGet();
-    
-    onChildIdleBegin();
     
     int startCount = _startingCount.decrementAndGet();
 
@@ -282,35 +301,52 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
     }
 
     _createCountTotal.incrementAndGet();
+    
+    wakeIfLowIdle();
   }
   
   /**
-   * Resume a child, i.e. start an active thread from an external source.
+   * Callback from the launched thread's run().
+   * 
+   * Must _not_ be called by any other method, including other spawning.
    */
-  public void onChildThreadResume()
+  public void onChildThreadLaunchEnd()
   {
-    onChildIdleBegin();
+    try {
+      if (_threadMax <= _threadCount.getAndDecrement()) {
+        wake();
+      }
+
+      wakeIfLowIdle();
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+  
+  /**
+   * Start housekeeping for a child thread managed by the launcher's
+   * housekeeping, but not spawned by the launcher itself, e.g. comet,
+   * websocket, keepalive.
+   */
+  public void onChildThreadResumeBegin()
+  {
     _threadCount.incrementAndGet();
   }
   
   /**
-   * Thread activity management
+   * End housekeeping for a child thread managed by the launcher's
+   * housekeeping, but not spawned by the launcher itself, e.g. comet,
+   * websocket, keepalive.
    */
-  public void onChildThreadEnd()
+  public void onChildThreadResumeEnd()
   {
-    try {
-    onChildIdleEnd();
+    int threadMax = _threadCount.getAndDecrement();
     
-    if (_threadMax <= _threadCount.getAndDecrement()) {
+    if (_threadMax <= threadMax) {
       wake();
     }
 
-    if (_idleCount.get() <= _idleMin) {
-      wake();
-    }
-    } catch (Exception e) {
-      e.printStackTrace();
-    }
+    wakeIfLowIdle();
   }
   
   //
@@ -354,10 +390,15 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
     return false;
   }
   
+  public final boolean isIdleLow()
+  {
+    return _idleCount.get() < _idleMin;
+  }
+  
   /**
    * Start the idle if the child idle is less than idle max.
    */
-  
+  /*
   public boolean childIdleBegin()
   {
     int idleCount;
@@ -371,6 +412,7 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
     
     return true;
   }
+  */
   
   public boolean isIdleOverflow()
   {
@@ -391,11 +433,19 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
    */
   public void onChildIdleEnd()
   {
-    int idleCount = _idleCount.decrementAndGet();
+    _idleCount.decrementAndGet();
 
-    if (idleCount <= _idleMin) {
+    wakeIfLowIdle();
+  }
+  
+  private void wakeIfLowIdle()
+  {
+    int idleCount = _idleCount.get();
+    int startingCount = _startingCount.get();
+    
+    if (idleCount + startingCount < _idleMin) {
       updateIdleExpireTime(getCurrentTimeActual());
-
+      
       wake();
     }
   }

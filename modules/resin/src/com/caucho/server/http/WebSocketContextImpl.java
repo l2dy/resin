@@ -33,12 +33,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.network.listen.SocketLinkDuplexController;
 import com.caucho.network.listen.SocketLinkDuplexListener;
+import com.caucho.remote.websocket.WebSocketBlockingQueue;
 import com.caucho.remote.websocket.WebSocketConstants;
 import com.caucho.remote.websocket.WebSocketInputStream;
 import com.caucho.remote.websocket.WebSocketOutputStream;
@@ -52,6 +54,7 @@ import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.WriteStream;
 import com.caucho.websocket.WebSocketContext;
+import com.caucho.websocket.WebSocketEncoder;
 import com.caucho.websocket.WebSocketListener;
 
 /**
@@ -110,14 +113,22 @@ class WebSocketContextImpl
     return _controller.getIdleTimeMax();
   }
 
-  /*
   @Override
-  public InputStream getInputStream()
-  throws IOException
+  public <T> BlockingQueue<T> createOutputQueue(WebSocketEncoder<T> encoder)
   {
-    return _controller.getReadStream();
+    return new WebSocketBlockingQueue<T>(this, encoder, 256);
   }
-  */
+
+  @Override
+  public void setAutoFlush(boolean isAutoFlush)
+  {
+  }
+
+  @Override
+  public boolean isAutoFlush()
+  {
+    return false;
+  }
 
   @Override
   public OutputStream startBinaryMessage()
@@ -163,6 +174,11 @@ class WebSocketContextImpl
     out.write(bytes.length);
     out.write(bytes);
     out.flush();
+  }
+  
+  public boolean isClosed()
+  {
+    return _isWriteClosed.get();
   }
   
   @Override
@@ -219,7 +235,8 @@ class WebSocketContextImpl
     _listener.onStart(this);
   }
   
-  void flush()
+  @Override
+  public void flush()
     throws IOException
   {
     WriteStream out = _controller.getWriteStream();

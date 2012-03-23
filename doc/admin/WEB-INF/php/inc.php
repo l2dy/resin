@@ -7,6 +7,8 @@
 
 require_once "WEB-INF/php/graph_flot.php";
 
+import java.lang.System;
+
 global $g_server_id;
 global $g_server_index;
 global $g_si;
@@ -244,6 +246,14 @@ function format_ago($date)
     return "";
 
   $event_time = $date->time / 1000;
+  
+  return format_ago_unixtime($event_time);
+}
+
+function format_ago_unixtime($event_time)
+{
+  if (! $event_time)
+    return "";
 
   if ($event_time < 365 * 24 * 3600)
     return "";
@@ -251,7 +261,14 @@ function format_ago($date)
   $now = time();
   $ago = $now - $event_time;
 
-  return sprintf("%dh%02d", $ago / 3600, $ago / 60 % 60);
+  return sprintf("%dh %02dm", $ago / 3600, $ago / 60 % 60);
+}
+
+// this is necessary to strip milliseconds, which strtotime doesn't handle
+function java_iso8601_to_date($iso8601) 
+{
+  $array = split('[T\.\+]', $iso8601);
+  return strtotime($array[0] . "T" . $array[1] . "+" . $array[3]);
 }
 
 function format_miss_ratio($hit, $miss)
@@ -737,7 +754,7 @@ else {
 </ul>
 </div>
 <div style='float: right; width: 20%; text-align: right;'>
-  <span class='status-item'><a target="caucho-wiki" href="http://wiki.caucho.com/Admin: <?= ucfirst($g_page) ?>"><?= gettext('help')?></a></span>
+  <span class='status-item'><a target="caucho-wiki" href="http://wiki4.caucho.com/Admin: <?= ucfirst($g_page) ?>"><?= gettext('help')?></a></span>
   <span class='status-item'><a href="<?= $g_next_url ?>"><?= gettext('refresh')?></a></span>
   <span class='status-item logout'><a href="?q=index.php&amp;logout=true"><?= gettext('logout')?></a></span>
 </div>
@@ -794,13 +811,39 @@ function display_pages()
 
   foreach ($names as $name) {
     $page_name = gettext($name);
+    $img = "";
+
+    if (file_exists("images/${page_name}_16.png")) {
+      $img = "<img src='images/${page_name}_16.png' width='16' height='16' alt='${page_name}' />&nbsp;";
+    }
+    else {
+      $img = "<img src='images/pixel.gif' width='16' height='16' noborder alt='${page_name}' />&nbsp;";
+    }
+
     if ($g_page == $name) {
-      echo "<li class='selected'>$page_name</li>";
+      echo "<li class='selected'>$img$page_name</li>";
     } else {
-      echo "<li><a href='?q=$name&amp;s=$g_server_index'>$page_name</a></li>";
+      echo "<li><a href='?q=$name&amp;s=$g_server_index'>$img$page_name</a></li>";
     }
   }
 }
+
+function print_title_image($page_name)
+{
+  if (file_exists("images/${page_name}_32.png")) {
+    return "<img src='images/${page_name}_32.png' width='32' height='32' alt='${page_name}' />&nbsp;";
+  }
+  else {
+    return "";
+  }
+}  
+
+function print_title($page_name, $text)
+{
+  echo "<h1>" . print_title_image($page_name) . gettext($text);
+  print_help($page_name);
+  echo "</h1>\n";
+}  
 
 function display_status_log($server)
 {
@@ -1125,12 +1168,12 @@ function info($name,$wiki="")
     $wiki = $name;
 
   echo $name;
-  echo "<sup><small><a href='http://wiki.caucho.com/Admin: $wiki' target='caucho-wiki' class='info'>?</a></small></sup>";
+  echo "<sup><small><a href='http://wiki4.caucho.com/Admin: $wiki' target='caucho-wiki' class='info'>?</a></small></sup>";
 }
 
 function print_help($wiki)
 {
-  echo "<sup><small><a href='http://wiki.caucho.com/Admin: $wiki' target='caucho-wiki' class='info'>?</a></small></sup>";
+  echo "<sup><small><a href='http://wiki4.caucho.com/Admin: $wiki' target='caucho-wiki' class='info'>?</a></small></sup>";
 }
 
 function sort_host($a, $b)
@@ -1360,5 +1403,12 @@ function get_param($current, $name, $default=null)
   return $default;
 }
 
+function debug($obj) 
+{
+  if (is_string($obj))
+    System::out->println($obj);
+  else
+    System::out->println(var_export($obj,1));
+}
 
 ?>

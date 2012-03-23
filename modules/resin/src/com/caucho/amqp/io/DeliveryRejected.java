@@ -31,6 +31,8 @@ package com.caucho.amqp.io;
 
 import java.io.IOException;
 
+import com.caucho.amqp.common.DeliveryNode;
+
 
 /**
  * AMQP delivery received
@@ -47,6 +49,23 @@ public class DeliveryRejected extends DeliveryState {
   {
     _error = error;
   }
+  
+  //
+  // action methods
+  //
+
+  /**
+   * Called on a disposition update.
+   */
+  @Override
+  public final void update(long xid, DeliveryNode node)
+  {
+    node.onRejected(xid, _error);
+  }
+  
+  //
+  // i/o methods
+  //
 
   @Override
   public long getDescriptorCode()
@@ -76,5 +95,11 @@ public class DeliveryRejected extends DeliveryState {
       out.writeNull();
     
     return 1;
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[]";
   }
 }

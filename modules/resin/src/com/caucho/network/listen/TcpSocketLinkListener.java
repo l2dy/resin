@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -51,6 +52,9 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.types.Period;
+import com.caucho.env.meter.ActiveMeter;
+import com.caucho.env.meter.CountMeter;
+import com.caucho.env.meter.MeterService;
 import com.caucho.env.thread.ThreadPool;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.management.server.PortMXBean;
@@ -60,7 +64,7 @@ import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
-import com.caucho.util.FreeList;
+import com.caucho.util.FreeRing;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JsseSSLFactory;
@@ -89,13 +93,25 @@ public class TcpSocketLinkListener
   private static final long ACCEPT_THROTTLE_SLEEP_TIME = 0;
   
   private static final int KEEPALIVE_MAX = 65536;
+  
+  private static final CountMeter _throttleDisconnectMeter
+    = MeterService.createCountMeter("Resin|Port|Throttle Disconnect Count");
+  
+  private static final CountMeter _keepaliveMeter
+    = MeterService.createCountMeter("Resin|Port|Keepalive Count");
+  
+  private static final ActiveMeter _keepaliveThreadMeter
+    = MeterService.createActiveMeter("Resin|Port|Keepalive Thread");
+  
+  private static final ActiveMeter _suspendMeter
+    = MeterService.createActiveMeter("Resin|Port|Request Suspend");
 
   private final AtomicInteger _connectionCount = new AtomicInteger();
 
   // started at 128, but that seems wasteful since the active threads
   // themselves are buffering the free connections
-  private FreeList<TcpSocketLink> _idleConn
-    = new FreeList<TcpSocketLink>(32);
+  private FreeRing<TcpSocketLink> _idleConn
+    = new FreeRing<TcpSocketLink>(32);
   
   // The owning server
   // private ProtocolDispatchServer _server;
@@ -138,7 +154,7 @@ public class TcpSocketLinkListener
   private long _keepaliveTimeMax = 10 * 60 * 1000L;
   private long _keepaliveTimeout = 120 * 1000L;
   
-  private boolean _isKeepaliveSelectEnable = true;
+  private boolean _isKeepaliveAsyncEnable = true;
   private long _keepaliveSelectThreadTimeout = 1000;
   
   // default timeout
@@ -153,6 +169,7 @@ public class TcpSocketLinkListener
 
   private boolean _isTcpNoDelay = true;
   private boolean _isTcpKeepalive;
+  private boolean _isTcpCork;
   
   private boolean _isEnableJni = true;
 
@@ -171,8 +188,8 @@ public class TcpSocketLinkListener
   private AbstractSelectManager _selectManager;
 
   // active set of all connections
-  private Set<TcpSocketLink> _activeConnectionSet
-    = Collections.synchronizedSet(new HashSet<TcpSocketLink>());
+  private ConcurrentHashMap<TcpSocketLink,TcpSocketLink> _activeConnectionSet
+    = new ConcurrentHashMap<TcpSocketLink,TcpSocketLink>();
 
   private final AtomicInteger _activeConnectionCount = new AtomicInteger();
 
@@ -191,10 +208,12 @@ public class TcpSocketLinkListener
 
   private final AtomicLong _lifetimeRequestCount = new AtomicLong();
   private final AtomicLong _lifetimeKeepaliveCount = new AtomicLong();
+  private final AtomicLong _lifetimeKeepaliveSelectCount = new AtomicLong();
   private final AtomicLong _lifetimeClientDisconnectCount = new AtomicLong();
   private final AtomicLong _lifetimeRequestTime = new AtomicLong();
   private final AtomicLong _lifetimeReadBytes = new AtomicLong();
   private final AtomicLong _lifetimeWriteBytes = new AtomicLong();
+  private final AtomicLong _lifetimeThrottleDisconnectCount = new AtomicLong();
 
   // total keepalive
   private AtomicInteger _keepaliveAllocateCount = new AtomicInteger();
@@ -499,7 +518,18 @@ public class TcpSocketLinkListener
     return _launcher.getIdleMax();
   }
 
-  /**
+  @Configurable
+  public void setPortThreadMax(int max)
+  {
+    _launcher.setThreadMax(max);
+  }
+  
+  public int getPortThreadMax()
+  {
+    return _launcher.getThreadMax();
+  }
+  
+    /**
    * Sets the minimum spare idle timeout.
    */
   @Configurable
@@ -518,6 +548,7 @@ public class TcpSocketLinkListener
     return _launcher.getIdleTimeout();
   }
   
+
   //
   // launcher throttle configuration
   //
@@ -656,6 +687,23 @@ public class TcpSocketLinkListener
   }
 
   /**
+   * Gets the tcp-cork property
+   */
+  public boolean isTcpCork()
+  {
+    return _isTcpNoDelay;
+  }
+
+  /**
+   * Sets the tcp-no-delay property
+   */
+  @Configurable
+  public void setTcpCork(boolean tcpCork)
+  {
+    _isTcpCork = tcpCork;
+  }
+
+  /**
    * Configures the throttle.
    */
   @Configurable
@@ -685,10 +733,12 @@ public class TcpSocketLinkListener
   
   public boolean isJniEnabled()
   {
-    if (_serverSocket != null)
+    if (_serverSocket != null) {
       return _serverSocket.isJni();
-    else
+    }
+    else {
       return false;
+    }
   }
 
   private Throttle createThrottle()
@@ -779,14 +829,14 @@ public class TcpSocketLinkListener
     _keepaliveTimeout = timeout;
   }
 
-  public boolean isKeepaliveSelectEnabled()
+  public boolean isKeepaliveAsyncEnabled()
   {
-    return _isKeepaliveSelectEnable;
+    return _isKeepaliveAsyncEnable;
   }
 
   public void setKeepaliveSelectEnabled(boolean isKeepaliveSelect)
   {
-    _isKeepaliveSelectEnable = isKeepaliveSelect;
+    _isKeepaliveAsyncEnable = isKeepaliveSelect;
   }
 
   public void setKeepaliveSelectEnable(boolean isKeepaliveSelect)
@@ -984,6 +1034,8 @@ public class TcpSocketLinkListener
   {
     if (! _lifecycle.toInit())
       return;
+    
+    _launcher.init();
   }
   
   public String getUrl()
@@ -1119,13 +1171,14 @@ public class TcpSocketLinkListener
 
     _serverSocket.setTcpNoDelay(_isTcpNoDelay);
     _serverSocket.setTcpKeepalive(_isTcpKeepalive);
+    _serverSocket.setTcpCork(_isTcpCork);
 
     _serverSocket.setConnectionSocketTimeout((int) getSocketTimeout());
 
     if (_serverSocket.isJni()) {
       SocketPollService pollService = SocketPollService.getCurrent();
         
-      if (pollService != null && isKeepaliveSelectEnabled()) {
+      if (pollService != null && isKeepaliveAsyncEnabled()) {
         _selectManager = pollService.getSelectManager();
       }
     }
@@ -1185,8 +1238,9 @@ public class TcpSocketLinkListener
       return ss;
     }
 
-    if (_isTcpNoDelay)
-      ss.setTcpNoDelay(_isTcpNoDelay);
+    ss.setTcpNoDelay(_isTcpNoDelay);
+    ss.setTcpKeepalive(_isTcpKeepalive);
+    ss.setTcpCork(_isTcpCork);
 
     ss.setConnectionSocketTimeout((int) getSocketTimeout());
 
@@ -1268,7 +1322,7 @@ public class TcpSocketLinkListener
     TcpSocketLink []connections;
 
     connections = new TcpSocketLink[_activeConnectionSet.size()];
-    _activeConnectionSet.toArray(connections);
+    _activeConnectionSet.keySet().toArray(connections);
 
     long now = CurrentTime.getExactTime();
     TcpConnectionInfo []infoList = new TcpConnectionInfo[connections.length];
@@ -1310,15 +1364,27 @@ public class TcpSocketLinkListener
   boolean accept(QSocket socket)
   {
     try {
+      SocketLinkThreadLauncher launcher = getLauncher();
+      
       while (! isClosed()) {
         Thread.interrupted();
 
         if (_serverSocket.accept(socket)) {
           //System.out.println("REMOTE: " + socket.getRemotePort());
-          if (_throttle.accept(socket)) {
+          if (launcher.isThreadMax()
+              && ! isKeepaliveAsyncEnabled()
+              && launcher.getIdleCount() <= 1) {
+            // System.out.println("CLOSED:");
+            _throttleDisconnectMeter.start();
+            _lifetimeThrottleDisconnectCount.incrementAndGet();
+            socket.close();
+          }
+          else if (_throttle.accept(socket)) {
             return true;
           }
           else {
+            _throttleDisconnectMeter.start();
+            _lifetimeThrottleDisconnectCount.incrementAndGet();
             socket.close();
           }
         }
@@ -1369,9 +1435,24 @@ public class TcpSocketLinkListener
       return false;
     else if (_keepaliveMax <= _keepaliveAllocateCount.get())
       return false;
+    else if (_launcher.isThreadMax()
+             && _launcher.isIdleLow()
+             && ! isKeepaliveAsyncEnabled()) {
+      return false;
+    }
     else
       return true;
   }
+
+  /**
+   * When true, use the async manager to wait for reads rather than
+   * blocking.
+   */
+  public boolean isAsyncThrottle()
+  {
+    return isKeepaliveAsyncEnabled() && _launcher.isThreadHigh();
+  }
+
 
   /**
    * Marks the keepalive allocation as starting.
@@ -1402,8 +1483,9 @@ public class TcpSocketLinkListener
   int keepaliveThreadRead(ReadStream is)
     throws IOException
   {
-    if (isClosed())
+    if (isClosed()) {
       return -1;
+    }
 
     int available = is.getBufferAvailable();
     
@@ -1413,42 +1495,60 @@ public class TcpSocketLinkListener
 
     long timeout = getKeepaliveTimeout();
 
-    // boolean isSelectManager = getServer().isSelectManagerEnabled();
-
-    if (isKeepaliveSelectEnabled() && _selectManager != null) {
-      long selectTimeout = getBlockingTimeoutForSelect();
-      
-      if (selectTimeout < timeout)
-        timeout = selectTimeout;
-    }
-
     if (getSocketTimeout() < timeout)
       timeout = getSocketTimeout();
-
-    /*
-    if (timeout < 0)
-      timeout = 0;
-      */
-    
-    if (timeout <= 0)
-      return 0;
-    
     
     // server/2l02
+    int keepaliveThreadCount = _keepaliveThreadCount.incrementAndGet();
 
-    _keepaliveThreadCount.incrementAndGet();
+    // boolean isSelectManager = getServer().isSelectManagerEnabled();
 
     try {
       int result;
-      
-      if (false && _keepaliveThreadCount.get() < 32) {
-        // benchmark perf with memcache
-        result = is.fillWithTimeout(-1);
-      }
-      else {
-        result = is.fillWithTimeout(timeout);
+
+      if (isKeepaliveAsyncEnabled() && _selectManager != null) {
+        long selectTimeout = getBlockingTimeoutForSelect();
+        
+        if (selectTimeout < timeout) {
+          timeout = selectTimeout;
+        }
+        
+        if (keepaliveThreadCount > 32) {
+          // throttle the thread keepalive when heavily loaded to save threads
+          if (isAsyncThrottle()) {
+            // when async throttle is active move the thread to async
+            // immediately
+            return 0;
+          }
+          else if (timeout >= 100) {
+            timeout = 100;
+          }
+        }
       }
 
+      /*
+      if (timeout < 0)
+        timeout = 0;
+        */
+      
+      if (timeout <= 0) {
+        return 0;
+      }
+      
+      _keepaliveThreadMeter.start();
+      
+      try {
+        if (false && _keepaliveThreadCount.get() < 32) {
+          // benchmark perf with memcache
+          result = is.fillWithTimeout(-1);
+        }
+        else {
+          result = is.fillWithTimeout(timeout);
+        }
+      } finally {
+        _keepaliveThreadMeter.end();
+      }
+      
       if (isClosed()) {
         return -1;
       }
@@ -1475,6 +1575,8 @@ public class TcpSocketLinkListener
   @Friend(SocketLinkState.class)
   void cometSuspend(TcpSocketLink conn)
   {
+    _suspendMeter.start();
+    
     _suspendConnectionSet.add(conn);
   }
 
@@ -1484,6 +1586,8 @@ public class TcpSocketLinkListener
   @Friend(SocketLinkState.class)
   boolean cometDetach(TcpSocketLink conn)
   {
+    _suspendMeter.end();
+    
     return _suspendConnectionSet.remove(conn);
   }
 
@@ -1543,12 +1647,23 @@ public class TcpSocketLinkListener
 
   void addLifetimeKeepaliveCount()
   {
+    _keepaliveMeter.start();
     _lifetimeKeepaliveCount.incrementAndGet();
   }
 
   public long getLifetimeKeepaliveCount()
   {
     return _lifetimeKeepaliveCount.get();
+  }
+
+  void addLifetimeKeepaliveSelectCount()
+  {
+    _lifetimeKeepaliveSelectCount.incrementAndGet();
+  }
+
+  public long getLifetimeKeepaliveSelectCount()
+  {
+    return _lifetimeKeepaliveSelectCount.get();
   }
 
   void addLifetimeClientDisconnectCount()
@@ -1590,6 +1705,11 @@ public class TcpSocketLinkListener
   {
     return _lifetimeWriteBytes.get();
   }
+  
+  long getLifetimeThrottleDisconnectCount()
+  {
+    return _lifetimeThrottleDisconnectCount.get();
+  }
 
   /**
    * Find the TcpConnection based on the thread id (for admin)
@@ -1597,7 +1717,7 @@ public class TcpSocketLinkListener
   public TcpSocketLink findConnectionByThreadId(long threadId)
   {
     ArrayList<TcpSocketLink> connList
-      = new ArrayList<TcpSocketLink>(_activeConnectionSet);
+      = new ArrayList<TcpSocketLink>(_activeConnectionSet.keySet());
 
     for (TcpSocketLink conn : connList) {
       if (conn.getThreadId() == threadId)
@@ -1619,7 +1739,7 @@ public class TcpSocketLinkListener
       startConn = new TcpSocketLink(connId, this, socket);
     }
     
-    _activeConnectionSet.add(startConn);
+    _activeConnectionSet.put(startConn,startConn);
     _activeConnectionCount.incrementAndGet();
     
     return startConn;
@@ -1631,7 +1751,7 @@ public class TcpSocketLinkListener
   @Friend(TcpSocketLink.class)
   void closeConnection(TcpSocketLink conn)
   {
-    if (_activeConnectionSet.remove(conn)) {
+    if (_activeConnectionSet.remove(conn) != null) {
       _activeConnectionCount.decrementAndGet();
     }
     else if (! isClosed()){
@@ -1717,7 +1837,7 @@ public class TcpSocketLinkListener
     Set<TcpSocketLink> activeSet;
 
     synchronized (_activeConnectionSet) {
-      activeSet = new HashSet<TcpSocketLink>(_activeConnectionSet);
+      activeSet = new HashSet<TcpSocketLink>(_activeConnectionSet.keySet());
     }
 
     for (TcpSocketLink conn : activeSet) {
@@ -1897,5 +2017,4 @@ public class TcpSocketLinkListener
       }
     }
   }
-
 }

@@ -114,11 +114,11 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
 
   @Override
   public final void wake()
-  {
-    if (_taskState.get() == TASK_READY) {
+  {/*
+    if (_taskState.get() == TASK_READY && _isActive.get()) {
       return;
     }
-    
+    */
     int oldState = _taskState.getAndSet(TASK_READY);
 
     if (_isActive.compareAndSet(false, true)) {
@@ -174,7 +174,7 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
     try {
       _thread = thread;
       thread.setContextClassLoader(_classLoader);
-      _thread.setName(getThreadName());
+      thread.setName(getThreadName());
       
       onThreadStart();
 
@@ -224,6 +224,7 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
                || isPermanent()
                || getCurrentTimeActual() < expires);
     } catch (Throwable e) {
+      System.out.println("EXN: " + e);
       WarningService.sendCurrentWarning(this, e);
       log.log(Level.WARNING, e.toString(), e);
     } finally {

@@ -74,6 +74,10 @@ public class HttpRequest extends AbstractHttpRequest
   private static final CharBuffer _getCb = new CharBuffer("GET");
   private static final CharBuffer _headCb = new CharBuffer("HEAD");
   private static final CharBuffer _postCb = new CharBuffer("POST");
+  
+  private static final char []_toLowerAscii;
+  private static final char []_toUpperAscii;
+  private static final boolean []_isHttpWhitespace;
 
   private static final String REQUEST_TIME_PROBE
     = "Resin|Http|Request";
@@ -89,15 +93,16 @@ public class HttpRequest extends AbstractHttpRequest
   private final CharBuffer _uriHost    // www.caucho.com:8080
     = new CharBuffer();
   private CharSequence _host;
-
+  
   private byte []_uri;                 // "/path/test.jsp/Junk?query=7"
   private int _uriLength;
 
   private final CharBuffer _protocol   // "HTTP/1.0"
     = new CharBuffer();
   private int _version;
-
+  
   private char []_headerBuffer;
+  private int _headerLength;
 
   private CharSegment []_headerKeys;
   private CharSegment []_headerValues;
@@ -415,6 +420,8 @@ public class HttpRequest extends AbstractHttpRequest
   {
     char []keyBuf = _headerBuffer;
     CharSegment []headerKeys = _headerKeys;
+    
+    char []toLowerAscii = _toLowerAscii;
 
     for (int i = _headerSize - 1; i >= 0; i--) {
       CharSegment key = headerKeys[i];
@@ -424,22 +431,22 @@ public class HttpRequest extends AbstractHttpRequest
 
       int offset = key.getOffset();
       int j;
+      
       for (j = length - 1; j >= 0; j--) {
         char a = testBuf[j];
         char b = keyBuf[offset + j];
-        if (a == b)
+        
+        if (a == b) {
           continue;
-
-        if (a >= 'A' && a <= 'Z')
-          a += 'a' - 'A';
-        if (b >= 'A' && b <= 'Z')
-          b += 'a' - 'A';
-        if (a != b)
+        }
+        else if (toLowerAscii[a] != toLowerAscii[b]) {
           break;
+        }
       }
 
-      if (j < 0)
+      if (j < 0) {
         return _headerValues[i];
+      }
     }
 
     return null;
@@ -453,10 +460,12 @@ public class HttpRequest extends AbstractHttpRequest
   {
     int i = matchNextHeader(0, key);
 
-    if (i >= 0)
+    if (i >= 0) {
       return _headerValues[i];
-    else
+    }
+    else {
       return null;
+    }
   }
 
   /**
@@ -469,8 +478,10 @@ public class HttpRequest extends AbstractHttpRequest
   public void getHeaderBuffers(String key, ArrayList<CharSegment> values)
   {
     int i = -1;
-    while ((i = matchNextHeader(i + 1, key)) >= 0)
+    
+    while ((i = matchNextHeader(i + 1, key)) >= 0) {
       values.add(_headerValues[i]);
+    }
   }
 
   /**
@@ -485,8 +496,9 @@ public class HttpRequest extends AbstractHttpRequest
     ArrayList<String> values = new ArrayList<String>();
     
     int i = -1;
-    while ((i = matchNextHeader(i + 1, key)) >= 0)
+    while ((i = matchNextHeader(i + 1, key)) >= 0) {
       values.add(_headerValues[i].toString());
+    }
 
     return Collections.enumeration(values);
   }
@@ -505,6 +517,7 @@ public class HttpRequest extends AbstractHttpRequest
     int length = key.length();
 
     char []keyBuf = _headerBuffer;
+    char []toLowerAscii = _toLowerAscii;
 
     for (; i < size; i++) {
       CharSegment header = _headerKeys[i];
@@ -518,19 +531,18 @@ public class HttpRequest extends AbstractHttpRequest
       for (j = 0; j < length; j++) {
         char a = key.charAt(j);
         char b = keyBuf[offset + j];
-        if (a == b)
+        
+        if (a == b) {
           continue;
-
-        if (a >= 'A' && a <= 'Z')
-          a += 'a' - 'A';
-        if (b >= 'A' && b <= 'Z')
-          b += 'a' - 'A';
-        if (a != b)
+        }
+        else if (toLowerAscii[a] != toLowerAscii[b]) {
           break;
+        }
       }
 
-      if (j == length)
+      if (j == length) {
         return i;
+      }
     }
 
     return -1;
@@ -576,22 +588,29 @@ public class HttpRequest extends AbstractHttpRequest
       tail = (_headerValues[_headerSize - 1].getOffset()
               + _headerValues[_headerSize - 1].getLength());
     }
-    else
+    else {
       tail = 0;
+    }
 
+    int keyLength = key.length();
+    int valueLength = value.length();
     char []headerBuffer = _headerBuffer;
-    for (int i = key.length() - 1; i >= 0; i--)
+    
+    for (int i = keyLength - 1; i >= 0; i--) {
       headerBuffer[tail + i] = key.charAt(i);
+    }
 
-    _headerKeys[_headerSize].init(headerBuffer, tail, key.length());
+    _headerKeys[_headerSize].init(headerBuffer, tail, keyLength);
 
-    tail += key.length();
+    tail += keyLength;
 
-    for (int i = value.length() - 1; i >= 0; i--)
+    for (int i = valueLength - 1; i >= 0; i--) {
       headerBuffer[tail + i] = value.charAt(i);
+    }
 
-    _headerValues[_headerSize].init(headerBuffer, tail, value.length());
+    _headerValues[_headerSize].init(headerBuffer, tail, valueLength);
     _headerSize++;
+    // XXX: size
   }
 
   //
@@ -768,6 +787,7 @@ public class HttpRequest extends AbstractHttpRequest
     boolean isInvocation = false;
 
     ServletService server = getServer();
+    // Thread thread = getTcpSocketLink().getThread();
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
     long startTime = 0;
@@ -778,7 +798,7 @@ public class HttpRequest extends AbstractHttpRequest
     try {
       thread.setContextClassLoader(server.getClassLoader());
       
-      startRequest(server.allocateHttpBuffer());
+      startRequest();
 
       if (! parseRequest()) {
         if (log.isLoggable(Level.FINER)) {
@@ -904,25 +924,28 @@ public class HttpRequest extends AbstractHttpRequest
    * @param s the read stream for the request
    */
   @Override
-  protected void startRequest(HttpBufferStore httpBuffer)
+  protected void startRequest()
     throws IOException
   {
-    super.startRequest(httpBuffer);
+    super.startRequest();
+    
+    // HttpBufferStore httpBuffer = getHttpBufferStore();
 
     _method.clear();
     _methodString = null;
     _protocol.clear();
 
     _uriLength = 0;
-    _uri = httpBuffer.getUriBuffer();
+    _uri = getSmallUriBuffer(); // httpBuffer.getUriBuffer();
 
     _uriHost.clear();
     _host = null;
 
     _headerSize = 0;
-    _headerBuffer = httpBuffer.getHeaderBuffer();
-    _headerKeys = httpBuffer.getHeaderKeys();
-    _headerValues = httpBuffer.getHeaderValues();
+    _headerLength = 0;
+    _headerBuffer = getSmallHeaderBuffer(); // httpBuffer.getHeaderBuffer();
+    _headerKeys = getSmallHeaderKeys();     // httpBuffer.getHeaderKeys();
+    _headerValues = getSmallHeaderValues(); // httpBuffer.getHeaderValues();
   }
 
   /**
@@ -938,6 +961,9 @@ public class HttpRequest extends AbstractHttpRequest
     // server/12o3 - default to 1.0 for error messages in request
     _version = HTTP_1_0;
     
+    boolean []isHttpWhitespace = _isHttpWhitespace;
+    char []toUpperAscii = _toUpperAscii;
+    
     byte []readBuffer = s.getBuffer();
     int readOffset = s.getOffset();
     int readLength = s.getLength();
@@ -952,8 +978,8 @@ public class HttpRequest extends AbstractHttpRequest
         readOffset = 0;
       }
 
-      ch = readBuffer[readOffset++];
-    } while (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n');
+      ch = readBuffer[readOffset++] & 0xff;
+    } while (isHttpWhitespace[ch]);
 
     char []buffer = _method.getBuffer();
     int length = buffer.length;
@@ -963,12 +989,13 @@ public class HttpRequest extends AbstractHttpRequest
     while (true) {
       if (length <= offset) {
       }
-      else if ('a' <= ch && ch <= 'z')
-        buffer[offset++] = ((char) (ch + 'A' - 'a'));
-      else if (ch > ' ')
-        buffer[offset++] = (char) ch;
-      else
+      else if (ch > ' ') {
+        buffer[offset++] = toUpperAscii[ch];
+      }
+      else {
         break;
+      }
+        
 
       if (readLength <= readOffset) {
         if ((readLength = s.fillBuffer()) < 0)
@@ -1028,7 +1055,7 @@ public class HttpRequest extends AbstractHttpRequest
         readOffset = 0;
       }
 
-      int ch1 = readBuffer[readOffset++];
+      int ch1 = readBuffer[readOffset++] & 0xff;
 
       if (ch1 != '/') {
         uriBuffer[uriLength++] = (byte) ch;
@@ -1046,7 +1073,7 @@ public class HttpRequest extends AbstractHttpRequest
             }
             readOffset = 0;
           }
-          ch = readBuffer[readOffset++];
+          ch = readBuffer[readOffset++] & 0xff;
 
           switch (ch) {
           case ' ': case '\t': case '\n': case '\r':
@@ -1065,31 +1092,33 @@ public class HttpRequest extends AbstractHttpRequest
         }
       }
     }
+    
+    int readTail = uriBuffer.length - uriLength - 1;
+    
+    if (readLength < readTail) {
+      readTail = readLength;
+    }
 
     // read URI
-    uri:
-    while (true) {
-      switch (ch) {
-      case ' ': case '\t': case '\n': case '\r':
-        break uri;
+    while (! isHttpWhitespace[ch]) {
+      // There's no check for over-running the length because
+      // allowing resizing would allow a DOS memory attack and
+      // also lets us save a bit of efficiency.
+      uriBuffer[uriLength++] = (byte) ch;
 
-      default:
-        // There's no check for over-running the length because
-        // allowing resizing would allow a DOS memory attack and
-        // also lets us save a bit of efficiency.
-        uriBuffer[uriLength++] = (byte) ch;
-        break;
-      }
-
-      if (readLength <= readOffset) {
-        readOffset = 0;
-        if ((readLength = s.fillBuffer()) < 0) {
+      if (readTail <= readOffset) {
+        if ((readTail = fillUrlTail(s, readOffset, uriLength)) <= 0) {
           _uriLength = uriLength;
           _version = 0;
           return true;
         }
+
+        readOffset = s.getOffset();
+        uriBuffer = _uri;
+        uriLength = _uriLength;
       }
-      ch = readBuffer[readOffset++];
+      
+      ch = readBuffer[readOffset++] & 0xff;
     }
     
     _uriLength = uriLength;
@@ -1102,20 +1131,18 @@ public class HttpRequest extends AbstractHttpRequest
         if ((readLength = s.fillBuffer()) < 0)
           return true;
       }
-      ch = readBuffer[readOffset++];
+      ch = readBuffer[readOffset++] & 0xff;
     }
 
     buffer = _protocol.getBuffer();
     length = buffer.length;
     offset = 0;
+    
     // scan protocol
-    while (ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
-      if (length <= offset) {
+    while (! isHttpWhitespace[ch]) {
+      if (offset < length) {
+        buffer[offset++] = toUpperAscii[ch];
       }
-      else if ('a' <= ch && ch <= 'z')
-        buffer[offset++] = ((char) (ch + 'A' - 'a'));
-      else
-        buffer[offset++] = (char) ch;
 
       if (readLength <= readOffset) {
         readOffset = 0;
@@ -1124,7 +1151,7 @@ public class HttpRequest extends AbstractHttpRequest
           return true;
         }
       }
-      ch = readBuffer[readOffset++];
+      ch = readBuffer[readOffset++] & 0xff;
     }
 
     _protocol.setLength(offset);
@@ -1162,29 +1189,29 @@ public class HttpRequest extends AbstractHttpRequest
    */
   private void parseHeaders(ReadStream s) throws IOException
   {
-    // This is still slowest part of the web server.  I don't see how
-    // to improve it much more, but there must be a way.
     int version = getVersion();
 
     if (version < HTTP_1_0) {
       return;
     }
 
-    if (version < HTTP_1_1)
+    if (version < HTTP_1_1) {
       killKeepalive("http client version less than 1.1: " + version);
+    }
 
     byte []readBuffer = s.getBuffer();
     int readOffset = s.getOffset();
     int readLength = s.getLength();
 
     char []headerBuffer = _headerBuffer;
-    int headerOffset = 1;
     headerBuffer[0] = 'z';
-    int headerSize = 0;
+    int headerOffset = 1;
     _headerSize = 0;
-
-    CharSegment []headerKeys = _headerKeys;
-    CharSegment []headerValues = _headerValues;
+    
+    int readTail = readLength;
+    if (headerBuffer.length - 1 < readTail - readOffset) {
+      readTail = headerBuffer.length - 1;
+    }
 
     boolean isLogFine = log.isLoggable(Level.FINE);
 
@@ -1195,35 +1222,48 @@ public class HttpRequest extends AbstractHttpRequest
 
       // scan the key
       while (true) {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
+        if (readTail <= readOffset) {
+          if ((readTail = fillHeaderTail(s, readOffset, headerOffset)) <= 0) {
             return;
+          }
+
+          readOffset = s.getOffset();
+          headerOffset = _headerLength;
+          headerBuffer = _headerBuffer;
         }
+
         ch = readBuffer[readOffset++];
 
         if (ch == '\n') {
           s.setOffset(readOffset);
           return;
         }
-        else if (ch == ':')
+        else if (ch == ':') {
           break;
+        }
 
         headerBuffer[headerOffset++] = (char) ch;
       }
 
-      while (headerBuffer[headerOffset - 1] == ' ')
+      // strip trailing whitespace from key
+      while (headerBuffer[headerOffset - 1] == ' ') {
         headerOffset--;
-
+      }
+      
       int keyLength = headerOffset - keyOffset;
-      headerKeys[headerSize].init(headerBuffer, keyOffset, keyLength);
 
+      // skip whitespace
       do {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
+        if (readTail <= readOffset) {
+          if ((readTail = fillHeaderTail(s, readOffset, headerOffset)) <= 0) {
             return;
+          }
+
+          readOffset = s.getOffset();
+          headerOffset = _headerLength;
+          headerBuffer = _headerBuffer;
         }
+        
         ch = readBuffer[readOffset++];
       } while (ch == ' ' || ch == '\t');
 
@@ -1231,10 +1271,14 @@ public class HttpRequest extends AbstractHttpRequest
 
       // scan the value
       while (true) {
-        if (readLength <= readOffset) {
-          readOffset = 0;
-          if ((readLength = s.fillBuffer()) <= 0)
+        if (readTail <= readOffset) {
+          if ((readTail = fillHeaderTail(s, readOffset, headerOffset)) <= 0) {
             break;
+          }
+
+          readOffset = s.getOffset();
+          headerOffset = _headerLength;
+          headerBuffer = _headerBuffer;
         }
 
         if (ch == '\n') {
@@ -1256,8 +1300,25 @@ public class HttpRequest extends AbstractHttpRequest
         ch = readBuffer[readOffset++];
       }
 
-      while (headerBuffer[headerOffset - 1] <= ' ')
+      while (headerBuffer[headerOffset - 1] <= ' ') {
         headerOffset--;
+      }
+      
+      int headerSize = _headerSize;
+      
+      CharSegment []headerKeys = _headerKeys;
+      CharSegment []headerValues = _headerValues;
+
+      if (headerKeys.length <= headerSize) {
+        _headerLength = headerOffset;
+        extendHeaderBuffers();
+        
+        headerBuffer = _headerBuffer;
+        headerKeys = _headerKeys;
+        headerValues = _headerValues;
+      }
+
+      headerKeys[headerSize].init(headerBuffer, keyOffset, keyLength);
 
       int valueLength = headerOffset - valueOffset;
       headerValues[headerSize].init(headerBuffer, valueOffset, valueLength);
@@ -1274,6 +1335,113 @@ public class HttpRequest extends AbstractHttpRequest
 
       _headerSize = headerSize;
     }
+  }
+  
+  private int fillUrlTail(ReadStream s, int readOffset,
+                          int uriOffset)
+    throws IOException
+  {
+    _uriLength = uriOffset;
+    
+    if (_uri.length <= uriOffset) {
+      extendHeaderBuffers();
+    }
+    
+    if (s.getLength() <= readOffset) {
+      if (s.fillBuffer() < 0) {
+        return -1;
+      }
+    }
+    else {
+      s.setOffset(readOffset);
+    }
+    
+    int tail = s.getLength() - s.getOffset();
+    
+    if (_uri.length - uriOffset < tail) {
+      tail = _uri.length - uriOffset;
+    }
+    
+    return tail;
+  }
+  
+  private int fillHeaderTail(ReadStream s, int readOffset,
+                             int headerOffset)
+    throws IOException
+  {
+    _headerLength = headerOffset;
+    
+    if (_headerBuffer.length <= headerOffset) {
+      extendHeaderBuffers();
+    }
+    
+    if (s.getLength() <= readOffset) {
+      if (s.fillBuffer() < 0) {
+        return -1;
+      }
+    }
+    else {
+      s.setOffset(readOffset);
+    }
+    
+    int tail = s.getLength() - s.getOffset();
+    
+    if (_headerBuffer.length - headerOffset < tail) {
+      tail = _headerBuffer.length - headerOffset;
+    }
+    
+    return tail;
+  }
+
+  protected void extendHeaderBuffers()
+    throws IOException
+  {
+    HttpBufferStore bufferStore = getHttpBufferStore();
+    
+    if (bufferStore != null) {
+      throw new BadRequestException(L.l("URL or HTTP headers are too long (IP={0})",
+                                        getRemoteAddr()));
+    }
+    
+    bufferStore = allocateHttpBufferStore();
+    
+    byte []uri = bufferStore.getUriBuffer();
+    System.arraycopy(_uri,  0, uri, 0, _uriLength);
+    
+    char []headerBuffer = bufferStore.getHeaderBuffer();
+    CharSegment []headerKeys = bufferStore.getHeaderKeys();
+    CharSegment []headerValues = bufferStore.getHeaderValues();
+    
+    if (headerBuffer == _headerBuffer || _uri == uri) {
+      throw new IllegalStateException();
+    }
+    
+    System.arraycopy(_headerBuffer, 0, headerBuffer, 0, _headerLength);
+    
+    for (int i = 0; i < _headerSize; i++) {
+      headerKeys[i].init(headerBuffer,  
+                         _headerKeys[i].getOffset(),
+                         _headerKeys[i].getLength());
+      
+      headerValues[i].init(headerBuffer,  
+                           _headerValues[i].getOffset(),
+                           _headerValues[i].getLength());
+    }
+    
+    _uri = uri;
+    _headerBuffer = headerBuffer;
+    _headerKeys = headerKeys;
+    _headerValues = headerValues;
+  }
+  
+  @Override
+  public void onCloseConnection()
+  {
+    super.onCloseConnection();
+    
+    _headerBuffer = null;
+    _headerKeys = null;
+    _headerValues = null;
   }
 
   //
@@ -1332,5 +1500,35 @@ public class HttpRequest extends AbstractHttpRequest
     else {
       return ("HttpRequest[" + serverId + ", " + connId + "]");
     }
+  }
+  
+  static {
+    _toLowerAscii = new char[256];
+    
+    for (int i = 0; i < 256; i++) {
+      if ('A' <= i && i <= 'Z') {
+        _toLowerAscii[i] = (char) (i + 'a' - 'A');
+      }
+      else {
+        _toLowerAscii[i] = (char) i;
+      }
+    }
+    
+    _toUpperAscii = new char[256];
+    
+    for (int i = 0; i < 256; i++) {
+      if ('a' <= i && i <= 'z') {
+        _toUpperAscii[i] = (char) (i + 'A' - 'a');
+      }
+      else {
+        _toUpperAscii[i] = (char) i;
+      }
+    }
+    
+    _isHttpWhitespace = new boolean[256];
+    _isHttpWhitespace[' '] = true;
+    _isHttpWhitespace['\t'] = true;
+    _isHttpWhitespace['\r'] = true;
+    _isHttpWhitespace['\n'] = true;
   }
 }

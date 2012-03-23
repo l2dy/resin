@@ -45,6 +45,7 @@ import javax.servlet.http.HttpSession;
 import com.caucho.env.meter.CountSensor;
 import com.caucho.env.meter.MeterService;
 import com.caucho.server.dispatch.BadRequestException;
+import com.caucho.server.log.LogBuffer;
 import com.caucho.server.session.CookieImpl;
 import com.caucho.server.session.SessionImpl;
 import com.caucho.server.webapp.WebApp;
@@ -83,17 +84,30 @@ abstract public class AbstractHttpResponse {
   private static final CountSensor _status5xxSensor
     = MeterService.createCountMeter("Resin|Http|5xx");
   private static final CountSensor _status500Sensor
-    = MeterService.createCountMeter("Resin|HTTP|500");
+    = MeterService.createCountMeter("Resin|Http|500");
   private static final CountSensor _status503Sensor
-    = MeterService.createCountMeter("Resin|HTTP|503");
+    = MeterService.createCountMeter("Resin|Http|503");
 
-  protected static final CaseInsensitiveIntMap _headerCodes;
-  protected static final int HEADER_CACHE_CONTROL = 1;
-  protected static final int HEADER_CONTENT_TYPE = HEADER_CACHE_CONTROL + 1;
-  protected static final int HEADER_CONTENT_LENGTH = HEADER_CONTENT_TYPE + 1;
-  protected static final int HEADER_DATE = HEADER_CONTENT_LENGTH + 1;
-  protected static final int HEADER_SERVER = HEADER_DATE + 1;
-  protected static final int HEADER_CONNECTION = HEADER_SERVER + 1;
+  private static final CaseInsensitiveIntMap _headerCodes;
+  private static final int HEADER_CACHE_CONTROL = 1;
+  private static final int HEADER_CONTENT_TYPE = HEADER_CACHE_CONTROL + 1;
+  private static final int HEADER_CONTENT_LENGTH = HEADER_CONTENT_TYPE + 1;
+  private static final int HEADER_DATE = HEADER_CONTENT_LENGTH + 1;
+  private static final int HEADER_SERVER = HEADER_DATE + 1;
+  private static final int HEADER_CONNECTION = HEADER_SERVER + 1;
+  
+  private static final CharBuffer CACHE_CONTROL
+    = new CharBuffer("cache-control");
+  private static final CharBuffer CONNECTION
+    = new CharBuffer("connection");
+  private static final CharBuffer CONTENT_TYPE
+    = new CharBuffer("content-type");
+  private static final CharBuffer CONTENT_LENGTH
+    = new CharBuffer("content-length");
+  private static final CharBuffer DATE
+    = new CharBuffer("date");
+  private static final CharBuffer SERVER
+    = new CharBuffer("server");
 
   private static final ConcurrentHashMap<String,ContentType> _contentTypeMap
     = new ConcurrentHashMap<String,ContentType>();
@@ -103,8 +117,8 @@ abstract public class AbstractHttpResponse {
   protected final ArrayList<String> _headerKeys = new ArrayList<String>();
   protected final ArrayList<String> _headerValues = new ArrayList<String>();
 
-  protected final ArrayList<String> _footerKeys = new ArrayList<String>();
-  protected final ArrayList<String> _footerValues = new ArrayList<String>();
+  private final ArrayList<String> _footerKeys = new ArrayList<String>();
+  private final ArrayList<String> _footerValues = new ArrayList<String>();
 
   private final AbstractResponseStream _responseStream;
 
@@ -113,16 +127,30 @@ abstract public class AbstractHttpResponse {
   private final ResponseWriter _responsePrintWriter
     = new ResponseWriter();
 
-  protected final QDate _calendar = new QDate(false);
+  private final LogBuffer _logBuffer = new LogBuffer(true); 
+  private final QDate _calendar = new QDate(false);
+  private final QDate _localCalendar = new QDate(true);
 
-  protected final CharBuffer _cb = new CharBuffer();
-  protected final char [] _headerBuffer = new char[256];
+  private final byte []_dateBuffer = new byte[64];
+  private final CharBuffer _dateCharBuffer = new CharBuffer();
 
-  private HttpBufferStore _bufferStore;
+  private int _dateBufferLength;
+  private long _lastDate;
+  
+  private final byte []_logDateBuffer = new byte[64];
+  private final CharBuffer _logDateCharBuffer = new CharBuffer();
+  private int _logDateBufferLength;
+  private long _lastLogDate;
+  
+  private final CharBuffer _cb = new CharBuffer();
+  // private final char [] _headerBuffer = new char[256];
+
+  // private HttpBufferStore _bufferStore;
 
   private boolean _isHeaderWritten;
 
-  protected long _contentLength;
+  private String _serverHeader;
+  private long _contentLength;
   private boolean _isClosed;
 
   protected AbstractHttpResponse(AbstractHttpRequest request)
@@ -132,10 +160,12 @@ abstract public class AbstractHttpResponse {
     _responseStream = createResponseStream();
   }
 
+  /*
   TempBuffer getBuffer()
   {
     return _bufferStore.getTempBuffer();
   }
+  */
 
   protected final QDate getCalendar()
   {
@@ -213,10 +243,10 @@ abstract public class AbstractHttpResponse {
   /**
    * Initializes the Response at the beginning of the request.
    */
-  public void startRequest(HttpBufferStore bufferStore)
+  public void startRequest()
     throws IOException
   {
-    _bufferStore = bufferStore;
+    // _bufferStore = bufferStore;
 
     _headerKeys.clear();
     _headerValues.clear();
@@ -230,6 +260,7 @@ abstract public class AbstractHttpResponse {
 
     _contentLength = -1;
     _isClosed = false;
+    _serverHeader = null;
   }
 
   public void startInvocation()
@@ -398,8 +429,9 @@ abstract public class AbstractHttpResponse {
    */
   public void addHeaderImpl(String key, String value)
   {
-    if (setSpecial(key, value))
+    if (setSpecial(key, value)) {
       return;
+    }
 
     _headerKeys.add(key);
     _headerValues.add(value);
@@ -424,46 +456,89 @@ abstract public class AbstractHttpResponse {
   protected boolean setSpecial(String key, String value)
   {
     int length = key.length();
+    
+    if (length == 0) {
+      return false;
+    }
+    
+    int ch = key.charAt(0);
+    
+    if ('A' <= ch && ch <= 'Z') {
+      ch += 'a' - 'A';
+    }
+    
+    int code = (length << 8) + ch;
+    
+    /*
     if (256 <= length)
       return false;
 
     key.getChars(0, length, _headerBuffer, 0);
+    */
 
-    switch (_headerCodes.get(_headerBuffer, length)) {
-    case HEADER_CACHE_CONTROL:
-      // server/13d9, server/13dg
-      if (value.startsWith("max-age")) {
+    switch (code) {
+    case 0x0d00 + 'c':
+      if (CACHE_CONTROL.matchesIgnoreCase(key)) {
+        // server/13d9, server/13dg
+        if (value.startsWith("max-age")) {
+        }
+        else if (value.startsWith("s-maxage")) {
+        }
+        else if (value.equals("x-anonymous")) {
+        }
+        else {
+          _request.getResponseFacade().setCacheControl(true);
+        }
       }
-      else if (value.startsWith("s-maxage")) {
-      }
-      else if (value.equals("x-anonymous")) {
+
+      return false;
+
+    case 0x0a00 + 'c':
+      if (CONNECTION.matchesIgnoreCase(key)) {
+        if ("close".equalsIgnoreCase(value))
+          _request.killKeepalive("client connection: close");
+        return true;
       }
       else {
-        _request.getResponseFacade().setCacheControl(true);
+        return false;
       }
 
-      return false;
+    case 0x0c00 + 'c':
+      if (CONTENT_TYPE.matchesIgnoreCase(key)) {
+        _request.getResponseFacade().setContentType(value);
+        return true;
+      }
+      else {
+        return false;
+      }
 
-    case HEADER_CONNECTION:
-      if ("close".equalsIgnoreCase(value))
-        _request.killKeepalive("client connection: close");
-      return true;
+    case 0x0e00 + 'c':
+      if (CONTENT_LENGTH.matchesIgnoreCase(key)) {
+        // server/05a8
+        // php/164v
+        _contentLength = parseLong(value);
+        return true;
+      }
+      else {
+        return false;
+      }
 
-    case HEADER_CONTENT_TYPE:
-      _request.getResponseFacade().setContentType(value);
-      return true;
+    case 0x0400 + 'd':
+      if (DATE.matchesIgnoreCase(key)) {
+        return true;
+      }
+      else {
+        return false;
+      }
 
-    case HEADER_CONTENT_LENGTH:
-      // server/05a8
-      // php/164v
-      _contentLength = parseLong(value);
-      return true;
-
-    case HEADER_DATE:
-      return true;
-
-    case HEADER_SERVER:
-      return false;
+    case 0x0600 + 's':
+      if (SERVER.matchesIgnoreCase(key)) {
+        _serverHeader = value;
+        return true;
+      }
+      else {
+        return false;
+      }
 
     default:
       return false;
@@ -636,9 +711,14 @@ abstract public class AbstractHttpResponse {
   /**
    * Returns the value of the content-length header.
    */
-  public long getContentLengthHeader()
+  public final long getContentLengthHeader()
   {
     return _contentLength;
+  }
+  
+  public String getServerHeader()
+  {
+    return _serverHeader;
   }
 
   /**
@@ -849,29 +929,31 @@ abstract public class AbstractHttpResponse {
         _status200Sensor.start();
         break;
       default:
+        _status2xxSensor.start();
         break;
       }
       break;
     case 3:
-      _status3xxSensor.start();
       switch (statusCode) {
       case 304:
         _status304Sensor.start();
         break;
       default:
+        _status3xxSensor.start();
         break;
       }
       break;
     case 4:
-      _status4xxSensor.start();
       switch (statusCode) {
       case 400:
         _status400Sensor.start();
+        _status4xxSensor.start();
         break;
       case 404:
         _status404Sensor.start();
         break;
       default:
+        _status4xxSensor.start();
         break;
       }
       break;
@@ -1034,6 +1116,138 @@ abstract public class AbstractHttpResponse {
     return true;
   }
 
+  public final LogBuffer getLogBuffer()
+  {
+    return _logBuffer;
+  }
+
+  public final byte []fillDateBuffer(long now)
+  {
+    if (_lastDate / 1000 != now / 1000) {
+      fillDate(now);
+    }
+    
+    return _dateBuffer;
+  }
+  
+  public final int getDateBufferLength()
+  {
+    return _dateBufferLength;
+  }
+  
+  public final int getRawDateBufferOffset()
+  {
+    return 8; // "\r\nDate: "
+  }
+  
+  public final int getRawDateBufferLength()
+  {
+    return 24;
+  }
+
+  private void fillDate(long now)
+  {
+    if (_lastDate / 60000 == now / 60000) {
+      int min = (int) (now / 60000 % 60);
+      int sec = (int) (now / 1000 % 60);
+
+      int m2 = '0' + (min / 10);
+      int m1 = '0' + (min % 10);
+
+      int s2 = '0' + (sec / 10);
+      int s1 = '0' + (sec % 10);
+
+      _dateBuffer[28] = (byte) m2;
+      _dateBuffer[29] = (byte) m1;
+
+      _dateBuffer[31] = (byte) s2;
+      _dateBuffer[32] = (byte) s1;
+
+      _lastDate = now;
+
+      return;
+    }
+
+    _lastDate = now;
+    _calendar.setGMTTime(now);
+    _dateCharBuffer.clear();
+    _dateCharBuffer.append("\r\nDate: ");
+    _calendar.printDate(_dateCharBuffer);
+
+    char []cb = _dateCharBuffer.getBuffer();
+    int len = _dateCharBuffer.getLength();
+
+    for (int i = len - 1; i >= 0; i--) {
+      _dateBuffer[i] = (byte) cb[i];
+    }
+
+    _dateBuffer[len] = (byte) '\r';
+    _dateBuffer[len + 1] = (byte) '\n';
+    _dateBuffer[len + 2] = (byte) '\r';
+    _dateBuffer[len + 3] = (byte) '\n';
+
+    _dateBufferLength = len + 4;
+  }
+
+  public final byte []fillLogDateBuffer(long now, 
+                                        String timeFormat,
+                                        int minutesOffset,
+                                        int secondsOffset)
+  {
+    if (_lastLogDate / 1000 != now / 1000) {
+      fillLogDate(now, timeFormat, minutesOffset, secondsOffset);
+    }
+    
+    return _logDateBuffer;
+  }
+  
+  public final int getLogDateBufferLength()
+  {
+    return _logDateBufferLength;
+  }
+
+  private void fillLogDate(long now, 
+                           String timeFormat,
+                           int minutesOffset,
+                           int secondsOffset)
+  {
+    if (_lastLogDate / 60000 == now / 60000) {
+      int min = (int) (now / 60000 % 60);
+      int sec = (int) (now / 1000 % 60);
+
+      int m2 = '0' + (min / 10);
+      int m1 = '0' + (min % 10);
+
+      int s2 = '0' + (sec / 10);
+      int s1 = '0' + (sec % 10);
+
+      _logDateBuffer[minutesOffset + 0] = (byte) m2;
+      _logDateBuffer[minutesOffset + 1] = (byte) m1;
+
+      _logDateBuffer[secondsOffset + 0] = (byte) s2;
+      _logDateBuffer[secondsOffset + 1] = (byte) s1;
+
+      _lastLogDate = now;
+
+      return;
+    }
+
+    _lastLogDate = now;
+    _localCalendar.setGMTTime(now);
+    _logDateCharBuffer.clear();
+
+    _localCalendar.format(_logDateCharBuffer, timeFormat);
+
+    char []cb = _logDateCharBuffer.getBuffer();
+    int len = _logDateCharBuffer.getLength();
+
+    for (int i = len - 1; i >= 0; i--) {
+      _logDateBuffer[i] = (byte) cb[i];
+    }
+
+    _logDateBufferLength = len;
+  }
+
   /**
    * Closes the request, called from web-app for early close.
    */
@@ -1134,7 +1348,7 @@ abstract public class AbstractHttpResponse {
       return;
 
     try {
-      _bufferStore = null;
+      // _bufferStore = null;
 
       AbstractHttpRequest request = _request;
 

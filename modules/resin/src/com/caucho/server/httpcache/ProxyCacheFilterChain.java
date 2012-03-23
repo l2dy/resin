@@ -294,7 +294,7 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
     entry = getVaryEntry(entry, req);
 
     // If the entry isn't valid, don't use it
-    if (entry == null || ! entry._isValid) {
+    if (entry == null || ! entry.isValid()) {
       return null;
     }
 
@@ -397,7 +397,7 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
       response.setHeader("Last-Modified", entry._lastModified);
 
     if (entry._maxAge > 0) {
-      response.setDateHeader("Expires", now + entry._maxAge);
+      // response.setDateHeader("Expires", now + entry._maxAge);
       response.addHeader("Cache-Control", "max-age=" + entry._maxAge / 1000);
       
       entry._expireDate = now + entry._maxAge;
@@ -427,8 +427,9 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
   {
     ProxyCacheEntry entry = (ProxyCacheEntry) abstractEntry;
 
-    if (! entry._isValid)
+    if (! entry._isValid) {
       return false;
+    }
 
     if (resetResponse(entry, response) == ResetResponse.FAIL) {
       log.warning(this + " unable to reset " + req + " " + response);
@@ -451,8 +452,12 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
 
     String range = req.getHeader("Range");
     
-    if (range != null && ! entry._allowRange)
+    if (range != null && ! entry._allowRange) {
+      if (log.isLoggable(Level.FINE))
+        log.fine(this + " cannot fill with range");
+      
       return false;
+    }
     
     if (entry._contentType != null)
       response.setContentType(entry._contentType);
@@ -471,7 +476,7 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
     }
     else if (entry._maxAge > 0) {
       // HTTP/1.0 browsers should be gone
-      response.addDateHeader("Expires", now + entry._maxAge);
+      // response.addDateHeader("Expires", now + entry._maxAge);
     }
 
     String method = req.getMethod();
@@ -483,6 +488,9 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
 
     ProxyCacheInode inode = entry.getInode();
     if (inode == null || ! inode.allocate()) {
+      log.fine(this + " invalid inode: " + inode);
+      System.out.println("BAD-INODE: " + inode);
+      
       return false;
     }
 
@@ -511,6 +519,10 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
 
         // inode may be cleared.
         if (! inode.writeToStream(response.getResponseStream())) {
+          if (log.isLoggable(Level.FINE))
+            log.fine(this + " cannot write inode: " + inode);
+          
+          System.out.println("BAD_WRITE:");
           return false;
         }
       }
@@ -1008,7 +1020,7 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
       }
     }
     else if (now < entry._expireDate) {
-      res.setDateHeader("Expires", entry._expireDate);
+      // res.setDateHeader("Expires", entry._expireDate);
     }
 
     entry._lastModified = lastModified;
@@ -1025,7 +1037,7 @@ public class ProxyCacheFilterChain extends AbstractCacheFilterChain
 
       // server/1319
       if (entry._maxAge > 0) { // && ! req.getVaryCookies())
-        res.setDateHeader("Expires", now + entry._maxAge);
+        // res.setDateHeader("Expires", now + entry._maxAge);
       }
 
       // Only cache internally for 5 seconds so we see updates

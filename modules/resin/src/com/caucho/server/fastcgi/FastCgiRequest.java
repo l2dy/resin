@@ -234,9 +234,7 @@ public class FastCgiRequest extends AbstractHttpRequest
     try {
       thread.setContextClassLoader(server.getClassLoader());
 
-      HttpBufferStore httpBuffer = server.allocateHttpBuffer();
-
-      startRequest(httpBuffer);
+      startRequest();
       startInvocation();
 
       ReadStream is = getRawRead();
@@ -798,26 +796,29 @@ public class FastCgiRequest extends AbstractHttpRequest
    * @param s the read stream for the request
    */
   @Override
-  protected void startRequest(HttpBufferStore httpBuffer)
+  protected void startRequest()
     throws IOException
   {
-    super.startRequest(httpBuffer);
+    super.startRequest();
+    
+    HttpBufferStore httpBuffer = getHttpBufferStore();
 
     _method.clear();
     _methodString = null;
     _protocol.clear();
 
+
     _uriLength = 0;
-    _uri = httpBuffer.getUriBuffer();
+    _uri = getSmallUriBuffer(); // httpBuffer.getUriBuffer();
 
     _uriHost.clear();
     _host = null;
 
     _headerSize = 0;
-    _headerOffset = 0;
-    _headerBuffer = httpBuffer.getHeaderBuffer();
-    _headerKeys = httpBuffer.getHeaderKeys();
-    _headerValues = httpBuffer.getHeaderValues();
+    _headerBuffer = getSmallHeaderBuffer(); // httpBuffer.getHeaderBuffer();
+    _headerKeys = getSmallHeaderKeys();     // httpBuffer.getHeaderKeys();
+    _headerValues = getSmallHeaderValues(); // httpBuffer.getHeaderValues();
+    
     _initAttributes = false;
   }
 

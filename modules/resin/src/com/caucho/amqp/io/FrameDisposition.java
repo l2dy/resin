@@ -44,14 +44,29 @@ public class FrameDisposition extends AmqpAbstractFrame {
   private DeliveryState _state; // delivery-state
   private boolean _isBatchable;
   
+  public void setRole(Role role)
+  {
+    _role = role;
+  }
+  
   public Role getRole()
   {
     return _role;
   }
   
+  public void setFirst(long first)
+  {
+    _first = first;
+  }
+  
   public long getFirst()
   {
     return _first;
+  }
+  
+  public void setLast(long last)
+  {
+    _last = last;
   }
   
   public long getLast()
@@ -62,6 +77,11 @@ public class FrameDisposition extends AmqpAbstractFrame {
   public boolean isSettled()
   {
     return _isSettled;
+  }
+  
+  public void setSettled(boolean isSettled)
+  {
+    _isSettled = isSettled;
   }
   
   public DeliveryState getState()
@@ -95,7 +115,7 @@ public class FrameDisposition extends AmqpAbstractFrame {
   }
   
   @Override
-  public void invoke(AmqpFrameReader fin, AmqpFrameHandler receiver)
+  public void invoke(AmqpReader fin, AmqpFrameHandler receiver)
     throws IOException
   {
     receiver.onDisposition(this);

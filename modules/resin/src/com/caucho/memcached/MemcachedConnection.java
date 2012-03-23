@@ -37,6 +37,7 @@ import java.util.HashMap;
 
 import com.caucho.distcache.ClusterCache;
 import com.caucho.distcache.ExtCacheEntry;
+import com.caucho.network.listen.AbstractProtocolConnection;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.util.Alarm;
@@ -50,7 +51,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * Custom serialization for the cache
  */
-public class MemcachedConnection implements ProtocolConnection
+public class MemcachedConnection extends AbstractProtocolConnection
 {
   private static final HashMap<CharBuffer,Command> _commandMap
     = new HashMap<CharBuffer,Command>();
@@ -117,6 +118,18 @@ public class MemcachedConnection implements ProtocolConnection
   {
     ReadStream is = _link.getReadStream();
     
+    while (handleSingleRequest(is)) {
+      if (is.getBufferAvailable() <= 0) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+  
+  private boolean handleSingleRequest(ReadStream is)
+    throws IOException
+  {
     _method.clear();
     
     int ch;
@@ -568,13 +581,15 @@ public class MemcachedConnection implements ProtocolConnection
       
       do {
         cb.append((char) ch);
-      } while ((ch = rs.read()) >= 0 && ! Character.isWhitespace(ch));
+      } while ((ch = rs.read()) >= 0
+               && (ch != ' ' && ch != '\r' && ch != '\n'));
       
       rs.unread();
+
       
-      return true;
+      return ch >= 0;
     }
-    
+
     protected void getCache(WriteStream out,
                             ClusterCache cache,
                             String key,
@@ -584,20 +599,24 @@ public class MemcachedConnection implements ProtocolConnection
     {
       ExtCacheEntry entry = cache.getLiveCacheEntry(key);
 
-      if (entry == null || entry.isValueNull()) {
-        return;
-      }
-      
-      long now = CurrentTime.getCurrentTime();
-      
-      if (entry.isExpired(now)) {
+      if (entry == null) {
         return;
       }
       
       HashKey valueKey = entry.getValueHashKey();
+      
+      long now = CurrentTime.getCurrentTime();
+      
+      if (entry.isExpired(now)) {
+        System.out.println("EXP: " + key.length());
+        return;
+      }
+      
+      // HashKey valueKey = entry.getValueHashKey();
       long unique = getCasKey(valueKey);
       
       if (hash != 0 && hash == unique) {
+        System.out.println("NOM: " + key.length());
         // out.print("NOT_MODIFIED\r\n");
         // get-if-modified
         return;

@@ -36,5 +36,22 @@ import java.util.concurrent.BlockingQueue;
  * message sender
  */
 public interface MessageSender<T> extends BlockingQueue<T> {
+  /**
+   * Auto-settle sends messages without waiting for confirmation
+   * from the broker.
+   */
+  public SettleMode getSettleMode();
+  
+  /**
+   * Returns the most recently received message id for acknowledgement.
+   */
+  public long getLastMessageId();
+  
+  public MessageSettleListener getSettleListener();
+  
+  public int getUnsettledCount();
+  
+  public MessagePropertiesFactory<T> createMessageFactory();
+  
   public void close();
 }

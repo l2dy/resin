@@ -9,13 +9,14 @@ LDFLAGS_SHLIB=@LDFLAGS_SHLIB@
 PROXY_LIBS=@PROXY_LIBS@
 APACHE_INC=@APACHE_INC@
 resin_conf=@apache_conf@
+resin_os=@resin_os@
 LIBEXEC=@LIBEXEC@
 resin_libexec=@apache_libexec@
 resin_home=$(DESTDIR)@resin_home@
 JNI_INCLUDE=@JNI_INCLUDE@
-INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common
+INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common -I$(resin_os)
 CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @CFLAGS_JNI@ @CFLAGS_SHLIB@
-OBJ= @resin_os@/std.o @resin_os@/memory.o @resin_os@/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o stat.o mmap_file.o
+OBJ= $(resin_os)/std.o $(resin_os)/memory.o $(resin_os)/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o stat.o mmap_file.o
 
 all	: libresin.$(SO)
 
@@ -26,11 +27,7 @@ libresin.jnilib	: $(OBJ)
 	$(CC) $(LDFLAGS_SHLIB) -framework JavaVM -o $@ $(OBJ) $(PROXY_LIBS)
 
 jni_vfs.o	: resin.h Makefile
-memory.o	: resin.h Makefile
 lru.o	: resin.h Makefile
-java.o	: resin.h Makefile
-std.o		: resin.h Makefile
-boot.o		: resin.h Makefile
 profile.o	: resin.h Makefile
 symbol.o	: resin.h Makefile
 crc64.o		: resin.h Makefile

@@ -123,6 +123,13 @@
   </health:LicenseHealthCheck>
   
   <!--
+     - HTTP Ping Check
+    -->
+  <health:HttpStatusHealthCheck>
+    <url-list>${http_ping_urls}</url-list>
+  </health:HttpStatusHealthCheck>
+  
+  <!--
      - JMX Meters - for graphing and anomaly detection 
     -->
   <health:JmxMeter>
@@ -453,6 +460,14 @@
   </health:AnomalyAnalyzer>
 
   <health:AnomalyAnalyzer>
+    <meter>Resin|Http|Ping Time Max</meter>
+  </health:AnomalyAnalyzer>
+
+  <health:AnomalyAnalyzer>
+    <meter>Resin|Port|Throttle Disconnect Count</meter>
+  </health:AnomalyAnalyzer>
+
+  <health:AnomalyAnalyzer>
     <meter>Resin|Http|400</meter>
   </health:AnomalyAnalyzer>
 
@@ -469,8 +484,20 @@
       
     <!-- row 1 -->
 
+    <section name="Requests">
+
+    <graph name="Request Active">
+      <meter>Resin|Http|Request Active</meter>
+      <meter>Resin|Port|Request Suspend Active</meter>
+      <meter>Resin|Port|Keepalive Thread Active</meter>
+      <meter>Resin|Port|Keepalive Async Active</meter>
+    </graph>
+
     <graph name="Request Count">
       <meter>Resin|Http|Request Count</meter>
+      <meter>Resin|Port|Request Suspend Count</meter>
+      <meter>Resin|Port|Keepalive Thread Count</meter>
+      <meter>Resin|Port|Keepalive Async Count</meter>
       <meter>Resin|Http|Session Save Count</meter>
     </graph>
       
@@ -488,7 +515,19 @@
       <meter>Resin|Http|5xx</meter>
     </graph>
 
+    <graph name="Throttle Disconnect">
+      <meter>Resin|Port|Throttle Disconnect Count</meter>
+    </graph>
+
+    <graph name="Http Ping Time">
+      <meter>Resin|Http|Ping Time</meter>
+      <meter>Resin|Http|Ping Time Max</meter>
+    </graph>
+
+    </section>
+    
     <!-- row 2 -->
+    <section name="Network/CPU">
       
     <graph name="Netstat">
       <meter>OS|Network|tcp-established</meter>
@@ -513,6 +552,10 @@
     <graph name="CPU Context Switch">
       <meter>OS|CPU|Context Switch Count</meter>
     </graph>
+    
+    </section>
+
+    <section name="Memory">
 
     <!-- row 3 -->
     
@@ -553,6 +596,9 @@
       <meter>Resin|Log|Severe</meter>
     </graph>
 
+    </section>
+    
+    <section name="Threads">
     <!-- row 5 -->
 
     <graph name="JVM Threads">
@@ -576,6 +622,9 @@
       <meter>Resin|Thread|Thread Task Queue</meter>
     </graph>
 
+    </section>
+    
+    <section name="Database">
     <!-- row 6 -->
 
     <graph name="Database Connection Active">
@@ -592,6 +641,8 @@
       <meter>Resin|Database|Query Count</meter>
     </graph>
     
+    </section>
+    <section name="Caching">
     <!-- row 7 -->
 
     <graph name="Block Cache I/O">
@@ -632,6 +683,8 @@
     <graph name="Proxy Cache Cacheable Rate">
       <meter>Resin|Proxy Cache|Cacheable Rate</meter>
     </graph>
+    
+    </section>
 
   </health:MeterGraphPage>
     

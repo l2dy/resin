@@ -47,7 +47,8 @@ import com.caucho.vfs.WriteStream;
  * a web server plugin.
  */
 public class FastCgiResponse extends AbstractHttpResponse {
-  private FastCgiRequest _req;
+  private final FastCgiRequest _req;
+  private final CharBuffer _cb = new CharBuffer();
 
   FastCgiResponse(FastCgiRequest request, WriteStream rawWrite)
   {
@@ -113,6 +114,13 @@ public class FastCgiResponse extends AbstractHttpResponse {
     }
     else if (response.isPrivateCache()) {
       os.print("Cache-Control: private\r\n");
+    }
+    
+    String serverHeader = getServerHeader();
+    if (serverHeader != null) {
+      os.print("Server: ");
+      os.printLatin1NoLf(serverHeader);
+      os.print("\r\n");
     }
 
     int size = _headerKeys.size();
