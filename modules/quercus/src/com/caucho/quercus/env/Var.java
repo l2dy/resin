@@ -74,28 +74,28 @@ public class Var extends Value
     // php/151m
     return this;
   }
-  
+
   public boolean isVar()
   {
     return true;
   }
-  
+
   /**
    * Sets the value, possibly replacing if a var and returning the resulting var
-   * 
+   *
    * $a =& (...).
    */
   public Var setRef(Value value)
   {
     // php/078d-f
-    
+
     if (value.isVar())
       return (Var) value;
     else {
       // XXX:
-      
+
       _value = value;
-      
+
       return this;
     }
   }
@@ -511,7 +511,7 @@ public class Var extends Value
   public Value toAutoArray()
   {
     _value = _value.toAutoArray();
-    
+
     // php/03mg
 
     return this;
@@ -771,7 +771,7 @@ public class Var extends Value
     // return new Var(_value.toArgValue());
     return this;
   }
-  
+
   /**
    * Converts to a local argument variable
    */
@@ -872,7 +872,7 @@ public class Var extends Value
   {
     return _value.toInputStream();
   }
-  
+
   @Override
   public Callable toCallable(Env env)
   {
@@ -916,7 +916,7 @@ public class Var extends Value
   @Override
   public Value copyArrayItem()
   {
-    // php/041d
+    // php/041d, php/041k, php/041l
     return this;
   }
 
@@ -1323,6 +1323,16 @@ public class Var extends Value
   }
 
   /**
+   * Returns a reference to the array value.
+   */
+  @Override
+  public Value getRef(Value index)
+  {
+    // php/066z
+    return _value.getRef(index);
+  }
+
+  /**
    * Returns the array ref.
    */
   @Override
@@ -1531,12 +1541,20 @@ public class Var extends Value
   }
 
   /**
+   * Returns true if the object has this field.
+   */
+  @Override
+  public boolean isFieldExists(Env env, StringValue name) {
+    return _value.isFieldExists(env, name);
+  }
+
+  /**
    * Returns true if the field is set.
    */
   @Override
-  public boolean issetField(StringValue name)
+  public boolean issetField(Env env, StringValue name)
   {
-    return _value.issetField(name);
+    return _value.issetField(env, name);
   }
 
   /**
@@ -1616,9 +1634,9 @@ public class Var extends Value
    * Returns true if the field is set.
    */
   @Override
-  public boolean issetThisField(StringValue name)
+  public boolean issetThisField(Env env, StringValue name)
   {
-    return _value.issetThisField(name);
+    return _value.issetThisField(env, name);
   }
 
   /**
@@ -2109,9 +2127,9 @@ public class Var extends Value
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
-    _value.jsonEncode(env, sb);
+    _value.jsonEncode(env, context, sb);
   }
 
   @Override
@@ -2123,6 +2141,15 @@ public class Var extends Value
   {
     out.print("&");
     _value.varDump(env, out, depth, valueSet);
+  }
+
+  protected void printRImpl(Env env,
+                            WriteStream out,
+                            int depth,
+                            IdentityHashMap<Value, String> valueSet)
+    throws IOException
+  {
+    _value.printRImpl(env, out, depth, valueSet);
   }
 
   //

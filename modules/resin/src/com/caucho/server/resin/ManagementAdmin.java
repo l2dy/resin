@@ -44,8 +44,6 @@ import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ManagementMXBean;
 import com.caucho.quercus.lib.reflection.ReflectionException;
 import com.caucho.server.admin.AddUserQueryReply;
-import com.caucho.server.admin.ControllerStateActionQueryReply;
-import com.caucho.server.admin.DeployClient;
 import com.caucho.server.admin.HmuxClientFactory;
 import com.caucho.server.admin.JmxCallQueryReply;
 import com.caucho.server.admin.JmxSetQueryReply;
@@ -53,12 +51,15 @@ import com.caucho.server.admin.JsonQueryReply;
 import com.caucho.server.admin.ListJmxQueryReply;
 import com.caucho.server.admin.ListUsersQueryReply;
 import com.caucho.server.admin.ManagerClient;
+import com.caucho.server.admin.ManagerProxyApi;
 import com.caucho.server.admin.PdfReportQueryReply;
 import com.caucho.server.admin.RemoveUserQueryReply;
 import com.caucho.server.admin.StatServiceValuesQueryReply;
 import com.caucho.server.admin.StringQueryReply;
-import com.caucho.server.admin.TagResult;
 import com.caucho.server.admin.WebAppDeployClient;
+import com.caucho.server.deploy.DeployControllerState;
+import com.caucho.server.deploy.DeployClient;
+import com.caucho.server.deploy.DeployTagResult;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
@@ -369,7 +370,7 @@ public class ManagementAdmin extends AbstractManagedObject
     Date to = new Date(CurrentTime.getCurrentTime());
 
     ManagerClient managerClient = getManagerClient(serverId);
-    
+
     long period = Period.toPeriod(periodStr);
 
     Date from = new Date(to.getTime() - period);
@@ -409,8 +410,12 @@ public class ManagementAdmin extends AbstractManagedObject
     return managerClient.callJmx(pattern, operation, operationIndex, params);
   }
 
+  //
+  // deploy
+  //
+
   @Override
-  public ControllerStateActionQueryReply startWebApp(String serverId,
+  public DeployControllerState startWebApp(String serverId,
                                                       String tag,
                                                       String context,
                                                       String stage,
@@ -429,13 +434,13 @@ public class ManagementAdmin extends AbstractManagedObject
 
     WebAppDeployClient deployClient = getWebappDeployClient(serverId);
 
-    ControllerStateActionQueryReply result = deployClient.start(tag);
+    DeployControllerState result = deployClient.start(tag);
 
     return result;
   }
 
   @Override
-  public ControllerStateActionQueryReply stopWebApp(String serverId,
+  public DeployControllerState stopWebApp(String serverId,
                                                      String tag,
                                                      String context,
                                                      String stage,
@@ -454,13 +459,13 @@ public class ManagementAdmin extends AbstractManagedObject
 
     WebAppDeployClient deployClient = getWebappDeployClient(serverId);
 
-    ControllerStateActionQueryReply result = deployClient.stop(tag);
+    DeployControllerState result = deployClient.stop(tag);
 
     return result;
   }
 
   @Override
-  public ControllerStateActionQueryReply restartWebApp(String serverId,
+  public DeployControllerState restartWebApp(String serverId,
                                                         String tag,
                                                         String context,
                                                         String stage,
@@ -479,7 +484,7 @@ public class ManagementAdmin extends AbstractManagedObject
 
     WebAppDeployClient deployClient = getWebappDeployClient(serverId);
 
-    ControllerStateActionQueryReply result = deployClient.restart(tag);
+    DeployControllerState result = deployClient.restart(tag);
 
     return result;
   }
@@ -588,12 +593,12 @@ public class ManagementAdmin extends AbstractManagedObject
   }
 
   @Override
-  public TagResult []deployList(String serverId, String pattern)
+  public DeployTagResult []deployList(String serverId, String pattern)
     throws ReflectionException
   {
     WebAppDeployClient deployClient = getWebappDeployClient(serverId);
 
-    TagResult []result = deployClient.queryTags(pattern);
+    DeployTagResult []result = deployClient.queryTags(pattern);
 
     return result;
   }
@@ -639,12 +644,45 @@ public class ManagementAdmin extends AbstractManagedObject
   }
 
   @Override
+  public String enable(String serverId)
+  {
+    ManagerProxyApi proxy = getManagerProxy(serverId);
+
+    return proxy.enable();
+  }
+
+  @Override
+  public String disable(String serverId)
+  {
+    ManagerProxyApi proxy = getManagerProxy(serverId);
+
+    return proxy.disable();
+  }
+
+  @Override
+  public String disableSoft(String serverId)
+    throws javax.management.ReflectionException
+  {
+    ManagerProxyApi proxy = getManagerProxy(serverId);
+
+    return proxy.disableSoft();
+  }
+
+  //
+  // jmx dump
+  //
+
+  @Override
   public JsonQueryReply doJmxDump(String serverId)
   {
     ManagerClient managerClient = getManagerClient(serverId);
 
     return managerClient.doJmxDump();
   }
+
+  //
+  // user admin
+  //
 
   @Override
   public AddUserQueryReply addUser(String serverId,
@@ -686,7 +724,9 @@ public class ManagementAdmin extends AbstractManagedObject
   @Override
   public StringQueryReply getStatus(String serverId)
   {
-    return null;
+    ManagerClient managerClient = getManagerClient(serverId);
+    
+    return managerClient.status();
   }
 
   private String makeTag(String name,
@@ -800,7 +840,31 @@ public class ManagementAdmin extends AbstractManagedObject
     return params.toArray(new String[params.size()]);
   }
 
-  private ManagerClient getManagerClient(String serverId) {
+  private ManagerProxyApi getManagerProxy(String serverId)
+  {
+    CloudServer server = getServer(serverId);
+
+    if (server == null)
+      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
+
+    ManagerProxyApi proxy = server.getData(ManagerProxyApi.class);
+
+    if (proxy == null) {
+      ManagerClient client = getManagerClient(serverId);
+
+      proxy = client.createAgentProxy(ManagerProxyApi.class,
+                                      "manager-proxy@resin.caucho");
+      
+      ManagerProxyApi presentProxy = server.putDataIfAbsent(proxy);
+
+/*      proxy = server.putDataIfAbsent(proxy);*/
+    }
+
+    return proxy;
+  }
+
+  private ManagerClient getManagerClient(String serverId)
+  {
     final ActorSender sender;
 
     CloudServer server = getServer(serverId);
@@ -812,7 +876,7 @@ public class ManagementAdmin extends AbstractManagedObject
       sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
     }
     else {
-      String authKey = Resin.getCurrent().getResinSystemAuthKey();
+      String authKey = Resin.getCurrent().getClusterSystemKey();
 
       HmuxClientFactory hmuxFactory
         = new HmuxClientFactory(server.getAddress(),
@@ -839,7 +903,7 @@ public class ManagementAdmin extends AbstractManagedObject
       sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
     }
     else {
-      String authKey = Resin.getCurrent().getResinSystemAuthKey();
+      String authKey = Resin.getCurrent().getClusterSystemKey();
 
       HmuxClientFactory hmuxFactory
         = new HmuxClientFactory(server.getAddress(),

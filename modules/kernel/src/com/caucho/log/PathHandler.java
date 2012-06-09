@@ -30,9 +30,7 @@
 package com.caucho.log;
 
 import java.io.IOException;
-import java.util.logging.Filter;
 import java.util.logging.Formatter;
-import java.util.logging.Handler;
 import java.util.logging.LogRecord;
 
 import javax.annotation.PostConstruct;
@@ -41,6 +39,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
+import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
@@ -49,13 +48,11 @@ import com.caucho.vfs.WriteStream;
  * Configures a log handler
  */
 @Configurable
-public class PathHandler extends Handler {
-  private RotateLog _pathLog = new RotateLog();
+public class PathHandler extends AbstractLogHandler {
+  private final RotateLog _pathLog = new RotateLog();
 
   private Formatter _formatter;
   private String _timestamp;
-
-  private Filter _filter;
 
   private WriteStream _os;
 
@@ -150,15 +147,6 @@ public class PathHandler extends Handler {
   }
 
   /**
-   * Sets the filter.
-   */
-  @Override
-  public void setFilter(Filter filter)
-  {
-    _filter = filter;
-  }
-
-  /**
    * Initialize the log.
    */
   @PostConstruct
@@ -189,82 +177,51 @@ public class PathHandler extends Handler {
       throw ConfigException.create(e);
     }
   }
-
-  /**
-   * Publishes the record.
-   */
+    
   @Override
-  public void publish(LogRecord record)
+  protected void processPublish(LogRecord record)
   {
-    if (! isLoggable(record))
-        return;
-
-    if (_filter != null && ! _filter.isLoggable(record))
-      return;
-
-    try {
-      if (record == null) {
-        synchronized (_os) {
-          _os.println("no record");
-          _os.flush();
-        }
-        return;
-      }
-
-      if (_formatter != null) {
-        String value = _formatter.format(record);
-
-        synchronized (_os) {
+    synchronized (_os) {
+      try {
+        if (_formatter != null) {
+          String value = _formatter.format(record);
+  
           _os.println(value);
-          _os.flush();
+  
+          return;
         }
-
-        return;
-      }
-
-      String message = record.getMessage();
-      Throwable thrown = record.getThrown();
-      
-      synchronized (_os) {
-        /*
-        if (_timestamp != null) {
-          _os.print(_timestamp);
-        }
-        */
-
+  
+        String message = record.getMessage();
+        Throwable thrown = record.getThrown();
+        
         if (thrown != null) {
           if (message != null
               && ! message.equals(thrown.toString())
               && ! message.equals(thrown.getMessage())) {
-            _os.println(message);
+            printMessage(_os, message, record.getParameters());
           }
-
+  
           record.getThrown().printStackTrace(_os.getPrintWriter());
         }
         else {
-          _os.println(record.getMessage());
+          printMessage(_os, message, record.getParameters());
         }
-        _os.flush();
+      } catch (Exception e) {
+        e.printStackTrace();
       }
-    } catch (Exception e) {
-      e.printStackTrace();
+      }
+  }
+  
+  @Override
+  protected void processFlush()
+  {
+    synchronized (_os) {
+      try {
+        _os.flush();
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
     }
-  }
-
-  /**
-   * Flushes the buffer.
-   */
-  @Override
-  public void flush()
-  {
-  }
-
-  /**
-   * Closes the handler.
-   */
-  @Override
-  public void close()
-  {
   }
 
   /**
@@ -276,7 +233,7 @@ public class PathHandler extends Handler {
     if (_os == null || _os.getPath() == null)
       return super.hashCode();
     else
-    return _os.getPath().hashCode();
+      return _os.getPath().hashCode();
   }
 
   /**

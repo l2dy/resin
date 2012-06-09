@@ -437,6 +437,15 @@ function pdf_health_status_label($val)
   return null;
 }
 
+function pdf_availability_label($val)
+{
+  if ($val == 0)
+    return "DOWN";
+  else if ($val == 3)
+    return "UP";
+  else return null;
+}
+
 function pdf_health()
 {
   global $g_jmx_dump, $g_jmx_dump_time, $g_si, $g_start, $g_end, $g_canvas, $g_health_colors;
@@ -507,18 +516,160 @@ function pdf_health()
     }
   }
   
-  pdf_log_messages("Recent Warnings",
-                   "/^com.caucho.health.analysis/",
-                   false,
-                   $g_start, $g_end,
-                   5);
+  pdf_health_events($g_start, $g_end);
+}
+
+function pdf_health_events($start, $end)
+{
+  global $g_canvas, $g_mbean_server;
   
+  $g_canvas->newLine();
+  $g_canvas->writeSubSection("Recent Health Events");
   
-  pdf_log_messages("Recent Anomalies",
-                   "/^com.caucho.health.analysis/",
-                   true,
-                   $g_start, $g_end,
-                   5);
+  $health_service = $g_mbean_server->lookup("resin:type=HealthSystem");
+  if ($health_service)
+    $events = $health_service->findEvents($g_server_index, 
+                                          $start * 1000, $end * 1000, 50);
+  
+  if (count($events) > 0) {
+    $w1 = 95;
+    $w2 = 85;
+    $w3 = 100;
+    $w4 = 245;
+  
+    $g_canvas->setFont("Courier-Bold", "8");
+    
+    $g_canvas->writeTextColumnHeader($w1, 'c', "Date");
+    $g_canvas->writeTextColumnHeader($w2, 'c', "Event Type");
+    $g_canvas->writeTextColumnHeader($w3, 'c', "Source");
+    $g_canvas->writeTextColumnHeader($w4, 'c', "Message");
+    $g_canvas->newLine();
+    $g_canvas->newLine();
+    
+    $g_canvas->setFont("Courier", "8");
+    
+    foreach ($events as $event) {
+      $ts = strftime("%Y-%m-%d %H:%M:%S", $events->timestamp / 1000);
+      
+      $g_canvas->writeTextColumn($w1, 'l', $ts);
+      $g_canvas->writeTextColumn($w2, 'l', $event->typeDescription);
+      $g_canvas->writeTextColumn($w3, 'l', $event->source);
+      $g_canvas->writeTextColumn($w4, 'l', $event->message);
+      $g_canvas->newLine();
+      
+      if ($event->type == "START_TIME") {
+        $g_canvas->writeHrule(0, .5, "grey");
+        $g_canvas->newLine();
+      }
+    }    
+  } else {
+    $g_canvas->setTextFont();
+    $g_canvas->writeTextLineIndent(20, "No Events");
+  }
+}
+
+function pdf_availability()
+{
+  global $g_si, $g_start, $g_end, $g_period, $g_canvas, $g_label;
+
+  $stat = get_stats_service();
+  if (! $stat)
+    return;
+  
+  $g_canvas->writeSection("Availability");
+  
+  $g_canvas->setTextFont();
+  
+  $downtimes = $stat->getDownTimes($g_si, $g_start * 1000, $g_end * 1000);
+  if (count($downtimes) == 0) {
+    $g_canvas->newLine();
+    $g_canvas->writeTextLineIndent(20, "No Data");
+    return;
+  }
+  
+  $g_canvas->allocateGraphSpace(4,1);
+  
+  pdf_stat_graph("$g_label Uptime", array("Resin|Uptime|Up"), $g_si, "pdf_availability_label");
+  
+  $downtimes = array_reverse($downtimes);
+  
+  $total = 0;
+  $count = 0;
+  
+  foreach($downtimes as $downtime) {
+    $et = $downtime->ET;
+    if ($et > 0) {
+      $total += $et;
+      $count++;
+    }
+  }
+  
+  $total /= 1000;
+  $avg = 0;
+  if ($count > 0)
+    $avg = $total / $count;
+  $uptime = 100 - (($total / $g_period) * 100);  
+  
+  $g_canvas->writeSubsection("Summary");
+  
+  $col1 = 120;
+  $col2 = 300;
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Period:");
+  $g_canvas->writeTextColumn($col2, 'l', format_seconds($g_period));
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Data Range:");
+  $g_canvas->writeTextColumn($col2, 'l', date("Y-m-d H:i", $g_start) . " through " . date("Y-m-d H:i", $g_end));
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Number of Downtimes:");
+  $g_canvas->writeTextColumn($col2, 'l', $count);
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Total Downtime:");
+  $g_canvas->writeTextColumn($col2, 'l', format_seconds($total));
+  $g_canvas->newLine();
+
+  $g_canvas->writeTextColumn($col1, 'r', "Average Downtime Period:");
+  $g_canvas->writeTextColumn($col2, 'l', format_seconds($avg));
+  $g_canvas->newLine();
+  
+  $g_canvas->writeTextColumn($col1, 'r', "Availability: ");
+  $g_canvas->writeTextColumn($col2, 'l', number_format($uptime, 4) . "%");
+  $g_canvas->newLine();
+  
+  $g_canvas->writeSubsection("Downtimes");
+  
+  $col1 = 120;
+  $col2 = 120;
+  $col3 = 285;
+  
+  $g_canvas->setFont("Courier-Bold", 9);
+  
+  $g_canvas->writeTextColumnHeader($col1, 'l', "Start Time");
+  $g_canvas->writeTextColumnHeader($col2, 'l', "End Time");
+  $g_canvas->writeTextColumnHeader($col3, 'l', "Elapsed Time");
+  $g_canvas->newLine();
+  $g_canvas->newLine();
+  
+  $g_canvas->setFont("Courier", 9);
+    
+  foreach($downtimes as $downtime) {
+    $et = $downtime->ET/1000;
+    
+    if ($et > 0)
+      $g_canvas->writeTextColumn($col1, 'l', date("Y-m-d H:i:s", $downtime->startTime / 1000));
+    else
+      $g_canvas->writeTextColumn($col1, 'l', "-");
+      
+    $g_canvas->writeTextColumn($col2, 'l', date("Y-m-d H:i:s", $downtime->endTime / 1000));
+    
+    if ($et > 0) 
+      $g_canvas->writeTextColumn($col3, 'l', format_seconds($et));
+      
+    $g_canvas->newLine();
+  }
 }
 
 function pdf_log_messages($title,

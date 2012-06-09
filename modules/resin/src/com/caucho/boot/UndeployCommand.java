@@ -31,8 +31,8 @@ package com.caucho.boot;
 
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
-import com.caucho.server.admin.DeployClient;
 import com.caucho.server.admin.WebAppDeployClient;
+import com.caucho.server.deploy.DeployClient;
 import com.caucho.util.L10N;
 
 public class UndeployCommand extends AbstractRepositoryCommand
@@ -62,10 +62,10 @@ public class UndeployCommand extends AbstractRepositoryCommand
     String name = args.getDefaultArg();
     
     if (name == null)
-      name = args.getArg("-name");
-
-    if (name == null) {
-      throw new ConfigException(L.l("Cannot find context argument in command line"));
+      name = getName(args, null);
+    
+    if (name == null || "/".equals(name)) {
+      name = "ROOT";
     }
     
     String host = args.getArg("-host");

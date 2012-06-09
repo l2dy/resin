@@ -45,7 +45,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.env.service.AbstractResinSubSystem;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.network.listen.SocketPollService;
-import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.network.listen.TcpPort;
 import com.caucho.server.hmux.HmuxProtocol;
 import com.caucho.util.HostUtil;
 import com.caucho.util.L10N;
@@ -67,7 +67,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
   
   private final CloudServer _selfServer;
   
-  private TcpSocketLinkListener _clusterListener;
+  private TcpPort _clusterListener;
   
   private CopyOnWriteArrayList<ClusterServerListener> _serverListeners
     = new CopyOnWriteArrayList<ClusterServerListener>();
@@ -153,7 +153,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
   /**
    * Returns the cluster port.
    */
-  public TcpSocketLinkListener getClusterListener()
+  public TcpPort getClusterListener()
   {
     return _clusterListener;
   }
@@ -365,7 +365,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
   private void startClusterListener()
     throws Exception
   {
-    TcpSocketLinkListener listener = _clusterListener;
+    TcpPort listener = _clusterListener;
     
     if (listener != null) {
       ClusterServer clusterServer = _selfServer.getData(ClusterServer.class);
@@ -376,7 +376,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
       listener.setKeepaliveTimeoutMillis(idleTime);
       listener.setSocketTimeoutMillis(idleTime);
       
-      listener.setProtocol(new HmuxProtocol());
+      listener.setProtocol(HmuxProtocol.create());
       listener.init();
       
       validateClusterServer(listener, clusterServer);
@@ -388,7 +388,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     }
   }
 
-  private void validateClusterServer(TcpSocketLinkListener listener,
+  private void validateClusterServer(TcpPort listener,
                                      ClusterServer server)
   {
     if (listener == null || server == null)
@@ -402,12 +402,15 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
                                     listener.getSocketTimeout()));
     }
 
+    // server/26r0
+    /*
     if (server.getLoadBalanceSocketTimeout() <= listener.getSocketTimeout()) {
       throw new ConfigException(L.l("{0}: load-balance-socket-timeout {1} must be greater than socket-timeout {2}",
                                     server, 
                                     server.getLoadBalanceSocketTimeout(),
                                     listener.getSocketTimeout()));
     }
+    */
 
     if (listener.getKeepaliveTimeout() <= server.getLoadBalanceIdleTime()) {
       throw new ConfigException(L.l("{0}: load-balance-idle-time {1} must be less than keepalive-timeout {2}",

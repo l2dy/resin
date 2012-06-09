@@ -33,6 +33,7 @@ import java.io.*;
 
 import com.caucho.json.ser.JsonSerializer;
 import com.caucho.json.ser.JsonSerializerFactory;
+import com.caucho.vfs.WriteStream;
 
 /**
  * Abstract output stream for JSON requests.
@@ -64,6 +65,11 @@ public class JsonOutput {
   {
     init(os);
   }
+
+  public JsonOutput(WriteStream out)
+  {
+    init(out.getPrintWriter());
+  }
   
   /**
    * Initialize the output with a new underlying stream.
@@ -73,12 +79,12 @@ public class JsonOutput {
     _os = os;
   }
 
-  public void writeObject(Serializable value) throws IOException
+  public void writeObject(Object value) throws IOException
   {
     writeObject(value, false);
   }
 
-  public void writeObject(Serializable value, boolean annotated)
+  public void writeObject(Object value, boolean annotated)
     throws IOException
   {
     PrintWriter os = _os;

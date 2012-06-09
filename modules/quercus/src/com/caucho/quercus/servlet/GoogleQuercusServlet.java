@@ -29,50 +29,42 @@
 
 package com.caucho.quercus.servlet;
 
-import com.caucho.config.ConfigException;
-import com.caucho.util.L10N;
-
-import java.lang.reflect.Constructor;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import javax.servlet.ServletException;
 
 /**
  * Servlet to call PHP through javax.script.
  */
+@SuppressWarnings("serial")
 public class GoogleQuercusServlet extends QuercusServlet
 {
-  private static final L10N L = new L10N(GoogleQuercusServlet.class);
-  private static final Logger log
-    = Logger.getLogger(GoogleQuercusServlet.class.getName());
+  private String _gsBucket;
+
+  public GoogleQuercusServlet()
+  {
+  }
 
   @Override
   protected QuercusServletImpl getQuercusServlet(boolean isResin)
   {
-    QuercusServletImpl impl = null;
+    QuercusServletImpl impl = new ProGoogleQuercusServlet(_gsBucket);
 
-    try {
-      Class<?> cl = Class.forName("com.caucho.quercus.servlet.ProGoogleQuercusServlet");
-      Constructor<?> cons = cl.getConstructor(java.io.File.class);
-      
-      impl = (QuercusServletImpl) cons.newInstance(_licenseDirectory);
-
-    } catch (ConfigException e) {
-      log.log(Level.FINEST, e.toString(), e);
-      log.info(
-          "Quercus compiled mode requires valid Quercus professional licenses");
-      log.info(e.getMessage());
-      
-    } catch (Exception e) {
-      log.log(Level.FINEST, e.toString(), e);
-    }
-
-    if (impl == null) {
-      impl = new GoogleQuercusServletImpl();
-      
-      impl.getQuercus();
-    }
-    
     return impl;
+  }
+
+  /**
+   * Sets a named init-param to the passed value.
+   *
+   * @throws ServletException if the init-param is not recognized
+   */
+  protected void setInitParam(String paramName, String paramValue)
+    throws ServletException
+  {
+    if ("cloud-storage-bucket".equals(paramName)) {
+      _gsBucket = paramValue;
+    }
+    else {
+      super.setInitParam(paramName, paramValue);
+    }
   }
 }
 

@@ -545,6 +545,11 @@ public class DBPool
     _connectionPool.setMaxActiveTime(maxActiveTime.getPeriod());
   }
 
+  public void setCommitOnTimeout(boolean commitOnTimeout)
+  {
+    getPool().setCommitOnTimeout(commitOnTimeout);
+  }
+
   /**
    * Get the table to 'ping' to see if the connection is still live.
    */
@@ -747,8 +752,8 @@ public class DBPool
     _connectionPool.setLocalTransaction(_poolImpl.isLocalTransaction());
 
     ManagedConnectionFactory mcf = _poolImpl.getManagedConnectionFactory();
-    
-    
+
+
     _dataSource = (DataSource) _connectionPool.init(mcf);
     _connectionPool.start();
 
@@ -765,10 +770,10 @@ public class DBPool
     BeanBuilder<?> factory = manager.createBeanFactory(DataSource.class);
 
     String name = _name;
-    
+
     if (name == null)
       name = _jndiName;
-    
+
     if (name == null)
       name = _var;
 
@@ -778,7 +783,7 @@ public class DBPool
     else {
       if (name != null)
         factory.qualifier(Names.create(name));
-      
+
       factory.qualifier(CurrentLiteral.CURRENT);
     }
 
@@ -788,7 +793,7 @@ public class DBPool
     // factory.stereotype(CauchoDeployment.class);
 
     manager.addBean(factory.singleton(this));
-    
+
 
     _queryAdmin.register();
     _databaseAdmin.register();
@@ -797,6 +802,7 @@ public class DBPool
   /**
    * Returns a new or pooled connection.
    */
+  @Override
   public Connection getConnection() throws SQLException
   {
     return getDataSource().getConnection();
@@ -811,6 +817,7 @@ public class DBPool
    * @param password database password
    * @return a database connection
    */
+  @Override
   public Connection getConnection(String user, String password)
     throws SQLException
   {
@@ -823,11 +830,11 @@ public class DBPool
   public void closeIdleConnections()
   {
     ConnectionPool connectionPool = _connectionPool;
-    
+
     if (connectionPool != null)
       connectionPool.clear();
   }
-  
+
   /*
    * Closes the specified connection and removes from the pool.
    */
@@ -932,7 +939,7 @@ public class DBPool
   {
     return _serializationHandle;
   }
-  
+
   public void close()
   {
     _databaseAdmin.close();

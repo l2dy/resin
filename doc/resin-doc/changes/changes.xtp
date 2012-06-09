@@ -10,6 +10,50 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.28 - snapshot">
+<ul>
+<li>install: --disable-ssl does not disable SSL (#5090, rep by R. Aughenbaugh)</li>
+<li>install: --disable-jni causes make to fail (#5094, rep by R. Aughenbaugh)</li>
+<li>load-balance: bounds check on hmux load-balance (#5058, rep by Travis Romney)</li>
+<li>load-balance: improve error message when open source configures a cluster</li>
+<li>logging: add formatting for entering/exiting (#5071)</li>
+<li>logging: add actor queue for logging</li>
+<li>servlet: add x-forwarded-host support for HTTP (#5092)</li>
+<li>hessian: add deflate support to hessian proxy (#4151, rep by ebourg)</li>
+<li>hessian: Iterator deserializer (#4164, rep by ebourg)</li>
+<li>ioc: processInjectionTarget should only be called on scanning, not createInjectionTarget</li>
+<li>cloud: cross-pod deployment (#4807)</li>
+<li>servlet: isMultipartEnable() NPE (#4995)</li>
+<li>class-loader: sort tree-loader before adding to classpath (#5006)</li>
+<li>jsp-el: method calls (rep by mate, #5011, #5087)</li>
+<li>http: header/url length limits for keepalive (rep by alex, #4999)</li>
+<li>jsp-el: coerceToType handling Class (rep by mate, #5061)</li>
+<li>jsp-el: BeanELResolver getType() for getValue w/o setValue (rep by mate, #5039)</li>
+<li>hessian: NullFieldDeserializer must extend FieldSerializer (rep by Thomas Poppe)</li>
+<li>db/distcache: fsync/timestamp on shutdown to avoid index revalidation when clean</li>
+<li>distcache: reworked cache data management to simplify and stale data cleanup.</li>
+<li>cloud: deploy timeout needs to adjust for long deployments that are progressing.</li>
+<li>resin: fixed directory naming for dynamic server on windows.(#5023, #5026)</li>
+<li>resin: fixed directory naming for dynamic server.(#5079)</li>
+<li>resin: fixed WEB-INF/lib/*.jar not being released on application stop problem.(#5059)</li>
+<li>servlet: fixed Resin schema constraint for async-supported servlet element.(#5044, rep by Naohisa Ohshima)</li>
+<li>jsp: fixed ELParser to accept expressions as argument to method calls.(#5034, rep by mate)</li>
+<li>jsp: fixed ResourceBundleELResolver handling of MissingResourceException (#5035, rep by mate)</li>
+<li>cloud: fixes for .jar support in deploy-config</li>
+<li>database: introduced new commit-on-timeout tag to manage expired connections.(#4926, rep by T. Fukuda)</li>
+<li>resin: fixed start issue with -server "" arguments on windows.(#5005, rep by K. Ding)</li>
+<li>servlet: fixed Part.getHeader case sensitivity issue.(#5018, rep by ralscha)</li>
+<li>servlet: fixed doOptions and doTrace HttpSerlvet methods.(#5020, rep by Andy Paladino)</li>
+<li>resin: fixed access-log@web-tier not reporting cookies problem.(#4965, rep by Chris Hart)</li>
+<li>resin: home-server for EC2/cloud configuration</li>
+<li>resin: license-add command fix for unlicensed pro server (#5008, rep by rickHigh)</li>
+<li>resin: mac osx case insensitive servlet mapping fix (#4980, rep by Alex Rojkov)</li>
+<li>resin: fixed Resin OS Proxy Servlet (5002, rep by lewellyn)</li>
+<li>debian: dpkg shouldn't override /etc/resin/resin.properties (#5000, rep by lewellyn)</li>
+<li>jsf: restored Mojarra12InjectionProvider (#4996, rep by igor)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.27 - Mar 22, 2012">
 <ul>
 <li>servlet: split CauchoWrapper from AbstractCauchoRequest (#4993, rep by Leonid Kaminsky)</li>

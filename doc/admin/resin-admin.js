@@ -164,6 +164,7 @@ function initializeToggleSwitches() {
   });
 }
 
+
 function initializeValidators() {
   $("form").each(function() {
     var required = $(this).find(".required");
@@ -209,3 +210,60 @@ function color_baseline(o)
   return o.add("a", -0.6);
 }
 
+function formatMemory(val)
+{
+  if (val >= 1e9)
+    return (val / 1e9).toFixed(1) + 'G';
+  if (val >= 1e6)
+    return (val / 1e6).toFixed(1) + 'M';
+  if (val >= 1e3)
+    return (val / 1e3).toFixed(1) + 'k'
+
+  return val + "B";
+}
+
+function formatDate(val) {
+  var now = new Date(Date.now());
+  var date = new Date(val);
+
+  var result;
+  if (now.getFullYear() != date.getFullYear() ||
+      now.getMonth() != date.getMonth() ||
+      now.getDate() != date.getDate()) {
+    result = date.getFullYear() + "-" + (date.getMonth() + 1 ) + "-"
+               + date.getDate() + " " + date.getHours() + ":"
+               + date.getMinutes() + ":" + date.getSeconds();
+  }
+  else {
+    result = date.getHours() + ":" + date.getMinutes() + ":" + date.getSeconds();
+  }
+
+  return result;
+}
+
+var lday = 1000 * 60 * 60 * 24;
+var lhour = 1000 * 60 * 60;
+var lmin = 1000 * 60;
+var lsec = 1000;
+
+function formatTimeout(ms) {
+  var days = Math.floor(ms / lday);
+  var hours = Math.floor((ms - lday * days) / lhour);
+  var minutes = Math.floor((ms - lday * days - lhour * hours) / lmin);
+  var seconds = Math.floor((ms - lday * days - lhour * hours - lmin * minutes)
+                             / lsec);
+
+  var result;
+  if (days > 0)
+    result = days + 'd ' + hours + 'h ' + minutes + 'm ' + seconds + 's ';
+  else if (hours > 0)
+   result = hours + 'h ' + minutes + 'm ' + seconds + 's ';
+  else if (minutes > 0)
+    result = minutes + 'm ' + seconds + 's ';
+  else if (seconds > 0)
+    result = seconds + 's ' + (ms - seconds * 1000) + 'ms';
+  else
+    result = ms + 'ms';
+
+  return result;
+}

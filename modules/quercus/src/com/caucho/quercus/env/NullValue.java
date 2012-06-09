@@ -598,7 +598,7 @@ public class NullValue extends Value
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append("NULL");
   }
@@ -607,7 +607,7 @@ public class NullValue extends Value
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
     sb.append("null");
   }

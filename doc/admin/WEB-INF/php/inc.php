@@ -8,6 +8,7 @@
 require_once "WEB-INF/php/graph_flot.php";
 
 import java.lang.System;
+import com.caucho.management.server.*;
 
 global $g_server_id;
 global $g_server_index;
@@ -31,7 +32,7 @@ if (function_exists('header')) {
   header("Pragma: No-Cache");
 }  
 
-function admin_init($query="", $is_refresh=false)
+function admin_init($query="", $is_refresh=false, $fragment = false)
 {
   global $g_server_id;
   global $g_server_index;
@@ -58,7 +59,10 @@ function admin_init($query="", $is_refresh=false)
   else
     $title = "Resin: $g_page";
 
-  return display_header($g_page, $title, $g_server, $query, $is_refresh, true);
+  if ($fragment)
+    return true;
+  else
+    return display_header($g_page, $title, $g_server, $query, $is_refresh, true);
 }  
 
 function mbean_init()
@@ -334,6 +338,8 @@ function uri_nocache($path)
   else
     $rand = "&.rand=" . mt_rand();
   */
+
+  $rand = "";
 
   if (strncmp($path, "/", 1) === 0)
     return $path . $rand;
@@ -1325,7 +1331,7 @@ function display_health_status($s)
       echo $s_health->Name;
       echo "</td>";
       echo "<td>";
-      echo $s_health->Message;
+      echo nl2br(htmlspecialchars(wordwrap($s_health->Message, 90)));
       echo "</td>";
       echo "</tr>";
     }
@@ -1409,6 +1415,55 @@ function debug($obj)
     System::out->println($obj);
   else
     System::out->println(var_export($obj,1));
+}
+
+function format_seconds($seconds) 
+{
+  if (round($seconds) == 0)
+    return "0 seconds";
+  
+  $minute = 60;
+  $hour = $minute * 60;
+  $day = $hour * 24;
+  $week = $day * 7;
+  
+  $weeks = floor($seconds/$week);
+  $seconds -= $weeks * $week;
+  
+  $days = floor($seconds/$day);
+  $seconds -= $days * $day;
+  
+  $hours = floor($seconds/$hour);
+  $seconds -= $hours * $hour;
+  
+  $minutes = floor($seconds/$minute);
+  $seconds -= $minutes * $minute;
+  
+  $seconds = round($seconds);
+  
+  $sb = "";
+  if ($weeks == 1)
+    $sb .= $weeks . " week ";
+  if ($weeks > 1)
+    $sb .= $weeks . " weeks ";
+  if ($days == 1)
+    $sb .= $days . " day ";
+  if ($days > 1)
+    $sb .= $days . " days ";
+  if ($hours == 1)
+    $sb .= $hours . " hour ";
+  if ($hours > 1)
+    $sb .= $hours . " hours ";
+  if ($minutes == 1)
+    $sb .= $minutes . " minute ";
+  if ($minutes > 1)
+    $sb .= $minutes . " minutes ";
+  if ($seconds == 1)
+    $sb .= $seconds . " second";
+  if ($seconds > 1)
+    $sb .= $seconds . " seconds";
+    
+  return $sb;
 }
 
 ?>

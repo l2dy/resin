@@ -29,6 +29,8 @@
 
 package com.caucho.server.distcache;
 
+import java.io.InputStream;
+
 import com.caucho.util.HashKey;
 
 /**
@@ -45,6 +47,12 @@ public class AbstractCacheEngine implements CacheEngine
   public void initCache(CacheImpl cache)
   {
   }
+  
+  @Override
+  public int getServerIndex()
+  {
+    return -1;
+  }
 
   @Override
   public boolean isLocalExpired(CacheConfig config,
@@ -55,27 +63,31 @@ public class AbstractCacheEngine implements CacheEngine
     return mnodeEntry.isExpired(now);
   }
 
+  /*
   @Override
-  public boolean loadData(HashKey valueKey, int flags)
+  public boolean loadData(HashKey key, 
+                          HashKey valueKey, long valueIndex,
+                          int flags)
   {
     return true;
   }
+  */
 
   @Override
-  public MnodeEntry get(DistCacheEntry entry, CacheConfig config)
+  public MnodeValue get(DistCacheEntry entry, CacheConfig config)
   {
     return null;
   }
 
   @Override
-  public void put(HashKey key, MnodeUpdate mnodeUpdate,
-                         MnodeEntry mnodeValue)
+  public void put(HashKey key, 
+                  MnodeUpdate mnodeUpdate,
+                  long valueDataId)
   {
   }
 
   @Override
-  public void remove(HashKey key, MnodeUpdate mnodeUpdate,
-                            MnodeEntry mnodeEntry)
+  public void remove(HashKey key, MnodeUpdate mnodeUpdate)
   {
   }
 
@@ -84,18 +96,24 @@ public class AbstractCacheEngine implements CacheEngine
   {
   }
   @Override
-  public HashKey compareAndPut(DistCacheEntry entry, HashKey testValue,
-                               MnodeUpdate mnodeUpdate, Object value,
-                               CacheConfig config)
+  public boolean compareAndPut(DistCacheEntry entry,
+                               long testValue,
+                               MnodeUpdate mnodeUpdate,
+                               long valueDataId)
   {
-    return null;
+    return false;
   }
 
   @Override
-  public HashKey getAndPut(DistCacheEntry entry, MnodeUpdate mnodeUpdate,
-                           Object value, long leaseTimeout, int leaseOwner)
+  public InputStream getAndPut(DistCacheEntry entry, 
+                               MnodeUpdate mnodeValue,
+                               long valueDataId)
   {
-    return null;
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
+  @Override
+  public void notifyLease(HashKey key, int leaseOwner)
+  {
+  }
 }

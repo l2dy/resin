@@ -50,6 +50,11 @@ public interface AmqpMessageEncoder<T>
   
   public String getContentType(T value);
   
-  public void encode(AmqpWriter out, T value)
+  public void encodeData(AmqpWriter out, T value)
+    throws IOException;
+  
+  public void encode(AmqpWriter out, 
+                     MessagePropertiesFactory<T> factory,
+                     T value)
     throws IOException;
 }

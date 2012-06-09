@@ -1108,9 +1108,9 @@ div.form-input-help {
 }
 
 .webapp-expand {
-	border : 1px solid grey; 
-	padding : 0em 1em 1em 1em;
-	width: 58em;
+  border: 1px solid grey;
+  padding: 0em 1em 1em 1em;
+  width: 58em;
 }
 
 .webapp-data {
@@ -1121,6 +1121,12 @@ div.form-input-help {
   text-align: center;
   white-space: nowrap;
   width: 15em;
+}
+
+.sessions-expand {
+  border: 1px solid grey;
+  padding: 0em 1em 1em 1em;
+  width: 58em;
 }
 
 .top-header {
@@ -1173,4 +1179,63 @@ of log entries*/
   color : grey;
   font-size: .5em;
   z-index: 2;
+}
+
+div.refresh-sessions {
+  height: 2em;
+}
+
+a.refresh-sessions {
+  color : #e5a122;
+}
+
+a.refresh-sessions:visited {
+  color : #e5a122;
+}
+
+a.refresh-sessions:hover {
+  color : #e5a122;
+  cursor: pointer;
+}
+
+table.data-detail {
+  font-size: 100%;
+  color: black;
+  border-collapse: collapse;
+  empty-cells: hide;
+}
+
+.data-detail td {
+  padding: 3px 4px 3px 4px;
+  border: thin solid grey;
+}
+/* old background: #e0e6f8; */
+
+.data-detail th {
+  padding: 3px 4px 3px 4px;
+  background: #EBD7B2;
+  text-align: center;
+  border: thin solid grey;
+}
+
+/*  background : #d0e4ff; */
+.data-detail td.group {
+  background : #EBD7B2;
+  font-weight : bold;
+}
+
+/* background : #e0e6f8; */
+.data-detail td.item {
+  background : #EBD7B2;
+  font-weight : bold;
+}
+
+.data-detail td.itemfail {
+  font-weight : bold;
+  background : #f99;
+}
+
+.error {
+	font-weight : bold;
+	color: red;
 }

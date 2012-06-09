@@ -60,7 +60,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * PHP misc functiomn.
+ * PHP misc functions.
  */
 public class MiscModule extends AbstractQuercusModule {
   private static final L10N L = new L10N(MiscModule.class);
@@ -505,7 +505,7 @@ public class MiscModule extends AbstractQuercusModule {
   {
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, false);
-      
+
       if (segments == null)
         return BooleanValue.FALSE;
 
@@ -529,10 +529,10 @@ public class MiscModule extends AbstractQuercusModule {
   {
     if (format == null)
       return NullValue.NULL;
-    
+
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, true);
-      
+
       if (segments == null)
         return BooleanValue.FALSE;
 
@@ -648,9 +648,9 @@ public class MiscModule extends AbstractQuercusModule {
       int status = process.waitFor();
 
       return sb;
-    } catch (Exception e) {
-
-      log.log(Level.FINE, e.getMessage(), e);
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e.getMessage(), e);
 
       return NullValue.NULL;
@@ -692,19 +692,21 @@ public class MiscModule extends AbstractQuercusModule {
         is.close();
 
         int status = process.waitFor();
-        
+
         if (result != null)
           result.set(LongValue.create(status));
       }
       finally {
         process.destroy();
       }
-    } catch (Exception e) {
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e.getMessage(), e);
     }
   }
 
-  /*
+  /**
    * Basic implementation of proc_open.
    * XXX: options
    */
@@ -837,16 +839,16 @@ public class MiscModule extends AbstractQuercusModule {
 
       return new ProcOpenResource(env, process, in, out, es, command);
 
-    } catch (Exception e) {
-
-      log.log(Level.FINE, e.getMessage(), e);
+    }
+    catch (Throwable e) {
+      // Throwables thrown by SecurityManager
       env.warning(e);
 
       return null;
     }
   }
 
-  /*
+  /**
    * Closes the process opened by proc_open.
    */
   public static int proc_close(Env env,
@@ -861,7 +863,7 @@ public class MiscModule extends AbstractQuercusModule {
    return stream.pclose();
   }
 
-  /*
+  /**
    * Forcibly terminates the process opened by proc_open.
    */
   public static boolean proc_terminate(Env env,

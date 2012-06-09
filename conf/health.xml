@@ -308,6 +308,21 @@
     <objectName>resin:type=ThreadPool</objectName>
     <attribute>ThreadOverflowCountTotal</attribute>
   </health:JmxDeltaMeter>
+
+  <!--
+     - Meters: BAM/Clustering
+    -->
+  <health:JmxDeltaMeter>
+    <name>Resin|Cluster|Message Read Count</name>
+    <objectName>resin:type=BamService</objectName>
+    <attribute>ExternalMessageReadCount</attribute>
+  </health:JmxDeltaMeter>
+  
+  <health:JmxDeltaMeter>
+    <name>Resin|Cluster|Message Write Count</name>
+    <objectName>resin:type=BamService</objectName>
+    <attribute>ExternalMessageWriteCount</attribute>
+  </health:JmxDeltaMeter>
   
   <!-- 
      - Meters: block manager 
@@ -371,21 +386,25 @@
     <name>Resin|Proxy Cache|Hit Count</name>
     <objectName>resin:type=ProxyCache</objectName>
     <attribute>HitCountTotal</attribute>
+    <optional>true</optional>
   </health:JmxDeltaMeter>
 
   <health:JmxDeltaMeter>
     <name>Resin|Proxy Cache|Miss Count</name>
     <objectName>resin:type=ProxyCache</objectName>
     <attribute>MissCountTotal</attribute>
+    <optional>true</optional>
   </health:JmxDeltaMeter>
 
   <health:JmxCalculationMeter>
     <name>Resin|Proxy Cache|Miss Rate</name>
     <rate>
       <delta objectName="resin:type=ProxyCache" 
-             attribute="MissCountTotal"/>
+             attribute="MissCountTotal"
+             optional="true"/>
       <delta objectName="resin:type=ProxyCache" 
-             attribute="HitCountTotal"/>
+             attribute="HitCountTotal"
+             optional="true"/>
     </rate>
   </health:JmxCalculationMeter>
 
@@ -393,12 +412,14 @@
     <name>Resin|Proxy Cache|Invocation Miss Count</name>
     <objectName>resin:type=ProxyCache</objectName>
     <attribute>InvocationMissCountTotal</attribute>
+    <optional>true</optional>
   </health:JmxDeltaMeter>
 
   <health:JmxDeltaMeter>
     <name>Resin|Proxy Cache|Invocation Hit Count</name>
     <objectName>resin:type=ProxyCache</objectName>
     <attribute>InvocationHitCountTotal</attribute>
+    <optional>true</optional>
   </health:JmxDeltaMeter>
 
   <health:JmxCalculationMeter>
@@ -406,15 +427,19 @@
     <ratio>
       <add>
         <delta objectName="resin:type=ProxyCache"
-               attribute="HitCountTotal"/>
+               attribute="HitCountTotal"
+               optional="true"/>
         <delta objectName="resin:type=ProxyCache"
-               attribute="MissCountTotal"/>
+               attribute="MissCountTotal"
+               optional="true"/>
       </add>
       <add>
         <delta objectName="resin:type=ProxyCache"
-               attribute="InvocationHitCountTotal"/>
+               attribute="InvocationHitCountTotal"
+                optional="true"/>
         <delta objectName="resin:type=ProxyCache"
-               attribute="InvocationMissCountTotal"/>
+               attribute="InvocationMissCountTotal"
+               optional="true"/>
       </add>
     </ratio>
   </health:JmxCalculationMeter>
@@ -475,11 +500,18 @@
     <meter>Resin|Http|5xx</meter>
   </health:AnomalyAnalyzer>
 
+  <health:AnomalyAnalyzer>
+    <meter>Resin|Cluster|Message Read Count</meter>
+  </health:AnomalyAnalyzer>
+
+  <health:AnomalyAnalyzer>
+    <meter>Resin|Cluster|Message Write Count</meter>
+  </health:AnomalyAnalyzer>
+
   <!-- Meter graphs pages: for resin-admin and PDF reports -->
   
   <health:MeterGraphPage>
     <name>Snapshot</name>
-    <period>6h</period>
     <columns>3</columns>
       
     <!-- row 1 -->
@@ -577,8 +609,6 @@
       <meter>OS|Process|File Descriptor Count</meter>
     </graph>
 
-    <!-- row 4 -->
-
     <graph name="Class Loading">
       <meter>JVM|Memory|Loaded Classes</meter>
       <meter>JVM|Compilation|Compilation Time</meter>
@@ -599,7 +629,6 @@
     </section>
     
     <section name="Threads">
-    <!-- row 5 -->
 
     <graph name="JVM Threads">
       <meter>JVM|Thread|JVM Thread Count</meter>
@@ -624,8 +653,16 @@
 
     </section>
     
+    <section name="Clustering">
+
+      <graph name="Cluster Messages">
+        <meter>Resin|Cluster|Message Read Count</meter>
+        <meter>Resin|Cluster|Message Write Count</meter>
+      </graph>
+    
+    </section>
+    
     <section name="Database">
-    <!-- row 6 -->
 
     <graph name="Database Connection Active">
       <meter>Resin|Database|Connection Count</meter>
@@ -642,8 +679,8 @@
     </graph>
     
     </section>
+      
     <section name="Caching">
-    <!-- row 7 -->
 
     <graph name="Block Cache I/O">
       <meter>Resin|Block Cache|Block Read Count</meter>
@@ -668,8 +705,6 @@
       <meter>Resin|Proxy Cache|Hit Count</meter>
       <meter>Resin|Proxy Cache|Miss Count</meter>
     </graph>
-
-    <!-- row 8 -->
 
     <graph name="Proxy Cache Miss Rate">
       <meter>Resin|Proxy Cache|Miss Rate</meter>

@@ -68,6 +68,7 @@ import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.env.vfs.RepositoryScheme;
 import com.caucho.java.WorkDir;
 import com.caucho.license.LicenseCheck;
+import com.caucho.license.LicenseStore;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.lifecycle.LifecycleState;
 import com.caucho.loader.Environment;
@@ -75,13 +76,12 @@ import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentLocal;
 import com.caucho.server.admin.Management;
 import com.caucho.server.admin.StatSystem;
-import com.caucho.server.cluster.ServletService;
 import com.caucho.server.cluster.ServerConfig;
 import com.caucho.server.cluster.ServletContainerConfig;
+import com.caucho.server.cluster.ServletService;
 import com.caucho.server.cluster.ServletSystem;
 import com.caucho.server.resin.BootConfig.BootType;
 import com.caucho.server.resin.ResinArgs.BoundPort;
-import com.caucho.util.Alarm;
 import com.caucho.util.CompileException;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
@@ -112,6 +112,8 @@ public class Resin
   private Path _resinHome;
   private Path _resinConf;
   
+  private Path _confDirectory;
+
   private Path _rootDirectory;
   private Path _resinDataDirectory;
   private Path _serverDataDirectory;
@@ -122,7 +124,7 @@ public class Resin
   private String _dynamicAddress;
   private int _dynamicPort;
   
-  private String _resinSystemAuthKey;
+  private String _clusterSystemKey;
   
   private String _stage = "production";
 
@@ -181,8 +183,13 @@ public class Resin
     _startTime = CurrentTime.getCurrentTime();
     
     _args = args;
-    
-    _resinSystem = new ResinSystem(args.getServerId());
+
+    String serverId = args.getServerId();
+
+    if (serverId == null && args.getHomeCluster() != null)
+      serverId = "dyn-"+ args.getServerAddress() + ':' + args.getServerPort();
+
+    _resinSystem = new ResinSystem(serverId);
 
     // _licenseErrorMessage = licenseErrorMessage;
     
@@ -190,11 +197,14 @@ public class Resin
 
     Environment.init();
  
-    _serverId = args.getServerId();
+    _serverId = serverId;//args.getServerId();
     
     _resinHome = args.getResinHome();
     
     _resinConf = args.getResinConfPath();
+    
+    if (_resinConf != null)
+      _confDirectory = _resinConf.getParent();
     
     _rootDirectory = args.getRootDirectory();
     _resinDataDirectory = args.getDataDirectory();
@@ -247,6 +257,12 @@ public class Resin
   public String getServerId()
   {
     return _serverId;
+  }
+
+  public String getServerIdFilePart() {
+    if (_serverId == null || _serverId.isEmpty())
+      return "default";
+    else return _serverId.replace(':', '_');
   }
 
   /**
@@ -319,6 +335,11 @@ public class Resin
   {
     return _resinConf;
   }
+  
+  public Path getConfDirectory()
+  {
+    return _confDirectory;
+  }
 
   protected String getResinName()
   {
@@ -386,17 +407,22 @@ public class Resin
    */
   public String getHomeCluster()
   {
-    return _homeCluster;
+    if (_homeCluster != null)
+      return _homeCluster;
+    else if (_bootResinConfig != null)
+      return _bootResinConfig.getHomeCluster();
+    else
+      return null;
   }
   
-  public String getResinSystemAuthKey()
+  public String getClusterSystemKey()
   {
-    return _resinSystemAuthKey;
+    return _clusterSystemKey;
   }
   
-  void setResinSystemAuthKey(String key)
+  void setClusterSystemKey(String key)
   {
-    _resinSystemAuthKey = key;
+    _clusterSystemKey = key;
   }
   
   /**
@@ -456,6 +482,8 @@ public class Resin
 
       if (_serverDataDirectory == null) {
         String serverName = getDisplayServerId();
+
+        serverName = serverName.replace(':', '_');
   
         _serverDataDirectory = dataDirectory.lookup("./" + serverName);
       }
@@ -641,8 +669,10 @@ public class Resin
 
       getDelegate().addPreTopologyServices();
 
-      // server/p603
-      initRepository();
+      if (! isWatchdog()) {
+        // server/p603
+        initRepository();
+      }
 
       // watchdog/0212
       // else
@@ -876,7 +906,7 @@ public class Resin
     
     BootResinConfig bootResin = _bootResinConfig;
     
-    _resinSystemAuthKey = bootResin.getResinSystemAuthKey();
+    _clusterSystemKey = bootResin.getClusterSystemKey();
     
     String serverId = _serverId;
     
@@ -908,7 +938,6 @@ public class Resin
     else if (_serverId != null && getHomeCluster() == null) {
       throw new ConfigException(L().l("-server '{0}' is an unknown server in the configuration file.",
                                       _serverId));
-      
     }
     else if ((_bootServerConfig = bootResin.findLocalServer()) != null) {
     }
@@ -939,7 +968,7 @@ public class Resin
   
   private BootServerConfig joinCluster(CloudSystem cloudSystem)
   {
-    String clusterId = _homeCluster;
+    String clusterId = getHomeCluster();
     
     BootResinConfig bootResin = _bootResinConfig;
     
@@ -1120,6 +1149,11 @@ public class Resin
   ResinDelegate getDelegate()
   {
     return _resinDelegate;
+  }
+
+  public LicenseStore getLicenseStore()
+  {
+    return _resinDelegate.getLicenseStore();
   }
 
   public LicenseCheck getLicenseCheck() {

@@ -29,6 +29,8 @@
 
 package com.caucho.amqp.common;
 
+import java.util.Map;
+
 import com.caucho.message.DistributionMode;
 import com.caucho.message.SettleMode;
 
@@ -40,7 +42,10 @@ public interface AmqpLinkFactory
   public AmqpSenderLink createSenderLink(String name, 
                                          String address,
                                          DistributionMode distMode,
-                                         SettleMode settleMode);
+                                         SettleMode settleMode,
+                                         Map<String,Object> sourceProperties);
   
-  public AmqpReceiverLink createReceiverLink(String name, String address);
+  public AmqpReceiverLink createReceiverLink(String name, 
+                                             String address,
+                                             Map<String,Object> targetProperties);
 }

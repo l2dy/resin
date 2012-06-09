@@ -97,6 +97,7 @@ public class InterpretedPage extends QuercusPage
   /**
    * Returns the pwd according to the source page.
    */
+  @Override
   public Path getPwd(Env env)
   {
     return getSelfPath(env).getParent();
@@ -151,9 +152,6 @@ public class InterpretedPage extends QuercusPage
     //return _program.getClassMap();
     return null;
   }
-
-  // runtime function list for compilation
-  private AbstractFunction []_runtimeFunList;
 
   /**
    * Sets a runtime function array after an env.

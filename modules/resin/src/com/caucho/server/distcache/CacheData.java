@@ -30,7 +30,6 @@
 package com.caucho.server.distcache;
 
 import com.caucho.util.HashKey;
-import com.caucho.util.Hex;
 
 /**
  * Full data from the data map
@@ -39,26 +38,34 @@ import com.caucho.util.Hex;
 public final class CacheData extends MnodeValue {
   private final HashKey _key;
 
+  private final long _valueDataId;
+  
   private final long _accessTime;
+  private final long _modifiedTime;
 
   public CacheData(HashKey key,
-                   HashKey value,
+                   long valueHash,
+                   long valueDataId,
                    long valueLength,
                    long version,
                    HashKey cacheKey,
                    long flags,
-                   long accessTime,
                    long accessedTimeout,
-                   long modifiedTimeout)
+                   long modifiedTimeout,
+                   long leaseTimeout,
+                   long accessTime,
+                   long modifiedTime)
   {
-    super(HashKey.getHash(value), valueLength, version,
+    super(valueHash, valueLength, version,
           HashKey.getHash(cacheKey),
           flags,
-          accessedTimeout, modifiedTimeout);
+          accessedTimeout, modifiedTimeout, leaseTimeout);
     
     _key = key;
     
+    _valueDataId = valueDataId;
     _accessTime = accessTime;
+    _modifiedTime = modifiedTime;
   }
 
   public HashKey getKey()
@@ -69,5 +76,15 @@ public final class CacheData extends MnodeValue {
   public long getAccessTime()
   {
     return _accessTime;
+  }
+
+  public long getModifiedTime()
+  {
+    return _modifiedTime;
+  }
+  
+  public long getValueDataId()
+  {
+    return _valueDataId;
   }
 }

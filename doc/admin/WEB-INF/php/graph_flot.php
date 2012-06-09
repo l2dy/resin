@@ -30,7 +30,8 @@ $g_periods = array(2 * 7 * 24 * 60 * 60	=> "2 Weeks",
                    
 $g_time = 0;
 $g_offset = 0;
-$g_period = (6 * 60 * 60);
+// $g_period = (6 * 60 * 60);
+$g_period = (60 * 60);
 $g_labels;
 
 class GraphParams {
@@ -43,6 +44,7 @@ class GraphParams {
 	public $alt = "Graph";
 	public $legend = "bottom";
 	public $labels_mbean;
+	public $labels;
 	public $title = "Graph";
 	public $mbean_server;
 	
@@ -233,6 +235,8 @@ function stat_graph_div($params)
 			  $g_labels[$params->canvas] = $labels;
 			} 
     }
+  } else if ($params->labels) {
+	 $g_labels[$params->canvas] = $params->labels;
   }
   
   #echo "</span>\n";

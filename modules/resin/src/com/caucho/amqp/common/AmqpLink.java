@@ -30,6 +30,7 @@
 package com.caucho.amqp.common;
 
 import java.io.IOException;
+import java.util.Map;
 
 import com.caucho.amqp.io.AmqpError;
 import com.caucho.amqp.io.AmqpReader;
@@ -49,15 +50,6 @@ abstract public class AmqpLink
   private int _outgoingHandle = -1;
   
   private AmqpSession _session;
-  //private MessageSettleHandler _settleHandler;
-  
-  private long _incomingDeliveryCount = -1;
-  private long _incomingTransferCount;
-  private long _deliveryLimit = -1;
-  
-  private long _outgoingDeliveryCount;
-  
-  private int _outgoingLinkCredit;
   
   public AmqpLink(String name, String address)
   {
@@ -76,6 +68,21 @@ abstract public class AmqpLink
   }
 
   abstract public Role getRole();
+
+  public Map<String,Object> getAttachProperties()
+  {
+    return null;
+  }
+
+  public Map<String,Object> getSourceProperties()
+  {
+    return null;
+  }
+
+  public Map<String,Object> getTargetProperties()
+  {
+    return null;
+  }
 
   public AmqpSession getSession()
   {
@@ -108,6 +115,13 @@ abstract public class AmqpLink
   public void setOutgoingHandle(int handle)
   {
     _outgoingHandle = handle;
+  }
+
+  /**
+   * Called after the attach has been sent to the peer.
+   */
+  public void afterAttach()
+  {
   }
   
   //
@@ -182,31 +196,18 @@ abstract public class AmqpLink
   //
   // flow
   //
-  
-  public long getIncomingDeliveryCount()
+
+  /**
+   * @return
+   */
+  public long getDeliveryCount()
   {
-    return _incomingDeliveryCount;
+    throw new UnsupportedOperationException(getClass().getName());
   }
-  
-  public void setIncomingDeliveryCount(long deliveryCount)
+
+  public void setPeerDeliveryCount(long deliveryCount)
   {
-    _incomingDeliveryCount = deliveryCount;
-  }
-  
-  protected void addDeliveryCount()
-  {
-    _incomingDeliveryCount++;
-    _incomingTransferCount++;
-  }
-  
-  protected long getTransferCount()
-  {
-    return _incomingTransferCount;
-  }
-  
-  protected long getOutgoingLinkCredit()
-  {
-    return _outgoingLinkCredit;
+    throw new UnsupportedOperationException(getClass().getName());
   }
 
   /**

@@ -31,9 +31,13 @@ package com.caucho.quercus.module;
 
 import com.caucho.config.ConfigException;
 import com.caucho.quercus.QuercusRuntimeException;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.DoubleValue;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringBuilderValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.ExprFactory;
-import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.marshal.Marshal;
 import com.caucho.quercus.marshal.MarshalFactory;
 import com.caucho.quercus.program.ClassDef;
@@ -98,10 +102,10 @@ public class ModuleContext
   private ModuleContext(ClassLoader loader)
   {
     _loader = loader;
-    
+
     _marshalFactory = new MarshalFactory(this);
     _exprFactory = new ExprFactory();
-    
+
     _stdClassDef = new InterpretedClassDef("stdClass", null, new String[0]);
     _stdClass = new QuercusClass(this, _stdClassDef, null);
 
@@ -159,15 +163,7 @@ public class ModuleContext
   {
     _serviceClassUrls.add(url);
   }
-
-  /**
-   * Tests if the URL has already been loaded for the context module
-   */
-  public boolean hasServiceModule(URL url)
-  {
-    return _serviceModuleUrls.contains(url);
-  }
-
+  
   /**
    * Adds a URL for the context module
    */
@@ -232,7 +228,7 @@ public class ModuleContext
         if (def == null)
           def = createDefaultJavaClassDef(name, type, extension);
       }
-      
+
       def.setPhpClass(true);
 
       _javaClassWrappers.put(name, def);
@@ -257,7 +253,7 @@ public class ModuleContext
   public JavaClassDef getJavaClassDefinition(Class<?> type, String className)
   {
     JavaClassDef def;
-    
+
     synchronized (_javaClassWrappers) {
       def = _javaClassWrappers.get(className);
 
@@ -275,7 +271,7 @@ public class ModuleContext
 
     return def;
   }
-  
+
   /**
    * Adds a java class
    */
@@ -293,7 +289,7 @@ public class ModuleContext
 
       try {
         Class<?> type;
-        
+
         try {
           type = Class.forName(className, false, _loader);
         }
@@ -336,7 +332,6 @@ public class ModuleContext
     }
   }
 
-
   protected JavaClassDef createDefaultJavaClassDef(String className,
                                                    Class type)
   {
@@ -345,7 +340,7 @@ public class ModuleContext
     else
       return new JavaClassDef(this, className, type);
   }
-  
+
   protected JavaClassDef createDefaultJavaClassDef(String className,
                                                    Class type,
                                                    String extension)
@@ -355,7 +350,7 @@ public class ModuleContext
     else
       return new JavaClassDef(this, className, type, extension);
   }
-  
+
   /**
    * Finds the java class wrapper.
    */
@@ -382,7 +377,7 @@ public class ModuleContext
   {
     return _exprFactory;
   }
-  
+
   public Marshal createMarshal(Class type,
                                boolean isNotNull,
                                boolean isNullAsFalse)
@@ -481,22 +476,22 @@ public class ModuleContext
   {
     return _extensionSet;
   }
-  
+
   /*
    * Adds a class to the extension's list of classes.
    */
   public void addExtensionClass(String ext, String clsName)
   {
     HashSet<String> list = _extensionClasses.get(ext);
-    
+
     if (list == null) {
       list = new HashSet<String>();
       _extensionClasses.put(ext, list);
     }
-    
+
     list.add(clsName);
   }
-  
+
   /*
    * Returns the list of the classes that are part of this extension.
    */
@@ -518,7 +513,7 @@ public class ModuleContext
   {
     initStaticFunctions();
     initStaticClassServices();
-    
+
     //initStaticClasses();
   }
 
@@ -532,25 +527,14 @@ public class ModuleContext
 
     try {
       setContextClassLoader(_loader);
-      
+
       String quercusModule
         = "META-INF/services/com.caucho.quercus.QuercusModule";
       Enumeration<URL> urls = _loader.getResources(quercusModule);
-      
-      HashSet<URL> urlSet = new HashSet<URL>();
 
-      // gets rid of duplicate entries found by different classloaders
       while (urls.hasMoreElements()) {
         URL url = urls.nextElement();
-
-        if (! hasServiceModule(url)) {
-          addServiceModule(url);
-
-          urlSet.add(url);
-        }
-      }
-
-      for (URL url : urlSet) {
+        
         InputStream is = null;
         ReadStream rs = null;
         try {
@@ -653,8 +637,8 @@ public class ModuleContext
       if (_moduleInfoMap.get(cl.getName()) != null)
         return;
 
-      log.finest(getClass().getSimpleName() 
-                 + " loading module " 
+      log.finest(getClass().getSimpleName()
+                 + " loading module "
                  + cl.getName());
 
       QuercusModule module = (QuercusModule) cl.newInstance();
@@ -682,7 +666,7 @@ public class ModuleContext
                : info.getFunctions().entrySet()) {
           String funName = entry.getKey();
           AbstractFunction fun = entry.getValue();
-      
+
           _staticFunctionMap.put(funName, fun);
 
           // _lowerFunMap.put(funName.toLowerCase(Locale.ENGLISH), fun);
@@ -707,7 +691,7 @@ public class ModuleContext
       String quercusModule
         = "META-INF/services/com.caucho.quercus.QuercusClass";
       Enumeration<URL> urls = loader.getResources(quercusModule);
-      
+
       HashSet<URL> urlSet = new HashSet<URL>();
 
       // gets rid of duplicate entries found by different classloaders
@@ -771,7 +755,7 @@ public class ModuleContext
 
       String className = args[0];
 
-      Class cl;
+      Class<?> cl;
 
       try {
         cl = Class.forName(className, false, loader);
@@ -827,7 +811,7 @@ public class ModuleContext
         if (phpClassName == null)
           phpClassName = className.substring(className.lastIndexOf('.') + 1);
 
-        Class javaClassDefClass;
+        Class<?> javaClassDefClass;
 
         if (definedBy != null) {
           javaClassDefClass = Class.forName(definedBy, false, loader);
@@ -837,7 +821,7 @@ public class ModuleContext
 
         introspectJavaClass(phpClassName, cl, extension, javaClassDefClass);
       } catch (Exception e) {
-        log.fine("Failed loading " + className + "\n" + e.toString());
+        log.log(Level.FINE, "Failed loading " + className + "\n" + e.toString());
         log.log(Level.FINE, e.toString(), e);
       }
     }

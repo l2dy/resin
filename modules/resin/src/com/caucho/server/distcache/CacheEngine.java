@@ -29,6 +29,9 @@
 
 package com.caucho.server.distcache;
 
+import java.io.InputStream;
+
+import com.caucho.server.distcache.LocalDataManager.DataItem;
 import com.caucho.util.HashKey;
 
 /**
@@ -43,34 +46,38 @@ public interface CacheEngine
 
   public void initCache(CacheImpl cache);
 
+  public int getServerIndex();
+
   public boolean isLocalExpired(CacheConfig config,
                                 HashKey key,
                                 MnodeEntry mnodeEntry, 
                                 long now);
   
-  public MnodeEntry get(DistCacheEntry entry, CacheConfig config);
+  public MnodeValue get(DistCacheEntry entry, CacheConfig config);
   
-  public boolean loadData(HashKey valueKey, int flags);
+  /*
+  public boolean loadData(HashKey key, 
+                          HashKey valueKey, long valueIndex,
+                          int flags);
+                          */
 
   public void put(HashKey key, 
                   MnodeUpdate mnodeUpdate,
-                  MnodeEntry mnodeValue);
+                  long valueDataId);
 
   public void updateTime(HashKey key, MnodeEntry mnodeValue);
 
   public void remove(HashKey key, 
-                     MnodeUpdate mnodeUpdate,
-                     MnodeEntry mnodeEntry);
+                     MnodeUpdate mnodeUpdate);
 
-  public HashKey getAndPut(DistCacheEntry entry, 
-                           MnodeUpdate mnodeUpdate,
-                           Object value, 
-                           long leaseTimeout, 
-                           int leaseOwner);
+  public InputStream getAndPut(DistCacheEntry entry, 
+                               MnodeUpdate mnodeValue,
+                               long valueDataId);
 
-  public HashKey compareAndPut(DistCacheEntry entry, 
-                               HashKey testValue,
-                               MnodeUpdate mnodeUpdate, 
-                               Object value,
-                               CacheConfig config);
+  public boolean compareAndPut(DistCacheEntry entry, 
+                               long testValue,
+                               MnodeUpdate update,
+                               long valueDataId);
+
+  public void notifyLease(HashKey key, int leaseOwner);
 }

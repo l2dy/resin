@@ -29,52 +29,37 @@
 
 package com.caucho.boot;
 
-import com.caucho.cloud.scaling.ResinScalingClient;
-import com.caucho.cloud.topology.CloudServerState;
 import com.caucho.config.ConfigException;
+import com.caucho.server.admin.ManagerClient;
 import com.caucho.util.L10N;
 
-public class DisableCommand extends AbstractScalingCommand
+public class DisableCommand extends AbstractManagementCommand
 {
   private static final L10N L = new L10N(DisableCommand.class);
 
   @Override
   public String getDescription()
   {
-    return "disables a server for load-balancing";
+    return "disables a server for http/load-balancing";
   }
 
   @Override
-  public int doCommand(WatchdogArgs args, WatchdogClient client)
+  public int doCommand(WatchdogArgs args, 
+                       WatchdogClient client,
+                       ManagerClient manager)
     throws BootArgumentException
   {
-    if (! isPro()) {
-      System.out.println("command 'disable' is only available with Resin Pro");
-
-      return 3;
-    }
-
-    ResinScalingClient scalingClient = getScalingClient(args, client);
-
-    String server = args.getDefaultArg();
+    String serverId = args.getDefaultArg();
     
-    if (server == null)
-      server = args.getServerId();
+    if (serverId == null)
+      serverId = args.getServerId();
 
-    if (server == null)
-      throw new ConfigException("server is not specified");
-
-    CloudServerState state = scalingClient.disable(server);
-
-    scalingClient.close();
-
-    String message;
-    if (state == null)
-      message = L.l("server '{0}' is not found", server);
-    else
-      message = L.l("server '{0}' state: {1}", server, state);
-
-    System.out.println(message);
+    if (serverId == null)
+      throw new ConfigException(L.l("{0}: -server is not specified", getName()));
+    
+    String result = manager.disable(serverId);
+    
+    System.out.println(result);
 
     return 0;
   }
@@ -90,22 +75,4 @@ public class DisableCommand extends AbstractScalingCommand
   {
     return true;
   }
-
-  /*
-  @Override
-  public void usage()
-  {
-    System.err.println(L.l("usage: bin/resin.sh [-conf <file>] -server <triad-server> disable -address <address> -port <port> -user <user> -password <password> <server>"));
-    System.err.println(L.l(""));
-    System.err.println(L.l("description:"));
-    System.err.println(L.l("   disables specified in <server> argument server" ));
-    System.err.println(L.l(""));
-    System.err.println(L.l("options:"));
-    System.err.println(L.l("   -server <triad-server> : one of the servers in the triad"));
-    System.err.println(L.l("   -address <address>     : ip or host name of the server"));
-    System.err.println(L.l("   -port <port>           : server http port"));
-    System.err.println(L.l("   -user <user>           : user name used for authentication to the server"));
-    System.err.println(L.l("   -password <password>   : password used for authentication to the server"));
-  }
-  */
 }

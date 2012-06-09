@@ -45,7 +45,7 @@ public class QueryMessageStreamFilter implements MessageStream {
   private final QueryManager _queryManager;
   
   public QueryMessageStreamFilter(MessageStream next, 
-                                QueryManager queryManager)
+                                  QueryManager queryManager)
   {
     _next = next;
     _queryManager = queryManager;
@@ -102,6 +102,8 @@ public class QueryMessageStreamFilter implements MessageStream {
                           Serializable payload)
   {
     if (! _queryManager.onQueryResult(id, to, from, payload)) {
+      System.out.println("NORESULT: " + id + " " + to + " " + from + " " + payload
+                         + "\n  " + _queryManager);
       _next.queryResult(id, to, from, payload);
     }
   }

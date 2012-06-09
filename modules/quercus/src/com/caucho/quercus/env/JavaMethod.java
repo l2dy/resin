@@ -32,6 +32,7 @@ package com.caucho.quercus.env;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.annotation.Name;
 import com.caucho.quercus.module.ModuleContext;
+import com.caucho.quercus.program.JavaClassDef;
 import com.caucho.util.L10N;
 
 import java.lang.reflect.InvocationTargetException;
@@ -44,28 +45,25 @@ import java.lang.reflect.Modifier;
 public class JavaMethod extends JavaInvoker {
   private static final L10N L = new L10N(JavaMethod.class);
 
-  private final Method _method;
-
   /**
    * Creates a function from an introspected java method.
    *
    * @param method the introspected method.
    */
-  public JavaMethod(ModuleContext moduleContext, Method method)
+  public JavaMethod(ModuleContext moduleContext,
+                    JavaClassDef classDef,
+                    Method method)
   {
     super(moduleContext,
+          classDef,
+          method,
           getName(method),
           method.getParameterTypes(),
           method.getParameterAnnotations(),
           method.getAnnotations(),
           method.getReturnType());
-    
-    _method = method;
+
     _isStatic = Modifier.isStatic(method.getModifiers());
-    
-    // php/069a
-    // Java 6 fixes the need to do this for methods of inner classes
-    _method.setAccessible(true);
   }
 
   private static String getName(Method method)
@@ -81,31 +79,21 @@ public class JavaMethod extends JavaInvoker {
 
     return name;
   }
-  
+
   @Override
   public String getDeclaringClassName()
   {
     return _method.getDeclaringClass().getSimpleName();
   }
 
-  /**
-   * Returns the function's method.
-   *
-   * @return the reflection method.
-   */
-  public Method getMethod()
-  {
-    return _method;
-  }
-
   @Override
-  public Class []getJavaParameterTypes()
+  public Class<?> []getJavaParameterTypes()
   {
     return _method.getParameterTypes();
   }
 
   @Override
-  public Class getJavaDeclaringClass()
+  public Class<?> getJavaDeclaringClass()
   {
     return _method.getDeclaringClass();
   }
@@ -115,24 +103,25 @@ public class JavaMethod extends JavaInvoker {
   {
     try {
       return _method.invoke(obj, args);
-    } catch (InvocationTargetException e) {
-      Throwable e1 = e.getCause();
-      
-      // php/0g0h
-      if (e1 instanceof QuercusException)
-        throw (QuercusException) e1;
+    }
+    catch (InvocationTargetException e) {
+      Throwable cause = e.getCause();
 
-      if (e1 instanceof QuercusException)
-        throw (QuercusException) e1;
-      
+      // php/0g0h
+      if (cause instanceof QuercusException)
+        throw (QuercusException) cause;
+
+      if (cause instanceof QuercusException)
+        throw (QuercusException) cause;
+
       String methodName = (_method.getDeclaringClass().getName() + "."
                            + _method.getName());
 
-      throw new QuercusException(methodName + ": " + e1.getMessage(), e1);
+      throw new QuercusException(methodName + ": " + cause.getMessage(), cause);
     } catch (Exception e) {
       String methodName = (_method.getDeclaringClass().getName() + "."
                            + _method.getName());
-      
+
       throw new QuercusException(methodName + ": " + e.getMessage(), e);
     }
   }

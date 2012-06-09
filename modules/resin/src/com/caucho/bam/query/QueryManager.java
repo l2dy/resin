@@ -38,6 +38,7 @@ import com.caucho.bam.BamError;
 import com.caucho.bam.BamException;
 import com.caucho.bam.ErrorPacketException;
 import com.caucho.bam.TimeoutException;
+import com.caucho.bam.stream.MessageStream;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
@@ -48,6 +49,8 @@ import com.caucho.util.WeakAlarm;
  * for query callbacks.
  */
 public class QueryManager {
+  private final String _id;
+  
   private final AtomicLong _qId = new AtomicLong();
 
   private final QueryMap _queryMap = new QueryMap();
@@ -57,12 +60,15 @@ public class QueryManager {
   
   private long _timeout = 15 * 60 * 1000L;
 
-  public QueryManager()
+  public QueryManager(String id)
   {
+    _id = id;
   }
 
-  public QueryManager(long seed)
+  public QueryManager(String id, long seed)
   {
+    this(id);
+    
     _qId.set(seed);
   }
   
@@ -104,7 +110,7 @@ public class QueryManager {
     Alarm alarm = _alarm;
 
     long expireTime = timeout + CurrentTime.getCurrentTime();
-    
+
     if (alarm != null 
         && (! alarm.isQueued() 
             || expireTime < alarm.getWakeTime())) {
@@ -123,10 +129,45 @@ public class QueryManager {
   {
     QueryFutureImpl future
       = new QueryFutureImpl(id, to, from, payload, timeout);
-
-    _queryMap.add(id, future, timeout);
+    
+    addQueryCallback(id, future, timeout);
 
     return future;
+  }
+  
+  /**
+   * Queries through to a stream.
+   */
+  public void query(MessageStream stream,
+                    String to,
+                    String from,
+                    Serializable payload,
+                    QueryCallback cb,
+                    long timeout)
+  {
+    long id = nextQueryId();
+
+    addQueryCallback(id, cb, timeout);
+    
+    stream.query(id, to, from, payload);
+  }
+  
+  /**
+   * Queries through to a stream.
+   */
+  public Serializable query(MessageStream stream,
+                            String to,
+                            String from,
+                            Serializable payload,
+                            long timeout)
+  {
+    long id = nextQueryId();
+    
+    QueryFuture future = addQueryFuture(id, to, from, payload, timeout);
+    
+    stream.query(id, to, from, payload);
+    
+    return future.get();
   }
 
   //
@@ -164,7 +205,7 @@ public class QueryManager {
                                     BamError error)
   {
     QueryItem item = _queryMap.remove(id);
-
+    
     if (item != null) {
       item.onQueryError(to, from, payload, error);
 
@@ -195,7 +236,7 @@ public class QueryManager {
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[]";
+    return getClass().getSimpleName() + "[" + _id + "]";
   }
 
   static final class QueryMap {
@@ -226,7 +267,7 @@ public class QueryManager {
             if (item != null) {
               QueryCallback cb = item._callback;
               
-              Exception exn = new TimeoutException();
+              Exception exn = new TimeoutException(item._id + " " + cb);
               BamError error = BamError.create(exn);
               
               cb.onQueryError(null, null, null, error);
@@ -243,7 +284,7 @@ public class QueryManager {
       long expires = timeout + CurrentTime.getCurrentTime();
       
       int hash = (int) (id & _mask);
-
+      
       synchronized (_entries) {
         _entries[hash] = new QueryItem(id, callback, expires, _entries[hash]);
       }
@@ -252,7 +293,7 @@ public class QueryManager {
     QueryItem remove(long id)
     {
       int hash = (int) (id & _mask);
-
+      
       synchronized (_entries) {
         QueryItem prev = null;
         QueryItem next = null;
@@ -372,7 +413,7 @@ public class QueryManager {
       throws TimeoutException, BamException
     {
       if (! waitFor(_timeout)) {
-        throw new TimeoutException(this + " query timeout " + _payload
+        throw new TimeoutException(this + " query timeout " + _timeout + "ms for " + _payload
                                    + " {to:" + _to + "}");
       }
       else if (getError() != null) {
@@ -412,7 +453,8 @@ public class QueryManager {
     }
 
     @Override
-    public void onQueryResult(String fromAddress, String toAddress,
+    public void onQueryResult(String fromAddress,
+                              String toAddress,
                               Serializable payload)
     {
       _result = payload;
@@ -451,7 +493,7 @@ public class QueryManager {
     {
       try {
         long now = CurrentTime.getCurrentTime();
-        
+
         checkTimeout(now);
       } finally {
         if (_alarm == alarm && ! isEmpty()) {

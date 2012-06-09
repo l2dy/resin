@@ -34,7 +34,6 @@ import com.caucho.jmx.MXAction;
 import com.caucho.jmx.MXContentType;
 import com.caucho.jmx.MXParam;
 import com.caucho.server.admin.AddUserQueryReply;
-import com.caucho.server.admin.ControllerStateActionQueryReply;
 import com.caucho.server.admin.JmxCallQueryReply;
 import com.caucho.server.admin.JmxSetQueryReply;
 import com.caucho.server.admin.JsonQueryReply;
@@ -44,7 +43,8 @@ import com.caucho.server.admin.PdfReportQueryReply;
 import com.caucho.server.admin.RemoveUserQueryReply;
 import com.caucho.server.admin.StatServiceValuesQueryReply;
 import com.caucho.server.admin.StringQueryReply;
-import com.caucho.server.admin.TagResult;
+import com.caucho.server.deploy.DeployControllerState;
+import com.caucho.server.deploy.DeployTagResult;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -85,9 +85,9 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @MXAction(value = "config-ls", method = "GET")
   @MXContentType
   public String []configLs(@MXParam(name = "server") String serverId,
-                         @MXParam(name = "name") String name,
-                         @MXParam(name = "stage") String stage,
-                         @MXParam(name = "version") String version)
+                           @MXParam(name = "name") String name,
+                           @MXParam(name = "stage") String stage,
+                           @MXParam(name = "version") String version)
   throws ReflectionException;
 
   @Description("undeploy configuration")
@@ -221,7 +221,7 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @Description("starts a deployed application")
   @MXAction(value = "web-app-start", method = "POST")
   @MXContentType
-  public ControllerStateActionQueryReply startWebApp(
+  public DeployControllerState startWebApp(
     @MXParam(name = "server") String serverId,
     @MXParam(name = "tag") String tag,
     @MXParam(name = "context") String context,
@@ -237,7 +237,7 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @Description("stops a deployed application")
   @MXAction(value = "web-app-stop", method = "POST")
   @MXContentType
-  public ControllerStateActionQueryReply stopWebApp(
+  public DeployControllerState stopWebApp(
     @MXParam(name = "server") String serverId,
     @MXParam(name = "tag") String tag,
     @MXParam(name = "context") String context,
@@ -253,7 +253,7 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @Description("restarts a deployed application")
   @MXAction(value = "web-app-restart", method = "POST")
   @MXContentType
-  public ControllerStateActionQueryReply restartWebApp(
+  public DeployControllerState restartWebApp(
     @MXParam(name = "server") String serverId,
     @MXParam(name = "tag") String tag,
     @MXParam(name = "context") String context,
@@ -302,7 +302,7 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @Description("lists deployed applications")
   @MXAction("deploy-list")
   @MXContentType
-  public TagResult[] deployList(@MXParam(name = "server") String serverId,
+  public DeployTagResult[] deployList(@MXParam(name = "server") String serverId,
                                 @MXParam(name = "pattern", defaultValue = ".*")
                                 String pattern)
     throws ReflectionException;
@@ -320,7 +320,7 @@ public interface ManagementMXBean extends ManagedObjectMXBean
     throws ReflectionException;
 
   @Description("adds an administration user and password")
-  @MXAction(value = "user-add", method = "POST")
+  //@MXAction(value = "user-add", method = "POST")
   @MXContentType
   public AddUserQueryReply addUser(@MXParam(name = "server") String serverId,
                                     @MXParam(name = "user", required = true)
@@ -330,14 +330,14 @@ public interface ManagementMXBean extends ManagedObjectMXBean
     throws ReflectionException;
 
   @Description("lists the administration user")
-  @MXAction(value = "user-list", method = "GET")
+  //@MXAction(value = "user-list", method = "GET")
   @MXContentType
   public ListUsersQueryReply listUsers(
     @MXParam(name = "server") String serverId)
     throws ReflectionException;
 
   @Description("removes an administration user")
-  @MXAction(value = "user-remove", method = "POST")
+  //@MXAction(value = "user-remove", method = "POST")
   @MXContentType
   public RemoveUserQueryReply removeUser(
     @MXParam(name = "server") String serverId,
@@ -348,5 +348,20 @@ public interface ManagementMXBean extends ManagedObjectMXBean
   @MXAction("status")
   @MXContentType
   public StringQueryReply getStatus(@MXParam(name = "server") String value)
+    throws ReflectionException;
+
+  @Description("Enables a server")
+  @MXAction(value = "enable", method = "POST")
+  public String enable(@MXParam(name = "server") String serverId)
+    throws ReflectionException;
+
+  @Description("Disables a server")
+  @MXAction(value = "disable", method = "POST")
+  public String disable(@MXParam(name = "server") String serverId)
+    throws ReflectionException;
+
+  @Description("Disables a server from accepting any new sessions")
+  @MXAction(value = "disable-soft", method = "POST")
+  public String disableSoft(@MXParam(name = "server") String serverId)
     throws ReflectionException;
 }

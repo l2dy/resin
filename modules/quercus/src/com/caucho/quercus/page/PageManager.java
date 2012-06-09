@@ -32,7 +32,6 @@ package com.caucho.quercus.page;
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.program.QuercusProgram;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
@@ -53,16 +52,16 @@ public class PageManager
     = Logger.getLogger(PageManager.class.getName());
 
   protected static final L10N L = new L10N(PageManager.class);
-  
+
   private final QuercusContext _quercus;
-  
+
   //private Path _pwd;
   private boolean _isLazyCompile;
   private boolean _isCompile;
   private boolean _isCompileFailover = CurrentTime.isActive();
 
   private boolean _isRequireSource = true;
-  
+
   private ConcurrentHashMap<String,Object> _programLockMap
     = new ConcurrentHashMap<String,Object>();
 
@@ -70,10 +69,10 @@ public class PageManager
     = new LruCache<Path,SoftReference<QuercusProgram>>(1024);
 
   private boolean _isClosed;
-  
+
   /**
    * Constructor.
-   */ 
+   */
   public PageManager(QuercusContext quercus)
   {
     _quercus = quercus;
@@ -123,7 +122,7 @@ public class PageManager
   {
     _isLazyCompile = isCompile;
   }
-  
+
   /**
    * true if interpreted pages should be used if pages fail to compile.
    */
@@ -131,7 +130,7 @@ public class PageManager
   {
     return _isCompileFailover;
   }
-  
+
   /**
    * true if interpreted pages should be used if pages fail to compile.
    */
@@ -139,7 +138,7 @@ public class PageManager
   {
     _isCompileFailover = isCompileFailover;
   }
-  
+
   /**
    * true if compiled pages require their source
    */
@@ -147,7 +146,7 @@ public class PageManager
   {
     _isRequireSource = isRequireSource;
   }
-  
+
   /**
    * true if compiled pages require their source
    */
@@ -155,7 +154,7 @@ public class PageManager
   {
     return _isRequireSource;
   }
-  
+
   /**
    * Gets the max size of the page cache.
    */
@@ -163,7 +162,7 @@ public class PageManager
   {
     return _programCache.getCapacity();
   }
-  
+
   /**
    * Sets the max size of the page cache.
    */
@@ -189,7 +188,7 @@ public class PageManager
   {
     if (path == null)
       return "tmp.eval";
-    
+
     String pathName = path.getFullPath();
     String pwdName = getPwd().getFullPath();
 
@@ -203,7 +202,7 @@ public class PageManager
     return "_quercus." + JavaCompiler.mangleName(relPath);
   }
   */
-  
+
   /**
    * Returns a parsed or compiled quercus program.
    *
@@ -218,7 +217,7 @@ public class PageManager
   {
     return parse(path, null, -1);
   }
-  
+
   /**
    * Returns a parsed or compiled quercus program.
    *
@@ -229,17 +228,17 @@ public class PageManager
    * @throws IOException
    */
   public QuercusPage parse(Path path, String fileName, int line)
-  throws IOException
+    throws IOException
   {
     String fullName = path.getFullPath();
-    
+
     try {
       Object lock = _programLockMap.get(fullName);
-      
+
       while (lock == null) {
         lock = new Object();
         _programLockMap.putIfAbsent(fullName, lock);
-        
+
         lock = _programLockMap.get(fullName);
       }
 
@@ -250,23 +249,20 @@ public class PageManager
       _programLockMap.remove(fullName);
     }
   }
-  
+
   public QuercusPage parseImpl(Path path, String fileName, int line)
     throws IOException
   {
     try {
-      
-      SoftReference<QuercusProgram> programRef;
+      SoftReference<QuercusProgram> programRef = _programCache.get(path);
 
-      programRef = _programCache.get(path);
-      
       QuercusProgram  program = programRef != null ? programRef.get() : null;
 
       boolean isModified = false;
-      
+
       if (program != null) {
         isModified = program.isModified();
-        
+
         if (program.isCompilable()) {
         }
         else if (isModified)
@@ -274,7 +270,7 @@ public class PageManager
         else {
           if (log.isLoggable(Level.FINE))
             log.fine(L.l("Quercus[{0}] loading interpreted page", path));
-          
+
           return new InterpretedPage(program);
         }
       }
@@ -287,7 +283,7 @@ public class PageManager
         if (program == null) {
           if (log.isLoggable(Level.FINE))
             log.fine(L.l("Quercus[{0}] parsing page", path));
-          
+
           program = QuercusParser.parse(_quercus,
                                         path,
                                         _quercus.getScriptEncoding(),
@@ -334,7 +330,7 @@ public class PageManager
   {
     if (log.isLoggable(Level.FINE))
       log.fine(L.l("Quercus[{0}] loading interpreted page", path));
-    
+
     return new InterpretedPage(program);
   }
 

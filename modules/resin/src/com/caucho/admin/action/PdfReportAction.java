@@ -6,6 +6,13 @@
 
 package com.caucho.admin.action;
 
+import java.io.IOException;
+import java.util.logging.Logger;
+
+import javax.mail.internet.InternetAddress;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import com.caucho.config.ConfigException;
 import com.caucho.hemp.services.MailService;
 import com.caucho.quercus.QuercusContext;
@@ -15,27 +22,15 @@ import com.caucho.quercus.page.QuercusPage;
 import com.caucho.server.http.StubServletRequest;
 import com.caucho.server.http.StubServletResponse;
 import com.caucho.server.resin.Resin;
-import com.caucho.util.Alarm;
-import com.caucho.util.CurrentTime;
-import com.caucho.util.IoUtil;
-import com.caucho.util.L10N;
-import com.caucho.util.QDate;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.TempOutputStream;
-import com.caucho.vfs.TempStream;
-import com.caucho.vfs.Vfs;
-import com.caucho.vfs.WriteStream;
-import com.caucho.vfs.WriterStreamImpl;
-import sun.misc.IOUtils;
-
-import javax.mail.internet.InternetAddress;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
+import com.caucho.util.*;
+import com.caucho.vfs.*;
 
 public class PdfReportAction implements AdminAction
 {
   private static final L10N L = new L10N(PdfReportAction.class);
+  private static final Logger log 
+    = Logger.getLogger(PdfReportAction.class.getName());
+  
   private static final long HOUR = 3600 * 1000L;
   private static final long DAY = 24 * 3600 * 1000L;
   
@@ -155,10 +150,20 @@ public class PdfReportAction implements AdminAction
     _logDirectory = logDirectory;
   }
   
+  public String getMailTo()
+  {
+    return _mailTo;
+  }
+  
   public void setMailTo(String mailTo)
   {
     if (! "".equals(mailTo))
       _mailTo = mailTo;
+  }
+  
+  public String getMailFrom()
+  {
+    return _mailFrom;
   }
   
   public void setMailFrom(String mailFrom)
@@ -258,8 +263,9 @@ public class PdfReportAction implements AdminAction
     }
     
     if (_phpPath == null) {
-      throw new ConfigException(L.l("{0} requires a path to a PDF generating .php file",
-                                    getClass().getSimpleName()));
+      log.warning(L.l("{0} requires a 'path' attribute to a PDF generating .php file or '{1}'",
+                      getClass().getSimpleName(),
+                      resin.getResinHome().lookup("php/admin/pdf-gen.php").getNativePath()));
     }
     
     if (_logPath == null)
@@ -288,9 +294,7 @@ public class PdfReportAction implements AdminAction
     if (_fileName == null) {
       String date = QDate.formatLocal(CurrentTime.getCurrentTime(), "%Y%m%dT%H%M");
 
-      String serverId = _serverId;
-      if (serverId == null || serverId.isEmpty())
-        serverId = "default";
+      String serverId = Resin.getCurrent().getServerIdFilePart();
 
       _fileName = String.format("%s-%s-%s.pdf",
                                 serverId,
@@ -341,7 +345,9 @@ public class PdfReportAction implements AdminAction
       Value result = env.executeTop();
 
       if (! result.toString().equals("ok")) {
-        throw new RuntimeException(L.l("generation failed: {0}", result.toString()));
+        throw new RuntimeException(L.l("{0} report generation failed: {1}", 
+                                       calculateReport(), 
+                                       result.toString()));
       }
 
       ws.flush();
@@ -349,7 +355,9 @@ public class PdfReportAction implements AdminAction
       if (_mailTo != null && ! "".equals(_mailTo)) {
         mailPdf(ts);
 
-        String message = L.l("{0} mailed to {1}", calculateTitle(), _mailTo);
+        String message = L.l("{0} report mailed to {1}", 
+                             calculateReport(), 
+                             _mailTo);
 
         PdfReportActionResult actionResult =
           new PdfReportActionResult(message, null, null);
@@ -364,7 +372,9 @@ public class PdfReportAction implements AdminAction
         ts.writeToStream(pdfOut);
       }
 
-      String message = L.l("generated {0}", path);
+      String message = L.l("{0} report generated at {1}", 
+                           calculateReport(),
+                           path);
 
       PdfReportActionResult actionResult
         = new PdfReportActionResult(message, path.getPath(), pdfOut);

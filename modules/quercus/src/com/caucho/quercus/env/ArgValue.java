@@ -30,6 +30,7 @@
 package com.caucho.quercus.env;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.util.IdentityHashMap;
 
@@ -48,48 +49,79 @@ abstract public class ArgValue extends Value
   {
     return toLocalValue();
   }
-  
+
   @Override
   public ArrayValue toArrayValue(Env env)
   {
     return toLocalValue().toArrayValue(env);
   }
-  
+
   @Override
   public StringValue toStringValue()
   {
     return toLocalValue().toStringValue();
   }
-  
+
+  @Override
   public StringValue toStringValue(Env env)
   {
     return toLocalValue().toStringValue(env);
   }
-  
+
+  @Override
+  public char toChar()
+  {
+    return toLocalValue().toChar();
+  }
+
+  @Override
+  public String toJavaString()
+  {
+    return toLocalValue().toJavaString();
+  }
+
+  @Override
+  public Object toJavaObject()
+  {
+    return toLocalValue().toJavaObject();
+  }
+
   @Override
   public boolean toBoolean()
   {
     return toLocalValue().toBoolean();
   }
-  
+
   @Override
   public double toDouble()
   {
     return toLocalValue().toDouble();
   }
-  
+
+  @Override
+  public long toLong()
+  {
+    return toLocalValue().toLong();
+  }
+
   @Override
   public Value toArray()
   {
     return toLocalValue().toArray();
   }
-  
+
   @Override
   public Value toAutoObject(Env env)
   {
     return toLocalValue().toObject(env);
   }
-  
+
+  @Override
+  public InputStream toInputStream()
+  {
+    return toLocalValue().toInputStream();
+  }
+
   @Override
   protected void varDumpImpl(Env env,
                              WriteStream out,
@@ -99,7 +131,7 @@ abstract public class ArgValue extends Value
   {
     toLocalValue().varDumpImpl(env, out, depth, valueSet);
   }
-  
+
   @Override
   protected void printRImpl(Env env,
                             WriteStream out,

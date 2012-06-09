@@ -35,7 +35,8 @@ import java.sql.SQLException;
 /**
  * Extra ResultSet metadata for a Quercus Mysql connection.
  */
-public interface QuercusResultSet extends ResultSet {
+public interface QuercusResultSet extends ResultSet
+{
   public int getStringLength(int column)
     throws SQLException;
 

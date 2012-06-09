@@ -35,7 +35,7 @@ package com.caucho.bam.mailbox;
 public enum MailboxType
 {
   DEFAULT,
-  SINGLE_WORKER,
+  ACTOR,
   MULTI_WORKER,
   NON_QUEUED;
 }

@@ -41,12 +41,15 @@ import java.util.logging.Logger;
 
 import com.caucho.VersionFactory;
 import com.caucho.bam.RemoteConnectionFailedException;
+import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.BamActorRef;
+import com.caucho.bam.manager.BamManager;
+import com.caucho.bam.manager.SimpleBamManager;
 import com.caucho.config.ConfigException;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.util.CauchoSystem;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -177,9 +180,9 @@ class WatchdogClient
     return _bootManager.getResinDataDirectory();
   }
 
-  public String getResinSystemAuthKey()
+  public String getClusterSystemKey()
   {
-    return _bootManager.getResinSystemAuthKey();
+    return _bootManager.getClusterSystemKey();
   }
 
   public long getShutdownWaitTime()
@@ -224,8 +227,9 @@ class WatchdogClient
     ActorSender conn = getConnection();
 
     try {
-      ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, new WatchdogStatusQuery());
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+      
+      ResultStatus status = watchdogProxy.status();
 
       if (status.isSuccess())
         return status.getMessage();
@@ -270,21 +274,24 @@ class WatchdogClient
     try {
       conn = getConnection();
       
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+      
       String serverId = getId();
 
-      ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS,
-                   new WatchdogStartQuery(serverId, argv),
-                   BAM_TIMEOUT);
+      ResultStatus status = watchdogProxy.start(serverId, argv);
 
-      if (status.isSuccess())
+      if (status.isSuccess()) {
         return null;
+      }
 
       throw new ConfigException(L.l("{0}: watchdog start failed because of '{1}'",
                                     this, status.getMessage()));
     } catch (RemoteConnectionFailedException e) {
       log.log(Level.FINE, e.toString(), e);
+    } catch (RemoteListenerUnavailableException e) {
+      log.log(Level.FINE, e.toString(), e);
     } catch (RuntimeException e) {
+      log.log(Level.FINE, e.toString(), e);
       throw e;
     } finally {
       if (conn != null)
@@ -333,10 +340,9 @@ class WatchdogClient
     ActorSender conn = getConnection();
 
     try {
-      ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, 
-                   new WatchdogStopQuery(serverId),
-                   BAM_TIMEOUT);
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+      
+      ResultStatus status = watchdogProxy.stop(serverId);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog '{1}' stop failed because of '{2}'",
@@ -354,8 +360,9 @@ class WatchdogClient
     ActorSender conn = getConnection();
 
     try {
-      ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, new WatchdogKillQuery(serverId), BAM_TIMEOUT);
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+      
+      ResultStatus status = watchdogProxy.kill(serverId);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog kill failed because of '{1}'",
@@ -364,6 +371,8 @@ class WatchdogClient
       throw e;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
+    } finally {
+      conn.close();
     }
   }
 
@@ -374,13 +383,12 @@ class WatchdogClient
     ActorSender conn = getConnection();
     
     try {
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+      
       String id = getId();
       
-      ResultStatus status = (ResultStatus)
-      conn.query(WATCHDOG_ADDRESS, 
-                 new WatchdogRestartQuery(id, argv),
-                 BAM_TIMEOUT);
-
+      ResultStatus status = watchdogProxy.restart(id, argv);
+      
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog restart failed because of '{1}'",
                                        this, status.getMessage()));
@@ -388,6 +396,8 @@ class WatchdogClient
       throw e;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
+    } finally {
+      conn.close();
     }
   }
 
@@ -397,8 +407,9 @@ class WatchdogClient
     ActorSender conn = getConnection();
 
     try {
-      ResultStatus status = (ResultStatus)
-        conn.query(WATCHDOG_ADDRESS, new WatchdogShutdownQuery(), BAM_TIMEOUT);
+      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+
+      ResultStatus status = watchdogProxy.shutdown();
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog shutdown failed because of '{1}'",
@@ -407,11 +418,26 @@ class WatchdogClient
       throw e;
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
+    } finally {
+      conn.close();
     }
 
     return true;
   }
 
+  private WatchdogProxy getWatchdogProxy(ActorSender conn)
+  {
+    String to = WATCHDOG_ADDRESS;
+    
+    BamManager bamManager = new SimpleBamManager(conn.getBroker());
+    
+    BamActorRef toRef = bamManager.createActorRef(to);
+
+    return bamManager.createProxy(WatchdogProxy.class, 
+                                  toRef,
+                                  conn);
+  }
+  
   private ActorSender getConnection()
   {
     synchronized (this) {
@@ -429,7 +455,7 @@ class WatchdogClient
       
           client.setEncryptPassword(true);
 
-          client.connect(uid, getResinSystemAuthKey());
+          client.connect(uid, getClusterSystemKey());
 
           _conn = client;
           client = null;
@@ -456,6 +482,7 @@ class WatchdogClient
 
     Path resinHome = getResinHome();
     Path resinRoot = getRootDirectory();
+    
 
     ProcessBuilder builder = new ProcessBuilder();
 
@@ -493,7 +520,12 @@ class WatchdogClient
 
     list.add(_config.getJavaExe());
 
+    /**
+     * list.add("-Xdebug");
+     * list.add("-Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=4948");
+    */
     // #3759 - user args are first so they're displayed by ps
+
     list.addAll(_config.getWatchdogJvmArgs());
 
     list.add("-Dresin.watchdog=" + _id);
@@ -502,12 +534,30 @@ class WatchdogClient
     list.add("-Djava.awt.headless=true");
     list.add("-Dresin.home=" + resinHome.getFullPath());
     list.add("-Dresin.root=" + resinRoot.getFullPath());
-
+    
+    /*
+    String licenseDir = System.getProperty("resin.license.dir");
+    if (licenseDir == null) {
+      Path parent = getConfig().getResinConf().getParent();
+      Path licenses = parent.lookup("licenses");
+      
+      if (licenses.exists()) {
+        licenseDir = licenses.getFullPath();
+      }
+    }
+    
+    if ( licenseDir != null ) {
+        list.add("-Dresin.license.dir=" + licenseDir);
+    }
+    */
+    
     for (int i = 0; i < argv.length; i++) {
       if (argv[i].startsWith("-Djava.class.path=")) {
         // IBM JDK startup issues
       }
-      else if (argv[i].startsWith("-J")) {
+      // #5053, server/6e0f
+      else if (argv[i].startsWith("-J")
+               && ! argv[i].startsWith("-J-X")) {
         list.add(argv[i].substring(2));
       }
     }
@@ -537,11 +587,22 @@ class WatchdogClient
 
     list.add("com.caucho.boot.WatchdogManager");
 
+/*
     if (("".equals(args.getServerId()) || args.getServerId() == null)
         && ! args.isDynamicServer()
         && ! "".equals(getId())) {
       list.add("-server");
       list.add(getId());
+    }
+*/
+    //server/6f05
+    if (("".equals(args.getServerId()) || args.getServerId() == null)
+        && ! args.isDynamicServer()) {
+      list.add("-server");
+      if ((getId() == null || "".equals(getId())) && CauchoSystem.isWindows())
+        list.add("\"\"");
+      else
+        list.add(getId());
     }
 
     for (int i = 0; i < argv.length; i++) {
@@ -551,6 +612,8 @@ class WatchdogClient
         list.add(resinHome.lookup(argv[i + 1]).getNativePath());
         i++;
       }
+      else if ("".equals(argv[i]) && CauchoSystem.isWindows())
+        list.add("\"\"");
       else
         list.add(argv[i]);
     }

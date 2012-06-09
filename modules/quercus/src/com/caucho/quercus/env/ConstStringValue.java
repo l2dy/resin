@@ -84,7 +84,19 @@ public class ConstStringValue
 
   public ConstStringValue(char ch)
   {
-    super(ch);
+    super(1, true);
+    setLength(1);
+
+    byte[] buffer = getBuffer();
+    buffer[0] = (byte) (ch & 0xff);
+  }
+
+  public ConstStringValue(byte ch) {
+    super(1, true);
+    setLength(1);
+
+    byte[] buffer = getBuffer();
+    buffer[0] = (byte) (ch & 0xff);
   }
 
   public ConstStringValue(String s)
@@ -133,27 +145,27 @@ public class ConstStringValue
   {
     _longValue = value;
   }
-  
+
   protected void setDoubleValue(DoubleValue value)
   {
     _doubleValue = value;
   }
-  
+
   protected void setString(String value)
   {
     _string = value;
   }
-  
+
   protected void setKey(Value value)
   {
     _key = value;
   }
-  
+
   protected void setValueType(ValueType valueType)
   {
     _valueType = valueType;
   }
- 
+
   /**
    * Converts to a long vaule
    */

@@ -29,12 +29,9 @@
 
 package com.caucho.quercus.env;
 
-import com.caucho.quercus.expr.Expr;
-import com.caucho.quercus.expr.LiteralStringExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.Primes;
-import com.caucho.util.Alarm;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -206,19 +203,20 @@ public class ObjectExtValue extends ObjectValue
   public final Value getField(Env env, StringValue name)
   {
     Value returnValue = getFieldExt(env, name);
-    if(returnValue == UnsetValue.UNSET)
+
+    if (returnValue == UnsetValue.UNSET)
     {
-        // __get didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
+      // __get didn't work, lets look in the class itself
+      int hash = (name.hashCode() & 0x7fffffff) % _prime;
 
-        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-          StringValue entryKey = entry._key;
+      for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
+        StringValue entryKey = entry._key;
 
-          if (name == entryKey || name.equals(entryKey)) {
-            // php/09ks vs php/091m
-            returnValue = entry._value.toValue();
-          }
+        if (name == entryKey || name.equals(entryKey)) {
+          // php/09ks vs php/091m
+          returnValue = entry._value.toValue();
         }
+      }
     }
 
     return returnValue;
@@ -244,9 +242,11 @@ public class ObjectExtValue extends ObjectValue
    */
   protected Value getFieldExt(Env env, StringValue name)
   {
-      Entry e = this.getEntry(env, name);
-      if(e != null && e._value != NullValue.NULL && e._value != UnsetValue.UNSET)
-        return e._value;
+    Entry e = this.getEntry(env, name);
+
+    if(e != null && e._value != NullValue.NULL && e._value != UnsetValue.UNSET) {
+      return e._value;
+    }
 
     return _quercusClass.getField(env, this, name);
   }
@@ -649,31 +649,30 @@ public class ObjectExtValue extends ObjectValue
       StringValue entryKey = entry._key;
 
       if (name == entryKey || name.equals(entryKey)) {
-
-
         if (entry._visibility == FieldVisibility.PRIVATE) {
           QuercusClass cls = env.getCallingClass();
 
           // XXX: this really only checks access from outside of class scope
           // php/091m
           if (cls != _quercusClass) {
-                env.notice(L.l("Can't access private field '{0}::${1}'",
-                        _quercusClass.getName(), name));
+            env.notice(L.l("Can't access private field '{0}::${1}'",
+                           _quercusClass.getName(), name));
+
+            return null;
+          }
+        }
+        /* nam: 2012-04-29 this doesn't work, commented out for drupal-7.12
+        else if (entry._visibility == FieldVisibility.PROTECTED) {
+          QuercusClass cls = env.getCallingClass();
+
+          if (cls == null || (cls != _quercusClass && ! cls.isA(_quercusClass.getName()))) {
+              env.notice(L.l("Can't access protected field '{0}::${1}'",
+                             _quercusClass.getName(), name));
+
               return null;
           }
-        } else if (entry._visibility == FieldVisibility.PROTECTED)
-        {
-            QuercusClass cls = env.getCallingClass();
-
-            if (cls == null || (cls != _quercusClass && !cls.isA(_quercusClass.getName())))
-            {
-                env.notice(L.l("Can't access protected field '{0}::${1}'",
-                        _quercusClass.getName(), name
-                        ));
-                return null;
-            }
         }
-
+        */
 
         return entry;
       }
@@ -788,15 +787,6 @@ public class ObjectExtValue extends ObjectValue
   //
   // method calls
   //
-
-  /**
-   * Finds the method name.
-   */
-  @Override
-  public AbstractFunction findFunction(String methodName)
-  {
-    return _quercusClass.findFunction(methodName);
-  }
 
   /**
    * Evaluates a method.
@@ -1049,23 +1039,29 @@ public class ObjectExtValue extends ObjectValue
   {
     ObjectExtValue newObject = new ObjectExtValue(_quercusClass);
 
+    clone(env, newObject);
+
+    return newObject;
+  }
+
+  protected void clone(Env env, ObjectExtValue obj) {
+    _quercusClass.initObject(env, obj);
+
     Iterator<Entry> iter = new EntryIterator(_entries);
 
     while (iter.hasNext()) {
       Entry entry = iter.next();
 
-      Entry copy = newObject.createEntry(entry.getKey(),
-                                         entry.getVisibility());
+      Entry copy = obj.createEntry(entry.getKey(),
+                                   entry.getVisibility());
 
       copy.setValue(entry.getValue().copy());
     }
-
-    return newObject;
   }
 
   // XXX: need to check the other copy, e.g. for sessions
 
-  /*
+  /**
    * Serializes the value.
    *
    * @param sb holds result of serialization
@@ -1073,7 +1069,8 @@ public class ObjectExtValue extends ObjectValue
    */
   @Override
   public void serialize(Env env,
-                        StringBuilder sb, SerializeMap serializeMap)
+                        StringBuilder sb,
+                        SerializeMap serializeMap)
   {
     Integer index = serializeMap.get(this);
 
@@ -1139,18 +1136,39 @@ public class ObjectExtValue extends ObjectValue
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
+    if (level != 0) {
+      sb.append('\n');
+    }
+
+    for (int i = 0; i < level; i++) {
+      sb.append("  ");
+    }
+
     sb.append(getName());
     sb.append("::__set_state(array(\n");
 
     for (Map.Entry<Value,Value> entry : entrySet()) {
+      Value key = entry.getKey();
+      Value value = entry.getValue();
+
+      for (int i = 0; i < level; i++) {
+        sb.append("  ");
+      }
+
       sb.append("   ");
-      entry.getKey().varExport(sb);
+
+      key.varExportImpl(sb, level + 1);
 
       sb.append(" => ");
-      entry.getValue().varExport(sb);
+
+      value.varExportImpl(sb, level + 1);
       sb.append(",\n");
+    }
+
+    for (int i = 0; i < level; i++) {
+      sb.append("  ");
     }
 
     sb.append("))");
@@ -1213,7 +1231,7 @@ public class ObjectExtValue extends ObjectValue
   public StringValue toString(Env env)
   {
     AbstractFunction toString = _quercusClass.getToString();
-    
+
     if (toString != null)
       return toString.callMethod(env, _quercusClass, this).toStringValue();
     else
@@ -1363,7 +1381,7 @@ public class ObjectExtValue extends ObjectValue
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
     sb.append('{');
 
@@ -1380,9 +1398,9 @@ public class ObjectExtValue extends ObjectValue
       if (length > 0)
         sb.append(',');
 
-      entry.getKey().toStringValue().jsonEncode(env, sb);
+      entry.getKey().toStringValue(env).jsonEncode(env, context, sb);
       sb.append(':');
-      entry.getValue().jsonEncode(env, sb);
+      entry.getValue().jsonEncode(env, context, sb);
       length++;
     }
 
@@ -1419,53 +1437,26 @@ public class ObjectExtValue extends ObjectValue
     }
   }
 
-  public void cleanup(Env env)
-  {
-    QuercusClass qClass = getQuercusClass();
-
-    AbstractFunction fun = qClass.getDestructor();
-
-    if (fun != null)
-      fun.callMethod(env, qClass, this);
-  }
-
-  private static String toMethod(char []key, int keyLength)
-  {
-    return new String(key, 0, keyLength);
-  }
-
-
   @Override
-  public boolean issetField( StringValue name) {
+  public boolean issetField(Env env, StringValue name)
+  {
+    Entry entry = getThisEntry(name);
 
-    Value returnValue = _quercusClass.issetField(Env.getCurrent(),this,name);
-    if(returnValue == UnsetValue.UNSET)
-    {
-        // setter didn't work, lets look in the class itself
-        int hash = (name.hashCode() & 0x7fffffff) % _prime;
-
-        for (Entry entry = _entries[hash]; entry != null; entry = entry._next) {
-          StringValue entryKey = entry._key;
-
-          if ((name == entryKey || name.equals(entryKey)) && entry._value != NullValue.NULL ) {
-            // php/09ks vs php/091m
-              return true;
-          }
-        }
-
-        if(this.isA("arrayaccess"))
-        {
-            // TODO: This should probably be in ArrayAccessDelegate
-            Env _env = Env.getCurrent();
-            Value v = this.getObject(_env).getArray().get(name);
-            if( v != null && v != NullValue.NULL && v != UnsetValue.UNSET)
-                return true;
-            return false;
-        }
+    if (entry != null && entry.isPublic()) {
+      return entry._value.isset();
     }
 
-    return returnValue.toBoolean();
+    boolean result = getQuercusClass().issetField(env, this, name);
 
+    return result;
+  }
+
+  @Override
+  public boolean isFieldExists(Env env, StringValue name)
+  {
+    Entry entry = getThisEntry(name);
+
+    return entry != null;
   }
 
   @Override
@@ -1757,12 +1748,12 @@ public class ObjectExtValue extends ObjectValue
     {
       return _key;
     }
-    
+
     public Entry getNext()
     {
       return _next;
     }
-    
+
     public void setNext(Entry next)
     {
       _next = next;
@@ -1773,7 +1764,12 @@ public class ObjectExtValue extends ObjectValue
       return _visibility;
     }
 
-    public final boolean isPrivate()
+    public boolean isPublic()
+    {
+      return _visibility == FieldVisibility.PUBLIC;
+    }
+
+    public boolean isPrivate()
     {
       return _visibility == FieldVisibility.PRIVATE;
     }

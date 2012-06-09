@@ -31,12 +31,15 @@ package com.caucho.bam.manager;
 
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.Agent;
+import com.caucho.bam.actor.BamActorRef;
 import com.caucho.bam.actor.ManagedActor;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MailboxType;
-import com.caucho.bam.query.QuerySender;
+import com.caucho.bam.router.BamRouter;
 import com.caucho.bam.stream.MessageStream;
+import com.caucho.server.deploy.DeployActor;
+import com.caucho.server.deploy.DeployActorProxy;
 
 
 /**
@@ -52,7 +55,7 @@ public interface BamManager
   /**
    * Adds a mailbox to the broker.
    */
-  void addMailbox(Mailbox mailbox);
+  void addMailbox(String address, Mailbox mailbox);
   
   /**
    * Removes a mailbox
@@ -76,14 +79,26 @@ public interface BamManager
                            MailboxType mailboxType);
 
   /**
-   * @param actorStream
-   * @param uid
-   * @param resource
+   * @param proxyAddress
+   * @param deployActorProxyImpl
    * @return
    */
+  public Mailbox createService(String address,
+                               Object bean);
+
   public Mailbox createClient(Mailbox next,
                               String uid,
                               String resource);
   
+  public BamActorRef createActorRef(String to);
+  
   public ActorSender createClient(String uid, String resource);
+  
+  public <T> T createProxy(Class<T> api, String to);
+  
+  public <T> T createProxy(Class<T> api, BamActorRef to, ActorSender sender);
+
+  public <T> T createProxy(Class<T> api,
+                           String to,
+                           ActorSender sender);
 }

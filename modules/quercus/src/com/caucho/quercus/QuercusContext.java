@@ -216,7 +216,7 @@ public class QuercusContext
 
   private ConcurrentHashMap<String,DataSource> _databaseMap
     = new ConcurrentHashMap<String,DataSource>();
-  
+
   private ConcurrentHashMap<Env,Env> _activeEnvSet
     = new ConcurrentHashMap<Env,Env>();
 
@@ -224,18 +224,21 @@ public class QuercusContext
 
   private Path _pwd;
   private Path _workDir;
+  private Path _webInfDir;
 
   private ServletContext _servletContext;
-  
+
   private QuercusTimer _quercusTimer;
-  
+
   private EnvTimeoutThread _envTimeoutThread;
   protected long _envTimeout = 60000L;
-  
+
   // how long to sleep the env timeout thread,
   // for fast, complete tomcat undeploys
   protected static final long ENV_TIMEOUT_UPDATE_INTERVAL = 1000L;
-  
+
+  private long _dependencyCheckInterval = 2000L;
+
   private boolean _isClosed;
 
   /**
@@ -246,7 +249,7 @@ public class QuercusContext
     _loader = Thread.currentThread().getContextClassLoader();
 
     _moduleContext = getLocalContext();
-    
+
     _pageManager = createPageManager();
 
     _sessionManager = createSessionManager();
@@ -256,7 +259,7 @@ public class QuercusContext
                          createString(entry.getValue()));
     }
   }
-  
+
   /**
    * Returns the current time.
    */
@@ -264,7 +267,7 @@ public class QuercusContext
   {
     return _quercusTimer.getCurrentTime();
   }
-  
+
   /**
    * Returns the current time in nanoseconds.
    */
@@ -272,7 +275,7 @@ public class QuercusContext
   {
     return _quercusTimer.getExactTimeNanoseconds();
   }
-  
+
   /**
    * Returns the exact current time in milliseconds.
    */
@@ -300,10 +303,24 @@ public class QuercusContext
     _pwd = path;
   }
 
+  public Path getWebInfDir()
+  {
+    if (_webInfDir == null) {
+      _webInfDir = getPwd().lookup("WEB-INF");
+    }
+
+    return _webInfDir;
+  }
+
+  public void setWebInfDir(Path path)
+  {
+    _webInfDir = path;
+  }
+
   public Path getWorkDir()
   {
     if (_workDir == null)
-      _workDir = getPwd().lookup("WEB-INF/work");
+      _workDir = getWebInfDir().lookup("work");
 
     return _workDir;
   }
@@ -318,9 +335,14 @@ public class QuercusContext
     return "JSESSIONID";
   }
 
-  public long getDependencyCheckInterval()
+  public final long getDependencyCheckInterval()
   {
-    return 2000L;
+    return _dependencyCheckInterval;
+  }
+
+  public final void setDependencyCheckInterval(long ms)
+  {
+    _dependencyCheckInterval = ms;
   }
 
   public int getIncludeCacheMax()
@@ -360,7 +382,7 @@ public class QuercusContext
   {
     return "apache";
   }
-  
+
   public boolean isRegisterArgv() {
     return getIniBoolean("register_argc_argv");
   }
@@ -456,7 +478,7 @@ public class QuercusContext
   {
     _isUnicodeSemantics = isUnicode;
   }
-  
+
   /**
    * Returns true if unicode.semantics is on.
    */
@@ -531,7 +553,7 @@ public class QuercusContext
     _scriptEncoding = encoding;
   }
 
-  /*
+  /**
    * Returns the mysql version to report to to PHP applications.
    * It is user set-able to allow cloaking of the underlying mysql
    * JDBC driver version for application compatibility.
@@ -541,7 +563,7 @@ public class QuercusContext
     return _mySqlVersion;
   }
 
-  /*
+  /**
    * Sets the mysql version to report to applications.  This cloaks
    * the underlying JDBC driver version, so that when an application
    * asks for the mysql version, this version string is returned instead.
@@ -701,7 +723,7 @@ public class QuercusContext
     return _isLooseParse;
   }
 
-  /*
+  /**
    * Gets the max size of the page cache.
    */
   public int getPageCacheSize()
@@ -709,7 +731,7 @@ public class QuercusContext
     return _pageManager.getPageCacheSize();
   }
 
-  /*
+  /**
    * Sets the capacity of the page cache.
    */
   public void setPageCacheSize(int size)
@@ -717,7 +739,7 @@ public class QuercusContext
     _pageManager.setPageCacheSize(size);
   }
 
-  /*
+  /**
    * Gets the max size of the regexp cache.
    */
   public int getRegexpCacheSize()
@@ -725,7 +747,7 @@ public class QuercusContext
     return RegexpModule.getRegexpCacheSize();
   }
 
-  /*
+  /**
    * Sets the capacity of the regexp cache.
    */
   public void setRegexpCacheSize(int size)
@@ -733,7 +755,7 @@ public class QuercusContext
     RegexpModule.setRegexpCacheSize(size);
   }
 
-  /*
+  /**
    * Set to true if compiled pages need to be backed by php source files.
    */
   public void setRequireSource(boolean isRequireSource)
@@ -741,7 +763,7 @@ public class QuercusContext
     _isRequireSource = isRequireSource;
   }
 
-  /*
+  /**
    * Returns whether the php source is required for compiled files.
    */
   public boolean isRequireSource()
@@ -749,7 +771,7 @@ public class QuercusContext
     return _isRequireSource;
   }
 
-  /*
+  /**
    * Turns connection pooling on or off.
    */
   public void setConnectionPool(boolean isEnable)
@@ -757,7 +779,7 @@ public class QuercusContext
     _isConnectionPool = isEnable;
   }
 
-  /*
+  /**
    * Returns true if connections should be pooled.
    */
   public boolean isConnectionPool()
@@ -803,7 +825,7 @@ public class QuercusContext
   {
     try {
       Class<?> type = Class.forName(className, false, _loader);
-      
+
       addJavaClass(phpName, type);
     }
     catch (ClassNotFoundException e) {
@@ -996,6 +1018,14 @@ public class QuercusContext
   public Value getIniValue(String name)
   {
     return _iniDefinitions.get(name).getValue(this);
+  }
+
+  /**
+   * Returns an ini value.
+   */
+  public String getIniString(String name)
+  {
+    return _iniDefinitions.get(name).getValue(this).toJavaString();
   }
 
   /**
@@ -1319,7 +1349,7 @@ public class QuercusContext
   {
     if (! isStrict())
       name = name.toLowerCase(Locale.ENGLISH);
-    
+
     if (name.startsWith("\\")) {
       // php/0m18
       name = name.substring(1);
@@ -1341,7 +1371,7 @@ public class QuercusContext
       id = _functionNameMap.size() + 1;
 
       _functionNameMap.put(name, id);
-      
+
       extendFunctionMap(name, id);
     }
 
@@ -1356,7 +1386,7 @@ public class QuercusContext
                        functionMap, 0, _functionMap.length);
       _functionMap = functionMap;
     }
-    
+
     int globalId = -1;
     int ns = name.lastIndexOf('\\');
     if (ns > 0) {
@@ -1373,7 +1403,7 @@ public class QuercusContext
   {
     if (! isStrict())
       name = name.toLowerCase(Locale.ENGLISH);
-    
+
     if (name.startsWith("\\"))
       name = name.substring(1);
 
@@ -1415,12 +1445,12 @@ public class QuercusContext
 
     if (id >= 0)
       return id;
-    
+
     if (className.startsWith("\\"))
       className = className.substring(1);
-    
+
     id = _classNameMap.get(className);
-    
+
     if (id >= 0)
       return id;
 
@@ -1941,7 +1971,7 @@ public class QuercusContext
   {
     return null;
   }
-  
+
   public void setSessionTimeout(long sessionTimeout)
   {
   }
@@ -2043,7 +2073,7 @@ public class QuercusContext
   {
     try {
       _quercusTimer = new QuercusTimer();
-      
+
       _envTimeoutThread = new EnvTimeoutThread();
       _envTimeoutThread.start();
     } catch (Exception e) {
@@ -2063,7 +2093,7 @@ public class QuercusContext
   {
     return new ExprFactory();
   }
-  
+
   protected Map<Env,Env> getActiveEnvSet()
   {
     return _activeEnvSet;
@@ -2073,12 +2103,12 @@ public class QuercusContext
   {
     _activeEnvSet.put(env, env);
   }
-  
+
   public void completeEnv(Env env)
   {
     _activeEnvSet.remove(env);
   }
-  
+
   protected boolean isClosed()
   {
     return _isClosed;
@@ -2087,13 +2117,13 @@ public class QuercusContext
   public void close()
   {
     _isClosed = true;
-    
+
     _sessionManager.close();
     _pageManager.close();
-    
+
     if (_envTimeoutThread != null)
       _envTimeoutThread.shutdown();
-    
+
     if (_quercusTimer != null) {
       _quercusTimer.shutdown();
     }
@@ -2122,7 +2152,8 @@ public class QuercusContext
 
       hash = 65537 * hash + _include.hashCode();
       hash = 65537 * hash + _includePath.hashCode();
-      hash = 65537 * hash + _pwd.hashCode();
+      if (_pwd != null)
+        hash = 65537 * hash + _pwd.hashCode();
       hash = 65537 * hash + _scriptPwd.hashCode();
 
       return hash;
@@ -2141,13 +2172,13 @@ public class QuercusContext
               && _scriptPwd.equals(key._scriptPwd));
     }
   }
-  
+
   class EnvTimeoutThread extends Thread {
     private volatile boolean _isRunnable = true;
     private final long _timeout = _envTimeout;
-    
+
     private long _quantumCount;
-    
+
     EnvTimeoutThread()
     {
       super("quercus-env-timeout");
@@ -2155,11 +2186,11 @@ public class QuercusContext
       setDaemon(true);
       //setPriority(Thread.MAX_PRIORITY);
     }
-    
+
     public void shutdown()
     {
       _isRunnable = false;
-      
+
       LockSupport.unpark(this);
     }
 
@@ -2168,11 +2199,11 @@ public class QuercusContext
       while (_isRunnable) {
         if (_quantumCount >= _timeout) {
           _quantumCount = 0;
-          
+
           try {
             ArrayList<Env> activeEnv
               = new ArrayList<Env>(_activeEnvSet.keySet());
-            
+
             for (Env env : activeEnv) {
               env.updateTimeout();
             }

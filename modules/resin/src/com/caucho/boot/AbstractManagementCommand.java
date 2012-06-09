@@ -31,6 +31,7 @@ package com.caucho.boot;
 
 import com.caucho.bam.NotAuthorizedException;
 import com.caucho.bam.actor.ActorSender;
+import com.caucho.config.ConfigException;
 import com.caucho.server.admin.ManagerClient;
 import com.caucho.util.L10N;
 
@@ -52,13 +53,19 @@ public abstract class AbstractManagementCommand extends AbstractRemoteCommand {
     } catch (Exception e) {
       Throwable cause = e;
 
-      while (cause.getCause() != null)
-        cause = cause.getCause();
+      if ((cause instanceof ConfigException) && ! args.isVerbose()) {
+        System.out.println(cause.getMessage());
+      }
+      else {
+        while (cause.getCause() != null) {
+          cause = cause.getCause();
+        }
 
-      if (args.isVerbose())
-        e.printStackTrace();
-      else
-        System.out.println(cause.toString());
+        if (args.isVerbose())
+          e.printStackTrace();
+        else
+          System.out.println(cause.toString());
+      }
 
       if (e instanceof NotAuthorizedException)
         return 1;
@@ -87,62 +94,4 @@ public abstract class AbstractManagementCommand extends AbstractRemoteCommand {
    
     return new ManagerClient(bamSender);
   }
-  /*
-  protected ManagerClient getManagerClient(WatchdogArgs args,
-                                           WatchdogClient client)
-  {
-    String address = args.getArg("-address");
-
-    if (address == null || address.isEmpty())
-      address = client.getConfig().getAddress();
-
-    int port = -1;
-
-    String portArg = args.getArg("-port");
-
-    try {
-      if (portArg != null && ! portArg.isEmpty())
-        port = Integer.parseInt(portArg);
-    } catch (NumberFormatException e) {
-      NumberFormatException e1 = new NumberFormatException(
-        "-port argument is not a number '" + portArg + "'");
-      e1.setStackTrace(e.getStackTrace());
-
-      throw e;
-    }
-    
-    int httpPort = port;
-    
-    if (port < 0)
-      port = client.getConfig().getPort();
-    
-    if (httpPort < 0)
-      httpPort = findPort(client);
-
-    String user = args.getArg("-user");
-    String password = args.getArg("-password");
-    
-    if (user == null && password == null) {
-      password = client.getResinSystemAuthKey();
-    }
-
-    return new ManagerClient(address, port, httpPort, user, password);
-    
-    // return new ManagerClient(address, port, user, password);
-  }
-  
-  private int findPort(WatchdogClient client)
-  {
-    for (TcpSocketLinkListener listener : client.getConfig().getPorts()) {
-      if (listener instanceof OpenPort) {
-        OpenPort openPort = (OpenPort) listener;
-        
-        if ("http".equals(openPort.getProtocolName()))
-          return openPort.getPort();
-      }
-    }
-    
-    return 0;
-  }
-  */
 }

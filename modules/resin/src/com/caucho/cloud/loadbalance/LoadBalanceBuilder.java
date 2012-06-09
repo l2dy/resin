@@ -137,7 +137,7 @@ public class LoadBalanceBuilder
    */
   public void setTargetCluster(String clusterId)
   {
-    throw new IllegalStateException(L.l("{0}: setTargetCluster is invalid here",
+    throw new IllegalStateException(L.l("{0}: setTargetCluster requires Resin Professional.",
                                         this));
   }
   /**
@@ -145,7 +145,7 @@ public class LoadBalanceBuilder
    */
   public void setTargetPort(int port)
   {
-    throw new IllegalStateException(L.l("{0}: setTargetPort is invalid here",
+    throw new IllegalStateException(L.l("{0}: setTargetPort requires Resin Professional.",
                                         this));
   }
   
@@ -154,7 +154,7 @@ public class LoadBalanceBuilder
    */
   public void setTargetCluster(CloudPod pod)
   {
-    throw new IllegalStateException(L.l("{0}: setTargetCluster is invalid here",
+    throw new IllegalStateException(L.l("{0}: setTargetCluster requires Resin Professional.",
                                         this));
   }
   
@@ -163,7 +163,11 @@ public class LoadBalanceBuilder
    */
   public LoadBalanceManager create()
   {
-    return new SingleLoadBalanceManager(getMeterCategory());
+    ClientSocketFactory socketFactory = null;
+    if (getClientList().size() > 0)
+      socketFactory = getClientList().get(0);
+
+    return new SingleLoadBalanceManager(socketFactory, getMeterCategory());
   }
 
   protected ClientSocketFactory createClientSocketFactory(String address)
@@ -195,5 +199,11 @@ public class LoadBalanceBuilder
       factory.setLoadBalanceIdleTime(_idleTimeout);
     
     return factory;
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[]";
   }
 }

@@ -30,6 +30,7 @@
 package com.caucho.message.local;
 
 import java.io.IOException;
+import java.util.Map;
 
 import com.caucho.amqp.AmqpException;
 import com.caucho.amqp.io.AmqpStreamWriter;
@@ -69,7 +70,8 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
     
     EnvironmentMessageBroker broker = EnvironmentMessageBroker.getCurrent();
         
-    _publisher = broker.createSender(_address);
+    Map<String,Object> nodeProperties = null;
+    _publisher = broker.createSender(_address, nodeProperties);
     
     if (_publisher == null) {
       throw new IllegalArgumentException(L.l("'{0}' is an unknown queue",
@@ -97,18 +99,8 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
       AmqpStreamWriter sout = new AmqpStreamWriter(os);
       AmqpWriter aout = new AmqpWriter();
       aout.initBase(sout);
-      
-      String contentType = _encoder.getContentType(value);
-      
-      if (contentType != null) {
-        MessageProperties properties = new MessageProperties();
-        
-        properties.setContentType(contentType);
-        
-        properties.write(aout);
-      }
     
-      _encoder.encode(aout, value);
+      _encoder.encode(aout, factory, value);
       
       sout.flush();
       os.flush();
@@ -119,7 +111,7 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
       long xid = 0;
       long mid = _publisher.nextMessageId();
       boolean isDurable = false;
-      int priority = 4;
+      int priority = factory.getPriority();
       long expireTime = 0;
       
       _lastMessageId = mid;

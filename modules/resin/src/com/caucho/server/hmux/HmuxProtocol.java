@@ -46,9 +46,10 @@ public class HmuxProtocol extends AbstractHttpProtocol {
   private static EnvironmentLocal<HmuxProtocol> _localManager
     = new EnvironmentLocal<HmuxProtocol>();
 
-  private HashMap<Integer,WeakReference<HmuxExtension>> _extensionMap
-    = new HashMap<Integer,WeakReference<HmuxExtension>>();
+  private HashMap<Integer,HmuxExtension> _extensionMap
+    = new HashMap<Integer,HmuxExtension>();
 
+  // public for server/69g0
   public HmuxProtocol()
   {
     setProtocolName("server");
@@ -63,6 +64,20 @@ public class HmuxProtocol extends AbstractHttpProtocol {
     }
   }
 
+  public static HmuxProtocol create()
+  {
+    synchronized (_localManager) {
+      HmuxProtocol protocol = _localManager.get();
+      
+      if (protocol == null) {
+        protocol = new HmuxProtocol();
+        _localManager.set(protocol);
+      }
+      
+      return protocol;
+    }
+  }
+  
   /**
    * Create a HmuxRequest object for the new thread.
    */
@@ -74,16 +89,11 @@ public class HmuxProtocol extends AbstractHttpProtocol {
 
   public HmuxExtension getExtension(Integer id)
   {
-    WeakReference<HmuxExtension> ref = _extensionMap.get(id);
-
-    if (ref != null)
-      return ref.get();
-    else
-      return null;
+    return _extensionMap.get(id);
   }
 
-  public void putExtension(Integer id, HmuxExtension extension)
+  public void putExtension(int id, HmuxExtension extension)
   {
-    _extensionMap.put(id, new WeakReference<HmuxExtension>(extension));
+    _extensionMap.put(id, extension);
   }
 }

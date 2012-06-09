@@ -29,6 +29,7 @@
 
 package com.caucho.env.thread2;
 
+import java.io.Closeable;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -38,13 +39,16 @@ import java.util.logging.Logger;
 
 import com.caucho.env.thread.TaskWorker;
 import com.caucho.env.warning.WarningService;
+import com.caucho.loader.Environment;
 import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 
 /**
  * A generic pool of threads available for Alarms and Work tasks.
  */
-abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
+abstract public class AbstractTaskWorker2
+  implements Runnable, TaskWorker, Closeable
+{
   private static final Logger log
     = Logger.getLogger(AbstractTaskWorker2.class.getName());
   
@@ -72,6 +76,8 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
   protected AbstractTaskWorker2(ClassLoader classLoader)
   {
     _classLoader = classLoader;
+    
+    Environment.addCloseListener(this, classLoader);
   }
 
   protected boolean isPermanent()
@@ -99,6 +105,7 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
   
   abstract public long runTask();
 
+  @Override
   public void close()
   {
     _isClosed = true;
@@ -189,16 +196,25 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
       else
         expires = 0;
       
+      boolean isExpireRetry = false;
+      
       do {
-        while (_taskState.getAndSet(TASK_SLEEP) == TASK_READY) {
+        isExpireRetry = false;
+        
+        while (_taskState.getAndSet(TASK_SLEEP) == TASK_READY
+               && ! isClosed()) {
           thread.setContextClassLoader(_classLoader);
-
+          
+          isExpireRetry = false;
+          
           long delta = runTask();
           
           now = getCurrentTimeActual();
           
           if (delta > 0) {
             expires = now + delta;
+
+            isExpireRetry = true;
           }
           else if (idleTimeout > 0) {
             expires = now + idleTimeout;
@@ -208,20 +224,22 @@ abstract public class AbstractTaskWorker2 implements Runnable, TaskWorker {
           }
         }
 
-        if (isClosed())
+        if (isClosed()) {
           return;
+        }
         
         if (expires > 0 && _taskState.compareAndSet(TASK_SLEEP, TASK_PARK)) {
           Thread.interrupted();
           LockSupport.parkUntil(expires);
         }
         
-        if (isPermanent()) {
+        if (isPermanent() || isExpireRetry) {
           expires = getCurrentTimeActual() + idleTimeout;
           _taskState.set(TASK_READY);
         }
       } while (_taskState.get() == TASK_READY
                || isPermanent()
+               || isExpireRetry
                || getCurrentTimeActual() < expires);
     } catch (Throwable e) {
       System.out.println("EXN: " + e);

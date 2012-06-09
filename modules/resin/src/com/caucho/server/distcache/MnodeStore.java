@@ -42,21 +42,23 @@ import java.util.logging.Logger;
 import javax.sql.DataSource;
 
 import com.caucho.db.jdbc.DataSourceImpl;
-import com.caucho.util.Alarm;
-import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeList;
 import com.caucho.util.HashKey;
+import com.caucho.util.Hex;
 import com.caucho.util.JdbcUtil;
+import com.caucho.util.L10N;
 
 
 /**
  * Manages backing for the cache map.
  */
-public class MnodeStore implements AlarmListener {
+public class MnodeStore {
+  private static final L10N L = new L10N(MnodeStore.class);
+  
   private static final Logger log
     = Logger.getLogger(MnodeStore.class.getName());
-
+  
   private FreeList<CacheMapConnection> _freeConn
     = new FreeList<CacheMapConnection>(32);
 
@@ -71,25 +73,22 @@ public class MnodeStore implements AlarmListener {
 
   private String _insertQuery;
   private String _updateSaveQuery;
-  private String _updateUpdateTimeQuery;
+  private String _updateAccessTimeQuery;
 
-  private String _updateVersionQuery;
-
-  private String _expireQuery;
+  private String _selectExpireQuery;
 
   private String _countQuery;
   private String _updatesSinceQuery;
   private String _remoteUpdatesSinceQuery;
+  private String _deleteQuery;
 
   private long _serverVersion;
-  private long _startupLastUpdateTime;
+  private long _startupLastAccessTime;
   
-  private AtomicLong _entryCount = new AtomicLong();
-  
-  private Alarm _alarm;
+  private final AtomicLong _entryCount = new AtomicLong();
   
   // private long _expireReaperTimeout = 60 * 60 * 1000L;
-  private long _expireReaperTimeout = 15 * 60 * 1000L;
+  // private long _expireReaperTimeout = 15 * 60 * 1000L;
 
   public MnodeStore(DataSource dataSource,
                     String tableName,
@@ -133,7 +132,7 @@ public class MnodeStore implements AlarmListener {
    */
   public long getStartupLastUpdateTime()
   {
-    return _startupLastUpdateTime;
+    return _startupLastAccessTime;
   }
 
   /**
@@ -179,63 +178,71 @@ public class MnodeStore implements AlarmListener {
   protected void init()
     throws Exception
   {
-    _loadQuery = ("SELECT value,value_length,cache_id,flags,server_version,item_version,access_timeout,update_timeout,update_time"
+    _loadQuery = ("SELECT value_hash,value_data_id,value_length,"
+                  + "     cache_id,flags,"
+                  + "     item_version,server_version,"
+                  + "     access_timeout,modified_timeout,"
+                  + "     access_time,modified_time"
                   + " FROM " + _tableName
                   + " WHERE id=?");
 
     _insertQuery = ("INSERT into " + _tableName
-                    + " (id,value,value_length,cache_id,flags,"
+                    + " (id,value_hash,value_data_id,value_length,cache_id,flags,"
                     + "  item_version,server_version,"
-                    + "  access_timeout,update_timeout,"
-                    + "  update_time)"
-                    + " VALUES (?,?,?,?,?,?,?,?,?,?)");
+                    + "  access_timeout,modified_timeout,"
+                    + "  access_time,modified_time)"
+                    + " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
 
     _updateSaveQuery
       = ("UPDATE " + _tableName
-         + " SET value=?,value_length=?,"
-         + "     server_version=?,item_version=?,"
-         + "     access_timeout=?,update_time=?"
+         + " SET value_hash=?,value_data_id=?,value_length=?,cache_id=?,flags=?,"
+         + "     item_version=?,server_version=?,"
+         + "     access_timeout=?,modified_timeout=?,"
+         + "     access_time=?,modified_time=?"
          + " WHERE id=? AND item_version<=?");
 
-    _updateUpdateTimeQuery
+    _updateAccessTimeQuery
       = ("UPDATE " + _tableName
-         + " SET access_timeout=?,update_time=?"
+         + " SET access_timeout=?,access_time=?"
          + " WHERE id=? AND item_version=?");
 
-    _updateVersionQuery = ("UPDATE " + _tableName
-                           + " SET update_time=?, server_version=?"
-                           + " WHERE id=? AND value=?");
+    _selectExpireQuery = ("SELECT id,value_data_id FROM " + _tableName
+                          + " WHERE access_time + 5 * access_timeout / 4 < ?"
+                          + " OR modified_time + modified_timeout < ?"
+                          + " LIMIT 4096");
 
-    _expireQuery = ("DELETE FROM " + _tableName
-                     + " WHERE update_time + 5 * access_timeout / 4 < ?"
-                     + " OR update_time + update_timeout < ?");
+    _deleteQuery = ("DELETE FROM " + _tableName
+                    + " WHERE id=?");
 
     _countQuery = "SELECT count(*) FROM " + _tableName;
 
-    _updatesSinceQuery = ("SELECT id,value,value_length,cache_id,flags,item_version,update_time,access_timeout,update_timeout"
+    _updatesSinceQuery = ("SELECT id,value_hash,value_data_id,value_length,"
+                          + "cache_id,flags,item_version,"
+                          + "     access_timeout,modified_timeout,"
+                          + "     access_time,modified_time"
                           + " FROM " + _tableName
-                          + " WHERE ? <= update_time"
+                          + " WHERE ? <= access_time"
                           + "   AND bitand(flags, " + CacheConfig.FLAG_TRIPLICATE + ") <> 0"
                           + " LIMIT 1024");
 
-    _remoteUpdatesSinceQuery = ("SELECT id,value,value_length,cache_id,flags,item_version,update_time,access_timeout,update_timeout"
+    _remoteUpdatesSinceQuery = ("SELECT id,value_hash,value_data_id,value_length,"
+                                + "     cache_id,flags,item_version,"
+                                + "     access_timeout,modified_timeout,"
+                                +"      access_time,modified_time"
                                 + " FROM " + _tableName
-                                + " WHERE ? = cache_id AND ? <= update_time"
+                                + " WHERE ? = cache_id AND ? <= access_time"
                                 + " LIMIT 1024");
 
     initDatabase();
 
     _serverVersion = initVersion();
-    _startupLastUpdateTime = initLastUpdateTime();
+    _startupLastAccessTime = initLastAccessTime();
     
     long initCount = getCountImpl();
     
     if (initCount > 0) {
       _entryCount.set(initCount);
     }
-
-    _alarm = new Alarm(this);
-    handleAlarm(_alarm);
   }
 
   /**
@@ -250,9 +257,9 @@ public class MnodeStore implements AlarmListener {
       Statement stmt = conn.createStatement();
 
       try {
-        String sql = ("SELECT id, value, value_length, cache_id, flags,"
-                      + "     access_timeout, update_timeout,"
-                      + "     update_time,"
+        String sql = ("SELECT id, value_hash, value_data_id, value_length, cache_id, flags,"
+                      + "     access_timeout, modified_timeout,"
+                      + "     access_time, modified_time"
                       + "     server_version, item_version"
                       + " FROM " + _tableName + " WHERE 1=0");
 
@@ -275,12 +282,14 @@ public class MnodeStore implements AlarmListener {
 
       String sql = ("CREATE TABLE " + _tableName + " (\n"
                     + "  id BINARY(32) PRIMARY KEY,\n"
-                    + "  value BINARY(32),\n"
-                    + "  value_length BIGINT,\n"
                     + "  cache_id BINARY(32),\n"
+                    + "  value_hash BIGINT,\n"
+                    + "  value_data_id BIGINT,\n"
+                    + "  value_length BIGINT,\n"
                     + "  access_timeout BIGINT,\n"
-                    + "  update_timeout BIGINT,\n"
-                    + "  update_time BIGINT,\n"
+                    + "  modified_timeout BIGINT,\n"
+                    + "  access_time BIGINT,\n"
+                    + "  modified_time BIGINT,\n"
                     + "  item_version BIGINT,\n"
                     + "  flags BIGINT,\n"
                     + "  server_version INTEGER)");
@@ -323,7 +332,7 @@ public class MnodeStore implements AlarmListener {
   /**
    * Returns the maximum update time on startup
    */
-  private long initLastUpdateTime()
+  private long initLastAccessTime()
     throws Exception
   {
     Connection conn = _dataSource.getConnection();
@@ -332,7 +341,7 @@ public class MnodeStore implements AlarmListener {
     try {
       Statement stmt = conn.createStatement();
 
-      String sql = ("SELECT MAX(update_time)"
+      String sql = ("SELECT MAX(access_time)"
                     + " FROM " + _tableName);
 
       rs = stmt.executeQuery(sql);
@@ -349,11 +358,6 @@ public class MnodeStore implements AlarmListener {
 
   public void close()
   {
-    Alarm alarm = _alarm;
-    _alarm = null;
-
-    if (alarm != null)
-      alarm.close();
   }
 
   /**
@@ -377,7 +381,7 @@ public class MnodeStore implements AlarmListener {
              + " WHERE ?<=update_time"
              + " LIMIT 1024");
       */
-
+      
       PreparedStatement pstmt = conn.prepareStatement(sql);
 
       pstmt.setLong(1, updateTime);
@@ -389,28 +393,33 @@ public class MnodeStore implements AlarmListener {
       rs.relative(offset);
       while (rs.next()) {
         byte []keyHash = rs.getBytes(1);
-        byte []valueHash = rs.getBytes(2);
-        long valueLength = rs.getLong(3);
-        byte []cacheHash = rs.getBytes(4);
-        long flags = rs.getLong(5);
-        long version = rs.getLong(6);
-        long itemUpdateTime = rs.getLong(7);
+        long valueHash = rs.getLong(2);
+        long valueIndex = rs.getLong(3);
+        long valueLength = rs.getLong(4);
+        byte []cacheHash = rs.getBytes(5);
+        long flags = rs.getLong(6);
+        long version = rs.getLong(7);
         long accessTimeout = rs.getLong(8);
-        long updateTimeout = rs.getLong(9);
+        long modifiedTimeout = rs.getLong(9);
+        long accessTime = rs.getLong(10);
+        long modifiedTime = rs.getLong(11);
+        
+        long leaseTimeout = 30000;
 
-        HashKey value = valueHash != null ? new HashKey(valueHash) : null;
         HashKey cacheKey = cacheHash != null ? new HashKey(cacheHash) : null;
 
         if (keyHash == null)
           continue;
 
         entryList.add(new CacheData(new HashKey(keyHash),
-                                    value, valueLength, version,
+                                    valueHash, valueIndex, valueLength, version,
                                     cacheKey,
                                     flags,
-                                    itemUpdateTime,
                                     accessTimeout,
-                                    updateTimeout));
+                                    modifiedTimeout,
+                                    leaseTimeout,
+                                    accessTime,
+                                    modifiedTime));
       }
 
       if (entryList.size() > 0)
@@ -457,16 +466,19 @@ public class MnodeStore implements AlarmListener {
       while (rs.next()) {
         byte []keyHash = rs.getBytes(1);
 
-        byte []valueHash = rs.getBytes(2);
-        long valueLength = rs.getLong(3);
-        byte []cacheHash = rs.getBytes(4);
-        long flags = rs.getLong(5);
-        long version = rs.getLong(6);
-        long itemUpdateTime = rs.getLong(7);
+        long valueHash = rs.getLong(2);
+        long valueIndex = rs.getLong(3);
+        long valueLength = rs.getLong(4);
+        byte []cacheHash = rs.getBytes(5);
+        long flags = rs.getLong(6);
+        long version = rs.getLong(7);
         long accessTimeout = rs.getLong(8);
-        long updateTimeout = rs.getLong(9);
+        long modifiedTimeout = rs.getLong(9);
+        long accessTime = rs.getLong(10);
+        long modifiedTime = rs.getLong(11);
         
-        HashKey value = valueHash != null ? new HashKey(valueHash) : null;
+        long leaseTimeout = 30000;
+        
         /*
         HashKey cacheKey = cacheHash != null ? new HashKey(cacheHash) : null;
         */
@@ -475,14 +487,17 @@ public class MnodeStore implements AlarmListener {
           continue;
 
         entryList.add(new CacheData(new HashKey(keyHash),
-                                    value,
+                                    valueHash,
+                                    valueIndex,
                                     valueLength,
                                     version,
                                     HashKey.create(cacheHash),
                                     flags,
-                                    itemUpdateTime,
                                     accessTimeout,
-                                    updateTimeout));
+                                    modifiedTimeout,
+                                    leaseTimeout,
+                                    accessTime,
+                                    modifiedTime));
       }
 
       if (entryList.size() > 0)
@@ -519,42 +534,41 @@ public class MnodeStore implements AlarmListener {
       rs = pstmt.executeQuery();
 
       if (rs.next()) {
-        byte []valueHash = rs.getBytes(1);
-        long valueLength = rs.getLong(2);
-
-        byte []cacheHash = rs.getBytes(3);
-        long flags = rs.getLong(4);
-        long serverVersion = rs.getLong(5);
-        long itemVersion = rs.getLong(6);
-        long accessedExpireTimeout = rs.getLong(7);
-        long modifiedExpireTimeout = rs.getLong(8);
-        long updateTime = rs.getLong(9);
-        long accessTime = CurrentTime.getCurrentTime();
+        long valueHash = rs.getLong(1);
+        long valueDataId = rs.getLong(2);
+        long valueLength = rs.getLong(3);
         
-        HashKey cacheHashKey
-          = cacheHash != null ? new HashKey(cacheHash) : null;
-
-        HashKey valueHashKey
-          = valueHash != null ? new HashKey(valueHash) : null;
-          
-          long leaseTimeout = 0;
-
+        byte []cacheHash = rs.getBytes(4);
+        long flags = rs.getLong(5);
+        long itemVersion = rs.getLong(6);
+        long serverVersion = rs.getLong(7);
+        long accessedExpireTimeout = rs.getLong(8);
+        long modifiedExpireTimeout = rs.getLong(9);
+        long accessTime = rs.getLong(10);
+        long modifiedTime = rs.getLong(11);
+        // long accessTime = CurrentTime.getCurrentTime();
+        
+        long leaseTimeout = 300000;
+        
         MnodeEntry entry;
-        entry = new MnodeEntry(valueHashKey, valueLength, itemVersion, null,
-                               cacheHashKey,
+        entry = new MnodeEntry(valueHash, valueLength, 
+                               itemVersion,
+                               cacheHash,
                                flags,
                                accessedExpireTimeout, modifiedExpireTimeout,
                                leaseTimeout,
-                               accessTime, updateTime,
+                               valueDataId,
+                               null,
+                               accessTime, modifiedTime,
                                serverVersion == _serverVersion,
                                false);
-        
+
         if (log.isLoggable(Level.FINER))
           log.finer(this + " load " + id + " " + entry);
         
         return entry;
       }
-
+      
       if (log.isLoggable(Level.FINEST))
         log.finest(this + " load: no mnode for cache key " + id);
 
@@ -579,31 +593,47 @@ public class MnodeStore implements AlarmListener {
    * @param idleTimeout the item's timeout
    */
   public boolean insert(HashKey id,
-                        MnodeValue mnodeUpdate)
+                        MnodeValue mnodeUpdate,
+                        long valueDataId)
   {
+    if ((valueDataId == 0) != (mnodeUpdate.getValueHash() == 0)) {
+      throw new IllegalStateException(L.l("data {0} vs hash {1} mismatch for cache mnode {2}",
+                                          valueDataId,
+                                          mnodeUpdate.getValueHash(),
+                                          id));
+    }
     CacheMapConnection conn = null;
 
     try {
       conn = getConnection();
-
+      
       PreparedStatement stmt = conn.prepareInsert();
       stmt.setBytes(1, id.getHash());
+      stmt.setLong(2, mnodeUpdate.getValueHash());
+      /*
+      System.out.println("V-HASH: " + mnodeUpdate.getValueDataId());
+      if (mnodeUpdate.getValueDataId() == 16384)
+        Thread.dumpStack();
+        */
+      stmt.setLong(3, valueDataId);
+      stmt.setLong(4, mnodeUpdate.getValueLength());
+      stmt.setBytes(5, mnodeUpdate.getCacheHash());
 
-      stmt.setBytes(2, mnodeUpdate.getValueHash());
-      stmt.setLong(3, mnodeUpdate.getValueLength());
-      stmt.setBytes(4, mnodeUpdate.getCacheHash());
-
-      stmt.setLong(5, mnodeUpdate.getFlags());
-      stmt.setLong(6, mnodeUpdate.getVersion());
-      stmt.setLong(7, _serverVersion);
-      stmt.setLong(8, mnodeUpdate.getAccessedExpireTimeout());
-      stmt.setLong(9, mnodeUpdate.getModifiedExpireTimeout());
-      stmt.setLong(10, CurrentTime.getCurrentTime());
+      stmt.setLong(6, mnodeUpdate.getFlags());
+      stmt.setLong(7, mnodeUpdate.getVersion());
+      stmt.setLong(8, _serverVersion);
+      stmt.setLong(9, mnodeUpdate.getAccessedExpireTimeout());
+      stmt.setLong(10, mnodeUpdate.getModifiedExpireTimeout());
+      
+      long now = CurrentTime.getCurrentTime();
+      stmt.setLong(11, now);
+      stmt.setLong(12, now);
 
       int count = stmt.executeUpdate();
 
-      if (log.isLoggable(Level.FINER))
+      if (log.isLoggable(Level.FINER)) {
         log.finer(this + " insert key=" + id + " " + mnodeUpdate + " count=" + count);
+      }
       
       if (count > 0) {
         _entryCount.addAndGet(1);
@@ -628,7 +658,8 @@ public class MnodeStore implements AlarmListener {
    * @param idleTimeout the item's timeout
    */
   public boolean updateSave(byte []key,
-                            MnodeValue mnodeUpdate)
+                            MnodeValue mnodeUpdate,
+                            long valueDataId)
   {
     CacheMapConnection conn = null;
 
@@ -637,21 +668,38 @@ public class MnodeStore implements AlarmListener {
 
       PreparedStatement stmt = conn.prepareUpdateSave();
       
-      stmt.setBytes(1, mnodeUpdate.getValueHash());
-      stmt.setLong(2, mnodeUpdate.getValueLength());
+      stmt.setLong(1, mnodeUpdate.getValueHash());
+      stmt.setLong(2, valueDataId);
+      stmt.setLong(3, mnodeUpdate.getValueLength());
+      stmt.setBytes(4, mnodeUpdate.getCacheHash());
+      stmt.setLong(5, mnodeUpdate.getFlags());
       
-      stmt.setLong(3, _serverVersion);
-      stmt.setLong(4, mnodeUpdate.getVersion());
-      stmt.setLong(5, mnodeUpdate.getAccessedExpireTimeout());
-      stmt.setLong(6, CurrentTime.getCurrentTime());
+      stmt.setLong(6, mnodeUpdate.getVersion());
+      stmt.setLong(7, _serverVersion);
+      stmt.setLong(8, mnodeUpdate.getAccessedExpireTimeout());
+      stmt.setLong(9, mnodeUpdate.getModifiedExpireTimeout());
+      
+      
+      long now = CurrentTime.getCurrentTime();
+      stmt.setLong(10, now);
+      stmt.setLong(11, now);
+      /*
+      + " SET value_hash=?,value_data_id=?,value_length=?,cache_id=?,flags=?,"
+      + "     item_version=?,server_version=?,"
+      + "     access_timeout=?,update_timeout=?,update_time=?"
+      */
 
-      stmt.setBytes(7, key);
-      stmt.setLong(8, mnodeUpdate.getVersion());
+      stmt.setBytes(12, key);
+      stmt.setLong(13, mnodeUpdate.getVersion());
 
       int count = stmt.executeUpdate();
 
-      if (log.isLoggable(Level.FINER))
-        log.finer(this + " save " + HashKey.create(key) + " " + mnodeUpdate);
+      if (log.isLoggable(Level.FINER)) {
+        if (count > 0)
+          log.finer(this + " updateSave " + HashKey.create(key) + " " + mnodeUpdate);
+        else
+          log.finer(this + " updateSave-failed " + HashKey.create(key) + " " + mnodeUpdate);
+      }
 
       return count > 0;
     } catch (SQLException e) {
@@ -672,20 +720,20 @@ public class MnodeStore implements AlarmListener {
    * @param idleTimeout the item's timeout
    * @param updateTime the item's timeout
    */
-  public boolean updateUpdateTime(HashKey id,
+  public boolean updateAccessTime(HashKey id,
                                   long itemVersion,
                                   long accessTimeout,
-                                  long updateTime)
+                                  long accessTime)
   {
     CacheMapConnection conn = null;
 
     try {
       conn = getConnection();
 
-      PreparedStatement stmt = conn.prepareUpdateUpdateTime();
+      PreparedStatement stmt = conn.preparedUpdateAccessTime();
       stmt.setLong(1, accessTimeout);
-      stmt.setLong(2, updateTime);
-
+      stmt.setLong(2, accessTime);
+      
       stmt.setBytes(3, id.getHash());
       stmt.setLong(4, itemVersion);
 
@@ -706,27 +754,73 @@ public class MnodeStore implements AlarmListener {
   }
 
   /**
+   * Reads the object from the data store.
+   *
+   * @param id the hash identifier for the data
+   * @return true on successful load
+   */
+  public boolean remove(byte []key)
+  {
+    CacheMapConnection conn = null;
+    ResultSet rs = null;
+
+    try {
+      conn = getConnection();
+
+      PreparedStatement pstmt = conn.prepareDelete();
+      pstmt.setBytes(1, key);
+
+      int count = pstmt.executeUpdate();
+      
+      if (count > 0) {
+        _entryCount.addAndGet(-1);
+        
+        if (log.isLoggable(Level.FINER)) {
+          log.finer(this + " remove " + HashKey.create(key));
+        }
+        
+        return true;
+      }
+      else {
+        return false;
+      }
+    } catch (SQLException e) {
+      log.log(Level.FINE, e.toString(), e);
+    } finally {
+      JdbcUtil.close(rs);
+      
+      if (conn != null)
+        conn.close();
+    }
+
+    return false;
+  }
+
+  /**
    * Clears the expired data
    */
-  public void removeExpiredData()
+  public ArrayList<ExpiredMnode> selectExpiredData()
   {
+    ArrayList<ExpiredMnode> expireList = new ArrayList<ExpiredMnode>();
+    
     CacheMapConnection conn = null;
  
     try {
       conn = getConnection();
-      PreparedStatement pstmt = conn.prepareExpire();
+      PreparedStatement pstmt = conn.prepareSelectExpire();
 
       long now = CurrentTime.getCurrentTime();
 
       pstmt.setLong(1, now);
       pstmt.setLong(2, now);
       
-      int count = pstmt.executeUpdate();
-
-      if (count > 0) {
-        log.finer(this + " expired " + count + " old data");
+      ResultSet rs = pstmt.executeQuery();
       
-        _entryCount.addAndGet(-count);
+      while (rs.next()) {
+        byte []key = rs.getBytes(1);
+        long dataId = rs.getLong(2);
+        
+        expireList.add(new ExpiredMnode(key, dataId));
       }
     } catch (Exception e) {
       e.printStackTrace();
@@ -734,6 +828,8 @@ public class MnodeStore implements AlarmListener {
     } finally {
       conn.close();
     }
+    
+    return expireList;
   }
 
   //
@@ -776,28 +872,10 @@ public class MnodeStore implements AlarmListener {
     return -1;
   }
 
-  @Override
-  public void handleAlarm(Alarm alarm)
-  {
-    if (_dataSource != null) {
-      try {
-        removeExpiredData();
-      } finally {
-        alarm.queue(_expireReaperTimeout);
-      }
-    }
-  }
-
   public void destroy()
   {
     _dataSource = null;
     _freeConn = null;
-
-    Alarm alarm = _alarm;
-    _alarm = null;
-
-    if (alarm != null)
-      alarm.dequeue();
   }
 
   private CacheMapConnection getConnection()
@@ -819,18 +897,17 @@ public class MnodeStore implements AlarmListener {
     return getClass().getSimpleName() +  "[" + _serverName + "]";
   }
 
-  class CacheMapConnection {
+  private class CacheMapConnection {
     private Connection _conn;
 
     private PreparedStatement _loadStatement;
 
     private PreparedStatement _insertStatement;
     private PreparedStatement _updateSaveStatement;
-    private PreparedStatement _updateUpdateTimeStatement;
+    private PreparedStatement _updateAccessTimeStatement;
 
-    private PreparedStatement _updateVersionStatement;
-
-    private PreparedStatement _expireStatement;
+    private PreparedStatement _selectExpireStatement;
+    private PreparedStatement _deleteStatement;
 
     private PreparedStatement _countStatement;
 
@@ -866,33 +943,33 @@ public class MnodeStore implements AlarmListener {
       return _updateSaveStatement;
     }
 
-    PreparedStatement prepareUpdateUpdateTime()
+    PreparedStatement preparedUpdateAccessTime()
       throws SQLException
     {
-      if (_updateUpdateTimeStatement == null) {
-        _updateUpdateTimeStatement
-          = _conn.prepareStatement(_updateUpdateTimeQuery);
+      if (_updateAccessTimeStatement == null) {
+        _updateAccessTimeStatement
+          = _conn.prepareStatement(_updateAccessTimeQuery);
       }
 
-      return _updateUpdateTimeStatement;
+      return _updateAccessTimeStatement;
     }
 
-    PreparedStatement prepareUpdateVersion()
+    PreparedStatement prepareSelectExpire()
       throws SQLException
     {
-      if (_updateVersionStatement == null)
-        _updateVersionStatement = _conn.prepareStatement(_updateVersionQuery);
+      if (_selectExpireStatement == null)
+        _selectExpireStatement = _conn.prepareStatement(_selectExpireQuery);
 
-      return _updateVersionStatement;
+      return _selectExpireStatement;
     }
 
-    PreparedStatement prepareExpire()
+    PreparedStatement prepareDelete()
       throws SQLException
     {
-      if (_expireStatement == null)
-        _expireStatement = _conn.prepareStatement(_expireQuery);
+      if (_deleteStatement == null)
+        _deleteStatement = _conn.prepareStatement(_deleteQuery);
 
-      return _expireStatement;
+      return _deleteStatement;
     }
 
     PreparedStatement prepareCount()
@@ -914,6 +991,34 @@ public class MnodeStore implements AlarmListener {
         } catch (SQLException e) {
         }
       }
+    }
+  }
+  
+  public static final class ExpiredMnode {
+    private final byte []_key;
+    private final long _dataId;
+    
+    ExpiredMnode(byte []key, long dataId)
+    {
+      _key = key;
+      _dataId = dataId;
+    }
+    
+    public final byte []getKey()
+    {
+      return _key;
+    }
+    
+    public final long getDataId()
+    {
+      return _dataId;
+    }
+    
+    public String toString()
+    {
+      return (getClass().getSimpleName()
+          + "[" + Hex.toHex(_key, 0, 4)
+          + "," + Long.toHexString(_dataId) + "]");
     }
   }
 }

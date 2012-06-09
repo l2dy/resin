@@ -36,10 +36,16 @@ import java.util.logging.Logger;
 
 import com.caucho.bam.BamException;
 import com.caucho.bam.NotAuthorizedException;
+import com.caucho.bam.actor.AbstractActorSender;
 import com.caucho.bam.actor.ActorHolder;
+import com.caucho.bam.actor.BamActorRef;
 import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.bam.broker.Broker;
+import com.caucho.bam.broker.ManagedBroker;
 import com.caucho.bam.client.LinkClient;
+import com.caucho.bam.manager.BamManager;
+import com.caucho.bam.manager.SimpleBamManager;
+import com.caucho.bam.proxy.BamProxyFactory;
 import com.caucho.bam.query.QueryCallback;
 import com.caucho.bam.query.QueryManager;
 import com.caucho.bam.stream.NullActor;
@@ -67,6 +73,7 @@ public class HmtpClient implements RemoteActorSender
 
   private ActorHolder _actor;
   
+  private BamManager _bamManager;
   private HmtpLinkFactory _linkFactory;
   private LinkClient _linkClient;
   
@@ -146,6 +153,8 @@ public class HmtpClient implements RemoteActorSender
     _linkClient = new LinkClient(_linkFactory, _actor);
     
     _actor.setBroker(_linkClient.getBroker());
+    
+    _bamManager = new SimpleBamManager(_linkClient.getBroker());
   }
   
   protected void connectImpl()
@@ -260,6 +269,7 @@ public class HmtpClient implements RemoteActorSender
   /**
    * Returns the address
    */
+  @Override
   public String getAddress()
   {
     return _address;
@@ -348,6 +358,12 @@ public class HmtpClient implements RemoteActorSender
   }
 
   @Override
+  public void message(BamActorRef to, Serializable payload)
+  {
+    _linkClient.getSender().message(to, payload);
+  }
+
+  @Override
   public Serializable query(String to, Serializable payload)
   {
     return _linkClient.getSender().query(to, payload);
@@ -364,11 +380,24 @@ public class HmtpClient implements RemoteActorSender
   {
     _linkClient.getSender().query(to, payload, callback);
   }
-  
+
+  @Override
+  public void query(BamActorRef to, Serializable payload, QueryCallback callback)
+  {
+    _linkClient.getSender().query(to, payload, callback);
+  }
+
   @Override
   public QueryManager getQueryManager()
   {
     return _linkClient.getSender().getQueryManager();
+  }
+  
+  public <T> T createProxy(Class<T> api, String to)
+  {
+    BamActorRef toRef = _bamManager.createActorRef(to);
+    
+    return _bamManager.createProxy(api, toRef, _linkClient.getSender());
   }
 
   @Override

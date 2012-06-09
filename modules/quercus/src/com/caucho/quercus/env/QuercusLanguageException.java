@@ -31,7 +31,7 @@ package com.caucho.quercus.env;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.lib.VariableModule;
+import com.caucho.quercus.lib.ErrorModule;
 
 /**
  * Parent of PHP exceptions
@@ -40,21 +40,30 @@ public class QuercusLanguageException extends QuercusException
 {
   private static final StringValue FILE = new ConstStringValue("file");
   private static final StringValue LINE = new ConstStringValue("line");
-  private static final StringValue MESSAGE
-    = new ConstStringValue("message");
-  
+  private static final StringValue MESSAGE = new ConstStringValue("message");
+
+  private ArrayValue _trace;
   private Value _value;
-  
+
   protected QuercusLanguageException()
   {
     _value = Env.getCurrent().wrapJava(this);
   }
-  
+
   public QuercusLanguageException(Value value)
   {
     super(value.toString());
 
     _value = value;
+  }
+  
+  public Value toException(Env env)
+  {
+    // php/0g0j
+    if (_value.isA("Exception"))
+      return _value;
+    else
+      return env.wrapJava(this);
   }
 
   /**
@@ -64,7 +73,7 @@ public class QuercusLanguageException extends QuercusException
   {
     return _value;
   }
-  
+
   /**
    * Converts the exception to a Value.
    */
@@ -72,20 +81,24 @@ public class QuercusLanguageException extends QuercusException
   {
     return _value;
   }
-  
+
   /*
    * Returns the PHP exception message.  If null, returns the empty string.
    */
   public String getMessage(Env env)
   {
     Value field = _value.getField(env, MESSAGE);
+
+    String msg;
     
     if (field != null)
-      return field.toString();
+      msg = field.toString();
     else
-      return "";
+      msg = getMessage();
+    
+    return msg + env.getStackTraceAsString(getTrace(env), getLocation(env));
   }
-  
+
   /**
    * Returns the location of this PHP exception.
    */
@@ -93,10 +106,29 @@ public class QuercusLanguageException extends QuercusException
   {
     Value file = _value.getField(env, FILE);
     Value line = _value.getField(env, LINE);
-    
+
     if (file.isNull() || line.isNull())
       return Location.UNKNOWN;
     else
       return new Location(file.toString(), line.toInt(), null, null);
+  }
+  
+  public int getLine(Env env)
+  {
+    return getLocation(env).getLineNumber();
+  }
+  
+  public String getFile(Env env)
+  {
+    return getLocation(env).getFileName();
+  }
+  
+  public ArrayValue getTrace(Env env)
+  {
+    if (_trace == null) {
+      _trace = ErrorModule.debug_backtrace_exception(env, this, 0);
+    }
+    
+    return _trace;
   }
 }

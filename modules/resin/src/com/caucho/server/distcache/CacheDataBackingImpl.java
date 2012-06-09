@@ -30,7 +30,9 @@
 package com.caucho.server.distcache;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -42,6 +44,9 @@ import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.env.health.HealthSystemFacade;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.env.service.RootDirectorySystem;
+import com.caucho.server.distcache.MnodeStore.ExpiredMnode;
+import com.caucho.util.Alarm;
+import com.caucho.util.AlarmListener;
 import com.caucho.util.HashKey;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.StreamSource;
@@ -54,11 +59,21 @@ public class CacheDataBackingImpl implements CacheDataBacking {
   private static final Logger log
     = Logger.getLogger(CacheDataBackingImpl.class.getName());
   
+  private CacheStoreManager _manager;
   private DataStore _dataStore;
   private MnodeStore _mnodeStore;
   
-  public CacheDataBackingImpl()
+  private DataRemoveActor _removeActor;
+  
+  private final AtomicLong _createCount = new AtomicLong();
+  private long _createReaperCount;
+  
+  private Alarm _reaperAlarm = new Alarm(new ReaperListener());
+  private long _reaperTimeout = 3600 * 1000;
+  
+  public CacheDataBackingImpl(CacheStoreManager storeManager)
   {
+    _manager = storeManager;
   }
   
   public void setDataStore(DataStore dataStore)
@@ -105,7 +120,7 @@ public class CacheDataBackingImpl implements CacheDataBacking {
     if (oldEntryValue == null
         || oldEntryValue.isImplicitNull()
         || oldEntryValue == MnodeEntry.NULL) {
-      if (_mnodeStore.insert(key, mnodeUpdate)) {
+      if (_mnodeStore.insert(key, mnodeUpdate, mnodeUpdate.getValueDataId())) {
         return mnodeUpdate;
       } else {
         log.fine(this + " db insert failed due to timing conflict"
@@ -114,10 +129,13 @@ public class CacheDataBackingImpl implements CacheDataBacking {
         return oldEntryValue;
       }
     } else {
-      if (_mnodeStore.updateSave(key.getHash(), mnodeUpdate)) {
+      if (_mnodeStore.updateSave(key.getHash(), 
+                                 mnodeUpdate,
+                                 mnodeUpdate.getValueDataId())) {
         return mnodeUpdate;
       }
-      else if (_mnodeStore.insert(key, mnodeUpdate)) {
+      else if (_mnodeStore.insert(key, mnodeUpdate, 
+                                  mnodeUpdate.getValueDataId())) {
         return mnodeUpdate;
       }
       else {
@@ -130,45 +148,75 @@ public class CacheDataBackingImpl implements CacheDataBacking {
   }
 
   @Override
-  public boolean putLocalValue(MnodeEntry mnodeValue,
+  public boolean putLocalValue(MnodeEntry mnodeEntry,
                                HashKey key,
-                               MnodeEntry oldEntryValue,
-                               MnodeUpdate mnodeUpdate)
+                               MnodeEntry oldEntryEntry,
+                               MnodeValue mnodeUpdate)
   {
-    if (oldEntryValue == null
-        || oldEntryValue.isImplicitNull()
-        || oldEntryValue == MnodeEntry.NULL) {
-      if (_mnodeStore.insert(key, mnodeUpdate)) {
-        return true;
+    boolean isSave = false;
+    
+    if (oldEntryEntry == null
+        || oldEntryEntry.isImplicitNull()
+        || oldEntryEntry == MnodeEntry.NULL) {
+      if (_mnodeStore.insert(key, mnodeUpdate, mnodeEntry.getValueDataId())) {
+        isSave = true;
+        
+        addCreateCount();
       } else {
         log.fine(this + " db insert failed due to timing conflict"
                  + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
       }
     } else {
-      if (_mnodeStore.updateSave(key.getHash(), mnodeUpdate)) {
-        return true;
+      if (_mnodeStore.updateSave(key.getHash(), 
+                                 mnodeUpdate,
+                                 mnodeEntry.getValueDataId())) {
+        isSave = true;
       }
-      else if (_mnodeStore.insert(key, mnodeUpdate)) {
-        return true;
+      else if (_mnodeStore.insert(key, 
+                                  mnodeUpdate,
+                                  mnodeEntry.getValueDataId())) {
+        isSave = true;
+        
+        addCreateCount();
       }
       else {
         log.fine(this + " db update failed due to timing conflict"
                  + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
       }
     }
+    
+    if (isSave && oldEntryEntry != null) {
+      long oldDataId = oldEntryEntry.getValueDataId();
 
-    return false;
+      // XXX: create delete queue?
+      if (oldDataId > 0 && mnodeEntry.getValueDataId() != oldDataId) {
+        removeData(oldDataId);
+      }
+    }
+
+    return isSave;
+  }
+  
+  private void addCreateCount()
+  {
+    _createCount.incrementAndGet();
+    
+    if (_createReaperCount < _createCount.get()) {
+      updateCreateReaperCount();
+      
+      _reaperAlarm.queue(0);
+    }
   }
   
   @Override
-  public  MnodeEntry saveLocalUpdateTime(HashKey keyHash,
-                                         MnodeEntry mnodeValue,
-                                         MnodeEntry oldMnodeValue)
+  public MnodeEntry saveLocalUpdateTime(HashKey keyHash,
+                                        MnodeEntry mnodeValue,
+                                        MnodeEntry oldMnodeValue)
   {
-    if (_mnodeStore.updateUpdateTime(keyHash,
+    if (_mnodeStore.updateAccessTime(keyHash,
                                      mnodeValue.getVersion(),
                                      mnodeValue.getAccessedExpireTimeout(),
-                                     mnodeValue.getLastModifiedTime())) {
+                                     mnodeValue.getLastAccessedTime())) {
       return mnodeValue;
     } else {
       log.fine(this + " db updateTime failed due to timing conflict"
@@ -179,32 +227,55 @@ public class CacheDataBackingImpl implements CacheDataBacking {
   }
 
   @Override
-  public boolean loadData(HashKey valueHash, WriteStream os)
+  public boolean loadData(long valueDataId,
+                          WriteStream os)
     throws IOException
   {
-    return _dataStore.load(valueHash, os);
+    return _dataStore.load(valueDataId, os);
   }
 
   @Override
-  public java.sql.Blob loadBlob(HashKey valueHash)
+  public java.sql.Blob loadBlob(long valueDataId)
   {
-    return _dataStore.loadBlob(valueHash);
+    return _dataStore.loadBlob(valueDataId);
+  }
+  
+  public long saveData(StreamSource source, int length)
+  {
+    try {
+      return _dataStore.save(source, length);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
   
   @Override
-  public boolean saveData(HashKey valueHash, StreamSource source, int length)
+  public long saveData(InputStream is, int length)
     throws IOException
   {
-    return _dataStore.save(valueHash, source, length);
+    return _dataStore.save(is, length);
+  }
+  
+  @Override
+  public boolean removeData(long dataId)
+  {
+    // return _dataStore.remove(dataId);
+    
+    _removeActor.offer(dataId);
+    
+    return true;
   }
 
   @Override
-  public boolean isDataAvailable(HashKey valueKey)
+  public boolean isDataAvailable(long valueIndex)
   {
+    return valueIndex > 0;
+    /*
     if (valueKey == null || valueKey == HashManager.NULL)
       return false;
 
-    return _dataStore.isDataAvailable(valueKey);
+    return _dataStore.isDataAvailable(valueKey, valueIndex);
+    */
   }
 
   /**
@@ -285,9 +356,15 @@ public class CacheDataBackingImpl implements CacheDataBacking {
       
       _dataStore = new DataStore(serverId, _mnodeStore);
       _dataStore.init();
+      
+      _removeActor = new DataRemoveActor(_dataStore);
+      
+      updateCreateReaperCount();
     } catch (Exception e) {
       throw ConfigException.create(e);
     }
+    
+    _reaperAlarm.queue(0);
   }
   
   private DataSource createDataSource(Path dataDirectory, String serverId)
@@ -313,19 +390,111 @@ public class CacheDataBackingImpl implements CacheDataBacking {
       throw new RuntimeException(e);
     }
   }
+  
+
+  /**
+   * Clears the expired data
+   */
+  private synchronized void removeExpiredData()
+  {
+    int removeCount = 0;
+    boolean isExpire;
+    
+    long preCount = _mnodeStore.getCount();
+    
+    do {
+      isExpire = false;
+      
+      for (ExpiredMnode data : _mnodeStore.selectExpiredData()) {
+        try {
+          if (removeData(data.getKey(), data.getDataId())) {
+            removeCount++;
+            isExpire = true;
+          }
+        } catch (Exception e) {
+          log.log(Level.FINER, e.toString(), e);
+        }
+      }
+    } while (isExpire);
+    
+    if (log.isLoggable(Level.FINE)) {
+      log.fine(this + " removed " + removeCount + " expired entries");
+    }
+        
+    /*
+    System.out.println("REMOVED: " + removeCount
+                       + " pre " + preCount
+                       + " entries " + _mnodeStore.getCount());
+                       */
+    
+  }
+  private boolean removeData(byte []key, long dataId)
+  {
+    DistCacheEntry distEntry = _manager.getCacheEntry(HashKey.create(key));
+    
+    distEntry.clear();
+
+    if (! _mnodeStore.remove(key)) {
+      return false;
+    }
+    
+    if (dataId > 0) {
+      removeData(dataId);
+    }
+    
+    return true;
+  }
+
+  private void updateCreateReaperCount()
+  {
+    long entryCount = _mnodeStore.getCount();
+    long createCount = _createCount.get();
+    
+    int delta = Math.max(1024, (int) (entryCount / 8));
+    
+    _createReaperCount = createCount + delta;
+  }
+
+  
   @Override
   public void close()
   {
+    _reaperAlarm.dequeue();
+
     MnodeStore mnodeStore = _mnodeStore;
     _mnodeStore = null;
     
     DataStore dataStore = _dataStore;
     _dataStore = null;
     
+    DataRemoveActor removeActor = _removeActor;
+    _removeActor = null;
+    
+    if (removeActor != null)
+      removeActor.close();
+    
     if (mnodeStore != null)
       mnodeStore.close();
     
     if (dataStore != null)
       dataStore.destroy();
+  }
+  
+  class ReaperListener implements AlarmListener {
+    @Override
+    public void handleAlarm(Alarm alarm)
+    {
+      updateCreateReaperCount();
+      
+      synchronized (this) {
+        try {
+          removeExpiredData();
+        } finally {
+          if (_mnodeStore != null) {
+            alarm.queue(_reaperTimeout);
+          }
+        }
+      }
+    }
   }
 }

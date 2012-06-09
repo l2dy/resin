@@ -16,7 +16,7 @@ resin_home=$(DESTDIR)@resin_home@
 JNI_INCLUDE=@JNI_INCLUDE@
 INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common -I$(resin_os)
 CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @CFLAGS_JNI@ @CFLAGS_SHLIB@
-OBJ= $(resin_os)/std.o $(resin_os)/memory.o $(resin_os)/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o stat.o mmap_file.o
+OBJ= $(resin_os)/std.o $(resin_os)/memory.o $(resin_os)/java.o jni_vfs.o profile.o heap.o lru.o symbol.o crc64.o stat.o mmap_file.o ipc.o
 
 all	: libresin.$(SO)
 
@@ -32,13 +32,14 @@ profile.o	: resin.h Makefile
 symbol.o	: resin.h Makefile
 crc64.o		: resin.h Makefile
 mmap_file.o	: resin.h Makefile
+ipc.o	: resin.h Makefile
 heap.o	: resin.h Makefile
 stat.o	: resin.h Makefile
 
 clean	:
-	- rm *.o *.lo *.la *.so *.jnilib *.dylib *.$(SO)
+	-rm *.o *.lo *.la *.so *.jnilib *.dylib *.$(SO)
 
 install	: libresin.$(SO)
-#	cp resin $(resin_home)/bin
-	- mkdir -p $(resin_home)/$(LIBEXEC)
+	@ echo "Installing pro plugin resin"
+	@ -mkdir -p $(resin_home)/$(LIBEXEC)
 	cp libresin.$(SO) $(resin_home)/$(LIBEXEC)

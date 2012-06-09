@@ -59,7 +59,7 @@ import com.caucho.loader.DynamicClassLoader;
 import com.caucho.log.EnvironmentStream;
 import com.caucho.log.LogHandlerConfig;
 import com.caucho.log.RotateStream;
-import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.network.listen.TcpPort;
 import com.caucho.security.AdminAuthenticator;
 import com.caucho.security.Authenticator;
 import com.caucho.server.cluster.ServletService;
@@ -97,7 +97,7 @@ class WatchdogManager implements AlarmListener {
   private final ResinSystem _system;
 
   private ServletService _server;
-  private TcpSocketLinkListener _httpPort;
+  private TcpPort _httpPort;
 
   private HashMap<String,WatchdogChild> _watchdogMap
     = new HashMap<String,WatchdogChild>();
@@ -207,6 +207,9 @@ class WatchdogManager implements AlarmListener {
       
     if (server == null)
       server = _watchdogMap.get(serverId);
+
+    if (server == null && "".equals(serverId))
+      server = _watchdogMap.get("default");
     
     if (server == null) {
       if (serverId == null) {
@@ -253,7 +256,7 @@ class WatchdogManager implements AlarmListener {
     NetworkListenSystem listenService 
       = _system.getService(NetworkListenSystem.class);
     
-    _httpPort = new TcpSocketLinkListener();
+    _httpPort = new TcpPort();
     _httpPort.setProtocol(new HttpProtocol());
 
     if (_watchdogPort > 0)
@@ -301,8 +304,9 @@ class WatchdogManager implements AlarmListener {
 
       HempBroker broker = HempBroker.getCurrent();
       
-      WatchdogService service
-        = new WatchdogService(this, "watchdog@admin.resin.caucho", broker);
+      WatchdogService service = new WatchdogService(this);
+      
+      broker.getBamManager().createService("watchdog@admin.resin.caucho", service);
 
 
       /*
@@ -310,7 +314,7 @@ class WatchdogManager implements AlarmListener {
       broker.setAllowNullAdminAuthenticator(true);
       */
 
-      broker.createAgent(service.getActor());
+      // broker.createAgent(service.getActor());
 
       ResinSystem.getCurrent().start();
 
@@ -443,9 +447,11 @@ class WatchdogManager implements AlarmListener {
    *
    * @param argv the command-line arguments to start the server
    */
-  void startServer(String serverId, String []argv)
+  String startServer(String cliServerId, String []argv)
     throws ConfigException
   {
+    String serverId = cliServerId;
+    
     synchronized (_watchdogMap) {
       WatchdogArgs args = new WatchdogArgs(argv, false);
 
@@ -453,29 +459,48 @@ class WatchdogManager implements AlarmListener {
       
       if (serverId == null)
         serverId = args.getServerId();
+      
+      WatchdogChild server;
 
       try {
-        readConfig(serverId, args);
+        server = readConfig(serverId, args);
       } catch (Exception e) {
         throw ConfigException.create(e);
       }
       
-      serverId = getServerId(serverId, args);
-      WatchdogChild watchdog = _watchdogMap.get(serverId);
-      
-      if (watchdog == null) {
-        // env/0fp7
-        watchdog = _watchdogMap.get("default");
-      }
-
-      if (watchdog == null)
-        throw new ConfigException(L().l("No matching <server> found for start -server '{0}' in '{1}'",
-                                        serverId, _args.getResinConf()));
-
-      watchdog.start();
+      startServer(server, serverId, args);
     }
+    
+    return serverId;
   }
 
+  void startServer(WatchdogChild watchdog,
+                   String serverId,
+                   WatchdogArgs args)
+  {
+    // server/6e09
+    String defaultServerId = getServerId(serverId, args);
+    
+    if (watchdog == null) {
+      watchdog = getWatchdog(defaultServerId);
+    }
+
+    if (watchdog == null) {
+      watchdog = getWatchdog(serverId);
+      // env/0fp7
+      
+      if (watchdog == null) {
+        watchdog = _watchdogMap.get(defaultServerId);
+      }
+    }
+
+    if (watchdog == null)
+      throw new ConfigException(L().l("No matching <server> found for start -server '{0}' in '{1}'",
+                                      defaultServerId, _args.getResinConf()));
+
+    watchdog.start();
+
+  }
   /**
    * Called from the hessian API to gracefully stop a Resin instance
    *
@@ -498,16 +523,36 @@ class WatchdogManager implements AlarmListener {
   
   private String getServerId(String serverId, WatchdogArgs args)
   {
+    /*
     if (serverId == null)
       serverId = args.getServerId();
 
-    if (args.isDynamicServer())
+    if (isDynamicServer(args)) {
       serverId = args.getDynamicServerId();
-    
+    }
+
     if (serverId == null)
       serverId = "default";
 
     return serverId;
+    */
+    if (serverId == null && ! isDynamicServer(args))
+      serverId = args.getServerId();
+    else if (serverId == null && isDynamicServer(args))
+      serverId = args.getDynamicServerId();
+
+    if (serverId == null)
+      serverId = "default";
+
+    return serverId;
+  }
+  
+  private boolean isDynamicServer(WatchdogArgs args)
+  {
+    if (args.isDynamicServer())
+      return true;
+    else
+      return false;
   }
   
   private WatchdogChild getWatchdog(String serverId)
@@ -519,7 +564,7 @@ class WatchdogManager implements AlarmListener {
         && _watchdogMap.size() == 1) {
       watchdog = _watchdogMap.values().iterator().next();
     }
-    
+
     return watchdog;
   }
 
@@ -616,19 +661,15 @@ class WatchdogManager implements AlarmListener {
       client = resin.findClient(serverId);
     else
       client = resin.findClient(serverId, args); 
-    
+
     //resin.findClient(serverId);
     if (client != null)
       serverConfig = client.getConfig();
     else
       serverConfig = resin.findServer(serverId);
 
-    if (serverConfig == null 
-        && (args.isDynamicServer() || resin.isHomeCluster())) {
-      String clusterId = resin.getHomeCluster();
-      
-      if (args.isDynamicServer())
-        clusterId = args.getClusterId();
+    if (serverConfig == null && resin.isDynamicServer(args)) {
+      String clusterId = resin.getClusterId(args);
       
       String address = args.getDynamicAddress();
       int port = args.getDynamicPort();
@@ -760,8 +801,9 @@ class WatchdogManager implements AlarmListener {
 
       JniCauchoSystem.create().initJniBackground();
 
+      String serverId = null;
       WatchdogManager manager = new WatchdogManager(argv);
-      manager.startServer(null, argv);
+      manager.startServer(serverId, argv);
 
       isValid = manager.isActive() && manager.isValid();
 

@@ -73,10 +73,16 @@ public class WebSocketOutputStream extends OutputStream
     this(os, TempBuffer.allocate().getBuffer());
   }
   
+  public void setAutoFlush(boolean isAutoFlush)
+  {
+    _isAutoFlush = isAutoFlush;
+  }
+  
   public void init()
   {
-    if (_state != MessageState.IDLE)
+    if (_state != MessageState.IDLE) {
       throw new IllegalStateException(String.valueOf(_state));
+    }
     
     _state = MessageState.FIRST;
     
@@ -160,12 +166,15 @@ public class WebSocketOutputStream extends OutputStream
     if (_state == MessageState.IDLE)
       return;
     
-    complete(true);
-    
-    _state = MessageState.IDLE;
-    
-    if (_isAutoFlush)
-      _os.flush();
+    try {
+      complete(true);
+      
+      if (_isAutoFlush) {
+        _os.flush();
+      }
+    } finally {
+      _state = MessageState.IDLE;
+    }
   }
 
   private void complete(boolean isFinal)

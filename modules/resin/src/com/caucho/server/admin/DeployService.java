@@ -29,21 +29,29 @@
 
 package com.caucho.server.admin;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.annotation.PostConstruct;
 
 import com.caucho.config.Service;
 import com.caucho.loader.EnvironmentLocal;
+import com.caucho.server.deploy.DeployActor;
 
 @Service
 public class DeployService
 {
+  private static final Logger log 
+    = Logger.getLogger(DeployService.class.getName());
+  
   private static EnvironmentLocal<DeployActor> _localDeployActor
     = new EnvironmentLocal<DeployActor>();
 
   public DeployService()
   {
-    if (_localDeployActor.get() == null)
-      _localDeployActor.set(new DeployActor());
+    if (_localDeployActor.get() == null) {
+      _localDeployActor.set(createDeployActor());
+    }
   }
   
   public DeployActor getCurrentDeployActor()
@@ -55,5 +63,22 @@ public class DeployService
   public void init()
   {
     _localDeployActor.get().init();
+  }
+  
+  private DeployActor createDeployActor()
+  {
+    try {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+      
+      Class<?> cl = Class.forName("com.caucho.server.deploy.ProDeployActor",
+                                  false,
+                                  loader);
+      
+      return (DeployActor) cl.newInstance();
+    } catch (Exception e) {
+      log.log(Level.FINEST, e.toString(), e);
+    }
+    
+    return new DeployActor();
   }
 }

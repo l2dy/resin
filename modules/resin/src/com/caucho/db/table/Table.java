@@ -29,20 +29,26 @@
 
 package com.caucho.db.table;
 
+import java.io.IOException;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.caucho.db.Database;
 import com.caucho.db.block.Block;
 import com.caucho.db.block.BlockStore;
 import com.caucho.db.index.BTree;
 import com.caucho.db.index.KeyCompare;
-// import com.caucho.db.lock.Lock;
+import com.caucho.db.jdbc.GeneratedKeysResultSet;
 import com.caucho.db.sql.CreateQuery;
 import com.caucho.db.sql.Expr;
 import com.caucho.db.sql.Parser;
 import com.caucho.db.sql.QueryContext;
 import com.caucho.db.xa.DbTransaction;
-import com.caucho.env.thread.AbstractTaskWorker;
 import com.caucho.inject.Module;
-import com.caucho.util.Alarm;
+import com.caucho.util.BitsUtil;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.SQLExceptionWrapper;
@@ -52,29 +58,17 @@ import com.caucho.vfs.TempBuffer;
 import com.caucho.vfs.TempStream;
 import com.caucho.vfs.WriteStream;
 
-import java.io.IOException;
-import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.atomic.AtomicLongArray;
-import java.util.concurrent.locks.Lock;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 /**
  * Table format:
  *
  * <pre>
  * Block 0: allocation table
- * Block 1: fragment table
- * Block 2: table definition
+ * Block 1: table definition
  *   0    - store data
  *   1024 - table data
  *    1024 - index pointers
  *   2048 - CREATE text
- * Block 3: first data
+ * Block 2: first data
  * </pre>
  */
 @Module
@@ -83,22 +77,27 @@ public class Table extends BlockStore {
     = Logger.getLogger(Table.class.getName());
   private final static L10N L = new L10N(Table.class);
 
-  private final static int ROOT_DATA_OFFSET = STORE_CREATE_END;
-  private final static int INDEX_ROOT_OFFSET = ROOT_DATA_OFFSET + 32;
+  private final static int TABLE_DATA_OFFSET = STORE_CREATE_END;
+  
+  private final static int STARTUP_TIMESTAMP_OFFSET = TABLE_DATA_OFFSET;
+  private final static int SHUTDOWN_TIMESTAMP_OFFSET = TABLE_DATA_OFFSET + 8;
+  private final static int TABLE_DATA_END = SHUTDOWN_TIMESTAMP_OFFSET + 8;
+  
+  private final static int ROOT_DATA_OFFSET = TABLE_DATA_END;
+  
+  private final static int INDEX_ROOT_OFFSET = ROOT_DATA_OFFSET + 768;
 
   private final static int ROOT_DATA_END = ROOT_DATA_OFFSET + 1024;
 
   public final static int INLINE_BLOB_SIZE = 120;
 
-  public final static long ROW_CLOCK_MIN = 1024;
-
   public final static byte ROW_VALID = 0x1;
   public final static byte ROW_ALLOC = 0x2;
   public final static byte ROW_MASK = 0x3;
 
-  private final static String DB_VERSION = "Resin-DB 4.0.25";
-  private final static String MIN_VERSION = "Resin-DB 4.0.25";
-
+  private final static String DB_VERSION = "Resin-DB 4.0.28";
+  private final static String MIN_VERSION = "Resin-DB 4.0.28";
+  
   private final Row _row;
 
   private final int _rowLength;
@@ -107,34 +106,14 @@ public class Table extends BlockStore {
 
   private final Constraint[]_constraints;
 
+  private final Column _identityColumn;
   private final Column _autoIncrementColumn;
+  
+  private long _startupTimestamp;
 
-  private long _entries;
-
-  private static final int FREE_ROW_BLOCK_SIZE = 256;
-  private final AtomicLongArray _insertFreeRowBlockArray
-    = new AtomicLongArray(FREE_ROW_BLOCK_SIZE);
-  private final AtomicInteger _insertFreeRowBlockHead
-    = new AtomicInteger();
-  private final AtomicInteger _insertFreeRowBlockTail
-    = new AtomicInteger();
-
-  private long _rowTailTop = BlockStore.BLOCK_SIZE * FREE_ROW_BLOCK_SIZE;
-  private final AtomicLong _rowTailOffset = new AtomicLong();
-
-  private final RowAllocator _rowAllocator = new RowAllocator();
+  private final TableRowAllocator _rowAllocator;
   
   private final AtomicLong _rowDeleteCount = new AtomicLong();
-
-  // clock counters for row insert allocation
-  private long _rowClockTop;
-  private long _rowClockOffset;
-
-  private long _clockRowFree;
-  private long _clockRowUsed;
-  
-  private long _clockBlockFree;
-  private long _clockRowDeleteCount;
 
   private long _autoIncrementValue = -1;
 
@@ -151,16 +130,25 @@ public class Table extends BlockStore {
 
     Column []columns = _row.getColumns();
     Column autoIncrementColumn = null;
+    Column identityColumn = null;
+    
     for (int i = 0; i < columns.length; i++) {
       columns[i].setTable(this);
 
       if (columns[i].getAutoIncrement() >= 0)
         autoIncrementColumn = columns[i];
+      
+      if (columns[i] instanceof IdentityColumn) {
+        identityColumn = columns[i];
+      }
     }
+    
     _autoIncrementColumn = autoIncrementColumn;
+    _identityColumn = identityColumn;
 
     //new Lock("table-insert:" + name);
     //new Lock("table-alloc:" + name);
+    _rowAllocator = new TableRowAllocator(this);
   }
 
   Row getRow()
@@ -182,6 +170,14 @@ public class Table extends BlockStore {
   int getRowEnd()
   {
     return _rowEnd;
+  }
+
+  /**
+   * Returns the end of the row
+   */
+  int getRowsPerBlock()
+  {
+    return _rowsPerBlock;
   }
 
   public final Column []getColumns()
@@ -268,7 +264,7 @@ public class Table extends BlockStore {
     ReadStream is = path.openRead();
     try {
       // skip allocation table and fragment table
-      is.skip(DATA_START + ROOT_DATA_OFFSET);
+      is.skip(METADATA_START + ROOT_DATA_OFFSET);
 
       StringBuilder sb = new StringBuilder();
       int ch;
@@ -295,7 +291,7 @@ public class Table extends BlockStore {
     is = path.openRead();
     try {
       // skip allocation table and fragment table
-      is.skip(DATA_START + ROOT_DATA_END);
+      is.skip(METADATA_START + ROOT_DATA_END);
 
       StringBuilder cb = new StringBuilder();
 
@@ -321,12 +317,22 @@ public class Table extends BlockStore {
                                 factory.getConstraints());
 
         table.init();
+        
+        if (! table.isShutdownTimestampValid()) {
+          log.info(L.l("{0} validating indexes due to unclean shutdown.",
+                       table));
 
-        //if (! table.validateIndexesSafe()) {
-          table.clearIndexes();
-          table.initIndexes();
-          table.rebuildIndexes();
-        //}
+          if (! table.readIndexes() || ! table.validateIndexesSafe()) {
+            log.warning(L.l("rebuilding indexes for '{0}' because they did not properly validate on startup.",
+                            table));
+          
+            table.clearIndexes();
+            table.createIndexes();
+            table.rebuildIndexes();
+          }
+        }
+        
+        table.writeStartupTimestamp();
 
         return table;
       } catch (Exception e) {
@@ -349,7 +355,7 @@ public class Table extends BlockStore {
   {
     super.create();
 
-    initIndexes();
+    createIndexes();
 
     byte []tempBuffer = new byte[BLOCK_SIZE];
 
@@ -391,14 +397,80 @@ public class Table extends BlockStore {
     getReadWrite().writeBlock(BLOCK_SIZE, tempBuffer, 0, BLOCK_SIZE, isPriority);
 
     _database.addTable(this);
+    
+    writeStartupTimestamp();
+  }
+  
+  private void writeStartupTimestamp()
+    throws IOException
+  {
+    _startupTimestamp = CurrentTime.getCurrentTime();
+    int offset = STARTUP_TIMESTAMP_OFFSET;
+    
+    writeTimestamp(offset, _startupTimestamp);
+  }
+  
+  private void writeShutdownTimestamp()
+    throws IOException
+  {
+    int offset = SHUTDOWN_TIMESTAMP_OFFSET;
+    
+    writeTimestamp(offset, _startupTimestamp);
+  }
+  
+  private void writeTimestamp(int offset, long timestamp)
+    throws IOException
+  {
+    long metaBlockAddress = METADATA_START;
+    Block metaBlock = readBlock(metaBlockAddress);
+    try {
+      byte []buffer = metaBlock.getBuffer();
+      
+      _startupTimestamp = CurrentTime.getCurrentTime();
+      
+      BitsUtil.writeLong(buffer, offset, timestamp);
+      
+      metaBlock.setDirty(offset, offset + 8);
+      
+      metaBlock.commit();
+    } finally {
+      metaBlock.free();
+    }
+  }
+  
+  private boolean isShutdownTimestampValid()
+    throws IOException
+  {
+    long metaBlockAddress = METADATA_START;
+    Block metaBlock = readBlock(metaBlockAddress);
+    
+    try {
+      byte []buffer = metaBlock.getBuffer();
+      
+      int startupOffset = STARTUP_TIMESTAMP_OFFSET;
+      
+      long startupTimestamp
+        = BitsUtil.readLong(buffer, STARTUP_TIMESTAMP_OFFSET);
+      
+      long shutdownTimestamp
+        = BitsUtil.readLong(buffer, SHUTDOWN_TIMESTAMP_OFFSET);
+      
+      
+      return startupTimestamp == shutdownTimestamp && startupTimestamp != 0;
+    } finally {
+      metaBlock.free();
+    }
   }
 
+
   /**
-   * Initialize the indexes
+   * Creates the indexes
    */
-  private void initIndexes()
+  private void createIndexes()
     throws IOException, SQLException
   {
+    int indexCount = 0;
+    
     Column []columns = _row.getColumns();
     for (int i = 0; i < columns.length; i++) {
       Column column = columns[i];
@@ -419,7 +491,70 @@ public class Table extends BlockStore {
                               keyCompare);
 
       column.setIndex(btree);
+      
+      long metaBlockAddress = METADATA_START;
+      Block metaBlock = readBlock(metaBlockAddress);
+      try {
+        byte []buffer = metaBlock.getBuffer();
+        
+        int newIndexCount = indexCount++;
+        
+        int offset = newIndexCount * 8 + INDEX_ROOT_OFFSET;
+        
+        BitsUtil.writeLong(buffer, offset, rootBlockId);
+      } finally {
+        metaBlock.free();
+      }
     }
+  }
+
+  /**
+   * Creates the indexes
+   */
+  private boolean readIndexes()
+    throws IOException, SQLException
+  {
+    int indexCount = 0;
+    
+    Column []columns = _row.getColumns();
+    for (int i = 0; i < columns.length; i++) {
+      Column column = columns[i];
+
+      if (! column.isUnique())
+        continue;
+
+      KeyCompare keyCompare = column.getIndexKeyCompare();
+
+      if (keyCompare == null)
+        continue;
+      
+      long rootBlockId = -1;
+      
+      long metaBlockAddress = METADATA_START;
+      Block metaBlock = readBlock(metaBlockAddress);
+      try {
+        byte []buffer = metaBlock.getBuffer();
+        
+        int newIndexCount = indexCount++;
+        
+        int offset = newIndexCount * 8 + INDEX_ROOT_OFFSET;
+        
+        rootBlockId = BitsUtil.readLong(buffer, offset);
+        
+        if (! isIndexBlock(rootBlockId)) {
+          return false;
+        }
+      } finally {
+        metaBlock.free();
+      }
+
+      BTree btree = new BTree(this, rootBlockId, column.getLength(),
+                              keyCompare);
+
+      column.setIndex(btree);
+    }
+    
+    return true;
   }
 
   /**
@@ -477,16 +612,17 @@ public class Table extends BlockStore {
       iter.init(xa);
 
       Column []columns = _row.getColumns();
-
+      
       while (iter.nextBlock()) {
         iter.initRow();
 
         byte []blockBuffer = iter.getBuffer();
 
         while (iter.nextRow()) {
+          long rowAddress = iter.getRowAddress();
+          int rowOffset = iter.getRowOffset();
+          
           try {
-            long rowAddress = iter.getRowAddress();
-            int rowOffset = iter.getRowOffset();
             
             if (! isValid(blockBuffer, rowOffset, columns)) {
               log.warning(this + ": removing corrupted row"
@@ -495,7 +631,7 @@ public class Table extends BlockStore {
               iter.delete();
               continue;
             }
-
+            
             for (int i = 0; i < columns.length; i++) {
               Column column = columns[i];
 
@@ -507,7 +643,15 @@ public class Table extends BlockStore {
               column.setIndex(xa, blockBuffer, rowOffset, rowAddress, null);
             }
           } catch (Exception e) {
-            log.log(Level.WARNING, e.toString(), e);
+            log.warning(this + " deleting row because of index rebuild failure: "
+                        + Long.toHexString(rowAddress)
+                        + "\n  " + e);
+            
+            if (log.isLoggable(Level.FINER)) {
+              log.log(Level.FINER, e.toString(), e);
+            }
+            
+            iter.deleteRowOnly();
           }
         }
       }
@@ -545,11 +689,18 @@ public class Table extends BlockStore {
   private boolean validateIndexesSafe()
   {
     try {
-      validateIndexes();
+      if (! validateIndexes()) {
+        return false;
+      }
       
       return true;
     } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      if (log.isLoggable(Level.FINER)) {
+        log.log(Level.FINER, e.toString(), e);
+      }
+      else { 
+        log.warning(e.toString());
+      }
     }
     
     return false;
@@ -561,6 +712,31 @@ public class Table extends BlockStore {
   private boolean validateIndexes()
     throws IOException, SQLException
   {
+    final Column []columns = _row.getColumns();
+    
+    boolean isIndex = false;
+    
+    for (Column column : columns) {
+      if (column.getIndex() != null)
+        isIndex = true;
+    }
+    
+    if (! isIndex) {
+      return true;
+    }
+    
+    return validateIndexByRow();
+  }
+  
+    
+  /*
+   * Rebuilds the indexes
+   */
+  private boolean validateIndexByRow()
+    throws IOException, SQLException
+  {
+    final Column []columns = _row.getColumns();
+    
     boolean isValid = false;
     
     DbTransaction xa = DbTransaction.create();
@@ -572,8 +748,6 @@ public class Table extends BlockStore {
       iter = createTableIterator();
 
       iter.init(xa);
-
-      Column []columns = _row.getColumns();
 
       while (iter.nextBlock()) {
         iter.initRow();
@@ -750,7 +924,7 @@ public class Table extends BlockStore {
     } catch (IOException e) {
       throw new SQLExceptionWrapper(e);
     }
-
+    
     synchronized (this) {
       if (_autoIncrementValue < max)
         _autoIncrementValue = max;
@@ -778,11 +952,11 @@ public class Table extends BlockStore {
 
     try {
       while (true) {
-        long blockId = allocateInsertRowBlock();
+        long blockId = _rowAllocator.allocateInsertRowBlock();
 
         block = xa.loadBlock(this, blockId);
 
-        int rowOffset = allocateRow(block, xa);
+        int rowOffset = _rowAllocator.allocateRow(block, xa);
 
         if (rowOffset >= 0) {
           insertRow(queryContext, xa, columns, values,
@@ -790,7 +964,7 @@ public class Table extends BlockStore {
 
           block.saveAllocation();
           
-          freeRowBlockId(blockId);
+          _rowAllocator.freeRowBlockId(blockId);
 
           return blockIdToAddress(blockId, rowOffset);
         }
@@ -805,35 +979,6 @@ public class Table extends BlockStore {
       if (block != null)
         block.free();
     }
-  }
-
-  private int allocateRow(Block block, DbTransaction xa)
-    throws IOException, SQLException, InterruptedException
-  {
-    Lock blockLock = block.getWriteLock();
-
-    blockLock.tryLock(xa.getTimeout(), TimeUnit.MILLISECONDS);
-    try {
-      block.read();
-
-      byte []buffer = block.getBuffer();
-
-      int rowOffset = 0;
-
-      for (; rowOffset < _rowEnd; rowOffset += _rowLength) {
-        if (buffer[rowOffset] == 0) {
-          buffer[rowOffset] = ROW_ALLOC;
-
-          block.setDirty(rowOffset, rowOffset + 1);
-
-          return rowOffset;
-        }
-      }
-    } finally {
-      blockLock.unlock();
-    }
-
-    return -1;
   }
 
   public void insertRow(QueryContext queryContext, DbTransaction xa,
@@ -889,20 +1034,35 @@ public class Table extends BlockStore {
         buffer[rowOffset] = (byte) ((buffer[rowOffset] & ~ROW_MASK) | ROW_VALID);
 
         xa.addUpdateBlock(block);
+        
+        long autoId = 0;
 
         if (_autoIncrementColumn != null) {
           long blockId = iter.getBlockId();
           
-          long value = _autoIncrementColumn.getLong(blockId, buffer, rowOffset);
+          autoId = _autoIncrementColumn.getLong(blockId, buffer, rowOffset);
 
           synchronized (this) {
-            if (_autoIncrementValue < value)
-              _autoIncrementValue = value;
+            if (_autoIncrementValue < autoId)
+              _autoIncrementValue = autoId;
           }
         }
-
+        
         block.setDirty(rowOffset, rowOffset + _rowLength);
-        _entries++;
+        
+        GeneratedKeysResultSet rs = queryContext.getGeneratedKeysResultSet();
+        
+        if (rs != null) {
+          if (_autoIncrementColumn != null) {
+            rs.setColumn(1, _autoIncrementColumn);
+            rs.setLong(1, autoId);
+            
+          }
+          else if (_identityColumn != null) {
+            rs.setColumn(1, _identityColumn);
+            rs.setLong(1, rowAddr);
+          }
+        }
 
         isOkay = true;
       } catch (SQLException e) {
@@ -918,204 +1078,6 @@ public class Table extends BlockStore {
       }
     } finally {
       queryContext.unlock();
-    }
-  }
-
-  //
-  // row allocation
-  //
-
-  private long allocateInsertRowBlock()
-    throws IOException
-  {
-    long blockId = allocateRowBlockId();
-
-    if (blockId != 0) {
-      return blockId;
-    }
-
-    long rowTailOffset = _rowTailOffset.get();
-
-    blockId = firstRowBlock(rowTailOffset);
-
-    if (blockId <= 0) {
-      Block block = allocateRow();
-
-      blockId = block.getBlockId();
-      // System.out.println("ALLOC: " + blockId + " " + _rowTailOffset.get() + " " + _rowTailTop);
-
-      block.free();
-    }
-
-    _rowTailOffset.compareAndSet(rowTailOffset, blockId + BLOCK_SIZE);
-    
-    return blockId;
-  }
-
-  //
-  // allocator
-  //
-
-  private void fillFreeRows()
-  {
-    if (_rowTailOffset.get() < _rowTailTop && isClosed())
-      return;
-    
-    while (scanClock()) {
-      if (! resetClock()) {
-        return;
-      }
-    }
-  }
-  
-  private boolean scanClock()
-  {
-    while (! isClosed () && isFreeRowBlockIdAvailable()) {
-      long clockBlockId = _rowClockOffset;
-
-      try {
-        clockBlockId = firstRowBlock(clockBlockId);
-        
-        if (clockBlockId < 0) {
-          _rowClockOffset = _rowClockTop;
-          
-          return true;
-        }
-
-        if (isRowBlockFree(clockBlockId)) {
-          _clockBlockFree++;
-          freeRowBlockId(clockBlockId);
-        }
-      } catch (IOException e) {
-        log.log(Level.FINE, e.toString(), e);
-
-        clockBlockId = _rowClockTop;
-      } finally {
-        _rowClockOffset = clockBlockId + BlockStore.BLOCK_SIZE;
-      }
-    }
-    
-    return false;
-  }
-
-  private boolean resetClock()
-  {
-    // force 50% free rows before clock starts again
-    long newRowCount = (_clockRowUsed - _clockRowFree) / _rowsPerBlock;
-    long deleteRowCount = (_rowDeleteCount.get() - _clockRowDeleteCount) / _rowsPerBlock;
-
-    if (_clockRowFree < ROW_CLOCK_MIN && _rowClockOffset > 0) {
-      // minimum 256 blocks of free rows
-      newRowCount = ROW_CLOCK_MIN;
-    }
-    else if (deleteRowCount < ROW_CLOCK_MIN) {
-      // if none deleted, don't clock
-      newRowCount = ROW_CLOCK_MIN;
-    }
-    
-    if (newRowCount > 0) {
-      _rowTailTop = _rowTailOffset.get() + newRowCount * _rowLength;
-      _rowClockOffset = _rowTailTop;
-      
-      return false;
-    }
-    else {
-      // System.out.println("RESET: used=" + _clockRowUsed + " free=" + _clockRowFree + " top=" + _rowTailTop);
-
-      _rowClockOffset = 0;
-      _rowClockTop = _rowTailOffset.get();
-      _clockRowUsed = 0;
-      _clockRowFree = 0;
-      _clockRowDeleteCount = _rowDeleteCount.get();
-      
-      return true;
-    }
-  }
-  
-  /**
-   * Test if any row in the block is free
-   */
-  private boolean isRowBlockFree(long blockId)
-    throws IOException
-  {
-    if (isClosed())
-      return false;
-    
-    Block block = readBlock(blockId);
-
-    try {
-      int rowOffset = 0;
-
-      byte []buffer = block.getBuffer();
-      boolean isFree = false;
-
-      for (; rowOffset < _rowEnd; rowOffset += _rowLength) {
-        if (buffer[rowOffset] == 0) {
-          isFree = true;
-          _clockRowFree++;
-        }
-        else
-          _clockRowUsed++;
-      }
-
-      return isFree;
-    } finally {
-      block.free();
-    }
-  }
-
-  private boolean isFreeRowBlockIdAvailable()
-  {
-    int head = _insertFreeRowBlockHead.get();
-    int tail = _insertFreeRowBlockTail.get();
-    
-    return (head + 1) % FREE_ROW_BLOCK_SIZE != tail;
-  }
-
-  private long allocateRowBlockId()
-  {
-    while (true) {
-      int tail = _insertFreeRowBlockTail.get();
-      int head = _insertFreeRowBlockHead.get();
-      
-      if (head == tail) {
-        _rowAllocator.wake();
-        return 0;
-      }
-    
-      long blockId = _insertFreeRowBlockArray.getAndSet(tail, 0);
-      
-      int nextTail = (tail + 1) % FREE_ROW_BLOCK_SIZE;
-      
-      _insertFreeRowBlockTail.compareAndSet(tail, nextTail);
-      
-      if (blockId > 0) {
-        int size = (head - tail + FREE_ROW_BLOCK_SIZE) % FREE_ROW_BLOCK_SIZE;
-        
-        if (2 * size < FREE_ROW_BLOCK_SIZE) {
-          _rowAllocator.wake();
-        }
-        
-        return blockId;
-      }
-    }
-  }
-
-  private void freeRowBlockId(long blockId)
-  {
-    while (true) {
-      int head = _insertFreeRowBlockHead.get();
-      int tail = _insertFreeRowBlockTail.get();
-      
-      int nextHead = (head + 1) % FREE_ROW_BLOCK_SIZE;
-      
-      if (nextHead == tail)
-        return;
-      
-      _insertFreeRowBlockHead.compareAndSet(head, nextHead);
-      
-      if (_insertFreeRowBlockArray.compareAndSet(head, 0, blockId))
-        return;
     }
   }
 
@@ -1175,9 +1137,25 @@ public class Table extends BlockStore {
     _rowDeleteCount.incrementAndGet();
   }
 
+  /**
+   * @return
+   */
+  public long getRowDeleteCount()
+  {
+    return _rowDeleteCount.get();
+  }
+
   @Override
   public void close()
   {
+    try {
+      if (fsync()) {
+        writeShutdownTimestamp();
+      }
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
+    
     _row.close();
 
     super.close();
@@ -1204,15 +1182,5 @@ public class Table extends BlockStore {
     int id = CurrentTime.isTest() ? 1 : getId();
     
     return getClass().getSimpleName() + "[" + getName() + ":" + id + "]";
-  }
-
-  class RowAllocator extends AbstractTaskWorker {
-    @Override
-    public long runTask()
-    {
-      fillFreeRows();
-      
-      return -1;
-    }
   }
 }

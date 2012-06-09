@@ -31,14 +31,14 @@ package com.caucho.quercus.lib.db;
 
 import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.annotation.Optional;
-import com.caucho.quercus.annotation.ReturnNullAsFalse;
+import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.EnvCleanup;
 import com.caucho.quercus.env.LongValue;
-import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
 import com.caucho.util.L10N;
 
@@ -46,10 +46,7 @@ import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -84,7 +81,6 @@ public class PDO implements EnvCleanup {
   public static final int ATTR_MAX_COLUMN_LEN = 18;
   public static final int ATTR_DEFAULT_FETCH_MODE = 19;
   public static final int ATTR_EMULATE_PREPARES = 20;
-
 
   public static final int CASE_NATURAL = 0;
   public static final int CASE_UPPER = 1;
@@ -126,6 +122,8 @@ public class PDO implements EnvCleanup {
 
   public static final int FETCH_PROPS_LATE = 1048576;
 
+  public static final int MYSQL_ATTR_USE_BUFFERED_QUERY = 1000;
+
   public static final int NULL_NATURAL = 0;
   public static final int NULL_EMPTY_STRING = 1;
   public static final int NULL_TO_STRING = 2;
@@ -147,55 +145,67 @@ public class PDO implements EnvCleanup {
 
   public static final int PARAM_INPUT_OUTPUT = 0x80000000;
 
-  private final Env _env;
   private final String _dsn;
-  private String _user;
-  private String _password;
+
+  private JdbcConnectionResource _conn;
 
   private final PDOError _error;
 
-  private Connection _conn;
-
-  private Statement _lastStatement;
   private PDOStatement _lastPDOStatement;
-  private String _lastInsertId;
+  private PDOStatement _lastExecutedStatement;
 
   private boolean _inTransaction;
-  
-  private static String ENCODING = "ISO8859_1";
+
+  private String _statementClassName;
+  private Value[] _statementClassArgs;
+
+  private int _columnCase = JdbcResultResource.COLUMN_CASE_NATURAL;
 
   public PDO(Env env,
              String dsn,
-             @Optional("null") String user,
-             @Optional("null") String password,
-             @Optional ArrayValue options)
+             @Optional String user,
+             @Optional String pass,
+             @Optional @ReadOnly ArrayValue options)
   {
-    _env = env;
     _dsn = dsn;
-    _user = user;
-    _password = password;
-    _error = new PDOError(_env);
+    _error = new PDOError();
+
+    if (options != null) {
+      for (Map.Entry<Value,Value> entry : options.entrySet()) {
+        setAttribute(env, entry.getKey().toInt(), entry.getValue());
+      }
+    }
 
     // XXX: following would be better as annotation on destroy() method
-    _env.addCleanup(this);
+    env.addCleanup(this);
 
     try {
-      DataSource ds = getDataSource(env, dsn);
+      JdbcConnectionResource conn = getConnection(env, dsn, user, pass);
+      _conn = conn;
 
-      if (ds == null) {
+      if (conn == null) {
         env.warning(L.l("'{0}' is an unknown PDO data source.", dsn));
       }
-      else if (_user != null && ! "".equals(_user))
-        _conn = ds.getConnection(_user, _password);
-      else
-        _conn = ds.getConnection();
-    } catch (RuntimeException e) {
-      throw e;
-    } catch (Exception e) {
-
-      env.warning(e.getMessage(), e);
-      _error.error(e);
     }
+    catch (SQLException e) {
+      env.warning(e.getMessage(), e);
+      _error.error(env, e);
+    }
+  }
+
+  protected JdbcConnectionResource getConnection()
+  {
+    return _conn;
+  }
+
+  protected boolean isConnected()
+  {
+    return _conn != null && _conn.isConnected();
+  }
+
+  protected void setLastExecutedStatement(PDOStatement stmt)
+  {
+    _lastExecutedStatement = stmt;
   }
 
   /**
@@ -203,40 +213,28 @@ public class PDO implements EnvCleanup {
    */
   public boolean beginTransaction()
   {
-    if (_conn == null)
+    JdbcConnectionResource conn = getConnection();
+
+    if (! isConnected())
       return false;
 
-    if (_inTransaction)
+    if (_inTransaction) {
       return false;
+    }
 
     _inTransaction = true;
 
-    try {
-      _conn.setAutoCommit(false);
-      return true;
-    }
-    catch (SQLException e) {
-      _error.error(e);
-      return false;
-    }
+    return conn.setAutoCommit(false);
   }
 
   private void closeStatements()
   {
-    Statement lastStatement = _lastStatement;
-
-    _lastInsertId = null;
-    _lastStatement = null;
+    PDOStatement stmt = _lastPDOStatement;
     _lastPDOStatement = null;
 
-    try {
-      if (lastStatement != null)
-        lastStatement.close();
+    if (stmt != null) {
+      stmt.close();
     }
-    catch (Throwable t) {
-      log.log(Level.WARNING, t.toString(), t);
-    }
-
   }
 
   /**
@@ -244,26 +242,20 @@ public class PDO implements EnvCleanup {
    */
   public boolean commit()
   {
-    if (_conn == null)
-      return false;
+    JdbcConnectionResource conn = getConnection();
 
-    if (! _inTransaction)
+    if (conn == null) {
       return false;
+    }
+
+    if (! _inTransaction) {
+      return false;
+    }
 
     _inTransaction = false;
 
-    boolean result = false;
-    try {
-      _conn.commit();
-      _conn.setAutoCommit(true);
-
-      return true;
-    }
-    catch (SQLException e) {
-      _error.error(e);
-    }
-
-    return result;
+    conn.commit();
+    return conn.setAutoCommit(true);
   }
 
   public void close()
@@ -276,99 +268,58 @@ public class PDO implements EnvCleanup {
    */
   public void cleanup()
   {
-    Connection conn = _conn;
-
+    JdbcConnectionResource conn = _conn;
     _conn = null;
 
     closeStatements();
 
     if (conn != null) {
-      try {
-        conn.close();
-      }
-      catch (SQLException e) {
-        log.log(Level.WARNING, e.toString(), e);
-      }
+      conn.close();
     }
   }
 
   public String errorCode()
   {
-    return _error.errorCode();
+    return _error.getErrorCode();
   }
 
   public ArrayValue errorInfo()
   {
-    return _error.errorInfo();
+    return _error.getErrorInfo();
+  }
+
+  protected int getColumnCase()
+  {
+    return _columnCase;
   }
 
   /**
    * Executes a statement, returning the number of rows.
    */
-  public int exec(String query)
-    throws SQLException
+  public Value exec(Env env, String query)
   {
-    if (_conn == null)
-      return -1;
+    _error.clear();
 
-    closeStatements();
+    JdbcConnectionResource conn = getConnection();
 
-    Statement stmt = null;
-
-    int rowCount;
-
-    try {
-      stmt = _conn.createStatement();
-      stmt.setEscapeProcessing(false);
-
-      if (stmt.execute(query)) {
-        ResultSet resultSet = null;
-
-        try {
-          resultSet = stmt.getResultSet();
-
-          resultSet.last();
-
-          rowCount = resultSet.getRow();
-
-          _lastStatement = stmt;
-
-          stmt = null;
-        }
-        finally {
-          try {
-            if (resultSet != null)
-              resultSet.close();
-          }
-          catch (SQLException e) {
-            log.log(Level.FINER, e.toString(), e);
-          }
-        }
-      }
-      else {
-        rowCount = stmt.getUpdateCount();
-
-        _lastStatement = stmt;
-
-        stmt = null;
-      }
-    } catch (SQLException e) {
-      _error.error(e);
-
-      return -1;
-    } finally {
-      try {
-        if (stmt != null)
-          stmt.close();
-      } catch (SQLException e) {
-        log.log(Level.FINER, e.toString(), e);
-      }
+    if (! conn.isConnected()) {
+      return BooleanValue.FALSE;
     }
 
-    return rowCount;
+    try {
+      PDOStatement stmt = new PDOStatement(env, this, _error, query, false, null, true);
+      _lastExecutedStatement = stmt;
+
+      return LongValue.create(conn.getAffectedRows());
+    }
+    catch (SQLException e) {
+      _error.error(env, e);
+
+      return BooleanValue.FALSE;
+    }
   }
 
-  public Value getAttribute(int attribute)
+  public Value getAttribute(Env env, int attribute)
   {
     switch (attribute) {
       case ATTR_AUTOCOMMIT:
@@ -390,47 +341,43 @@ public class PDO implements EnvCleanup {
       case ATTR_PREFETCH:
         return LongValue.create(getPrefetch());
       case ATTR_SERVER_INFO:
-        return StringValue.create(getServerInfo());
+        return getServerInfo(env);
       case ATTR_SERVER_VERSION:
-        return StringValue.create(getServerVersion());
+        return getServerVersion(env);
       case ATTR_TIMEOUT:
         return LongValue.create(getTimeout());
 
       default:
-        _error.unsupportedAttribute(attribute);
+        _error.unsupportedAttribute(env, attribute);
         // XXX: check what php does
         return BooleanValue.FALSE;
-
     }
   }
 
   public static ArrayValue getAvailableDrivers()
   {
     ArrayValue array = new ArrayValueImpl();
-    
+
     array.put("mysql");
     array.put("pgsql");
     array.put("java");
     array.put("jdbc");
-    
+
     return array;
   }
-  
+
   /**
    * Returns the auto commit value for the connection.
    */
   private boolean getAutocommit()
   {
-    if (_conn == null)
-      return true;
+    JdbcConnectionResource conn = getConnection();
 
-    try {
-      return _conn.getAutoCommit();
-    }
-    catch (SQLException e) {
-      _error.error(e);
+    if (conn == null) {
       return true;
     }
+
+    return conn.getAutoCommit();
   }
 
   public int getCase()
@@ -453,15 +400,28 @@ public class PDO implements EnvCleanup {
     throw new UnimplementedException();
   }
 
-  private String getServerInfo()
+  private Value getServerInfo(Env env)
   {
-    throw new UnimplementedException();
+    throw new UnimplementedException("PDO::ATTR_SERVER_INFO");
   }
 
   // XXX: might be int return
-  private String getServerVersion()
+  private Value getServerVersion(Env env)
   {
-    throw new UnimplementedException();
+    if (_conn == null) {
+      return BooleanValue.FALSE;
+    }
+
+    try {
+      String info = _conn.getServerInfo();
+
+      return env.createString(info);
+    }
+    catch (SQLException e) {
+      _error.error(env, e);
+
+      return BooleanValue.FALSE;
+    }
   }
 
   private int getTimeout()
@@ -469,89 +429,109 @@ public class PDO implements EnvCleanup {
     throw new UnimplementedException();
   }
 
-  public String lastInsertId(@Optional String name)
+  public String lastInsertId(Env env, @Optional Value nameV)
   {
-    if (!(name == null || name.length() == 0))
+    if (! nameV.isDefault()) {
       throw new UnimplementedException("lastInsertId with name");
-
-    if (_lastInsertId != null)
-      return _lastInsertId;
-
-    String lastInsertId = null;
-
-    if (_lastPDOStatement != null)
-      lastInsertId =  _lastPDOStatement.lastInsertId(name);
-    else if (_lastStatement != null) {
-      ResultSet resultSet = null;
-
-      try {
-        resultSet = _lastStatement.getGeneratedKeys();
-
-        if (resultSet.next())
-          lastInsertId = resultSet.getString(1);
-      }
-      catch (SQLException ex) {
-        _error.error(ex);
-      }
-      finally {
-        try {
-          if (resultSet != null)
-            resultSet.close();
-        }
-        catch (SQLException ex) {
-          log.log(Level.WARNING, ex.toString(), ex);
-        }
-      }
     }
 
-    _lastInsertId = lastInsertId == null ? "0" : lastInsertId;
+    if (_lastExecutedStatement == null) {
+      return "0";
+    }
 
-    return _lastInsertId;
+    try {
+      String lastInsertId = _lastExecutedStatement.lastInsertId(env);
+
+      if (lastInsertId == null) {
+        return "0";
+      }
+
+      return lastInsertId;
+    }
+    catch (SQLException e) {
+      _error.error(env, e);
+      return "0";
+    }
   }
 
   /**
    * Prepares a statement for execution.
    */
-  @ReturnNullAsFalse
-  public PDOStatement prepare(String statement,
-                              @Optional ArrayValue driverOptions)
+  public Value prepare(Env env,
+                       String query,
+                       @Optional ArrayValue driverOptions)
   {
-    if (_conn == null)
-      return null;
+    JdbcConnectionResource conn = getConnection();
+
+    if (! conn.isConnected()) {
+      return BooleanValue.FALSE;
+    }
 
     try {
       closeStatements();
 
       PDOStatement pdoStatement
-        = new PDOStatement(_env, _conn, statement, true, driverOptions);
-      
+        = new PDOStatement(env, this, _error, query, true, driverOptions, true);
+
       _lastPDOStatement = pdoStatement;
 
-      return pdoStatement;
-    } catch (SQLException e) {
-      _error.error(e);
+      if (_statementClassName != null) {
+        QuercusClass cls = env.getClass(_statementClassName);
 
-      return null;
+        Value phpObject = cls.callNew(env, pdoStatement, _statementClassArgs);
+
+        return phpObject;
+      }
+      else {
+        return env.wrapJava(pdoStatement);
+      }
+    }
+    catch (SQLException e) {
+      _error.error(env, e);
+
+      return BooleanValue.FALSE;
     }
   }
 
   /**
    * Queries the database
    */
-  public Value query(String query)
+  public Value query(Env env,
+                     String query,
+                     @Optional int mode,
+                     @Optional @ReadOnly Value[] args)
   {
-    if (_conn == null)
+    _error.clear();
+
+    JdbcConnectionResource conn = getConnection();
+
+    if (! conn.isConnected()) {
       return BooleanValue.FALSE;
+    }
 
     try {
       closeStatements();
 
-      PDOStatement pdoStatement = new PDOStatement(
-          _env, _conn, query, false, null);
+      PDOStatement pdoStatement
+         = new PDOStatement(env, this, _error, query, false, null, true);
+
+      if (mode != 0) {
+        pdoStatement.setFetchMode(env, mode, args);
+      }
+
       _lastPDOStatement = pdoStatement;
-      return _env.wrapJava(pdoStatement);
-    } catch (SQLException e) {
-      _error.error(e);
+
+      if (_statementClassName != null) {
+        QuercusClass cls = env.getClass(_statementClassName);
+
+        return cls.callNew(env, pdoStatement, _statementClassArgs);
+      }
+      else {
+        return env.wrapJava(pdoStatement);
+      }
+    }
+    catch (SQLException e) {
+      _error.error(env, e);
 
       return BooleanValue.FALSE;
     }
@@ -618,52 +598,56 @@ public class PDO implements EnvCleanup {
   /**
    * Rolls a transaction back.
    */
-  public boolean rollBack()
+  public boolean rollBack(Env env)
   {
-    if (_conn == null)
-      return false;
+    JdbcConnectionResource conn = getConnection();
 
-    if (! _inTransaction)
+    if (conn == null) {
       return false;
+    }
+
+    if (! _inTransaction) {
+      return false;
+    }
 
     _inTransaction = false;
 
-    try {
-      _conn.rollback();
-      _conn.setAutoCommit(true);
-      return true;
-    }
-    catch (SQLException e) {
-      _error.error(e);
-      return false;
-    }
+    conn.rollback();
+    return conn.setAutoCommit(true);
   }
 
-  public boolean setAttribute(int attribute, Value value)
+  public boolean setAttribute(Env env, int attribute, Value value)
   {
-    return setAttribute(attribute, value, false);
+    return setAttribute(env, attribute, value, false);
   }
 
-  private boolean setAttribute(int attribute, Value value, boolean isInit)
+  private boolean setAttribute(Env env,
+                               int attribute, Value value, boolean isInit)
   {
     switch (attribute) {
       case ATTR_AUTOCOMMIT:
-        return setAutocommit(value.toBoolean());
+        return setAutocommit(env, value.toBoolean());
 
       case ATTR_ERRMODE:
-        return _error.setErrmode(value.toInt());
+        return _error.setErrmode(env, value.toInt());
 
       case ATTR_CASE:
-        return setCase(value.toInt());
+        return setCase(env, value.toInt());
 
       case ATTR_ORACLE_NULLS:
-        return setOracleNulls(value.toInt());
+        return setOracleNulls(env, value.toInt());
 
       case ATTR_STRINGIFY_FETCHES:
         return setStringifyFetches(value.toBoolean());
 
       case ATTR_STATEMENT_CLASS:
-        return setStatementClass(value);
+        if (! value.isArray()) {
+          env.warning(L.l("ATTR_STATEMENT_CLASS attribute must be an array"));
+
+          return false;
+        }
+
+        return setStatementClass(env, value.toArrayValue(env));
     }
 
     if (isInit) {
@@ -678,7 +662,7 @@ public class PDO implements EnvCleanup {
     }
 
     // XXX: check what PHP does
-    _error.unsupportedAttribute(attribute);
+    _error.unsupportedAttribute(env, attribute);
     return false;
   }
 
@@ -686,20 +670,15 @@ public class PDO implements EnvCleanup {
    * Sets the auto commit, if true commit every statement.
    * @return true on success, false on error.
    */
-  private boolean setAutocommit(boolean autoCommit)
+  private boolean setAutocommit(Env env, boolean autoCommit)
   {
-    if (_conn == null)
-      return false;
+    JdbcConnectionResource conn = getConnection();
 
-    try {
-      _conn.setAutoCommit(autoCommit);
-    }
-    catch (SQLException e) {
-      _error.error(e);
+    if (conn == null) {
       return false;
     }
 
-    return true;
+    return conn.setAutoCommit(autoCommit);
   }
 
   /**
@@ -711,16 +690,23 @@ public class PDO implements EnvCleanup {
    * <dt>{@link CASE_UPPER}
    * </dl>
    */
-  private boolean setCase(int value)
+  private boolean setCase(Env env, int value)
   {
     switch (value) {
       case CASE_LOWER:
+        _columnCase = JdbcResultResource.COLUMN_CASE_LOWER;
+        return true;
+
       case CASE_NATURAL:
+        _columnCase = JdbcResultResource.COLUMN_CASE_NATURAL;
+        return true;
+
       case CASE_UPPER:
-        throw new UnimplementedException();
+        _columnCase = JdbcResultResource.COLUMN_CASE_UPPER;
+        return true;
 
       default:
-        _error.unsupportedAttributeValue(value);
+        _error.unsupportedAttributeValue(env, env);
         return false;
     }
   }
@@ -740,7 +726,7 @@ public class PDO implements EnvCleanup {
    *
    * @return true on success, false on error.
    */
-  private boolean setOracleNulls(int value)
+  private boolean setOracleNulls(Env env, int value)
   {
     switch (value) {
       case NULL_NATURAL:
@@ -748,8 +734,8 @@ public class PDO implements EnvCleanup {
       case NULL_TO_STRING:
         throw new UnimplementedException();
       default:
-        _error.warning(L.l("unknown value `{0}'", value));
-        _error.unsupportedAttributeValue(value);
+        _error.warning(env, L.l("unknown value `{0}'", value));
+        _error.unsupportedAttributeValue(env, value);
         return false;
     }
   }
@@ -771,9 +757,27 @@ public class PDO implements EnvCleanup {
    *
    * @return true on success, false on error.
    */
-  private boolean setStatementClass(Value value)
+  private boolean setStatementClass(Env env, ArrayValue value)
   {
-    throw new UnimplementedException("ATTR_STATEMENT_CLASS");
+    Value className = value.get(LongValue.ZERO);
+
+    if (! className.isString()) {
+      return false;
+    }
+
+    _statementClassName = className.toStringValue(env).toString();
+
+    Value argV = value.get(LongValue.ONE);
+
+    if (argV.isArray()) {
+      ArrayValue array = argV.toArrayValue(env);
+      _statementClassArgs = array.valuesToArray();;
+    }
+    else {
+      _statementClassArgs = Value.NULL_ARGS;
+    }
+
+    return true;
   }
 
   /**
@@ -794,17 +798,24 @@ public class PDO implements EnvCleanup {
   /**
    * Opens a connection based on the dsn.
    */
-  private DataSource getDataSource(Env env, String dsn)
-    throws Exception
+  private JdbcConnectionResource getConnection(Env env,
+                                               String dsn,
+                                               String user,
+                                               String pass)
+    throws SQLException
   {
-    if (dsn.startsWith("mysql:"))
-      return getMysqlDataSource(env, dsn);
-    if (dsn.startsWith("pgsql:"))
-      return getPgsqlDataSource(env, dsn);
-    else if (dsn.startsWith("java"))
-      return getJndiDataSource(env, dsn);
-    else if (dsn.startsWith("resin:"))
+    if (dsn.startsWith("mysql:")) {
+      return getMysqlConnection(env, dsn, user, pass);
+    }
+    else if (dsn.startsWith("pgsql:")) {
+      return getPgsqlDataSource(env, dsn, user, pass);
+    }
+    else if (dsn.startsWith("java")) {
+      return getJndiDataSource(env, dsn, user, pass);
+    }
+    else if (dsn.startsWith("resin:")) {
       return getResinDataSource(env, dsn);
+    }
     else {
       env.error(L.l("'{0}' is an unknown PDO data source.",
                     dsn));
@@ -816,73 +827,76 @@ public class PDO implements EnvCleanup {
   /**
    * Opens a mysql connection based on the dsn.
    */
-  private DataSource getMysqlDataSource(Env env, String dsn)
-    throws Exception
+  private JdbcConnectionResource getMysqlConnection(Env env,
+                                                    String dsn,
+                                                    String user,
+                                                    String pass)
+    throws SQLException
   {
-    HashMap<String,String> attr = parseAttr(dsn, dsn.indexOf(':'));
+    HashMap<String,String> attrMap = parseAttr(dsn, dsn.indexOf(':'));
 
     // XXX: more robust to get attribute values as is done in getPgsqlDataSource
 
-    String host = attr.get("host");
-    String portStr = attr.get("port");
-    String dbname = attr.get("dbname");
-    String unixSocket = attr.get("unix_socket");
-
-    if (unixSocket != null) {
-      env.error(L.l("PDO mysql: does not support unix_socket"));
-      return null;
-    }
-
-    if (host == null)
-      host = "localhost";
-
+    String host = "localhost";
     int port = 3306;
-    
-    if (portStr != null) {
-      try {
-        port = Integer.parseInt(portStr);
-      } catch (NumberFormatException e) {
-        log.log(Level.FINE, e.toString(), e);
+    String dbName = null;
+
+    for (Map.Entry<String,String> entry : attrMap.entrySet()) {
+      String key = entry.getKey();
+      String value = entry.getValue();
+
+      if ("host".equals(key)) {
+        host = value;
+      }
+      else if ("port".equals(key)) {
+        try {
+          port = Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+          env.warning(e);
+        }
+      }
+      else if ("dbname".equals(key)) {
+        dbName = value;
+      }
+      else if ("user".equals(key)) {
+        user = value;
+      }
+      else if ("password".equals(key)) {
+        pass = value;
+      }
+      else {
+        env.warning(L.l("pdo dsn attribute not supported: {0}={1}", key, value));
       }
     }
-
-    if (dbname == null)
-      dbname = "test";
 
     // PHP doc does not sure user and password as attributes for mysql,
     // but in the pgsql doc  the dsn specified user and
     // password override arguments
     // passed to constructor
-    String user = attr.get("user");
-    if (user != null)
-      _user = user;
 
-    String password = attr.get("password");
-    if (password != null)
-      _password = password;
+    String socket = null;
+    int flags = 0;
+    String driver = null;
+    String url = null;
+    boolean isNewLink = false;
 
-    String driver = Mysqli.DEFAULT_DRIVER;
-    
-    // XXX: mysql options?
-    String url = Mysqli.getUrl(host, port, dbname, ENCODING,
-                               false, false, false);
-    
-    return env.getDataSource(driver, url);
+    return new Mysqli(env, host, user, pass, dbName, port,
+                      socket, flags, driver, url, isNewLink);
   }
 
   /**
    * Opens a postgres connection based on the dsn.
    */
-  private DataSource getPgsqlDataSource(Env env, String dsn)
-    throws Exception
+  private JdbcConnectionResource getPgsqlDataSource(Env env,
+                                                    String dsn,
+                                                    String user,
+                                                    String pass)
   {
     HashMap<String,String> attr = parseAttr(dsn, dsn.indexOf(':'));
 
     String host = "localhost";
     String port = null;
     String dbname = "test";
-    String user = null;
-    String password = null;
 
     for (Map.Entry<String,String> entry : attr.entrySet()) {
       String key = entry.getKey();
@@ -896,18 +910,10 @@ public class PDO implements EnvCleanup {
       else if ("user".equals(key))
         user = entry.getValue();
       else if ("password".equals(key))
-        password = entry.getValue();
+        pass = entry.getValue();
       else
         env.warning(L.l("unknown pgsql attribute '{0}'", key));
     }
-
-    // confirmed with PHP doc,  the dsn specified user and password override
-    // arguments passed to constructor
-    if (user != null)
-      _user = user;
-
-    if (password != null)
-      _password = password;
 
     String driver = "org.postgresql.Driver";
 
@@ -921,26 +927,45 @@ public class PDO implements EnvCleanup {
     url.append('/');
     url.append(dbname);
 
-    return env.getDataSource(driver, url.toString());
+    try {
+      DataSource ds = env.getDataSource(driver, url.toString());
+
+      return new DataSourceConnection(env, ds, user, pass);
+    }
+    catch (Exception e) {
+      env.warning(e);
+
+      return null;
+    }
   }
 
   /**
    * Opens a resin connection based on the dsn.
    */
-  private DataSource getResinDataSource(Env env, String dsn)
-    throws Exception
+  private JdbcConnectionResource getResinDataSource(Env env, String dsn)
   {
-    String driver = "com.caucho.db.jdbc.ConnectionPoolDataSourceImpl";
+    try {
+      String driver = "com.caucho.db.jdbc.ConnectionPoolDataSourceImpl";
+      String url = "jdbc:" + dsn;
 
-    String url = "jdbc:" + dsn;
+      DataSource ds = env.getDataSource(driver, url);
 
-    return env.getDataSource(driver, url);
+      return new DataSourceConnection(env, ds, null, null);
+    }
+    catch (Exception e) {
+      env.warning(e);
+
+      return null;
+    }
   }
 
   /**
    * Opens a connection based on the dsn.
    */
-  private DataSource getJndiDataSource(Env env, String dsn)
+  private JdbcConnectionResource getJndiDataSource(Env env,
+                                                   String dsn,
+                                                   String user,
+                                                   String pass)
   {
     DataSource ds = null;
 
@@ -952,10 +977,13 @@ public class PDO implements EnvCleanup {
       log.log(Level.FINE, e.toString(), e);
     }
 
-    if (ds == null)
+    if (ds == null) {
       env.error(L.l("'{0}' is an unknown PDO JNDI data source.", dsn));
 
-    return ds;
+      return null;
+    }
+
+    return new DataSourceConnection(env, ds, user, pass);
   }
 
   private HashMap<String,String> parseAttr(String dsn, int i)
@@ -964,28 +992,34 @@ public class PDO implements EnvCleanup {
 
     int length = dsn.length();
 
+    StringBuilder sb = new StringBuilder();
+
     for (; i < length; i++) {
       char ch = dsn.charAt(i);
 
       if (! Character.isJavaIdentifierStart(ch))
         continue;
 
-      StringBuilder name = new StringBuilder();
       for (;
            i < length && Character.isJavaIdentifierPart((ch = dsn.charAt(i)));
            i++) {
-        name.append(ch);
+        sb.append(ch);
       }
+
+      String name = sb.toString();
+      sb.setLength(0);
 
       for (; i < length && ((ch = dsn.charAt(i)) == ' ' || ch == '='); i++) {
       }
 
-      StringBuilder value = new StringBuilder();
       for (; i < length && (ch = dsn.charAt(i)) != ' ' && ch != ';'; i++) {
-        value.append(ch);
+        sb.append(ch);
       }
 
-      attr.put(name.toString(), value.toString());
+      String value = sb.toString();
+      sb.setLength(0);
+
+      attr.put(name, value);
     }
 
     return attr;
@@ -1015,9 +1049,6 @@ public class PDO implements EnvCleanup {
 
     HashMap<String,String> attr = parseAttr(_dsn, i);
 
-    if (_user != null && ! "".equals(_user))
-      attr.put("user", _user);
-
     boolean first = true;
 
     for (Map.Entry<String,String> entry : attr.entrySet()) {
@@ -1031,7 +1062,7 @@ public class PDO implements EnvCleanup {
       else if ("pass".equalsIgnoreCase(key))
         value = "XXXXX";
 
-      if (!first)
+      if (! first)
         str.append(' ');
 
       first = false;

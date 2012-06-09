@@ -32,6 +32,11 @@ import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.RemoteListenerUnavailableException;
 import com.caucho.bam.ServiceUnavailableException;
 import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.actor.RemoteActorSender;
+import com.caucho.bam.broker.ManagedBroker;
+import com.caucho.bam.manager.BamManager;
+import com.caucho.bam.manager.SimpleBamManager;
+import com.caucho.bam.proxy.BamProxyFactory;
 import com.caucho.hmtp.HmtpClient;
 import com.caucho.server.cluster.ServletService;
 import com.caucho.util.L10N;
@@ -51,11 +56,15 @@ public class ManagerClient
   private static final L10N L = new L10N(ManagerClient.class);
 
   private static final long MANAGER_TIMEOUT = 600 * 1000L;
+  
+  private BamManager _bamManager;
+
+  private String _url;
 
   private ActorSender _bamClient;
   private String _managerAddress;
-
-  private String _url;
+  
+  private ManagerProxyApi _managerProxy;
 
   public ManagerClient()
   {
@@ -64,9 +73,12 @@ public class ManagerClient
     if (server == null)
       throw new IllegalStateException(L.l("ManagerClient was not called in a Resin context. For external clients, use the ManagerClient constructor with host,port arguments."));
 
+    _bamManager = server.getBamManager();
     _bamClient = server.createAdminClient(getClass().getSimpleName());
 
     _managerAddress = "manager@resin.caucho";
+    
+    initImpl();
   }
 
   public ManagerClient(String serverId)
@@ -76,17 +88,29 @@ public class ManagerClient
     if (server == null)
       throw new IllegalStateException(L.l("ManagerClient was not called in a Resin context. For external clients, use the ManagerClient constructor with host,port arguments."));
 
+    _bamManager = server.getBamManager();
     _bamClient = server.createAdminClient(getClass().getSimpleName());
 
     _managerAddress = "manager@" + serverId + ".resin.caucho";
+    
+    initImpl();
   }
   
   public ManagerClient(ActorSender bamClient)
   {
+    this(new SimpleBamManager(bamClient.getBroker()), bamClient);
+  }
+  
+  public ManagerClient(BamManager bamManager,
+                       ActorSender bamClient)
+  {
+    _bamManager = bamManager;
     _bamClient = bamClient;
 
     _managerAddress = "manager@resin.caucho";
     // _managerAddress = bamClient.getAddress();
+    
+    initImpl();
   }
 
   public ManagerClient(String host, int serverPort, int httpPort,
@@ -95,9 +119,15 @@ public class ManagerClient
     RuntimeException exn = null;
     
     try {
-      if (serverPort > 0)
-        _bamClient 
-          = new HmuxClientFactory(host, serverPort, userName, password).create();
+      if (serverPort > 0) {
+        HmuxClientFactory clientFactory
+          = new HmuxClientFactory(host, serverPort, userName, password);
+        
+        RemoteActorSender remoteClient = clientFactory.create();
+        
+        _bamManager = new SimpleBamManager(remoteClient.getBroker());
+        _bamClient = remoteClient;
+      }
     
       _managerAddress = "manager@resin.caucho";
       
@@ -131,6 +161,7 @@ public class ManagerClient
 
       client.connect(userName, password);
 
+      _bamManager = new SimpleBamManager(client.getBroker());
       _bamClient = client;
     
       _managerAddress = "manager@resin.caucho";
@@ -143,6 +174,14 @@ public class ManagerClient
                                                     url, e.getMessage()),
                                                 e);
     }
+    
+    initImpl();
+  }
+  
+  private void initImpl()
+  {
+    _managerProxy = createAgentProxy(ManagerProxyApi.class,
+                                     "manager-proxy@resin.caucho");
   }
   
   public String getUrl()
@@ -153,6 +192,18 @@ public class ManagerClient
   public ActorSender getSender()
   {
     return _bamClient;
+  }
+  
+  public <T> T createAgentProxy(Class<T> api, String address)
+  {
+    return _bamManager.createProxy(api,
+                                   _bamManager.createActorRef(address),
+                                   getSender());
+  }
+  
+  private ManagerProxyApi getManagerProxy()
+  {
+    return _managerProxy;
   }
 
   public AddUserQueryReply addUser(String user,
@@ -315,6 +366,31 @@ public class ManagerClient
     StatsQuery query = new StatsQuery(meters, from, to);
 
     return (StatServiceValuesQueryReply) query(query);
+  }
+
+  public StringQueryReply status()
+  {
+    ServerStatusQuery status = new ServerStatusQuery();
+
+    return (StringQueryReply) query(status);
+  }
+
+  //
+  // enable/disable
+  //
+  
+  public String enable(String serverId)
+  {
+    ManagerProxyApi manager = getManagerProxy();
+    
+    return manager.enable();
+  }
+  
+  public String disable(String serverId)
+  {
+    ManagerProxyApi manager = getManagerProxy();
+    
+    return manager.disable();
   }
 
   protected Serializable query(Serializable query)

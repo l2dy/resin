@@ -35,6 +35,7 @@ import com.caucho.server.distcache.CacheStoreManager;
 import com.caucho.server.distcache.DistCacheEntry;
 import com.caucho.server.distcache.MnodeEntry;
 import com.caucho.server.distcache.MnodeUpdate;
+import com.caucho.server.distcache.MnodeValue;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.HashKey;
@@ -55,6 +56,7 @@ public class MemcachedCacheEngine extends AbstractCacheEngine
   }
   
 
+  /*
   @Override
   public boolean isLocalExpired(CacheConfig config,
                                   HashKey key,
@@ -63,9 +65,10 @@ public class MemcachedCacheEngine extends AbstractCacheEngine
   {
     return mnodeEntry.isLocalExpired(now, config);
   }
+  */
 
   @Override
-  public MnodeEntry get(DistCacheEntry entry, CacheConfig config)
+  public MnodeValue get(DistCacheEntry entry, CacheConfig config)
   {
     CharBuffer cb = new CharBuffer();
     
@@ -74,12 +77,12 @@ public class MemcachedCacheEngine extends AbstractCacheEngine
     String key = cb.toString();
     
     MnodeUpdate update = _client.getResinIfModified(key, 
-                                                    entry.getValueHashKey(),
+                                                    entry.getMnodeEntry().getValueHash(),
                                                     entry,
                                                     config);
     
     if (update != null)
-      return _cacheService.putLocalValue(entry, update, null, 0, 0);
+      return entry.putLocalValue(update, null);
     else
       return entry.getMnodeEntry();
   }
@@ -87,7 +90,7 @@ public class MemcachedCacheEngine extends AbstractCacheEngine
   @Override
   public void put(HashKey hashKey, 
                   MnodeUpdate mnodeUpdate,
-                  MnodeEntry mnodeValue)
+                  long valueDataId)
   {
     CharBuffer cb = new CharBuffer();
     
@@ -95,13 +98,12 @@ public class MemcachedCacheEngine extends AbstractCacheEngine
     
     String key = cb.toString();
     
-    _client.putResin(key, mnodeUpdate);
+    _client.putResin(key, mnodeUpdate, valueDataId);
   }
   
   @Override
   public void remove(HashKey hashKey, 
-                     MnodeUpdate mnodeUpdate,
-                     MnodeEntry mnodeEntry)
+                     MnodeUpdate mnodeUpdate)
   {
     CharBuffer cb = new CharBuffer();
     

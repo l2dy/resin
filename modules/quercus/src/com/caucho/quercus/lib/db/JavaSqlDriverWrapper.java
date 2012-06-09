@@ -35,68 +35,68 @@ import java.sql.Driver;
 import java.sql.SQLException;
 import java.util.Properties;
 
-/*
+/**
  * javax.sql.DataSource adapter for java.sql.Driver
  */
 public class JavaSqlDriverWrapper implements javax.sql.DataSource
 {
   private Driver _driver;
   private String _url;
-  
+
   public JavaSqlDriverWrapper(Driver driver, String url)
   {
     _driver = driver;
     _url = url;
   }
-  
+
   public Connection getConnection()
     throws SQLException
   {
     Properties props = new Properties();
     props.put("user", "");
     props.put("password", "");
-    
+
     return _driver.connect(_url, props);
   }
-  
+
   public Connection getConnection(String user, String password)
     throws SQLException
   {
     Properties props = new Properties();
-    
+
     if (user != null)
       props.put("user", user);
     else
       props.put("user", "");
-    
+
     if (password != null)
       props.put("password", password);
     else
       props.put("password", "");
-    
+
     return _driver.connect(_url, props);
   }
-  
+
   public int getLoginTimeout()
   {
     throw new UnsupportedOperationException();
   }
-  
+
   public PrintWriter getLogWriter()
   {
     throw new UnsupportedOperationException();
   }
-  
+
   public void setLoginTimeout(int seconds)
   {
     throw new UnsupportedOperationException();
   }
-  
+
   public void setLogWriter(PrintWriter out)
   {
     throw new UnsupportedOperationException();
   }
-  
+
   public <T> T unwrap(Class<T> iface)
     throws SQLException
   {

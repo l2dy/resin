@@ -39,7 +39,7 @@ import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.log.AbstractRolloverLog;
 import com.caucho.log.RotateStream;
-import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.network.listen.TcpPort;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
@@ -89,7 +89,7 @@ class WatchdogConfig
   private String _userName;
   private String _groupName;
 
-  private ArrayList<TcpSocketLinkListener> _ports = new ArrayList<TcpSocketLinkListener>();
+  private ArrayList<TcpPort> _ports = new ArrayList<TcpPort>();
   
   private long _shutdownWaitTime = 60000L;
 
@@ -239,7 +239,7 @@ class WatchdogConfig
   /**
    * Adds a custom-protocol port.
    */
-  public TcpSocketLinkListener createProtocol()
+  public TcpPort createProtocol()
     throws ConfigException
   {
     OpenPort port = new OpenPort();
@@ -252,7 +252,7 @@ class WatchdogConfig
   /**
    * Adds a watchdog managed port
    */
-  public void addOpenPort(TcpSocketLinkListener port)
+  public void addOpenPort(TcpPort port)
   {
     _ports.add(port);
   }
@@ -293,7 +293,7 @@ class WatchdogConfig
     if ("".equals(_id))
       name = "jvm-default.log";
     else
-      name = "jvm-" + _id + ".log";
+      name = "jvm-" + _id.replace(':', '_') + ".log";
 
     return getLogDirectory().lookup(name);
   }
@@ -430,7 +430,7 @@ class WatchdogConfig
     return _args;
   }
 
-  Iterable<TcpSocketLinkListener> getPorts()
+  Iterable<TcpPort> getPorts()
   {
     return _ports;
   }
@@ -593,7 +593,7 @@ class WatchdogConfig
     /**
      * Initialize a log with the watchdog-log parameters
      * 
-     * @param log the log to initialize
+     * @param stream the log to initialize
      */
     void logInit(RotateStream stream)
     {

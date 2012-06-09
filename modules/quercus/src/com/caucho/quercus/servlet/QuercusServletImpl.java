@@ -44,6 +44,7 @@ import com.caucho.quercus.page.QuercusPage;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.FilePath;
+import com.caucho.vfs.MergePath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 import com.caucho.vfs.WriteStream;
@@ -72,10 +73,11 @@ public class QuercusServletImpl extends HttpServlet
   protected QuercusContext _quercus;
   protected ServletConfig _config;
   protected ServletContext _servletContext;
-  
+
   /**
    * initialize the script manager.
    */
+  @Override
   public final void init(ServletConfig config)
     throws ServletException
   {
@@ -83,21 +85,25 @@ public class QuercusServletImpl extends HttpServlet
     _servletContext = config.getServletContext();
 
     checkServletAPIVersion();
-    
+
     Path pwd = new FilePath(_servletContext.getRealPath("/"));
-    
+    Path webInfDir = new FilePath(_servletContext.getRealPath("/WEB-INF"));
+
     getQuercus().setPwd(pwd);
+    getQuercus().setWebInfDir(webInfDir);
 
     // need to set these for non-Resin containers
     if (! CurrentTime.isTest() && ! getQuercus().isResin()) {
       Vfs.setPwd(pwd);
-      WorkDir.setLocalWorkDir(pwd.lookup("WEB-INF/work"));
+      WorkDir.setLocalWorkDir(webInfDir.lookup("work"));
     }
+
+    initImpl(config);
 
     getQuercus().init();
     getQuercus().start();
   }
-  
+
   protected void initImpl(ServletConfig config)
     throws ServletException
   {
@@ -127,13 +133,13 @@ public class QuercusServletImpl extends HttpServlet
    * Service.
    */
   @Override
-  public void service(HttpServletRequest request,
-                      HttpServletResponse response)
+  public final void service(HttpServletRequest request,
+                            HttpServletResponse response)
     throws ServletException, IOException
   {
     Env env = null;
     WriteStream ws = null;
-    
+
     try {
       Path path = getPath(request);
 
@@ -142,9 +148,9 @@ public class QuercusServletImpl extends HttpServlet
       try {
         page = getQuercus().parse(path);
       }
-      catch (FileNotFoundException ex) {
+      catch (FileNotFoundException e) {
         // php/2001
-        log.log(Level.FINER, ex.toString(), ex);
+        log.log(Level.FINER, e.toString(), e);
 
         response.sendError(HttpServletResponse.SC_NOT_FOUND);
 
@@ -152,18 +158,22 @@ public class QuercusServletImpl extends HttpServlet
       }
 
       ws = openWrite(response);
-      
+
       // php/6006
       ws.setNewlineString("\n");
 
       QuercusContext quercus = getQuercus();
-      
+
       env = quercus.createEnv(page, ws, request, response);
+
+      // php/815d
+      env.setPwd(path.getParent());
+
       quercus.setServletContext(_servletContext);
-      
+
       try {
         env.start();
-        
+
         // php/2030, php/2032, php/2033
         // Jetty hides server classes from web-app
         // http://docs.codehaus.org/display/JETTY/Classloading
@@ -176,7 +186,7 @@ public class QuercusServletImpl extends HttpServlet
           = quercus.getIniValue("auto_prepend_file").toStringValue(env);
         if (prepend.length() > 0) {
           Path prependPath = env.lookup(prepend);
-          
+
           if (prependPath == null)
             env.error(L.l("auto_prepend_file '{0}' not found.", prepend));
           else {
@@ -191,7 +201,7 @@ public class QuercusServletImpl extends HttpServlet
           = quercus.getIniValue("auto_append_file").toStringValue(env);
         if (append.length() > 0) {
           Path appendPath = env.lookup(append);
-          
+
           if (appendPath == null)
             env.error(L.l("auto_append_file '{0}' not found.", append));
           else {
@@ -215,7 +225,7 @@ public class QuercusServletImpl extends HttpServlet
       }
       catch (QuercusValueException e) {
         log.log(Level.FINE, e.toString(), e);
-        
+
         ws.println(e.toString());
 
         //  return;
@@ -253,15 +263,21 @@ public class QuercusServletImpl extends HttpServlet
       throw e;
     }
     catch (Throwable e) {
-      throw new ServletException(e);
+      handleThrowable(response, e);
     }
+  }
+
+  protected void handleThrowable(HttpServletResponse response, Throwable e)
+    throws IOException, ServletException
+  {
+    throw new ServletException(e);
   }
 
   protected WriteStream openWrite(HttpServletResponse response)
     throws IOException
   {
     WriteStream ws;
-    
+
     OutputStream out = response.getOutputStream();
 
     ws = Vfs.openWrite(out);
@@ -269,12 +285,39 @@ public class QuercusServletImpl extends HttpServlet
     return ws;
   }
 
-  Path getPath(HttpServletRequest req)
+  protected Path getPath(HttpServletRequest req)
   {
-    String scriptPath = QuercusRequestAdapter.getPageServletPath(req);
+    // php/8173
+    Path pwd = getQuercus().getPwd().copy();
+
+    StringBuilder sb = new StringBuilder();
+    String servletPath = QuercusRequestAdapter.getPageServletPath(req);
+
+    if (servletPath.startsWith("/")) {
+      sb.append(servletPath, 1, servletPath.length());
+    }
+    else {
+      sb.append(servletPath);
+    }
+
     String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
-    Path pwd = Vfs.lookup();
+    if (pathInfo != null) {
+      sb.append(pathInfo);
+    }
+
+    String scriptPath = sb.toString();
+
+    Path path = pwd.lookupChild(scriptPath);
+
+    return path;
+
+    /* jetty getRealPath() de-references symlinks, which causes problems with MergePath
+    // php/8173
+    Path pwd = getQuercus().getPwd().copy();
+
+    String scriptPath = QuercusRequestAdapter.getPageServletPath(req);
+    String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
     Path path = pwd.lookup(req.getRealPath(scriptPath));
 
@@ -290,17 +333,18 @@ public class QuercusServletImpl extends HttpServlet
       fullPath = scriptPath;
 
     return pwd.lookup(req.getRealPath(fullPath));
+    */
   }
 
   /**
    * Returns the Quercus instance.
    */
   protected QuercusContext getQuercus()
-  { 
+  {
     if (_quercus == null) {
       _quercus = new QuercusContext();
     }
-    
+
     return _quercus;
   }
 

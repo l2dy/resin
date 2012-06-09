@@ -31,8 +31,8 @@ package com.caucho.boot;
 
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
-import com.caucho.server.admin.DeployClient;
 import com.caucho.server.admin.WebAppDeployClient;
+import com.caucho.server.deploy.DeployClient;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -71,13 +71,6 @@ public class DeployCommand extends AbstractRepositoryCommand {
                                     war));
     }
 
-    String name = args.getArg("-name");
-    
-    String webapp = args.getArg("-web-app");
-    
-    if (webapp != null)
-      name = webapp;
-    
     String host = args.getArg("-host");
     
     if (host == null)
@@ -93,13 +86,7 @@ public class DeployCommand extends AbstractRepositoryCommand {
     
     Path path = Vfs.lookup(war);
     
-    if (name == null) {
-      String tail = path.getTail();
-      
-      int p = tail.lastIndexOf('.');
-
-      name = tail.substring(0, p);
-    }
+    String name = getName(args, path);
     
     commit.tagKey(host + "/" + name);
 

@@ -191,6 +191,7 @@ public class HmuxRequest extends AbstractHttpRequest
   // public static final int HMUX_CLUSTER_PROTOCOL = 0x101;
   public static final int HMUX_DISPATCH_PROTOCOL = 0x102;
   public static final int HMUX_JMS_PROTOCOL = 0x103;
+  public static final int HMUX_HTTP_PROXY_PROTOCOL = 0x104;
 
   public enum ProtocolResult {
     QUIT,
@@ -246,7 +247,8 @@ public class HmuxRequest extends AbstractHttpRequest
   private final HmuxDispatchRequest _dispatchRequest;
 
   private HmtpRequest _hmtpRequest;
-  private boolean _isHmtpRequest;
+  
+  private ProtocolConnection _subProtocol;
 
   private HmuxProtocol _hmuxProtocol;
   private ErrorPageManager _errorManager;
@@ -321,7 +323,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   public boolean isSuspend()
   {
-    return super.isSuspend() || _isHmtpRequest;
+    return super.isSuspend() || _subProtocol != null;
   }
 
   @Override
@@ -329,8 +331,10 @@ public class HmuxRequest extends AbstractHttpRequest
     throws IOException
   {
     try {
-      if (_isHmtpRequest) {
-        return _hmtpRequest.handleRequest();
+      ProtocolConnection subProtocol = _subProtocol;
+      
+      if (subProtocol != null) {
+        return subProtocol.handleRequest();
       }
       else {
         return handleRequestImpl();
@@ -371,7 +375,7 @@ public class HmuxRequest extends AbstractHttpRequest
       if (! _hasRequest)
         getResponse().setHeaderWritten(true);
 
-      if (! _isHmtpRequest) {
+      if (_subProtocol == null) {
         finishInvocation();
       }
 
@@ -387,7 +391,7 @@ public class HmuxRequest extends AbstractHttpRequest
       }
 
       // cluster/6610 - hmtp mode doesn't close the stream.
-      if (! _isHmtpRequest) {
+      if (_subProtocol == null) {
         try {
           ReadStream is = getReadStream();
 
@@ -542,7 +546,7 @@ public class HmuxRequest extends AbstractHttpRequest
     super.onStartConnection();
     
     _hmtpRequest.onStartConnection();
-    _isHmtpRequest = false;
+    _subProtocol = null;
   }
   
   /**
@@ -880,7 +884,7 @@ public class HmuxRequest extends AbstractHttpRequest
         if (isLoggable)
           log.fine(dbgId() + (char) code + "-r switch-to-hmtp");
         
-        _isHmtpRequest = true;
+        _subProtocol = _hmtpRequest;
         
         boolean result = _hmtpRequest.handleRequest();
 
@@ -921,7 +925,7 @@ public class HmuxRequest extends AbstractHttpRequest
   {
     int result = HMUX_EXIT;
     boolean isKeepalive = false;
-    
+
     if (value == HMUX_DISPATCH_PROTOCOL) {
       if (log.isLoggable(Level.FINE))
         log.fine(dbgId() + (char) code + "-r: dispatch protocol");
@@ -1555,7 +1559,7 @@ public class HmuxRequest extends AbstractHttpRequest
   @Override
   public void onCloseConnection()
   {
-    _isHmtpRequest = false;
+    _subProtocol = null;
     _hmtpRequest.onCloseConnection();
     
     super.onCloseConnection();

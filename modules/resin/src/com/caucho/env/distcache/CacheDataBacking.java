@@ -30,13 +30,14 @@
 package com.caucho.env.distcache;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 
 import com.caucho.server.distcache.CacheData;
 import com.caucho.server.distcache.DataStore;
-import com.caucho.server.distcache.MnodeStore;
-import com.caucho.server.distcache.MnodeUpdate;
 import com.caucho.server.distcache.MnodeEntry;
+import com.caucho.server.distcache.MnodeStore;
+import com.caucho.server.distcache.MnodeValue;
 import com.caucho.util.HashKey;
 import com.caucho.vfs.StreamSource;
 import com.caucho.vfs.WriteStream;
@@ -70,17 +71,21 @@ public interface CacheDataBacking {
   public boolean putLocalValue(MnodeEntry mnodeValue,
                                HashKey key,
                                MnodeEntry oldEntryValue,
-                               MnodeUpdate mnodeUpdate);
+                               MnodeValue mnodeUpdate);
   
-  public boolean loadData(HashKey valueHash, WriteStream os)
+  public boolean loadData(long valueDataId, WriteStream os)
     throws IOException;
 
-  public java.sql.Blob loadBlob(HashKey valueHash);
+  public java.sql.Blob loadBlob(long valueDataId);
 
-  public boolean saveData(HashKey valueHash, StreamSource source, int length)
+  public long saveData(InputStream mIn, int length)
     throws IOException;
 
-  public boolean isDataAvailable(HashKey valueKey);
+  public long saveData(StreamSource source, int length);
+  
+  public boolean removeData(long valueDataId);
+  
+  public boolean isDataAvailable(long valueDataId);
 
   /**
    * Returns the last update time on server startup.
@@ -108,4 +113,6 @@ public interface CacheDataBacking {
    * Close the backing.
    */
   public void close();
+
+
 }

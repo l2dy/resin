@@ -41,14 +41,15 @@ import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.util.L10N;
 
-import java.util.logging.Level;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.logging.Logger;
 
 
 /**
  * mysqli object oriented API facade
  */
-public class MysqliStatement extends JdbcStatementResource {
+public class MysqliStatement extends JdbcPreparedStatementResource {
   private static final Logger log = Logger
     .getLogger(MysqliStatement.class.getName());
   private static final L10N L = new L10N(MysqliStatement.class);
@@ -63,6 +64,10 @@ public class MysqliStatement extends JdbcStatementResource {
     super(conn);
   }
 
+  @Override
+  public boolean execute(Env env) {
+    return super.execute(env);
+  }
 
   /**
    * Quercus function to get the field 'affected_rows'.
@@ -86,12 +91,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public int affected_rows(Env env)
   {
-    try {
-      return validateConnection().getAffectedRows();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return -1;
-    }
+    return getConnection().getAffectedRows();
   }
 
   /**
@@ -103,15 +103,35 @@ public class MysqliStatement extends JdbcStatementResource {
    * @return true on success or false on failure
    */
   public boolean bind_param(Env env,
-                            StringValue types,
+                            StringValue typeStr,
                             @Reference Value[] params)
   {
-    try {
-      return bindParams(env, types.toString(), params);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return false;
+    int len = typeStr.length();
+
+    ColumnType[] types = new ColumnType[len];
+
+    for (int i = 0; i < len; i++) {
+      char ch = typeStr.charAt(i);
+
+      if (ch == 's') {
+        types[i] = ColumnType.STRING;
+      }
+      else if (ch == 'b') {
+        types[i] = ColumnType.BLOB;
+      }
+      else if (ch == 'i') {
+        types[i] = ColumnType.LONG;
+      }
+      else if (ch == 'd') {
+        types[i] = ColumnType.DOUBLE;
+      }
+      else {
+        env.warning(L.l("invalid param type '{0}' in string '{1}'", ch, typeStr));
+        return false;
+      }
     }
+
+    return bindParams(env, types, params);
   }
 
   /**
@@ -124,12 +144,7 @@ public class MysqliStatement extends JdbcStatementResource {
   public boolean bind_result(Env env,
                              @Reference Value[] outParams)
   {
-    try {
-      return bindResults(env, outParams);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return false;
-    }
+    return bindResults(env, outParams);
   }
 
   /**
@@ -138,15 +153,10 @@ public class MysqliStatement extends JdbcStatementResource {
    * @param env the PHP executing environment
    * @return true on success or false on failure
    */
-  public boolean close(Env env)
+  @Override
+  public boolean close()
   {
-    try {
-      super.close();
-      return true;
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return false;
-    }
+    return super.close();
   }
 
   /**
@@ -159,13 +169,8 @@ public class MysqliStatement extends JdbcStatementResource {
   public Value data_seek(Env env,
                          int offset)
   {
-    try {
-
-      if (dataSeek(offset))
-        return NullValue.NULL;
-
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+    if (dataSeek(offset)) {
+      return NullValue.NULL;
     }
 
     return BooleanValue.FALSE;
@@ -179,12 +184,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public int errno()
   {
-    try {
-      return errorCode();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return -1;
-    }
+    return getErrorCode();
   }
 
   /**
@@ -204,12 +204,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public StringValue error(Env env)
   {
-    try {
-      return env.createString(errorMessage());
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return null;
-    }
+    return env.createString(getErrorMessage());
   }
 
   /**
@@ -223,23 +218,6 @@ public class MysqliStatement extends JdbcStatementResource {
   }
 
   /**
-   * Executes a prepared Query. The statement has
-   * been prepared using mysqli_prepare.
-   *
-   * @param env the PHP executing environment
-   * @return true on success or false on failure
-   */
-  public boolean execute(Env env)
-  {
-    try {
-      return super.execute(env);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return false;
-    }
-  }
-
-  /**
    * Fetch results from a prepared statement into the bound variables.
    *
    * @param env the PHP executing environment
@@ -248,14 +226,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public Value fetch(Env env)
   {
-    try {
-      return super.fetch(env);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      env.error(e);
-
-      return BooleanValue.FALSE;
-    }
+    return super.fetch(env);
   }
 
   /**
@@ -265,30 +236,21 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public void free_result(Env env)
   {
-    try {
-      freeResult();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-    }
+    freeResult();
   }
-  
+
   /**
    * Returns the MysqliResult
    */
-  public MysqliResult get_result(Env env) {
-    try {
+  public JdbcResultResource get_result(Env env)
+  {
+    return getResultSet();
+  }
 
-      if (getResultSet() != null) {
-        return new MysqliResult(env,
-                                getPreparedStatement(),
-                                getResultSet(),
-                                (Mysqli) validateConnection());
-      } else
-        return null;
-
-    } catch (Exception e) {
-      throw new QuercusModuleException(e);
-    }
+  @Override
+  protected JdbcResultResource createResultSet(ResultSet rs)
+  {
+    return new MysqliResult(getPreparedStatement(), rs, (Mysqli) getConnection());
   }
 
   /**
@@ -307,15 +269,12 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public Value num_rows(Env env)
   {
-    try {
-      if (getResultSet() != null)
-        return LongValue.create(JdbcResultResource.getNumRows(getResultSet()));
-      else
-        return BooleanValue.FALSE;
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+    JdbcResultResource rs = getResultSet();
+
+    if (rs != null)
+      return LongValue.create(rs.getNumRows());
+    else
       return BooleanValue.FALSE;
-    }
   }
 
   /**
@@ -334,12 +293,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public int param_count(Env env)
   {
-    try {
-      return paramCount();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return -1;
-    }
+    return paramCount();
   }
 
   /**
@@ -349,15 +303,10 @@ public class MysqliStatement extends JdbcStatementResource {
    * @param query SQL query
    * @return true on success or false on failure
    */
-  public boolean prepare(Env env,
-                         StringValue query)
+  @Override
+  public boolean prepare(Env env, String query)
   {
-    try {
-      return super.prepare(env, query);
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return false;
-    }
+    return super.prepare(env, query);
   }
 
   /**
@@ -418,14 +367,12 @@ public class MysqliStatement extends JdbcStatementResource {
   public MysqliResult result_metadata(Env env)
   {
     try {
-
       if (getResultSet() != null) {
-        return new MysqliResult(env, getMetaData(),
-                                (Mysqli) validateConnection());
+        return new MysqliResult(getMetaData(), (Mysqli) getConnection());
       } else
         return null;
 
-    } catch (Exception e) {
+    } catch (SQLException e) {
       throw new QuercusModuleException(e);
     }
   }
@@ -464,6 +411,7 @@ public class MysqliStatement extends JdbcStatementResource {
   public StringValue sqlstate(Env env)
   {
     int code = errno();
+
     return env.createString(Mysqli.lookupSqlstate(code));
   }
 
@@ -491,12 +439,7 @@ public class MysqliStatement extends JdbcStatementResource {
    */
   public int field_count(Env env)
   {
-    try {
-      return getFieldCount();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-      return -1;
-    }
+    return getFieldCount();
   }
 
   /**
@@ -509,7 +452,7 @@ public class MysqliStatement extends JdbcStatementResource {
 
   public Value insert_id(Env env)
   {
-    return ((Mysqli) validateConnection()).insert_id(env);
+    return ((Mysqli) getConnection()).insert_id(env);
   }
 }
 

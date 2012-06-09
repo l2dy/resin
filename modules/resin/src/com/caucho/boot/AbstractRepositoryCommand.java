@@ -34,6 +34,7 @@ import java.net.Socket;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import com.caucho.bam.BamException;
 import com.caucho.bam.NotAuthorizedException;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.RemoteListenerUnavailableException;
@@ -42,10 +43,11 @@ import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
 import com.caucho.hmtp.HmtpClient;
-import com.caucho.network.listen.TcpSocketLinkListener;
+import com.caucho.network.listen.TcpPort;
 import com.caucho.server.admin.HmuxClientFactory;
 import com.caucho.server.admin.WebAppDeployClient;
 import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 
 public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
   private static final L10N L = new L10N(AbstractRepositoryCommand.class);
@@ -67,16 +69,40 @@ public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
       deployClient = getDeployClient(args, client);
 
       return doCommand(args, client, deployClient);
+    } catch (ConfigException e) {
+      if (args.isVerbose()) {
+        e.printStackTrace();
+      }
+      
+      System.out.println(e.toString());
+      
+      return 2;
+    } catch (NotAuthorizedException e) {
+      if (args.isVerbose()) {
+        e.printStackTrace();
+      }
+      
+      System.out.println(e.toString());
+      
+      return 1;
+    } catch (BamException e) {
+      if (args.isVerbose()) {
+        e.printStackTrace();
+      }
+      
+      System.out.println(e.toString());
+      
+      return 2;
     } catch (Exception e) {
+      /*
       if (args.isVerbose())
         e.printStackTrace();
       else
         System.out.println(e.toString());
+        */
+      e.printStackTrace();
 
-      if (e instanceof NotAuthorizedException)
-        return 1;
-      else
-        return 2;
+      return 2;
     } finally {
       if (deployClient != null)
         deployClient.close();
@@ -97,6 +123,33 @@ public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
     return new WebAppDeployClient(sender.getUrl(), sender);
   }
   
+  protected String getName(WatchdogArgs args, Path path)
+  {
+    String name = args.getArg("-name");
+    
+    String webapp = args.getArg("-web-app");
+    
+    if (webapp != null)
+      name = webapp;
+    
+    if (name == null && path != null) {
+      String tail = path.getTail();
+    
+      int p = tail.lastIndexOf('.');
+
+      name = tail.substring(0, p);
+    }
+    
+    if (name == null || name.equals("/")) {
+      name = "ROOT";
+    }
+    else if (name.startsWith("/")) {
+      name = name.substring(1);
+    }
+    
+    return name;
+  }
+
   private ActorSender createBamzClient(WatchdogArgs args,
                                         WatchdogClient client)
   {
@@ -120,7 +173,7 @@ public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
     
     if (user == null || "".equals(user)) {
       user = "";
-      password = client.getResinSystemAuthKey();
+      password = client.getClusterSystemKey();
     }
     
     return createBamClient(client, address, port, user, password);
@@ -267,7 +320,7 @@ public abstract class AbstractRepositoryCommand extends AbstractRemoteCommand {
   
   private int findPort(WatchdogClient client)
   {
-    for (TcpSocketLinkListener listener : client.getConfig().getPorts()) {
+    for (TcpPort listener : client.getConfig().getPorts()) {
       if (listener instanceof OpenPort) {
         OpenPort openPort = (OpenPort) listener;
         

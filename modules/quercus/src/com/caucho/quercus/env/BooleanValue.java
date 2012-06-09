@@ -338,7 +338,7 @@ public class BooleanValue extends Value
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
     if (_value)
       sb.append("true");
@@ -350,7 +350,7 @@ public class BooleanValue extends Value
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append(_value ? "true" : "false");
   }

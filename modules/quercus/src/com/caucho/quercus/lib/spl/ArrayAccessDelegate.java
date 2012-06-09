@@ -46,49 +46,39 @@ public class ArrayAccessDelegate implements ArrayDelegate
     = new ConstStringValue("offsetUnset");
   private static final StringValue OFFSET_EXISTS
     = new ConstStringValue("offsetExists");
-  
-  public Value get(ObjectValue qThis, Value index)
+
+  @Override
+  public Value get(Env env, ObjectValue qThis, Value index)
   {
-    Env env = Env.getInstance();
-    
     return qThis.callMethod(env, OFFSET_GET, index);
   }
 
-  public Value put(ObjectValue qThis, Value index, Value value)
+  @Override
+  public Value put(Env env, ObjectValue qThis, Value index, Value value)
   {
-    Env env = Env.getInstance();
-
     return qThis.callMethod(env, OFFSET_SET, index, value);
   }
 
-  public Value put(ObjectValue qThis, Value index)
+  @Override
+  public Value put(Env env, ObjectValue qThis, Value index)
   {
-    Env env = Env.getInstance();
-    
     return qThis.callMethod(env, OFFSET_SET, UnsetValue.UNSET, index);
   }
 
-  public boolean isset(ObjectValue qThis, Value index)
+  @Override
+  public boolean isset(Env env, ObjectValue qThis, Value index)
   {
-    Env env = Env.getInstance();
-    Value returnValue = qThis.getQuercusClass().issetField(env,qThis,index.toString(env));
-    
-    if (returnValue == UnsetValue.UNSET) {
-      return qThis.callMethod(env, OFFSET_EXISTS, index).toBoolean();
-    }
-    else
-      return returnValue.toBoolean();
+    return qThis.callMethod(env, OFFSET_EXISTS, index).toBoolean();
   }
 
-  public Value unset(ObjectValue qThis, Value index)
+  @Override
+  public Value unset(Env env, ObjectValue qThis, Value index)
   {
-    Env env = Env.getInstance();
-    
     return qThis.callMethod(env, OFFSET_UNSET, index);
   }
-  
+
   @Override
-  public long count(ObjectValue qThis)
+  public long count(Env env, ObjectValue qThis)
   {
     return 1;
   }

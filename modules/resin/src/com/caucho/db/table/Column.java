@@ -31,6 +31,8 @@ package com.caucho.db.table;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.sql.Types;
+
 import com.caucho.db.index.BTree;
 import com.caucho.db.index.KeyCompare;
 import com.caucho.db.sql.Expr;
@@ -43,24 +45,6 @@ import com.caucho.util.L10N;
 @Module
 abstract public class Column {
   private static final L10N L = new L10N(Column.class);
-  
-  @Module
-  public enum ColumnType {
-    NONE,
-    VARCHAR,
-    BOOLEAN,
-    BYTE,
-    SHORT,
-    INT,
-    LONG,
-    DOUBLE,
-    DATE,
-    BLOB,
-    NUMERIC,
-    BINARY,
-    VARBINARY,
-    IDENTITY;
-  }
   
   private final Row _row;
   private final String _name;
@@ -132,6 +116,14 @@ abstract public class Column {
   public Class<?> getJavaType()
   {
     return Object.class;
+  }
+
+  /**
+   * @return
+   */
+  public int getSQLType()
+  {
+    return getTypeCode().getSQLType();
   }
 
   /**
@@ -552,8 +544,10 @@ abstract public class Column {
                    rowAddr,
                    xa);
     */
+    
     index.insert(block, rowOffset + getColumnOffset(), getLength(),
                  rowAddr, false);
+    
   }
   
   /**
@@ -603,11 +597,12 @@ abstract public class Column {
       = index.lookup(block, rowOffset + getColumnOffset(), getLength());
 
     if (value != rowAddr)
-      throw new IllegalStateException(L.l("{0}: invalid index (key={1}, index value={2}, row addr={3})",
+      throw new IllegalStateException(L.l("{0}: invalid index (key={1}, index value={2}, row addr={3}, {4})",
                                           this, 
                                           getIndexKeyCompare().toString(block, rowOffset + getColumnOffset(), getLength()),
                                           Long.toHexString(value), 
-                                          Long.toHexString(rowAddr)));
+                                          Long.toHexString(rowAddr),
+                                          _table));
   }
   
   /**
@@ -633,11 +628,74 @@ abstract public class Column {
       index.close();
   }
 
+  @Override
   public String toString()
   {
     if (getIndex() != null)
-      return getClass().getName() + "[" + _name + ",index]";
+      return getClass().getSimpleName() + "[" + _name + ",index]";
     else
-      return getClass().getName() + "[" + _name + "]";
+      return getClass().getSimpleName() + "[" + _name + "]";
+  }
+  
+  @Module
+  public enum ColumnType {
+    NONE,
+    VARCHAR {
+      @Override
+      public int getSQLType() { return Types.VARCHAR; }
+    },
+    BOOLEAN {
+      @Override
+      public int getSQLType() { return Types.BIT; }
+    },
+    BYTE {
+      @Override
+      public int getSQLType() { return Types.TINYINT; }
+    },
+    SHORT {
+      @Override
+      public int getSQLType() { return Types.SMALLINT; }
+    },
+    INT {
+      @Override
+      public int getSQLType() { return Types.INTEGER; }
+    },
+    LONG {
+      @Override
+      public int getSQLType() { return Types.BIGINT; } 
+    },
+    DOUBLE {
+      @Override
+      public int getSQLType() { return Types.DOUBLE; } 
+    },
+    DATE {
+      @Override
+      public int getSQLType() { return Types.TIMESTAMP; } 
+    },
+    BLOB {
+      @Override
+      public int getSQLType() { return Types.VARBINARY; } 
+    },
+    NUMERIC {
+      @Override
+      public int getSQLType() { return Types.DOUBLE; } 
+    },
+    BINARY {
+      @Override
+      public int getSQLType() { return Types.BINARY; } 
+    },
+    VARBINARY {
+      @Override
+      public int getSQLType() { return Types.VARBINARY; } 
+    },
+    IDENTITY {
+      @Override
+      public int getSQLType() { return Types.BIGINT; } 
+    };
+    
+    public int getSQLType()
+    {
+      return Types.VARCHAR;
+    }
   }
 }

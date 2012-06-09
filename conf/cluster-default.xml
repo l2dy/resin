@@ -1,19 +1,7 @@
 <resin xmlns="http://caucho.com/ns/resin"
        xmlns:resin="urn:java:com.caucho.resin">
 
-  <!--
-     - driver .jar files can be placed in ${resin.root}/resin.d/lib
-     -->
-  <class-loader>
-    <tree-loader path="${resin.root}/ext-lib"/>
-    <tree-loader path="${resin.root}/resin-inf"/>
-    <tree-loader path="cloud:/resin-inf"/>
-  </class-loader>
 
-  <!-- Java system-properties -->
-  <system-property mail.smtp.host="${smtp_host?:'127.0.0.1'}"/>
-  <system-property mail.smtp.port="${smtp_port?:25}"/>
-  <system-property mail.smtp.from="${smtp_from}"/>
 
   <!--
      - default configuration applied to all clusters
@@ -22,7 +10,7 @@
     <!-- shared webapp jars for non-classloader-aware libraries -->
     <web-app-default>
       <class-loader>
-        <library-loader path="${resin.home}/webapp-jars"/>
+        <library-loader path="${resin.root}/webapp-jars"/>
         <library-loader path="${resin.root}/webapp.d/lib"/>
         <library-loader path="config:/webapp.d/lib"/>
       </class-loader>
@@ -35,7 +23,7 @@
     </class-loader>
 
     <!-- include resources config files in resources/ -->
-    <resin:import fileset="${__DIR__}/${cluster.id}-inf/**/*.xml"/>
+    <resin:import fileset="${resin.root}/${cluster.id}-inf/**/*.xml"/>
     <resin:import fileset="cloud:/${cluster.id}-inf/**/*.xml"
                   recover="true"/>
 
@@ -50,10 +38,12 @@
     <!--
        - Enables the proxy cache (available in Resin Professional) 
       -->
-    <proxy-cache memory-size="${proxy_cache_size}">
-     <!-- Vary header rewriting for IE -->
-      <rewrite-vary-as-private/>
-    </proxy-cache>
+    <resin:if test="${proxy_cache_enable}">
+      <proxy-cache memory-size="${proxy_cache_size}">
+       <!-- Vary header rewriting for IE -->
+        <rewrite-vary-as-private/>
+      </proxy-cache>
+    </resin:if>
     
     <!--
        - Admin services
@@ -64,6 +54,10 @@
     </resin:if>
     
     <resin:AdminServices/>
+
+    <resin:if test="${elastic_cloud_enable}">
+      <resin:ElasticCloudService/>
+    </resin:if>
 
     <!-- defaults for each server, i.e. JVM -->
     <server-default>
@@ -87,15 +81,15 @@
       <sendfile-enable>${sendfile}</sendfile-enable>
 
       <!-- The http port -->
-      <http address="*" port="${http}"/>
+      <http address="${http_address?:'*'}" port="${http}"/>
 
       <!-- SSL port configuration: -->
       <resin:choose>
       <resin:when test="${openssl_file != null}">
-        <http port="${https}">
+        <http address="${http_address?:'*'}" port="${https}">
           <openssl>
-            <certificate-file>${openssl_file}</certificate-file>
-            <certificate-key-file>${openssl_key}</certificate-key-file>
+            <certificate-file>${file_lookup(openssl_file,__DIR__)}</certificate-file>
+            <certificate-key-file>${file_lookup(openssl_key, __DIR__)}</certificate-key-file>
             <password>
               <resin:Password>${openssl_password}</resin:Password>
             </password>
@@ -103,7 +97,7 @@
         </http>
       </resin:when>
       <resin:when test="${jsse_keystore_file != null}">
-        <http address="*" port="${https}">
+        <http address="${http_address?:'*'}" port="${https}">
           <jsse-ssl>
             <key-store-type>${jsse_keystore_type?:'jks'}</key-store-type>
             <key-store-file>${jsse_keystore_file}</key-store-file>
@@ -114,7 +108,7 @@
         </http>
       </resin:when>
       <resin:when test="${class_exists('sun.security.x509.CertAndKeyGen')}">
-        <http address="*" port="${https}">
+        <http address="${http_address?:'*'}" port="${https}">
           <jsse-ssl self-signed-certificate-name="resin@localhost"/>
         </http>
       </resin:when>
@@ -182,7 +176,7 @@
           <servlet-mapping url-pattern="/*"
                            servlet-class="com.caucho.admin.servlet.AdminRestServlet">
             <init>
-              <require-secure>${rest_admin_secure}</require-secure>
+              <require-secure>${rest_admin_ssl}</require-secure>
             </init>
           </servlet-mapping>
         </web-app>

@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.27)
+AC_INIT([resin],4.0.28)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -33,30 +33,31 @@ if test "$prefix" == "NONE"; then
   resin_home="$ac_default_prefix/$resin_version"
 else
   resin_home="$prefix"
-fi  
+fi
 
 build_dir="${abs_builddir}"
 
 if test -z "${build_dir}"; then
   build_dir=`pwd`
 fi
-  
+
 AC_SUBST(resin_home)
 AC_SUBST(resin_version)
 AC_SUBST(usr_share)
 AC_SUBST(build_dir)
+AC_SUBST(initd_dir)
 #
 # --with-resin-root
 #
 
 AC_ARG_WITH(resin-root,
 [AS_HELP_STRING([--with-resin-root=DIR],
-                [resin data directory])], 
+                [resin data directory])],
 [resin_root=${withval}])
 
 if test -z "$resin_root"; then
   if test "$prefix" == "NONE"; then
-    resin_root="/var/www"
+    resin_root="/var/resin"
   else
     resin_root="$prefix"
   fi
@@ -71,7 +72,7 @@ AC_SUBST(resin_conf)
 
 AC_ARG_WITH(resin-conf,
 [AS_HELP_STRING([--with-resin-conf=DIR],
-                [resin configuration directory])], 
+                [resin configuration directory])],
 [resin_conf=${withval}])
 
 if test -z "$resin_conf"; then
@@ -88,8 +89,8 @@ fi
 AC_SUBST(resin_log)
 
 AC_ARG_WITH(resin-log,
-[AS_HELP_STRING([--with-resin-log=DIR], 
-                [resin log directory])], 
+[AS_HELP_STRING([--with-resin-log=DIR],
+                [resin log directory])],
 [resin_log=${withval}])
 
 if test -z "$resin_log"; then
@@ -105,15 +106,20 @@ fi
 #
 if test -d "/etc/init.d/rc.d"; then
   resin_init_d="/etc/init.d/rc.d/resin"
+  initd_dir="/etc/init.d/rc.d"
 elif test -d "/etc/init.d"; then
   resin_init_d="/etc/init.d/resin"
+  initd_dir="/etc/init.d"
 elif test -d "/etc/rc.d"; then
   resin_init_d="/etc/rc.d"
+  initd_dir="/etc/"
 fi
 
-AC_ARG_WITH(resin-init.d,
-[AS_HELP_STRING([--with-resin-init.d=PATH], 
-                [resin startup (init.d) script path])], 
+AC_SUBST(initd_dir)
+
+AC_ARG_WITH(resin-init-d,
+[AS_HELP_STRING([--with-resin-init-d=PATH],
+                [resin startup (init.d) script path])],
 [
 case "${withval}" in
   no)  resin_init_d= ;;
@@ -122,6 +128,7 @@ esac
 ])
 
 AC_SUBST(resin_init_d)
+AC_SUBST(initd_dir)
 
 resin_pro="."
 resin_os="../resin_os"
@@ -133,8 +140,7 @@ elif test -r "../pro/modules/c/src/resin/mmap_file.c"; then
   resin_pro="../pro"
   resin_os="../../../../../resin/modules/c/src/resin_os"
   is_dev="true"
-  echo "development mode"
-fi  
+fi
 
 AC_SUBST(resin_os)
 AC_SUBST(resin_pro)
@@ -144,16 +150,16 @@ AC_SUBST(resin_pro)
 #
 AC_ARG_WITH(java-home,
 [AS_HELP_STRING([--with-java-home=DIR],
-                [java home])], 
+                [java home])],
 [JAVA_HOME=${withval}])
 
 if test -n "$JAVA_HOME"; then
-  a=b
+  JAVA_EXE="$JAVA_HOME/bin/java"
 elif test -x "/usr/libexec/java_home"; then
   JAVA_HOME=`/usr/libexec/java_home`
 else
   java=`which java 2>/dev/null`
-  if test $? = "0"; then
+  if test -x "$java"; then
     while test -h "$java"
     do
       head=`dirname $java`
@@ -165,25 +171,33 @@ else
       fi
     done
 
-    JAVA_HOME=`dirname $java`
+    JAVA_BIN=`dirname $java`
 
     # we're in $JAVA_HOME/jre
-    if test -f "$JAVA_HOME/include/jni.h"; then
-      JAVA_HOME=$JAVA_HOME
+    if test -f "$JAVA_BIN/include/jni.h"; then
+      JAVA_HOME=$JAVA_BIN
+    elif test -f "$JAVA_BIN/../include/jni.h"; then
+      JAVA_HOME="$JAVA_BIN"
+    elif test -f "$JAVA_BIN/../../include/jni.h"; then
+      JAVA_HOME="$JAVA_BIN/../.."
     elif test -f "/System/Library/Frameworks/JavaVM.framework"; then
       JAVA_HOME="/System/Library/Frameworks/JavaVM.framework"
     elif test -d "/etc/alternatives/java_sdk"; then
       JAVA_HOME="/etc/alternatives/java_sdk"
-    elif test -f "$JAVA_HOME/../include/jni.h"; then
-      JAVA_HOME=`cd $JAVA_HOME/..; pwd`
-    elif test -f "$JAVA_HOME/lib/rt.jar"; then
-      JAVA_HOME=`cd $JAVA_HOME/..; pwd`
+    elif test -f "$JAVA_BIN/lib/rt.jar"; then
+      JAVA_HOME=`cd $JAVA_BIN/..; pwd`
     elif test -f "/usr/lib/jvm/java-6-openjdk/include/jni.h"; then
       JAVA_HOME="/usr/lib/jvm/java-6-openjdk"
     elif test -f "/usr/lib/jvm/java-6-sun/include/jni.h"; then
       JAVA_HOME="/usr/lib/jvm/java-6-sun"
+    elif test -f "/usr/lib/jvm/java-openjdk/include/jni.h"; then
+      JAVA_HOME="/usr/lib/jvm/java-openjdk"
+    elif test -f "/usr/lib/jvm/java/include/jni.h"; then
+      JAVA_HOME="/usr/lib/jvm/java"
     elif test -d "/usr/java"; then
       JAVA_HOME=/usr/java
+    else
+      JAVA_HOME="$JAVA_BIN"
     fi
   elif test -d "/usr/java"; then
     JAVA_HOME=/usr/java
@@ -200,57 +214,68 @@ fi
 
 AC_SUBST(JAVA_HOME)
 
-#JAVA_EXE="$JAVA_HOME/bin/java"
-JAVA_EXE=`which java`
+if test -z "$JAVA_EXE"; then
+  java=`which java 2>/dev/null`
+  if test -x "$java"; then
+    JAVA_EXE="$java"
+  fi
+fi
 
-$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
-
-if test $? = "0"; then
-  JAVA_EXE="$JAVA_EXE -d64"
+if test -z "$JAVA_EXE"; then
+  JAVA_EXE="$JAVA_HOME/bin/java"
 fi
 
 AC_SUBST(JAVA_EXE)
 
+JAVA_ARGS=
+
+$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
+if test $? = "0"; then
+  JAVA_ARGS="-d64"
+fi
+
+AC_SUBST(JAVA_ARGS)
+
 #
 # libtool stuff
-#  
-AC_PROG_LIBTOOL			    
+#
+AC_PROG_LIBTOOL
 if test -z "${LTFLAGS}"; then
   LTFLAGS="--silent"
 fi
-	
+
 LIBTOOL_SCRIPT="`pwd`/libtool"
-LIBTOOL="${LIBTOOL_SCRIPT} ${LTFLAGS}"    
+LIBTOOL="${LIBTOOL_SCRIPT} ${LTFLAGS}"
 SH_LIBTOOL="${SHELL} ${LIBTOOL_SCRIPT} ${LTFLAGS}"
 SHLTCFLAGS=""
 LTCFLAGS=""
 
-AC_SUBST(LTFLAGS)	
-AC_SUBST(LIBTOOL_SCRIPT)	
-AC_SUBST(LIBTOOL)	
-AC_SUBST(SH_LIBTOOL)	
-AC_SUBST(LTCFLAGS)	
+AC_SUBST(LTFLAGS)
+AC_SUBST(LIBTOOL_SCRIPT)
+AC_SUBST(LIBTOOL)
+AC_SUBST(SH_LIBTOOL)
+AC_SUBST(LTCFLAGS)
 AC_SUBST(EGREP)
-     
+
 INCLUDES=""
 plugins=common
 LIBEXEC=libexec
-		
+
 AC_SUBST(plugins)
 AC_SUBST(resin_pro_plugins)
 AC_SUBST(LIBEXEC)
 dnl should be unnecessary
 AC_SUBST(LD)
 
-ACLOCAL=aclocal	
+ACLOCAL=aclocal
 AUTOMAKE=automake
-AC_SUBST(ACLOCAL)	
-AC_SUBST(AUTOMAKE)	
+AC_SUBST(ACLOCAL)
+AC_SUBST(AUTOMAKE)
 
 #
 # additional CFLAGS
 #
-# for solaris        
+# for solaris
 CFLAGS="$CFLAGS -D_POSIX_PTHREAD_SEMANTICS"
 
 #
@@ -258,7 +283,7 @@ CFLAGS="$CFLAGS -D_POSIX_PTHREAD_SEMANTICS"
 #
 AC_ARG_WITH(apache-src,
 [AS_HELP_STRING([--with-apache-src=DIR],
-                [Apache src static compilation])], 
+                [Apache src static compilation])],
 [
 apache_src=${withval}
 
@@ -299,7 +324,7 @@ libcaucho.o: $(OBJS)
 
 libcaucho.so: $(OBJS_PIC)
 	rm -f $@
-	$(LD_SHLIB) $(LDFLAGS_SHLIB) -o $@ $(OBJS_PIC) $(LIBS_SHLIB) 
+	$(LD_SHLIB) $(LDFLAGS_SHLIB) -o $@ $(OBJS_PIC) $(LIBS_SHLIB)
 
 .SUFFIXES: .o .lo
 
@@ -342,7 +367,7 @@ END
 #
 AC_ARG_WITH(apache,
 [AS_HELP_STRING([--with-apache=DIR],
-                [the Apache root directory])], 
+                [the Apache root directory])],
 [
 apache_dir=${withval}
 
@@ -352,7 +377,7 @@ fi
 
 if test ! -d "${apache_dir}"; then
   AC_MSG_ERROR([--with-apache=${apache_dir} is not a valid Apache directory])
-fi   
+fi
 
 apache=1
 ])
@@ -362,7 +387,7 @@ apache=1
 #
 AC_ARG_WITH(apxs,
 [AS_HELP_STRING([--with-apxs=PATH],
-                [the Apache configuration utility])], 
+                [the Apache configuration utility])],
 [
 apxs=${withval}
 
@@ -378,7 +403,7 @@ apache=1
 #
 AC_ARG_WITH(apache-eapi,
 [AS_HELP_STRING([--with-apache-eapi=DIR],
-                [Apache eapi support])], 
+                [Apache eapi support])],
 [apache_eapi=${withval}])
 
 #
@@ -386,7 +411,7 @@ AC_ARG_WITH(apache-eapi,
 #
 AC_ARG_WITH(apache-include,
 [AS_HELP_STRING([--with-apache-include=DIR],
-                [the Apache include directory])], 
+                [the Apache include directory])],
 [
 apache_include=${withval}
 
@@ -402,7 +427,7 @@ apache=1
 #
 AC_ARG_WITH(apache-libexec,
 [AS_HELP_STRING([--with-apache-libexec=DIR],
-                [the Apache module directory])], 
+                [the Apache module directory])],
 [
 apache_libexec=${withval}
 
@@ -418,7 +443,7 @@ apache=1
 #
 AC_ARG_WITH(apache-conf,
 [AS_HELP_STRING([--with-apache-conf=DIR],
-                [the Apache configuration])], 
+                [the Apache configuration])],
 [
 apache_conf=${withval}
 
@@ -436,7 +461,7 @@ apache_cflags=
 #
 AC_ARG_WITH(apache-cflags,
 [AS_HELP_STRING([--with-apache-cflags=flags],
-                [flags for compiling mod_caucho])], 
+                [flags for compiling mod_caucho])],
 [
 apache_cflags=${withval}
 
@@ -452,17 +477,17 @@ if test -n "${apxs}"; then
     AC_MSG_ERROR(bad apxs ${apxs})
   fi
 elif test -x "${apache_bin}/apxs"; then
-  apxs=${apache_bin}/apxs 
+  apxs=${apache_bin}/apxs
 elif test -x "${apache_dir}/bin/apxs"; then
-  apxs=${apache_dir}/bin/apxs 
+  apxs=${apache_dir}/bin/apxs
 elif test -x "${apache_dir}/sbin/apxs"; then
-  apxs=${apache_dir}/sbin/apxs 
+  apxs=${apache_dir}/sbin/apxs
 elif test -x "/sbin/apxs"; then
-  apxs=/sbin/apxs 
+  apxs=/sbin/apxs
 elif test -x "/usr/sbin/apxs"; then
-  apxs=/usr/sbin/apxs 
+  apxs=/usr/sbin/apxs
 fi
-   
+
 #
 # heuristics for finding the Apache include directory
 #
@@ -474,10 +499,10 @@ if test -z "${apache_include}" -a -r "${apache_dir}/include/httpd.h"; then
   apache_include=${apache_dir}/include
 fi
 
-if test -n "${apache_include}"; then	
+if test -n "${apache_include}"; then
   APACHE_INC="-I${apache_include}"
 fi
-  
+
 #
 # deal with stronghold
 #
@@ -510,9 +535,9 @@ if test -n "${apache_exe}"; then
 elif test -z "${apache_bin}"; then
  a=b;
 elif test -x "${apache_bin}/httpd"; then
- apache_exe="${apache_bin}/httpd"   	
+ apache_exe="${apache_bin}/httpd"
 elif test -x "${apache_bin}/apache"; then
- apache_exe="${apache_bin}/apache"   	
+ apache_exe="${apache_bin}/apache"
 elif test -x "${apache_bin}/httpd2"; then
  apache_exe="${apache_bin}/httpd2"
 elif test -x "${apache_bin}/apache2"; then
@@ -548,7 +573,7 @@ fi
 
 if test -z "${apache_conf}" -a -n "${apxs}"; then
   apache_confdir=`${apxs} -q SYSCONFDIR`
-  
+
   if test -r "${apache_confdir}"/httpd.conf; then
     apache_conf=${apache_confdir}/httpd.conf
   elif test -r "${apache_confdir}"/apache.conf; then
@@ -583,7 +608,7 @@ if test -x "${apxs}"; then
      APACHE_INC="${APACHE_INC} ${apr_inc}"
    fi
 fi
-	
+
 #
 # Apache CFLAGS
 #
@@ -598,8 +623,8 @@ if test -z "$apache_cflags" -a -x "${apxs}"; then
    else
      apache_cflags="`${apxs} -q CFLAGS`"
    fi
- fi
-	
+fi
+
 if test -z "$apache_cflags" -a -x "${apache_exe}"; then
    flags=`${apache_exe} -V | grep EAPI`
    if test -n "$flags"; then
@@ -646,7 +671,6 @@ fi
 echo $ECHO_N "checking if ${JAVA_EXE} is Java 1.6... "
 
 tmpname="/tmp/java$$.out"
-	       	
 $JAVA_EXE -version 2> $tmpname
 
 grep "1\.@<:@678]" $tmpname 1> /dev/null
@@ -658,61 +682,25 @@ fi
 
 echo "yes"
 
+rm -f $tmpname
+
 #
 # 64bit heuristics
 #
-echo $ECHO_N "checking if Java is 64-bit... "
+echo $ECHO_N "checking if ${JAVA_EXE} is 64-bit... "
 
-tmpname="/tmp/java$$.out"
-	       	
-#$JAVA_HOME/bin/java -version 2> $tmpname
-
-$JAVA_EXE -version 2> $tmpname
-
-grep "64-Bit" $tmpname 1> /dev/null
-if test "$?" = "0"; then
+$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
+if test $? = "0"; then
    b64_jni=true
 fi
 
-grep "amd64-64" $tmpname 1> /dev/null
-if test "$?" = "0"; then
-   b64_jni=true
-fi
+# Require user to use --enable-64bit if the version is optional in the javac
 
-grep "x86_64" $tmpname 1> /dev/null
-if test "$?" = "0"; then
-   b64_jni=true
-fi
-
-grep "s390x-64" $tmpname 1> /dev/null
-if test "$?" = "0"; then
-   b64_jni=true
-fi
-               	
-$JAVA_HOME/bin/sparcv9/java -version 2> $tmpname
-grep "64-Bit" $tmpname 1> /dev/null
-     
-if test "$?" = "0"; then
-   b64_jni=true
-fi
-
-# Require user to use --enable-64bit if the version is optional
-# in the javac  
-#  
-#$JAVA_HOME/bin/java -d64 -version 2> $tmpname
-#grep "64-Bit" $tmpname 1> /dev/null
-    
-#if test "$?" = "0"; then
-#   b64_jni=true
-#fi
-
-if test -n "$b64_jni"; then	
+if test -n "$b64_jni"; then
    echo "yes"
-else   
+else
    echo "no"
 fi
-
-rm -f $tmpname	
 
 #
 # --enable-64bit
@@ -749,9 +737,9 @@ AC_ARG_ENABLE(64bit-plugin,
 
 if test -n "${b64}"; then
    b64_jni=true
-fi   
+fi
 
-if test -n "${b64_jni}"; then        
+if test -n "${b64_jni}"; then
    CFLAGS="$CFLAGS -DB64"
    LIBEXEC=libexec64
 fi
@@ -775,7 +763,7 @@ fi
 # fill in based on known configurations
 #
 if test -z "${LD_SHLIB}"; then
-  LD_SHLIB=${LD}	
+  LD_SHLIB=${LD}
   CFLAGS_SHLIB="-fpic"
   LDFLAGS_SHLIB="-shared"
 
@@ -871,24 +859,24 @@ if test -z "${LD_SHLIB}"; then
 #  case "$target_cpu" in
 #    x86_64)
 #           if test -z "$b64_jni"; then
-#  	     CFLAGS_JNI="$CFLAGS_JNI -m32"
-#  	     LDFLAGS_SHLIB="$LDFLAGS_SHLIB -m32"
-#   	   fi
-#	;;
-#  esac	
+#        CFLAGS_JNI="$CFLAGS_JNI -m32"
+#        LDFLAGS_SHLIB="$LDFLAGS_SHLIB -m32"
+#        fi
+# ;;
+#  esac
 fi
 
 case "$target_os" in
   linux*)
         CFLAGS="$CFLAGS -DHAS_SOCK_TIMEOUT -DHAS_SENDFILE -DHAS_SPLICE"
-	;;
+  ;;
   solaris*)
         CFLAGS="$CFLAGS -DHAS_SOCK_TIMEOUT"
-	;;
+  ;;
   darwin*)
         CFLAGS="$CFLAGS -DHAS_SOCK_TIMEOUT"
-	;;
-esac        
+  ;;
+esac
 
 if test -z "$apache"; then
   a=b
@@ -915,9 +903,7 @@ if test -z "${LD_SHLIB}"; then
       CFLAGS_SHLIB="`$PERL -V:cccdlflags | cut -d\' -f2`"
       LDFLAGS_SHLIB="`$PERL -V:lddlflags | cut -d\' -f2`"
       LD_SHLIB="`$PERL -V:ld | cut -d\' -f2`"
- 
       has_clflags=1
-
       echo "Using shared library flags from Perl"
     fi
   fi
@@ -957,86 +943,84 @@ resin_pro_plugin=
 if test -r "${resin_pro}/modules/c/src/resin/mmap_file.c"; then
    resin_pro_plugin="resin"
 fi
-echo "PRO: ${resin_pro} ${resin_pro_plugin}"	
-resin_ssl_plugin="resinssl"
 
 resin_pro_plugins="$resin_pro_plugin"
 
 case "$target_cpu" in
   i?86)
-	CPU=i386
-	;;
+  CPU=i386
+  ;;
 
   sparc*)
-	if test -n "${b64_jni}"; then
-  	  CPU=sparcv9
-	else
-  	  CPU=sparc
-	fi
-	;;
+  if test -n "${b64_jni}"; then
+      CPU=sparcv9
+  else
+      CPU=sparc
+  fi
+  ;;
 
   x86_64)
-	CPU=$target_cpu
-	;;
-	
+  CPU=$target_cpu
+  ;;
+
   *)
-	CPU=$target_cpu
-	;;
+  CPU=$target_cpu
+  ;;
 esac
 
 case "$target_os" in
   linux*)
-	jni_os=linux
-        PROXY_LIBS="-lpthread -lc"
-	;;
+  jni_os=linux
+        PROXY_LIBS="-lpthread -lrt -lc"
+  ;;
 
   *solaris*)
-	jni_os=solaris
-	CFLAGS="$CFLAGS -D__SOLARIS__"
-	PROXY_LIBS='-lnsl -lsocket -lthread -lc'
-	;;
+  jni_os=solaris
+  CFLAGS="$CFLAGS -D__SOLARIS__"
+  PROXY_LIBS='-lnsl -lsocket -lthread -lc'
+  ;;
 
   *freebsd*)
-	PROXY_LIBS='-lpthread'
-        jni_os=freebsd        
-        
-	tmp=`ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libc_r`
-	tmp=$tmp `ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libpthread`
-	tmp=$tmp `ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libthr`
+  PROXY_LIBS='-lpthread'
+        jni_os=freebsd
 
-	case "$tmp" in
-	100)
-		PROXY_LIBS='-lc_r';
-		;;
-	010)
-		PROXY_LIBS='-lpthread';
-		;;
-	001)
-		PROXY_LIBS='-lthr';
-		;;
-	*)
-		PROXY_LIBS='-lpthread'
-		echo "Using -lpthread as default"
-		;;
-	esac	
-	;;
+  tmp=`ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libc_r`
+  tmp=$tmp `ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libpthread`
+  tmp=$tmp `ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libthr`
+
+  case "$tmp" in
+  100)
+    PROXY_LIBS='-lc_r';
+    ;;
+  010)
+    PROXY_LIBS='-lpthread';
+    ;;
+  001)
+    PROXY_LIBS='-lthr';
+    ;;
+  *)
+    PROXY_LIBS='-lpthread'
+    echo "Using -lpthread as default"
+    ;;
+  esac
+  ;;
 
   *darwin*)
-	LD=gcc
-	SO=jnilib
-	;;
+  LD=gcc
+  SO=jnilib
+  ;;
 
   *hpux*)
-	if test -r "$JAVA_HOME/include/hpux/jni_md.h"; then
-	  jni_os=hpux
+  if test -r "$JAVA_HOME/include/hpux/jni_md.h"; then
+    jni_os=hpux
         else
-	  jni_os=hp-ux
+    jni_os=hp-ux
         fi
-	;;
+  ;;
 
   *aix*)
         jni_os=aix
-	;;
+  ;;
 esac
 
 AC_SUBST(CPU)
@@ -1054,8 +1038,8 @@ AC_SUBST(SSL_LIBS)
 # --with-jni-include
 #
 AC_ARG_WITH(jni-include,
-[AS_HELP_STRING([--with-jni-include="-Idir -Idir"], 
-                [jni include string])], 
+[AS_HELP_STRING([--with-jni-include="-Idir -Idir"],
+                [jni include string])],
 [
 JNI_INCLUDE=${withval}
 JNI="yes"
@@ -1068,7 +1052,7 @@ AC_ARG_ENABLE(jni,
 [AS_HELP_STRING([--enable-jni], [Turn on jni])],
 [case "${enableval}" in
  yes) JNI=true ;;
- no)  JNI=false ;; 
+ no)  JNI=false ;;
  *) AC_MSG_ERROR(bad value ${enableval} for --enable-jni) ;;
  esac],[JNI=""])
 
@@ -1131,7 +1115,6 @@ if test "$JNI" != "false" ; then
 
   if test -n "$HAS_JVMTI"; then
     echo "Using JVMTI for class reloading"
-    
     CFLAGS="$CFLAGS -DHAS_JVMTI"
   else
     AC_MSG_ERROR([Can't find JVMTI directory ${JNI_INCLUDE_DIR}/jvmti.h])
@@ -1151,7 +1134,7 @@ fi
 
 AC_SUBST(JNI)
 AC_SUBST(JNI_INCLUDE)
-	
+
 #
 # --enable-ssl
 #
@@ -1159,7 +1142,7 @@ AC_ARG_ENABLE(ssl,
 [AS_HELP_STRING([--enable-ssl], [Turn on ssl])],
 [case "${enableval}" in
  yes) ENABLE_SSL=true ;;
- no)  ENABLE_SSL="" ;;
+ no)  ENABLE_SSL=false ;;
  *) AC_MSG_ERROR(bad value ${enableval} for --enable-ssl) ;;
  esac],[ENABLE_SSL=""])
 
@@ -1168,11 +1151,11 @@ AC_ARG_ENABLE(ssl,
 #
 AC_ARG_WITH(openssl,
 [AS_HELP_STRING([--with-openssl=DIR],
-                [Openssl directory])], 
+                [Openssl directory])],
 [
 OPENSSL=${withval}
-OPENSSL_INCLUDE=${OPENSSL}/include	
-OPENSSL_LIB=${OPENSSL}/lib	
+OPENSSL_INCLUDE=${OPENSSL}/include
+OPENSSL_LIB=${OPENSSL}/lib
 ENABLE_SSL=true
 ])
 
@@ -1181,7 +1164,7 @@ ENABLE_SSL=true
 #
 AC_ARG_WITH(openssl-include,
 [AS_HELP_STRING([--with-openssl-include=DIR],
-                [Openssl include directory])], 
+                [Openssl include directory])],
 [
 OPENSSL_INCLUDE=${withval}
 ENABLE_SSL=true
@@ -1196,103 +1179,62 @@ fi
 #
 AC_ARG_WITH(openssl-lib,
 [AS_HELP_STRING([--with-openssl-lib=DIR],
-                [Openssl lib directory])], 
+                [Openssl lib directory])],
 [
 OPENSSL_LIB=${withval}
 ENABLE_SSL=true
 
 if test ! -r "${OPENSSL_LIB}/libssl.a" -a \
         ! -r "${OPENSSL_LIB}/libssl.dylib" -a \
-	! -r "${OPENSSL_LIB}/libssl.so"; then
+  ! -r "${OPENSSL_LIB}/libssl.so"; then
   AC_MSG_ERROR([Can't find valid OpenSSL library ${OPENSSL_LIB}/libssl.*])
 fi
 ])
 
-if test -n "${OPENSSL_INCLUDE}"; then
+if test "${ENABLE_SSL}" == false; then
+  foo=bar
+elif test -n "${OPENSSL_INCLUDE}"; then
   foo=bar
 elif test -r ${OPENSSL}/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=${OPENSSL}/include
-  ENABLE_SSL=true
 elif test -r /usr/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/include
-  ENABLE_SSL=true
 elif test -r /usr/local/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/local/include
-  ENABLE_SSL=true
 elif test -r /usr/local/ssl/include/openssl/ssl3.h; then
   OPENSSL_INCLUDE=/usr/local/ssl/include
-  ENABLE_SSL=true
 fi
 
-#if test "${ENABLE_SSL}" = false; then	
-#  foo=bar
-#elif test -n "${OPENSSL_LIB}"; then
-#  foo=bar
-#elif test -n "${b64_jni}" -a -r /lib64/libcrypto.so; then
-#  OPENSSL_LIB=/lib64
-#elif test -n "${b64_jni}" -a -r /usr/lib64/libcrypto.so; then
-#  OPENSSL_LIB=/usr/lib64
-  
-#elif test -r /lib/libcrypto.so; then
-#  OPENSSL_LIB=/lib
-#elif test -r /lib/libcrypto.dylib; then
-#  OPENSSL_LIB=/lib
-#  
-#elif test -r /usr/lib/libcrypto.so; then
-#  OPENSSL_LIB=/usr/lib
-#elif test -r /usr/lib/libcrypto.dylib; then
-#  OPENSSL_LIB=/usr/lib
-#  
-#elif test -r /usr/local/lib/libcrypto.so; then
-#  OPENSSL_LIB=/usr/local/lib
-#elif test -r /usr/lib/libcrypto.dylib; then
-#  OPENSSL_LIB=/usr/local/lib
-#  
-#elif test -r /usr/local/ssl/lib/libcrypto.so; then
-#  OPENSSL_LIB=/usr/local/ssl/lib
-#elif test -r /usr/local/ssl/lib/libcrypto.dylib; then
-#  OPENSSL_LIB=/usr/local/ssl/lib
-#elif test -r ${OPENSSL}/lib/libcrypto.a; then
-#  OPENSSL_LIB=${OPENSSL}/lib
-#elif test -r /usr/local/ssl/lib/libcrypto.a; then
-#  OPENSSL_LIB=/usr/local/ssl/lib
-#elif test -r /usr/local/lib/libssl.a; then
-#  OPENSSL_LIB=/usr/local/lib
-#elif test -r /usr/lib/libssl.a; then
-#  OPENSSL_LIB=/usr/lib
-#fi
-
-
-if test -z "${ENABLE_SSL}"; then	
+if test "${ENABLE_SSL}" == false; then
   foo=bar
-elif test -z "${OPENSSL_LIB}"; then	
+elif test -z "${OPENSSL_LIB}"; then
   SSL_LIBS="${SSL_LIBS} -lssl"
-elif test -r "${OPENSSL_LIB}/libssl.so"; then	
+elif test -r "${OPENSSL_LIB}/libssl.so"; then
   SSL_LIBS="${SSL_LIBS} -lssl"
-elif test -r "${OPENSSL_LIB}/libssl.dylib"; then	
+elif test -r "${OPENSSL_LIB}/libssl.dylib"; then
   SSL_LIBS="${SSL_LIBS} -lssl"
-elif test -r "${OPENSSL_LIB}/libssl3.so"; then	
+elif test -r "${OPENSSL_LIB}/libssl3.so"; then
   SSL_LIBS="${SSL_LIBS} -lssl3"
-elif test -r "${OPENSSL_LIB}/libssl3.dylib"; then	
+elif test -r "${OPENSSL_LIB}/libssl3.dylib"; then
   SSL_LIBS="${SSL_LIBS} -lssl3"
-elif test -r "${OPENSSL_LIB}/libssl.a"; then	
+elif test -r "${OPENSSL_LIB}/libssl.a"; then
   SSL_LIBS="${SSL_LIBS} ${OPENSSL_LIB}/libssl.a"
-elif test -r "${OPENSSL_LIB}/libssl3.a"; then	
+elif test -r "${OPENSSL_LIB}/libssl3.a"; then
   SSL_LIBS="${SSL_LIBS} ${OPENSSL_LIB}/libssl3.a"
 else
   # probably an error
   SSL_LIBS="${SSL_LIBS} -lssl"
 fi
 
-if test -z "${ENABLE_SSL}"; then	
+if test "${ENABLE_SSL}" == false; then
   foo=bar
-elif test -z "${OPENSSL_LIB}"; then	
+elif test -z "${OPENSSL_LIB}"; then
   SSL_LIBS="${SSL_LIBS} -lcrypto"
-elif test -r "${OPENSSL_LIB}/libcrypto.so"; then	
+elif test -r "${OPENSSL_LIB}/libcrypto.so"; then
   SSL_LIBS="${SSL_LIBS} -lcrypto"
-elif test -r "${OPENSSL_LIB}/libcrypto.dylib"; then	
+elif test -r "${OPENSSL_LIB}/libcrypto.dylib"; then
   SSL_LIBS="${SSL_LIBS} -lcrypto"
-elif test -r "${OPENSSL_LIB}/libcrypto.a"; then	
+elif test -r "${OPENSSL_LIB}/libcrypto.a"; then
   SSL_LIBS="${SSL_LIBS} ${OPENSSL_LIB}/libcrypto.a"
 else
   # probably an error
@@ -1301,14 +1243,10 @@ fi
 
 SSL_OBJ=ssl_stub.o
 
-if test -z "${ENABLE_SSL}"; then	
+if test "${ENABLE_SSL}" == false; then
   echo "Openssl is not enabled"
-#elif test -z "${OPENSSL_LIB}"; then
-#  echo "Openssl library was not found"
-#elif test ! -r "${OPENSSL_LIB}/libcrypto.so" -a \
-#          ! -r "${OPENSSL_LIB}/libcrypto.dylib" -a \
-#          ! -r "${OPENSSL_LIB}/libcrypto.a" ; then
-#  AC_MSG_ERROR([Can't find valid OpenSSL library in ${OPENSSL_LIB}])
+elif test -z "${OPENSSL_INCLUDE}"; then
+  echo "Can't find OpenSSL include '${OPENSSL_INCLUDE}'"
 elif test ! -r "${OPENSSL_INCLUDE}/openssl/ssl23.h"; then
   AC_MSG_ERROR([Can't find valid OpenSSL include in ${OPENSSL_INCLUDE}])
 else
@@ -1323,13 +1261,13 @@ END
     apache_ssl=`${apache_dir}/bin/httpd -l 2>&1 | grep ssl`
     if test -n "$apache_ssl"; then
       CFLAGS="$CFLAGS -DOPENSSL"
-      echo "Enabling ssl for mod_caucho" 
+      echo "Enabling ssl for mod_caucho"
     fi
   elif test -x "${apache_dir}/bin/httpd2"; then
     apache_ssl=`${apache_dir}/bin/httpd2 -l 2>&1 | grep ssl`
     if test -n "$apache_ssl"; then
       CFLAGS="$CFLAGS -DOPENSSL"
-      echo "Enabling ssl for mod_caucho" 
+      echo "Enabling ssl for mod_caucho"
     fi
   fi
 
@@ -1355,17 +1293,17 @@ fi
 # test the open ssl
 #
 
-if test -n "${OPENSSL_LIB}"; then	
+if test -n "${SSL_LIBS}"; then
 cat >conftest.$ac_ext <<_ACEOF
 #include <openssl/ssl.h>
-#include <openssl/rsa.h>       
+#include <openssl/rsa.h>
 #include <openssl/err.h>
 
 int main(int argc, char **argv)
 {
   SSLeay_add_ssl_algorithms();
   SSL_load_error_strings();
-  
+
 #if OPENSSL_VERSION_NUMBER >= 0x00907000L
     if (0)
       ERR_print_errors_cb(0, 0);
@@ -1377,7 +1315,11 @@ int main(int argc, char **argv)
 }
 _ACEOF
 
-${CC} -o conftest ${CFLAGS_OPENSSL} ${CFLAGS} ${INCLUDES} conftest.$ac_ext -L${OPENSSL_LIB} ${SSL_LIBS} ${PROXY_LIBS} 1>/dev/null 2>/dev/null
+if test -n "$OPENSSL_LIB"; then
+  FLAG_OPENSSL_LIB="-L${OPENSSL_LIB}"
+fi
+
+${CC} -o conftest ${CFLAGS_OPENSSL} ${CFLAGS} ${INCLUDES} conftest.$ac_ext ${FLAG_OPENSSL_LIB} ${SSL_LIBS} ${PROXY_LIBS} 1>/dev/null 2>/dev/null
 
 if test "$?" != 0; then
   ${CC} -o conftest ${CFLAGS_OPENSSL} ${CFLAGS} ${INCLUDES} conftest.$ac_ext -L${OPENSSL_LIB} ${SSL_LIBS} ${PROXY_LIBS}
@@ -1390,11 +1332,13 @@ else
 
   if test "$?" != 0; then
     AC_MSG_WARN(Can't execute SSL.  Check that load version in the library path: ${LD_LIBRARY_PATH} matches the expected version.)
+  else
+    resin_ssl_plugin="resinssl"
   fi
-fi  
-	
+fi
+
 rm -f conftest conftest.$ac_ext
-fi   
+fi
 
 AC_SUBST(INCLUDES)
 AC_SUBST(CFLAGS_OPENSSL)
@@ -1407,13 +1351,26 @@ PERL="perl"
 #
 AC_ARG_WITH(perl,
 [AS_HELP_STRING([--with-perl=DIR],
-                [Perl binary location])], 
+                [Perl binary location])],
 [PERL=${withval}])
 
 AC_SUBST(PERL)
 
+SKIP_CHECK_RESIN_SH=false
 #
-# --enable-debug
+# --with-check-skip
+#  
+AC_ARG_WITH(check-skip,
+[AS_HELP_STRING([--with-check-skip=checks],
+                [checks to skip])],
+[case "${withval}" in
+  *resin_sh*) SKIP_CHECK_RESIN_SH=true ;;
+esac])
+
+AC_SUBST(SKIP_CHECK_RESIN_SH)
+
+#
+# --ENABLE-debug
 #
 AC_ARG_ENABLE(debug,
 [AS_HELP_STRING([--enable-debug], [Turn on debugging])],
@@ -1432,10 +1389,14 @@ fi
 # final cleanup
 #
 
-plugins="$plugins $resin_ssl_plugin"
+if test -n "$resin_pro_plugins"; then
+  resin_pro_plugins="$resin_pro_plugins $resin_ssl_plugin"
+fi
+
+plugins="$plugins"
 
 if test -z "${is_dev}"; then
-  plugins="$plugins $resin_pro_plugin"
+  plugins="$plugins $resin_pro_plugins"
   resin_pro_plugins="$plugins"
 fi
 
@@ -1445,87 +1406,102 @@ modules/c/src/Makefile
 modules/c/src/common/Makefile
 modules/c/src/apache2/Makefile
 modules/c/src/resin_os/Makefile
-modules/c/src/resinssl/Makefile
 init.d/resin
 bin/resinctl
 ], [])
 
-#if test -n "${resin_pro_plugins}"; then
-#  AC_OUTPUT([
-#    ${resin_pro}/modules/c/src/Makefile
-#    ${resin_pro}/modules/c/src/resin/Makefile
-#    ${resin_pro}/modules/c/src/resinssl/Makefile
-#  ])
-#fi
-
-if test -n "${resin_pro_plugins}"; then
+if test -r "modules/c/src/resin/mmap_file.c"; then
   AC_OUTPUT([
     modules/c/src/resin/Makefile
+    modules/c/src/resinssl/Makefile
+  ])
+elif test -r "../pro/modules/c/src/resin/mmap_file.c"; then
+  AC_OUTPUT([
+    ../pro/modules/c/src/Makefile
+    ../pro/modules/c/src/resin/Makefile
+    ../pro/modules/c/src/resinssl/Makefile
   ])
 fi
 
-echo ""
-echo ""
-echo "Resin Configuration summary:"
-echo ""
-echo "  RESIN_HOME  : ${resin_home}"
-echo "      root    : ${resin_root}"
-echo "      conf    : ${resin_conf}"
-echo "      log     : ${resin_log}"
-echo "      plugins : ${plugins}" 
+#if test -n "${resin_pro_plugins}"; then
+#  AC_OUTPUT([
+#    modules/c/src/resin/Makefile
+#  ])
+#fi
 
+echo ""
+echo ""
+echo "Resin Configuration Summary:"
+echo ""
+echo "  RESIN       : $PACKAGE_VERSION"
+echo "    home      : ${resin_home}"
+echo "    root      : ${resin_root}"
+echo "    conf      : ${resin_conf}"
+echo "    log       : ${resin_log}"
+echo "    plugins   : ${plugins}"
 
 if test -n "${resin_init_d}"; then
-  echo "      init    : ${resin_init_d}"
+  echo "    init      : ${resin_init_d}"
 fi
+
+echo ""
+
+echo "  JAVA_HOME   : ${JAVA_HOME}"
+echo ""
 
 if test "$JNI" = "false" ; then
-  echo 
-  echo "  *** JNI disabled by --disable-jni"
+  echo "  JNI         : Disabled by --disable-jni"
 elif test -z "$JNI"; then
-  echo "  *** No JNI has been found in JAVA_HOME=${JAVA_HOME}"
-  echo "  *** JNI libraries cannot be compiled"
-else  
-  echo "  JAVA_HOME: ${JAVA_HOME}"
-  echo ""
-
+  echo "  JNI         : No JNI has been found in JAVA_HOME"
+  echo "    *** JNI libraries cannot be compiled ***"
+else
   if test -n "${b64_jni}"; then
-    echo "    + 64-bit JNI in ${JNI_INCLUDE}"
-  else  
-    echo "    + 32-bit JNI in ${JNI_INCLUDE}"
+    echo "  JNI         : 64-bit"
+  else
+    echo "  JNI         : 32-bit"
   fi
 
-  echo "    + JNI CFLAGS: ${JNI_CFLAGS}"
+  echo "    include   : ${JNI_INCLUDE}"
+  echo "    CFLAGS    : ${JNI_CFLAGS}"
 
   if test -n "$epoll"; then
-    echo "    + epoll() for keepalives"
+    echo "    epoll() for keepalives"
   elif test -n "$poll"; then
-    echo "    + poll() for keepalives"
+    echo "    poll() for keepalives"
   else
-    echo "    + select() for keepalives"
+    echo "    select() for keepalives"
   fi
 
-  if test -n "$OPENSSL_INCLUDE"; then
-    echo "    + ${openssl_version}"
-    echo "        OpenSSL include: ${OPENSSL_INCLUDE}"
-    echo "        OpenSSL lib: ${OPENSSL_LIB}"
-    echo "        OpenSSL libraries: ${SSL_LIBS}"
-  else
-    echo "    + not using OpenSSL"
-  fi
-fi
+  echo ""
 
-if test -n "${is_dev}"; then
-  echo "  Development build"
+  if test "${ENABLE_SSL}" = "false"; then
+    echo "  OPENSSL     : Disable by --disable-ssl"
+    echo ""
+  elif test -z "${OPENSSL_INCLUDE}"; then
+    echo "  OPENSSL     : No OpenSSL has been found"
+    echo "    *** OpenSSL libraries cannot be compiled ***"
+    echo ""
+  elif test -n "${resin_pro_plugin}"; then
+    echo "  OPENSSL     : ${openssl_version}"
+    echo "    include   : ${OPENSSL_INCLUDE}"
+    echo "    lib       : ${OPENSSL_LIB}"
+    echo "    libraries : ${SSL_LIBS}"
+    echo ""
+  fi
 fi
 
 if test -n "${apache}"; then
+  echo "  APACHE      : ${apache_dir}"
+  echo "    conf      : ${apache_conf}"
+  echo "    libexec   : ${apache_libexec}"
+  echo "    include   : ${apache_include}"
+  echo "    CFLAGS    : ${apache_cflags}"
   echo ""
-  echo "  Apache: ${apache_dir}"
-  echo "      conf: ${apache_conf}"
-  echo "      libexec: ${apache_libexec}"
-  echo "      include: ${apache_include}"
-  echo "      CFLAGS: ${apache_cflags}"
+fi
+
+if test -n "${is_dev}"; then
+  echo "  DEVELOPMENT BUILD"
+  echo ""
 fi
 
 echo ""

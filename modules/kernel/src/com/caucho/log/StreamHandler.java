@@ -38,7 +38,7 @@ import java.util.logging.LogRecord;
 /**
  * Resin's rotating path-based log.
  */
-public class StreamHandler extends Handler {
+public class StreamHandler extends AbstractLogHandler {
   private static final L10N L = new L10N(StreamHandler.class);
   
   private WriteStream _os;
@@ -68,6 +68,7 @@ public class StreamHandler extends Handler {
   /**
    * Sets the formatter.
    */
+  @Override
   public void setFormatter(Formatter formatter)
   {
     _formatter = formatter;
@@ -81,87 +82,81 @@ public class StreamHandler extends Handler {
   /**
    * Publishes the record.
    */
-  public void publish(LogRecord record)
+  protected void processPublish(LogRecord record)
   {
     if (! isLoggable(record))
       return;
+    
+    WriteStream os = _os;
 
-    try {
-      if (record == null) {
-        synchronized (_os) {
-          _os.println("no record");
-          
-          if (_isNullDelimited)
-            _os.write(0);
+      synchronized (os) {
+      try {
+        if (record == null) {
+          os.println("no record");
             
-          _os.flush();
+          if (_isNullDelimited) {
+            os.write(0);
+          }
+  
+          return;
         }
-        return;
-      }
-
-      if (_formatter != null) {
-        String value = _formatter.format(record);
-
-        synchronized (_os) {
-          _os.println(value);
-          if (_isNullDelimited)
-            _os.write(0);
+  
+        if (_formatter != null) {
+          String value = _formatter.format(record);
+  
+          os.println(value);
+          if (_isNullDelimited) {
+            os.write(0);
+          }
           
-          _os.flush();
+          return;
         }
         
-        return;
-      }
-      
-      String message = record.getMessage();
-      Throwable thrown = record.getThrown();
-      
-      if (thrown == null
-          && message != null
-          && message.indexOf("java.lang.NullPointerException") >= 0) {
-        thrown = new IllegalStateException();
-        thrown.fillInStackTrace();
-      }
-
-      synchronized (_os) {
-        if (_timestamp != null) {
-          _os.print(_timestamp);
+        String message = record.getMessage();
+        Throwable thrown = record.getThrown();
+        
+        if (thrown == null
+            && message != null
+            && message.indexOf("java.lang.NullPointerException") >= 0) {
+          thrown = new IllegalStateException();
+          thrown.fillInStackTrace();
         }
-          
+  
+        if (_timestamp != null) {
+          os.print(_timestamp);
+        }
+            
         if (thrown != null) {
           if (message != null
               && ! message.equals(thrown.toString()) 
-              && ! message.equals(thrown.getMessage()))
-            _os.println(message);
-        
-          thrown.printStackTrace(_os.getPrintWriter());
+              && ! message.equals(thrown.getMessage())) {
+            printMessage(os, message, record.getParameters());
+          }
+          
+          thrown.printStackTrace(os.getPrintWriter());
         }
         else {
-          _os.println(record.getMessage());
+          printMessage(os, message, record.getParameters());
         }
         
         if (_isNullDelimited)
-          _os.write(0);
-        
+          os.write(0);
+      } catch (Throwable e) {
+        e.printStackTrace();
+      }
+      }
+  }
+  
+  @Override
+  protected void processFlush()
+  {
+    try {
+      synchronized (_os) {
         _os.flush();
       }
-    } catch (Throwable e) {
+    } catch (Exception e) {
       e.printStackTrace();
     }
-  }
-
-  /**
-   * Flushes the buffer.
-   */
-  public void flush()
-  {
-  }
-
-  /**
-   * Closes the handler.
-   */
-  public void close()
-  {
   }
 
   /**

@@ -31,7 +31,9 @@ package com.caucho.amqp.client;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -62,6 +64,10 @@ class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
   
   private int _prefetch;
   private final AmqpMessageDecoder<T> _decoder;
+  
+  private final Map<String,Object> _attachProperties;
+  private final Map<String,Object> _sourceProperties;
+  private final Map<String,Object> _targetProperties;
 
   private int _linkCredit;
 
@@ -78,7 +84,22 @@ class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
     _address = builder.getAddress();
     
     _settleMode = builder.getSettleMode();
-    _decoder = (AmqpMessageDecoder) builder.getDecoder(); 
+    _decoder = (AmqpMessageDecoder) builder.getDecoder();
+    
+    if (builder.getAttachProperties() != null)
+      _attachProperties = new HashMap<String,Object>(builder.getAttachProperties());
+    else
+      _attachProperties = null;
+    
+    if (builder.getSourceProperties() != null)
+      _sourceProperties = new HashMap<String,Object>(builder.getSourceProperties());
+    else
+      _sourceProperties = null;
+    
+    if (builder.getTargetProperties() != null)
+      _targetProperties = new HashMap<String,Object>(builder.getTargetProperties());
+    else
+      _targetProperties = null;
 
     _prefetch = builder.getPrefetch();
     
@@ -89,8 +110,23 @@ class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
 
     if (_prefetch > 0) {
       _linkCredit = _prefetch;
-      _link.setPrefetch(_prefetch);
+      _link.updatePrefetch(_prefetch);
     }
+  }
+  
+  Map<String,Object> getAttachProperties()
+  {
+    return _attachProperties;
+  }
+  
+  Map<String,Object> getSourceProperties()
+  {
+    return _sourceProperties;
+  }
+  
+  Map<String,Object> getTargetProperties()
+  {
+    return _targetProperties;
   }
   
   public int getPrefetchQueueSize()
@@ -109,7 +145,7 @@ class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
       }
       
       if (_prefetch == 0) {
-        _link.setPrefetch(1);
+        _link.updatePrefetch(1);
       }
       try {
         value = _valueQueue.poll(1000, TimeUnit.MILLISECONDS);
@@ -123,7 +159,7 @@ class AmqpClientReceiver<T> extends AbstractMessageReceiver<T>
       } finally {
         if (_prefetch == 0) {
           // drain
-          _link.setPrefetch(0);
+          _link.updatePrefetch(0);
         }
       }
     }

@@ -35,6 +35,8 @@ package com.caucho.message.broker;
  */
 public interface SenderSettleHandler
 {
+  public boolean isSettled();
+  
   public void onAccepted(long mid);
   
   public void onRejected(long mid, String msg);

@@ -41,7 +41,7 @@ public interface ObjectCache<K,V> extends Cache<K,V>
    */
   public ExtCacheEntry<K,V> getExtCacheEntry(K key);
   
-  public V getExact(K key);
+  // public V getExact(K key);
 
   /**
    * Updates the cache if the old value hash matches the current value.
@@ -53,7 +53,7 @@ public interface ObjectCache<K,V> extends Cache<K,V>
    *
    * @return true if the update succeeds, false if it fails
    */
-  public boolean compareAndPut(K key, long version, Object value);
+  public boolean compareVersionAndPut(K key, long version, Object value);
 
   /**
    * Removes the entry from the cache if the current entry's version

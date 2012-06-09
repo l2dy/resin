@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright (c) 1998-2011 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -131,14 +131,13 @@ namespace Caucho
       }
 
       String currentResin = Util.GetCurrentResinFromRegistry();
+      Resin resinInRegistry = null;
       if (currentResin != null) {
         currentResin = Util.Canonicalize(currentResin);
-        Resin resin = new Resin(currentResin);
+        resinInRegistry = new Resin(currentResin);
 
-        Resin = resin;
-
-        if (!HasResin(resin))
-          AddResin(resin);
+        if (!HasResin(resinInRegistry))
+          AddResin(resinInRegistry);
       }
 
       RegistryKey services = Registry.LocalMachine.OpenSubKey(Setup.REG_SERVICES);
@@ -163,7 +162,7 @@ namespace Caucho
               resin = new Resin(home);
           }
 
-          if (resin != null && ! HasResin(resin))
+          if (resin != null && !HasResin(resin))
             AddResin(resin);
         }
 
@@ -175,18 +174,24 @@ namespace Caucho
       String resinHome = Util.GetResinHome(null, System.Reflection.Assembly.GetExecutingAssembly().Location);
 
       foreach (Resin resin in _resinList) {
-        if (resin.Home.Equals(resinHome))
-        {
+        if (resin.Home.Equals(resinHome)) {
           Resin = resin;
 
-          break;
-        }          
+          return;
+        }
       }
 
-      if (Resin == null){
+      if (Resin == null && resinInRegistry != null)
+        Resin = resinInRegistry;
+
+      if (Resin == null && resinHome != null) {
         Resin = new Resin(resinHome);
+
         AddResin(Resin);
       }
+
+      if (Resin == null && _resinList.Count > 0)
+        Resin = _resinList[_resinList.Count - 1];
     }
 
     public void FindResinServices()
@@ -460,14 +465,40 @@ namespace Caucho
     {
       try {
         Util.TestDotNetCapability();
-      } catch (Exception) {
-        MessageBox.Show(".NET Version 3.5 is required.");
+      } catch (Exception e) {
+        String message = ".NET Version 3.5 is required.";
+        LogStartupError(message, e);
+        MessageBox.Show(message);
         Environment.Exit(1);
       }
-      Application.EnableVisualStyles();
-      Application.SetCompatibleTextRenderingDefault(false);
-      SetupForm setupForm = new SetupForm(new Setup());
-      Application.Run(setupForm);
+      try {
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        SetupForm setupForm = new SetupForm(new Setup());
+        Application.Run(setupForm);
+      } catch (Exception e) {
+        LogStartupError(null, e);
+      }
+    }
+
+    public static void LogStartupError(String message, Exception e)
+    {
+      StringBuilder text = new StringBuilder();
+      text.Append(DateTime.Now.ToString());
+      if (message != null) {
+        text.Append(message);
+        text.Append("\r\n");
+      }
+
+      if (e != null) {
+        text.Append(e.Message);
+        text.Append("\r\n");
+        text.Append(e.StackTrace);
+      }
+
+      text.Append("\r\n").Append("\r\n");
+
+      File.AppendAllText("setup-err.log", text.ToString(), Encoding.UTF8);
     }
 
     public static Hashtable FakeState()
@@ -594,7 +625,7 @@ namespace Caucho
     public String JavaHome { get; set; }
     public String Server { get; set; }
     public bool DynamicServer { get; set; }
-    public String Cluster { get; set; } 
+    public String Cluster { get; set; }
     public int DebugPort { get; set; }
     public int JmxPort { get; set; }
     public int WatchdogPort { get; set; }
@@ -631,8 +662,10 @@ namespace Caucho
       if (DynamicServer)
         sb.Append(" -cluster ").Append(Cluster);
 
-      if (Server != null && !"".Equals(Server))
+      if (DynamicServer) {
+      } else if (Server != null && !"".Equals(Server)) {
         sb.Append(" -server ").Append(Server);
+      }
 
       if (IsPreview)
         sb.Append(" -preview");
@@ -672,8 +705,8 @@ namespace Caucho
 
       if (Server != null)
         result.Append("-server ").Append(Server);
-      else if (DynamicServer != null)
-        result.Append("-dynamic:").Append(DynamicServer);
+      else if (DynamicServer)
+        result.Append("dynamic server");
       else
         result.Append("default server");
 

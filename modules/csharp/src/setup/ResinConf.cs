@@ -1,4 +1,32 @@
-﻿using System;
+﻿/*
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ *
+ * This file is part of Resin(R) Open Source
+ *
+ * Each copy or derived work must preserve the copyright notice and this
+ * notice unmodified.
+ *
+ * Resin Open Source is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2
+ * as published by the Free Software Foundation.
+ *
+ * Resin Open Source is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE, or any warranty
+ * of NON-INFRINGEMENT.  See the GNU General Public License for more
+ * details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Resin Open Source; if not, write to the
+ *
+ *   Free Software Foundation, Inc.
+ *   59 Temple Place, Suite 330
+ *   Boston, MA 02111-1307  USA
+ *
+ * @author Alex Rojkov
+ */
+
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text;
@@ -44,8 +72,7 @@ namespace Caucho
 
       XPathNodeIterator multi = _docNavigator.Select("caucho:resin/caucho:cluster/caucho:server-multi", _xmlnsMgr);
 
-      while (multi.MoveNext())
-      {
+      while (multi.MoveNext()) {
         String idPrefix = multi.Current.GetAttribute("id-prefix", "");
         String addressList = multi.Current.GetAttribute("address-list", "");
 
@@ -55,19 +82,17 @@ namespace Caucho
 
         String[] addresses = null;
 
-        if (addressList.StartsWith("${"))
-        {
+        if (addressList.StartsWith("${")) {
           String addressListKey = addressList.Substring(2, addressList.Length - 3);
           addressList = (String)getProperties()[addressListKey];
         }
-        
+
         if (addressList == null)
           continue;
 
-        addresses = addressList.Split(';');
+        addresses = addressList.Split(new Char[] { ';', ' ' });
 
-        for (int i = 0; i < addresses.Length; i++)
-        {
+        for (int i = 0; i < addresses.Length; i++) {
           ResinConfServer server = new ResinConfServer();
           server.ID = idPrefix + i;
           server.Cluster = cluster;
@@ -141,8 +166,7 @@ namespace Caucho
     {
       XPathNavigator navigator = _docNavigator.SelectSingleNode("caucho:resin/caucho:cluster[@id='" + cluster + "']", _xmlnsMgr);
 
-      if (navigator != null && navigator.MoveToFirstChild())
-      {
+      if (navigator != null && navigator.MoveToFirstChild()) {
         if ("ElasticCloudService".Equals(navigator.LocalName))
           return true;
 
@@ -153,8 +177,7 @@ namespace Caucho
 
       navigator = _docNavigator.SelectSingleNode("caucho:resin/caucho:cluster-default", _xmlnsMgr);
 
-      if (navigator != null && navigator.MoveToFirstChild())
-      {
+      if (navigator != null && navigator.MoveToFirstChild()) {
         if ("ElasticCloudService".Equals(navigator.LocalName))
           return true;
 
@@ -162,6 +185,11 @@ namespace Caucho
           if ("ElasticCloudService".Equals(navigator.LocalName))
             return true;
       }
+
+      Hashtable properties = getProperties();
+
+      if (properties != null && "true".Equals((String)properties["elastic_cloud_enable"], StringComparison.CurrentCultureIgnoreCase))
+        return true;
 
       return false;
     }
@@ -212,12 +240,9 @@ namespace Caucho
 
       _properties = new Hashtable();
 
-      String propertiesFile;
       XPathNavigator nav = _docNavigator.SelectSingleNode("caucho:resin", _xmlnsMgr);
-      if (nav.MoveToFirstChild())
-      {
-        do
-        {
+      if (nav.MoveToFirstChild()) {
+        do {
           if ("properties".Equals(nav.LocalName)) {
             String path = nav.GetAttribute("path", "");
             parse(path, _resinConf, _properties);
@@ -240,14 +265,15 @@ namespace Caucho
         file = path;
       }
 
+      if (! File.Exists(file))
+        return;
+
       TextReader reader = null;
 
-      try
-      {
+      try {
         reader = File.OpenText(file);
         String line;
-        while ((line = reader.ReadLine()) != null)
-        {
+        while ((line = reader.ReadLine()) != null) {
           if (line.StartsWith("#"))
             continue;
 
@@ -261,8 +287,7 @@ namespace Caucho
 
           properties.Add(key.Trim(), value.Trim());
         }
-      } finally
-      {
+      } finally {
         if (file != null)
           reader.Close();
       }
@@ -270,7 +295,7 @@ namespace Caucho
 
     static public ResinConfServer ParseDynamic(String value)
     { //dynamic:app-tier:name
-      String []values = value.Split(':');
+      String[] values = value.Split(':');
       String cluster = values[1];
       String id = values[2];
       if (values.Length == 4)

@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -162,14 +162,14 @@ namespace Caucho
         else if ("-verbose".Equals(arguments[argsIdx]))
         {
           IsVerbose = true;
-
-          resinArgs.Append(' ').Append(arguments[argsIdx++]);
+          argsIdx++;
+          resinArgs.Append(" -verbose ");
         }
         else if (arguments[argsIdx].StartsWith("-J")
                  || arguments[argsIdx].StartsWith("-D")
                  || arguments[argsIdx].StartsWith("-X"))
         {
-          resinArgs.Append(' ').Append(arguments[argsIdx++]);
+          resinArgs.Append(' ').Append(arguments[argsIdx++]).Append(' ');
         }
         else if ("-java_home".Equals(arguments[argsIdx])
                    || "-java-home".Equals(arguments[argsIdx]))
@@ -231,18 +231,12 @@ namespace Caucho
         {
           argsIdx += 2;
         }
-        else if ("-join-cluster".Equals(arguments[argsIdx])) {
+        else if ("-join-cluster".Equals(arguments[argsIdx])
+                  || "--join-cluster".Equals(arguments[argsIdx])
+                  || "-cluster".Equals(arguments[argsIdx]) 
+                  || "--cluster".Equals(arguments[argsIdx])) {
           DynamicServer = true;
           Cluster = arguments[argsIdx + 1];
-          resinArgs.Append("-cluster ").Append(Cluster).Append(' ');
-
-          argsIdx += 2;
-        }
-        else if ("-cluster".Equals(arguments[argsIdx]))
-        {
-          DynamicServer = true;
-          Cluster = arguments[argsIdx + 1];
-          resinArgs.Append("-cluster ").Append(Cluster).Append(' ');
 
           argsIdx += 2;
         }
@@ -314,6 +308,7 @@ namespace Caucho
                      || "config-cat".Equals(arguments[argsIdx])
                      || "config-deploy".Equals(arguments[argsIdx])
                      || "config-ls".Equals(arguments[argsIdx])
+                     || "config-undeploy".Equals(arguments[argsIdx])
                      || "console".Equals(arguments[argsIdx])
                      || "deploy".Equals(arguments[argsIdx])
                      || "deploy-copy".Equals(arguments[argsIdx])
@@ -345,9 +340,6 @@ namespace Caucho
                      || "stop".Equals(arguments[argsIdx])
                      || "thread-dump".Equals(arguments[argsIdx])
                      || "undeploy".Equals(arguments[argsIdx])
-                     || "user-add".Equals(arguments[argsIdx])
-                     || "user-list".Equals(arguments[argsIdx])
-                     || "user-remove".Equals(arguments[argsIdx])
                      || "watchdog".Equals(arguments[argsIdx])
                      || "web-app-deploy".Equals(arguments[argsIdx])
                      || "web-app-restart".Equals(arguments[argsIdx])

@@ -565,7 +565,7 @@
        - resin.jar
       -->
     <jar destfile="${dist.build}/lib/resin.jar"
-         manifest="${resin.modules}/resin/src/manifest">
+         manifest="${resin.modules}/resin/src/manifest.dist">
       <fileset dir="${resin.modules}/resin/classes">
         <exclude name="**/.*"/>
       </fileset>
@@ -721,7 +721,7 @@
         <include name="lib/jcache.jar"/>
         <include name="lib/jaxstream-15.jar"/>
         -->
-        <include name="lib/jsf-mojarra-2.1.3.jar"/>
+        <include name="lib/jsf-mojarra-2.1.8.jar"/>
         <include name="lib/jsf.LICENSE"/>
         <!--
         <include name="lib/slf4j-api-1.6.1.jar"/>
@@ -731,6 +731,13 @@
         <include name="lib/webservices-api.jar"/>
         <include name="lib/webservices-extra-api.jar"/>
         <include name="lib/webservices.LICENSE"/>
+
+
+        <include name="endorsed/README"/>
+	<include name="resin-inf/README"/>
+	<include name="app-inf/README"/>
+	<include name="keys/README"/>
+	<include name="licenses/README"/>
 
 	<!--
         <include name="webapps/resin-doc.war"/>
@@ -760,6 +767,7 @@
         <include name="hibernate-validator-4.0.2.GA.jar"/>
       </fileset>
     </copy>
+
 
     <copy todir="${dist.build}/doc/resin-doc">
       <fileset dir="${resin.doc}">
@@ -878,7 +886,7 @@
       
       <include name="${dist.name}/lib/activation.jar"/>
       <include name="${dist.name}/lib/javamail-14.jar"/>
-      <include name="${dist.name}/lib/jsf-mojarra-2.1.3.jar"/>
+      <include name="${dist.name}/lib/jsf-mojarra-2.1.8.jar"/>
 
       <exclude name="${dist.name}/webapps/*.war"/>
       <exclude name="${dist.name}/lib/**"/>
@@ -1234,6 +1242,7 @@
     <exec dir="${libexec}" executable="/bin/sh">
       <arg value="configure"/>
       <arg value="--prefix=${libexec}"/>
+      <arg value="--with-check-skip=resin_sh"/>
     </exec>
     
     <exec dir="${libexec}" executable="make">
@@ -1244,7 +1253,137 @@
     </exec>
   </target>
 
-  <target name="debian" depends="init,configure,dist,debian-libexec,debian-perm">
+  <target name="debian-compile" depends="init,configure,dist">
+    <delete dir="dist-debian"/>
+    <delete dir="build-debian"/>
+
+    <mkdir dir="build-debian"/>
+
+    <copy tofile="build-debian/${shortproduct}-${version}.tar.gz"
+          file="${dist}/${shortproduct}-${version}.tar.gz">
+    </copy>
+
+    <exec executable="tar" dir="build-debian">
+      <arg value="-zxf"/>
+      <arg value="${shortproduct}-${version}.tar.gz"/>
+    </exec>
+    
+    <exec executable="./configure"
+          dir="build-debian/${shortproduct}-${version}">
+    </exec>
+    
+    <exec executable="make"
+          dir="build-debian/${shortproduct}-${version}">
+      <env key="DESTDIR" value="${basedir}/dist-debian"/>
+    </exec>
+    
+    <exec executable="make"
+          dir="build-debian/${shortproduct}-${version}">
+      <env key="DESTDIR" value="${basedir}/dist-debian"/>
+      <arg value="rpm-dist"/>
+    </exec>
+    
+    <exec executable="make"
+          dir="build-debian/${shortproduct}-${version}">
+      <env key="DESTDIR" value="${basedir}/dist-debian"/>
+      <arg value="install"/>
+    </exec>
+          
+  </target>
+
+  <target name="debian-clean" depends="init,debian-perm">
+    <!--
+    <exec executable="${basedir}/debian-perm">
+      <arg value="-r"/>
+    </exec>
+    -->
+    
+    <delete dir="dist-debian"/>
+    <delete dir="build-debian"/>
+  </target>
+
+  <target name="debian" depends="init,debian-clean,debian-compile">
+    <exec executable="uname" outputproperty="debian.architecture">
+      <arg value="-m"/>
+ 
+      <redirector>
+        <outputfilterchain>
+          <replacestring from="i486" to="i386"/>
+          <replacestring from="i586" to="i386"/>
+          <replacestring from="i686" to="i386"/>
+          <replacestring from="x86_64" to="amd64"/>
+        </outputfilterchain>
+      </redirector>
+    </exec>
+
+    <copy file="${install}/debian/control.in"
+          tofile="dist-debian/DEBIAN/control">
+      <filterset>
+        <filter token="VERSION" value="${version}"/>
+        <filter token="ARCHITECTURE" value="${debian.architecture}"/>
+      </filterset>
+    </copy>
+
+    <copy file="${install}/debian/conffiles"
+          tofile="dist-debian/DEBIAN/conffiles"/>
+
+    <copy file="${install}/debian/postinst"
+          tofile="dist-debian/DEBIAN/postinst"/>
+
+    <chmod perm="755" file="dist-debian/DEBIAN/postinst"/>
+
+    <copy file="${install}/debian/prerm"
+          tofile="dist-debian/DEBIAN/prerm"/>
+
+    <chmod perm="755" file="dist-debian/DEBIAN/prerm"/>
+
+    <!--
+    <exec executable="${basedir}/debian-perm"/>
+    -->
+
+    <delete dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
+            failonerror="false"/>
+
+    <mkdir dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
+
+    <!--
+    <exec executable="dpkg">
+      <arg value="-b"/>
+      <arg value="dist-debian"/>
+      <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
+    </exec>
+    -->
+    
+    <exec executable="fakeroot">
+      <arg value="dpkg"/>
+      <arg value="-b"/>
+      <arg value="dist-debian"/>
+      <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/${shortproduct}_${version}-${debian.architecture}.deb"/>
+    </exec>
+
+    <apply executable="ln"
+           dest="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"
+           dir="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}">
+      <arg value="-s"/>
+      <mapper type="flatten"/>
+      <fileset dir="/home/caucho/git/download/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}" includes="*.deb"/>
+    </apply>
+
+    <exec executable="dpkg-scanpackages"
+          dir="${dist}/debian"
+          output="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"
+          logError="true">
+      <arg value="--multiversion"/>
+      <arg value="dists/${debian.stability}/${debian.component}/binary-${debian.architecture}"/>
+    </exec>
+
+    <exec executable="gzip">
+      <arg value="${dist}/debian/dists/${debian.stability}/${debian.component}/binary-${debian.architecture}/Packages"/>
+    </exec>
+  </target>
+
+  <target name="debian-old" depends="init,configure,dist,debian-libexec,debian-perm">
+  <!--target name="debian" depends="init"-->
     <exec executable="${basedir}/debian-perm">
       <arg value="-r"/>
     </exec>
@@ -1253,10 +1392,10 @@
     
     <mkdir dir="dist-debian/var/log/resin"/>
     
-    <mkdir dir="dist-debian/var/www/webapps/ROOT"/>
+    <mkdir dir="dist-debian/var/resin/webapps/ROOT"/>
     
     <mkdir dir="dist-debian/etc/resin"/>
-    <mkdir dir="dist-debian/etc/resin/resin-inf"/>
+    <!--mkdir dir="dist-debian/etc/resin/resin-inf"/-->
     <copy todir="dist-debian/etc/resin"
           preservelastmodified="true"
           overwrite="true">
@@ -1271,6 +1410,22 @@
         <!--
         <include name="local.d/**.xml"/>
         -->
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/etc/resin/keys"
+          preservelastmodified="true"
+          overwrite="true">
+      <fileset dir="${resindir}/keys">
+        <include name="README"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/etc/resin/licenses"
+          preservelastmodified="true"
+          overwrite="true">
+      <fileset dir="${resindir}/licenses">
+	<include name="README"/>
       </fileset>
     </copy>
 
@@ -1308,7 +1463,7 @@
         <filter token="JAVA_HOME" value=""/>
         <filter token="JAVA_EXE" value="/usr/bin/java"/>
         <filter token="resin_home" value="/usr/local/share/resin"/>
-        <filter token="resin_root" value="/var/www"/>
+        <filter token="resin_root" value="/var/resin"/>
         <filter token="resin_log" value="/var/log/resin"/>
         <filter token="resin_conf" value="/etc/resin"/>
       </filterset>
@@ -1321,9 +1476,9 @@
     </chmod>
 
     <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/lib"/>
-    <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/keys"/>
-    <mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/licenses"/>
-    <mkdir dir="dist-debian/var/www/licenses"/>
+    <!--mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/keys"/-->
+    <!--mkdir dir="dist-debian/usr/local/share/${shortproduct}-${version}/licenses"/-->
+    <!--mkdir dir="dist-debian/var/resin/licenses"/-->
     <mkdir dir="dist-debian/usr/bin"/>
     
     <copy todir="dist-debian/usr/local/share/${shortproduct}-${version}"
@@ -1341,7 +1496,7 @@
         <include name="lib/javaee-16.jar"/>
         <include name="lib/javamail-141.jar"/>
         <include name="lib/jaxrpc-15.jar"/>
-        <include name="lib/jsf-mojarra-2.1.3.jar"/>
+        <include name="lib/jsf-mojarra-2.1.8.jar"/>
 
         <include name="lib/resin.jar"/>
         <include name="lib/resin-eclipselink.jar"/>
@@ -1357,7 +1512,7 @@
         <include name="lib/license.jar"/>
         <include name="lib/pro.jar"/>
 
-        <include name="webapp-jars/**"/>
+        <!--include name="webapp-jars/**"/-->
       </fileset>
       
       <fileset dir="${resindir}">
@@ -1412,8 +1567,9 @@
         <filter token="BASH" value="/bin/sh"/>
         <filter token="JAVA_HOME" value=""/>
         <filter token="JAVA_EXE" value="/usr/bin/java"/>
+        <filter token="JAVA_ARGS" value=""/>
         <filter token="resin_home" value="/usr/local/share/resin"/>
-        <filter token="resin_root" value="/var/www"/>
+        <filter token="resin_root" value="/var/resin"/>
         <filter token="resin_log" value="/var/log/resin"/>
         <filter token="resin_conf" value="/etc/resin"/>
       </filterset>
@@ -1425,7 +1581,7 @@
       <arg value="dist-debian/usr/bin/resinctl"/>
     </exec>
     
-    <copy todir="dist-debian/var/www"
+    <copy todir="dist-debian/var/resin"
           preservelastmodified="true"
           overwrite="true">
       <fileset dir="${dist.build}">
@@ -1433,12 +1589,47 @@
       </fileset>
     </copy>
 
-    <copy todir="dist-debian/var/www/webapps/ROOT"
+    <copy todir="dist-debian/var/resin/webapps/ROOT"
           preservelastmodified="true"
           overwrite="true">
       <fileset dir="${basedir}/../resin/webapps/ROOT">
         <include name="index.jsp"/>
         <include name="favicon.ico"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/var/resin/resin-inf">
+      <fileset dir="${dist.build}/resin-inf">
+	<include name="README"/>
+	<include name="*.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/var/resin/app-inf">
+      <fileset dir="${dist.build}/app-inf">
+	<include name="README"/>
+	<include name="*.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/var/resin/project-jars">
+      <fileset dir="${dist.build}/project-jars">
+	<include name="README"/>
+	<include name="*.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/var/resin/webapp-jars">
+      <fileset dir="${dist.build}/webapp-jars">
+	<include name="README"/>
+        <include name="*.jar"/>
+      </fileset>
+    </copy>
+
+    <copy todir="dist-debian/var/resin/endorsed">
+      <fileset dir="${dist.build}/endorsed">
+	<include name="README"/>
+        <include name="*.jar"/>
       </fileset>
     </copy>
 
@@ -1562,7 +1753,7 @@
           preservelastmodified="true"
           overwrite="true">
       <filterset>
-        <filter token="RESIN_ROOT" value="${shortproduct}-${version}"/>
+        <filter token="RESIN_ROOT" value="resin-${version}"/>
       </filterset>
     </copy>
 

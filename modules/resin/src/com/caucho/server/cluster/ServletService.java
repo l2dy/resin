@@ -88,7 +88,6 @@ import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
 import com.caucho.server.http.HttpBufferStore;
 import com.caucho.server.httpcache.AbstractProxyCache;
-import com.caucho.server.httpcache.ProxyCache;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
@@ -140,6 +139,7 @@ public class ServletService
 
   private String _stage = "production";
   private boolean _isPreview;
+  private boolean _isEnabled = true;
 
   private String _serverHeader;
 
@@ -399,6 +399,11 @@ public class ServletService
     return _selfServer.getPod();
   }
 
+  public BamManager getBamManager()
+  {
+    return _bamService.getBamManager();
+  }
+  
   /**
    * Returns the bam broker.
    */
@@ -420,7 +425,7 @@ public class ServletService
    */
   public BamManager getAdminBrokerManager()
   {
-    return _bamService.getBrokerManager();
+    return _bamService.getBamManager();
   }
   
   /**
@@ -465,9 +470,11 @@ public class ServletService
         thread.setContextClassLoader(getClassLoader());
 
         _adminAuth = _cdiManager.getReference(AdminAuthenticator.class);
-        
+
+        /*
         if (_adminAuth != null)
           _adminAuth.initCache();
+          */
       } catch (Exception e) {
         e.printStackTrace();
         if (log.isLoggable(Level.FINEST))
@@ -476,7 +483,7 @@ public class ServletService
           log.finer(e.toString());
 
         _adminAuth = new AdminAuthenticator();
-        _adminAuth.initCache();
+        // _adminAuth.initCache();
       } finally {
         thread.setContextClassLoader(oldLoader);
       }
@@ -532,6 +539,21 @@ public class ServletService
   public boolean isPreview()
   {
     return _isPreview;
+  }
+  
+  /**
+   * Returns true for an enabled service.
+   */
+  public boolean isEnabled()
+  {
+    return _isEnabled;
+  }
+  
+  public void setEnabled(boolean isEnabled)
+  {
+    _isEnabled = isEnabled;
+    
+    clearCache();
   }
 
   /**
@@ -723,7 +745,7 @@ public class ServletService
   /**
    * Creates the http cache.
    */
-  public AbstractProxyCache createProxyCache()
+  public final AbstractProxyCache createProxyCache()
     throws ConfigException
   {
     if (_proxyCache == null) {
@@ -735,13 +757,9 @@ public class ServletService
   
   protected AbstractProxyCache instantiateProxyCache()
   {
-    /*
     log.warning(L.l("<proxy-cache> requires Resin Professional.  Please see http://www.caucho.com for Resin Professional information and licensing."));
 
     return new AbstractProxyCache();
-    */
-    
-    return new ProxyCache();
   }
   
   /**

@@ -52,13 +52,13 @@ public class ClassMethodExpr extends AbstractMethodExpr {
 
   protected boolean _isMethod;
 
-  public ClassMethodExpr(Location location, String className, 
-                         String methodName, 
+  public ClassMethodExpr(Location location, String className,
+                         String methodName,
                          ArrayList<Expr> args)
   {
     super(location);
     _className = className.intern();
-    
+
     _methodName = MethodIntern.intern(methodName);
     _hash = _methodName.hashCodeCaseInsensitive();
 
@@ -70,15 +70,15 @@ public class ClassMethodExpr extends AbstractMethodExpr {
                          String methodName, Expr []args)
   {
     super(location);
-    
+
     _className = className.intern();
-    
+
     _methodName = MethodIntern.intern(methodName);
     _hash = _methodName.hashCodeCaseInsensitive();
 
     _args = args;
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -97,7 +97,7 @@ public class ClassMethodExpr extends AbstractMethodExpr {
     Value []values = evalArgs(env, _args);
 
     Value oldThis = env.getThis();
-    
+
     // php/09qe
     Value qThis = oldThis;
     /*
@@ -110,13 +110,13 @@ public class ClassMethodExpr extends AbstractMethodExpr {
       */
     // php/024b
     // qThis = cl;
-    
+
     env.pushCall(this, cl, values);
     // QuercusClass oldClass = env.setCallingClass(cl);
 
     try {
       env.checkTimeout();
-      
+
       return cl.callMethod(env, qThis, _methodName, _hash, values);
     } finally {
       env.popCall();
@@ -124,7 +124,7 @@ public class ClassMethodExpr extends AbstractMethodExpr {
       // env.setCallingClass(oldClass);
     }
   }
-  
+
   public String toString()
   {
     return _className + "::" + _methodName + "()";

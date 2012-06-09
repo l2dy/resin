@@ -49,7 +49,7 @@ public class ProtocolWrapper {
     _qClass = qClass;
   }
 
-  public BinaryStream fopen(Env env, StringValue path, StringValue mode, 
+  public BinaryStream fopen(Env env, StringValue path, StringValue mode,
                             LongValue options)
   {
     return new WrappedStream(env, _qClass, path, mode, options);
@@ -57,63 +57,110 @@ public class ProtocolWrapper {
 
   public Value opendir(Env env, StringValue path, LongValue flags)
   {
-    WrappedDirectoryValue value = new WrappedDirectoryValue(env, _qClass);
+    WrappedDirectory value = new WrappedDirectory(env, _qClass);
 
-    if (! value.opendir(path, flags))
+    if (! value.open(env, path, flags))
       return BooleanValue.FALSE;
     else
-      return value;
+      return env.wrapJava(value);
   }
 
   public boolean unlink(Env env, StringValue path)
   {
-    AbstractFunction function = _qClass.getStaticFunction("unlink");
+    // php/1e23
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("unlink");
 
-    if (function == null)
+    if (function == null) {
       return false;
+    }
 
-    return function.call(env, path).toBoolean();
+    Value result = function.callMethod(env, _qClass, obj, path);
+
+    return result.toBoolean();
   }
 
-  public boolean rename(Env env, StringValue path_from, StringValue path_to)
+  public boolean rename(Env env, StringValue from, StringValue to)
   {
-    AbstractFunction function = _qClass.getStaticFunction("rename");
+    // php/1e24
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("rename");
 
-    if (function == null)
+    if (function == null) {
       return false;
+    }
 
-    return function.call(env, path_from, path_to).toBoolean();
+    Value result = function.callMethod(env, _qClass, obj, from, to);
+
+    return result.toBoolean();
   }
 
-  public boolean mkdir(Env env, 
+  public boolean mkdir(Env env,
                        StringValue path, LongValue mode, LongValue options)
   {
-    AbstractFunction function = _qClass.getStaticFunction("mkdir");
+    // creating an uninitialized object makes no sense but it's here
+    // to match PHP 5.3.8 behavior for drupal-7.12
+    // php/1e22
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("mkdir");
 
-    if (function == null)
+    if (function == null) {
       return false;
+    }
 
-    return function.call(env, path, mode, options).toBoolean();
+    Value result = function.callMethod(env, _qClass, obj, path, mode, options);
+
+    return result.toBoolean();
   }
 
   public boolean rmdir(Env env, StringValue path, LongValue options)
   {
-    AbstractFunction function = _qClass.getStaticFunction("rmdir");
+    // php/1e25
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("rmdir");
 
-    if (function == null)
+    if (function == null) {
       return false;
+    }
 
-    return function.call(env, path, options).toBoolean();
+    Value result = function.callMethod(env, _qClass, obj, path, options);
+
+    return result.toBoolean();
   }
 
   public Value url_stat(Env env, StringValue path, LongValue flags)
   {
-    AbstractFunction function = _qClass.getStaticFunction("url_stat");
+    // php/1e26
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("url_stat");
 
-    if (function == null)
+    if (function == null) {
       return BooleanValue.FALSE;
+    }
 
-    return function.call(env, path, flags);
+    Value result = function.callMethod(env, _qClass, obj, path, flags);
+
+    return result;
   }
 
+  public boolean stream_metadata(Env env, StringValue path,
+                                 LongValue options, Value arg)
+  {
+    Value obj = _qClass.createObject(env);
+    AbstractFunction function = _qClass.findFunction("stream_metadata");
+
+    if (function == null) {
+      return false;
+    }
+
+    Value result = function.callMethod(env, _qClass, obj, path, options, arg);
+
+    return result.toBoolean();
+  }
+
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _qClass + "]";
+  }
 }

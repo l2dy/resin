@@ -67,6 +67,7 @@ import com.caucho.server.distcache.DataStore;
 import com.caucho.server.distcache.DistCacheSystem;
 import com.caucho.server.distcache.CacheEngine;
 import com.caucho.server.distcache.MnodeStore;
+import com.caucho.server.distcache.MnodeUpdate;
 import com.caucho.util.HashKey;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
@@ -416,11 +417,13 @@ public class AbstractCache
    * Returns the object with the given key, checking the backing
    * store if necessary.
    */
+  /*
   @Override
   public Object getExact(Object key)
   {
     return _delegate.getExact(key);
   }
+  */
 
   /**
    * Fills an output stream with the value for a key.
@@ -643,6 +646,23 @@ public class AbstractCache
   }
 
   /**
+   * Puts a new item in the cache with a custom idle
+   * timeout (used for sessions).
+   *
+   * @param key         the key of the item to put
+   * @param is          the value of the item to put
+   * @param idleTimeout the idle timeout for the item
+   */
+  @Override
+  public boolean putIfNew(Object key,
+                          MnodeUpdate update,
+                          InputStream is)
+    throws IOException
+  {
+    return _delegate.putIfNew(key, update, is);
+  }
+
+  /**
    * Puts a new item in the cache.
    *
    * @param key   the key of the item to put
@@ -664,11 +684,11 @@ public class AbstractCache
    * @return true if the update succeeds, false if it fails
    */
   @Override
-  public boolean compareAndPut(Object key,
-                               long version,
-                               Object value)
+  public boolean compareVersionAndPut(Object key,
+                                      long version,
+                                      Object value)
   {
-    return _delegate.compareAndPut(key, version, value);
+    return _delegate.compareVersionAndPut(key, version, value);
   }
 
   /**
@@ -680,14 +700,16 @@ public class AbstractCache
    * @param inputStream the new value
    * @return true if the update succeeds, false if it fails
    */
+  /*
   @Override
-  public boolean compareAndPut(Object key,
-                               long version,
-                               InputStream inputStream)
+  public boolean compareVersionAndPut(Object key,
+                                      long version,
+                                      InputStream inputStream)
     throws IOException
   {
-    return _delegate.compareAndPut(key, version, inputStream);
+    return _delegate.compareVersionAndPut(key, version, inputStream);
   }
+  */
   
   /**
    * Returns the entry for the given key, returning the live item.
@@ -955,21 +977,21 @@ public class AbstractCache
     _config.setGuid(_guid);
   }
   
-  public boolean loadData(HashKey valueHash, WriteStream os)
+  public boolean loadData(long valueIndex, WriteStream os)
     throws IOException
   {
-    return _delegate.loadData(valueHash, os);
+    return _delegate.loadData(valueIndex, os);
   }
 
-  public boolean saveData(HashKey valueHash, StreamSource source, int length)
+  public long saveData(StreamSource source, int length)
     throws IOException
   {
-    return _delegate.saveData(valueHash, source, length);
+    return _delegate.saveData(source, length);
   }
 
-  public boolean isDataAvailable(HashKey valueKey)
+  public boolean isDataAvailable(long valueDataId)
   {
-    return _delegate.isDataAvailable(valueKey);
+    return _delegate.isDataAvailable(valueDataId);
   }
 
   //
@@ -981,7 +1003,7 @@ public class AbstractCache
     return _delegate.getKeyHash(name);
   }
   
-  public byte []getValueHash(Object value)
+  public long getValueHash(Object value)
   {
     return _delegate.getValueHash(value);
   }
@@ -994,11 +1016,6 @@ public class AbstractCache
   public DataStore getDataStore()
   {
     return _delegate.getDataStore();
-  }
-  
-  public void saveData(Object value)
-  {
-    _delegate.saveData(value);
   }
   
   public CacheImpl createIfAbsent()

@@ -29,25 +29,10 @@
 
 package com.caucho.boot;
 
-import com.caucho.VersionFactory;
-import com.caucho.config.ConfigException;
-import com.caucho.license.*;
-import com.caucho.server.resin.ResinELContext;
-import com.caucho.server.util.CauchoSystem;
-import com.caucho.util.Alarm;
-import com.caucho.util.CurrentTime;
-import com.caucho.util.HostUtil;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
-
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
 import java.io.File;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Constructor;
-import java.net.InetAddress;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,8 +42,23 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+import com.caucho.VersionFactory;
+import com.caucho.config.ConfigException;
+import com.caucho.license.LicenseCheck;
+import com.caucho.server.resin.ResinELContext;
+import com.caucho.server.util.CauchoSystem;
+import com.caucho.util.CurrentTime;
+import com.caucho.util.HostUtil;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 class WatchdogArgs
 {
@@ -113,9 +113,10 @@ class WatchdogArgs
     if (isTop)
       setLogLevel(logLevel);
 
-    _resinHome = calculateResinHome();
-    _rootDirectory = calculateResinRoot(_resinHome);
-
+    setResinHome(calculateResinHome());
+    
+    setRootDirectory(calculateResinRoot(_resinHome));
+    
     _javaHome = Vfs.lookup(System.getProperty("java.home"));
 
     _is64bit = CauchoSystem.is64Bit();
@@ -188,8 +189,10 @@ class WatchdogArgs
 
   void setDynamicServerId(String serverId)
   {
-    if (serverId != null)
+    if (serverId != null) {
+      _isDynamicServer = true;
       _serverId = serverId;
+    }
   }
 
   String getClusterId()
@@ -204,7 +207,7 @@ class WatchdogArgs
 
   boolean isDynamicServer()
   {
-    return _isDynamicServer;
+    return _isDynamicServer || getServerId() == null && getClusterId() != null;
   }
 
   String getDynamicAddress()
@@ -271,6 +274,15 @@ class WatchdogArgs
   void setResinHome(Path resinHome)
   {
     _resinHome = resinHome;
+    
+    System.setProperty("resin.home", resinHome.getNativePath());
+  }
+
+  void setRootDirectory(Path resinRoot)
+  {
+    _rootDirectory = resinRoot;
+    
+    System.setProperty("resin.root", resinRoot.getNativePath());
   }
 
   boolean is64Bit()
@@ -445,6 +457,7 @@ class WatchdogArgs
     for (int i = 0; i < argv.length; i++) {
       String arg = argv[i];
       
+      
       String resinArg = arg;
       
       if (! resinArg.startsWith("--") && resinArg.startsWith("-")) {
@@ -487,12 +500,12 @@ class WatchdogArgs
         i++;
       }
       else if ("--resin-home".equals(resinArg)) {
-        _resinHome = Vfs.lookup(argv[i + 1]);
+        setResinHome(Vfs.lookup(argv[i + 1]));
         argv[i + 1] = _resinHome.getFullPath();
         i++;
       }
       else if ("--root-directory".equals(resinArg)) {
-        _rootDirectory = Vfs.lookup(argv[i + 1]);
+        setRootDirectory(Vfs.lookup(argv[i + 1]));
         argv[i + 1] = _rootDirectory.getFullPath();
         i++;
       }
@@ -979,7 +992,7 @@ class WatchdogArgs
   public class ResinBootELContext
     extends ResinELContext
   {
-    private boolean _isLicenseCheck;
+    private final AtomicBoolean _isLicenseCheck = new AtomicBoolean();
     private boolean _isResinProfessional;
 
     @Override
@@ -1027,10 +1040,9 @@ class WatchdogArgs
 
     private void loadLicenses()
     {
-      if (_isLicenseCheck)
+      if (_isLicenseCheck.getAndSet(true)) {
         return;
-
-      _isLicenseCheck = true;
+      }
 
       LicenseCheck license;
 
@@ -1038,17 +1050,27 @@ class WatchdogArgs
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
 
         Class<?> cl = Class.forName("com.caucho.license.LicenseCheckImpl",
-            false, loader);
+                                    false, loader);
         
-        Constructor<?> ctor = cl.getConstructor(File.class);
+        Constructor<?> ctor = cl.getConstructor(File[].class);
         
-        File licenseFile = null;
+        ArrayList<File> licensePath = new ArrayList<File>();
         
         if (_licenseDirectory != null) {
-          licenseFile = new File(_licenseDirectory.getNativePath());
+          licensePath.add(new File(_licenseDirectory.getNativePath()));
         }
+        
+        Path path = getResinConf().getParent().lookup("licenses");
 
-        license = (LicenseCheck) ctor.newInstance(licenseFile);
+        if (path.isDirectory()) {
+          File dir = new File(path.getNativePath());
+          licensePath.add(dir);
+        }
+        
+        File []files = new File[licensePath.size()];
+        licensePath.toArray(files);
+
+        license = (LicenseCheck) ctor.newInstance(new Object[] { files });
 
         license.requireProfessional(1);
 
@@ -1112,9 +1134,9 @@ class WatchdogArgs
     addCommand(new ThreadDumpCommand());
 
     addCommand(new UndeployCommand());
-    addCommand(new UserAddCommand());
-    addCommand(new UserListCommand());
-    addCommand(new UserRemoveCommand());
+    //addCommand(new UserAddCommand());
+    //addCommand(new UserListCommand());
+    //addCommand(new UserRemoveCommand());
 
     addCommand(new WatchdogCommand());
 

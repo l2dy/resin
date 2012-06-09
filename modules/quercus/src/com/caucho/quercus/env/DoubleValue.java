@@ -300,7 +300,7 @@ public class DoubleValue extends NumberValue
   public Value subOne()
   {
     double next = _value - 1;
-    
+
     /*
     if (next == (long) next)
       return LongValue.create(next);
@@ -477,7 +477,8 @@ public class DoubleValue extends NumberValue
   /**
    * Exports the value.
    */
-  public void varExport(StringBuilder sb)
+  @Override
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append(toString());
   }
@@ -491,6 +492,7 @@ public class DoubleValue extends NumberValue
    *
    * @param out the writer to the Java source code.
    */
+  @Override
   public void generate(PrintWriter out)
     throws IOException
   {
@@ -507,6 +509,7 @@ public class DoubleValue extends NumberValue
   /**
    * Returns the hash code
    */
+  @Override
   public int hashCode()
   {
     return (int) (37 + 65521 * _value);
@@ -515,6 +518,7 @@ public class DoubleValue extends NumberValue
   /**
    * Compare for equality.
    */
+  @Override
   public boolean equals(Object o)
   {
     if (this == o)
@@ -527,6 +531,7 @@ public class DoubleValue extends NumberValue
     return _value == value._value;
   }
 
+  @Override
   public void varDumpImpl(Env env,
                           WriteStream out,
                           int depth,

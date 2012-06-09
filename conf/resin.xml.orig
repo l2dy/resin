@@ -9,6 +9,13 @@
   <resin:properties path="cloud:/resin.properties"
                     optional="true" recover="true"/>
 
+
+  <resin:if test="${properties_import_url}">
+     <resin:properties path="${properties_import_url}"
+                    optional="true" recover="true"/>
+  </resin:if>
+
+
   <!-- Logging configuration for the JDK logging API -->
   <log-handler name="" level="all" path="stdout:"
                timestamp="[%y-%m-%d %H:%M:%S.%s]"
@@ -42,11 +49,6 @@
     -->
   <resin:import path="${__DIR__}/health.xml"/>
 
-  <!--
-     - local configuration files
-    -->
-  <resin:import fileset="${__DIR__}/resin-inf/*.xml"/>
-  <resin:import fileset="cloud:/resin-inf/*.xml" recover="true"/>
   
   <!--
      - Remote management requires at least one enabled admin user.
@@ -59,9 +61,9 @@
   </resin:AdminAuthenticator>
 
   <!--
-     - For clustered systems, create a password in as system_key
+     - For clustered systems, create a password in as cluster_system_key
     -->
-  <resin-system-auth-key>${system_key}</resin-system-auth-key>
+  <cluster-system-key>${cluster_system_key}</cluster-system-key>
 
   <!--
      - For production sites, change dependency-check-interval to something
@@ -71,6 +73,9 @@
 
   <!-- For resin.properties dynamic cluster joining -->
   <home-cluster>${home_cluster}</home-cluster>
+  <!-- <home-server>${home_server}</home-server> -->
+
+
 
   <!--
      - Configures the main application cluster.  Load-balancing configurations

@@ -386,7 +386,7 @@ class BinaryColumn extends Column {
     if (index != null) {
       try {
         index.insert(block,
-                     rowOffset + _columnOffset, getLength(),
+                     rowOffset + getColumnOffset(), getLength(),
                      rowAddr,
                      false);
       } catch (SqlIndexAlreadyExistsException e) {

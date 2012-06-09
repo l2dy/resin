@@ -77,8 +77,9 @@ public class BootResinConfig // implements EnvironmentBean
   private Path _resinDataDirectory;
   
   private BootManagementConfig _management;
-  private String _resinSystemKey;
+  private String _clusterSystemKey;
   private String _homeCluster;
+  private String _homeServer;
   
   BootResinConfig(ResinSystem system,
                   WatchdogArgs args)
@@ -138,22 +139,27 @@ public class BootResinConfig // implements EnvironmentBean
       return getRootDirectory().lookup("resin-data");
   }
   
-  public void setResinSystemAuthKey(String digest)
+  public void setClusterSystemKey(String digest)
   {
     if (digest == null || "".equals(digest))
       return;
     
-    _resinSystemKey = digest;
+    _clusterSystemKey = digest;
     
     SecurityService security = SecurityService.getCurrent();
     
     if (security != null)
       security.setSignatureSecret(digest);
   }
-  
-  public String getResinSystemAuthKey()
+
+  public void setResinSystemAuthKey(String key)
   {
-    return _resinSystemKey;
+    setClusterSystemKey(key);
+  }
+
+  public String getClusterSystemKey()
+  {
+    return _clusterSystemKey;
   }
   
   @Configurable
@@ -185,6 +191,18 @@ public class BootResinConfig // implements EnvironmentBean
     return _classLoader;
   }
   */
+  
+  @Configurable
+  public void setHomeServer(String homeServer)
+  {
+    if (homeServer != null && ! homeServer.isEmpty())
+      _homeServer = homeServer;
+  }
+  
+  public String getHomeServer()
+  {
+    return _homeServer;
+  }
 
   public void add(AdminAuthenticator auth)
   {
@@ -235,6 +253,10 @@ public class BootResinConfig // implements EnvironmentBean
   WatchdogClient findClient(String serverId, WatchdogArgs args)
   {
     WatchdogClient client = null;
+    
+    if (serverId == null) {
+      serverId = getHomeServer();
+    }
 
     if (serverId != null) {
       client = findClient(serverId);
@@ -272,19 +294,25 @@ public class BootResinConfig // implements EnvironmentBean
     if (client != null)
       return client;
     
-    ArrayList<WatchdogClient> clientList = findLocalClients();
+    ArrayList<WatchdogClient> clientList = findLocalClients(serverId);
     
-    if (clientList.size() == 1) {
+    if (clientList.size() == 1
+        || clientList.size() > 0 && _args.getCommand().isStart()) {
       client = clientList.get(0);
-      
+
+      // server/6e0f
+      if (serverId != null && ! serverId.equals(client.getId()))
+        client = null;
+
       // server/6e10
-      if (client.getConfig().isRequireExplicitId())
+      if (client != null && client.getConfig().isRequireExplicitId())
         client = null;
     }
 
     // server/6e10
-    if (args.isDynamicServer() || getHomeCluster() != null)
+    if (isDynamicServer(args)) {
       return null;
+    }
 
     /*
     if (client == null && _args.getCommand().isShutdown()) {
@@ -300,18 +328,65 @@ public class BootResinConfig // implements EnvironmentBean
     }
 
     if (client == null) {
-      throw new ConfigException(L.l("Resin/{0}: default server cannot find a unique <server> or <server-multi>\nin {2}.",
+      throw new ConfigException(L.l("Resin/{0}: server '{1}' does not match a unique <server> or <server-multi>\nin {2}.",
                                     VersionFactory.getVersion(), 
-                                    _args.getServerId(), 
+                                    getDisplayServerName(_args.getServerId()), 
                                     _args.getResinConf()));
     }
     
     return client;
   }
+  
+  private String getDisplayServerName(String name)
+  {
+    if (name == null || "".equals(name))
+      return "default";
+    else
+      return name;
+  }
+  
+  boolean isDynamicServer(WatchdogArgs args)
+  {
+    if (args.getServerId() != null) {
+      return false;
+    }
+    else if (args.isDynamicServer()) {
+      return true;
+    }
+    else if (getHomeCluster() != null) {
+      return true;
+    }
+    else if (args.getClusterId() != null) {
+      return true;
+    }
+    else {
+      return false;
+    }
+  }
+  
+  String getClusterId(WatchdogArgs args)
+  {
+    if (args.getClusterId() != null) {
+      return args.getClusterId();
+    }
+    else {
+      return getHomeCluster();
+    }
+  }
 
-  public ArrayList<WatchdogClient> findLocalClients()
+  public ArrayList<WatchdogClient> findLocalClients(String serverId)
   {
     ArrayList<WatchdogClient> clientList = new ArrayList<WatchdogClient>();
+    
+    if (serverId != null) {
+      // server/6e27
+      WatchdogClient client = _watchdogMap.get(serverId);
+      
+      if (client != null) {
+        clientList.add(client);
+        return clientList;
+      }
+    }
     
     fillLocalClients(clientList);
     
@@ -430,8 +505,9 @@ public class BootResinConfig // implements EnvironmentBean
 
     String clusterId = args.getClusterId();
     
-    if (clusterId == null)
+    if (clusterId == null) {
       clusterId = getHomeCluster();
+    }
     
     String address = args.getDynamicAddress();
     int port = args.getDynamicPort();

@@ -29,8 +29,6 @@
 
 package com.caucho.server.spdy;
 
-import com.caucho.amqp.client.AmqpClientConnectionImpl;
-import com.caucho.amqp.server.AmqpProtocol;
 import com.caucho.network.listen.Protocol;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;

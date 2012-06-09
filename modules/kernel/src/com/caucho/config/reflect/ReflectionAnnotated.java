@@ -44,7 +44,7 @@ import javax.enterprise.inject.spi.Annotated;
 public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
 {
   private static final LinkedHashSet<Annotation> _emptyAnnSet
-    = new  LinkedHashSet<Annotation>();
+    = new LinkedHashSet<Annotation>();
 
   private static final Annotation []_emptyAnnArray = new Annotation[0];
 
@@ -72,8 +72,10 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
         }
       }
 
-      _annArray = new Annotation[_annSet.size()];
-      _annSet.toArray(_annArray);
+      Annotation []annArray = new Annotation[_annSet.size()];
+      _annSet.toArray(annArray);
+      
+      _annArray = annArray;
     }
     else {
       _annSet = _emptyAnnSet;
@@ -128,6 +130,7 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   /**
    * Returns the introspected annotations
    */
+  @Override
   public Set<Annotation> getAnnotations()
   {
     return _annSet;
@@ -136,11 +139,13 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   /**
    * Returns the matching annotation
    */
+  @Override
   public <T extends Annotation> T getAnnotation(Class<T> annType)
   {
     for (Annotation ann : _annArray) {
-      if (annType.equals(ann.annotationType()))
+      if (annType.equals(ann.annotationType())) {
         return (T) ann;
+      }
     }
 
     return null;
@@ -152,12 +157,17 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
       return;
     }
     
-    if (_annSet == _emptyAnnSet)
+    if (_annSet == _emptyAnnSet) {
       _annSet = new LinkedHashSet<Annotation>();
+    }
 
-    _annSet.add(ann);
-    _annArray = new Annotation[_annSet.size()];
-    _annSet.toArray(_annArray);
+    synchronized (_annSet) {
+      _annSet.add(ann);
+      Annotation []annArray = new Annotation[_annSet.size()];
+      _annSet.toArray(annArray);
+      
+      _annArray = annArray;
+    }
   }
 
   /**
@@ -167,8 +177,13 @@ public class ReflectionAnnotated implements Annotated, BaseTypeAnnotated
   public boolean isAnnotationPresent(Class<? extends Annotation> annType)
   {
     for (Annotation ann : _annArray) {
-      if (annType.equals(ann.annotationType()))
+      if (ann == null) {
+        continue;
+      }
+      
+      if (annType.equals(ann.annotationType())) {
         return true;
+      }
     }
 
     return false;

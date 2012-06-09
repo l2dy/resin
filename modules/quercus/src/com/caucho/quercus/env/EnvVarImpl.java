@@ -41,10 +41,10 @@ public final class EnvVarImpl extends EnvVar
   {
     if (var == null)
       throw new NullPointerException();
-    
+
     _var = var;
   }
-  
+
   /**
    * Returns the current value.
    */

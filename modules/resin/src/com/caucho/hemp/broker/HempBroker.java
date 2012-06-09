@@ -44,18 +44,22 @@ import java.util.logging.Logger;
 import javax.enterprise.inject.spi.Bean;
 
 import com.caucho.bam.BamError;
+import com.caucho.bam.actor.Actor;
 import com.caucho.bam.actor.ActorHolder;
 import com.caucho.bam.broker.AbstractManagedBroker;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MultiworkerMailbox;
 import com.caucho.bam.mailbox.PassthroughMailbox;
+import com.caucho.bam.manager.BamManager;
+import com.caucho.bam.manager.SimpleBamManager;
 import com.caucho.bam.packet.Message;
 import com.caucho.bam.packet.MessageError;
 import com.caucho.bam.packet.Packet;
 import com.caucho.bam.packet.Query;
 import com.caucho.bam.packet.QueryError;
 import com.caucho.bam.packet.QueryResult;
+import com.caucho.bam.proxy.ProxyActor;
 import com.caucho.bam.stream.MessageStream;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.env.service.AfterResinStartListener;
@@ -87,6 +91,7 @@ public class HempBroker extends AbstractManagedBroker
 
   private HempBrokerManager _manager;
   private DomainManager _domainManager;
+  private BamManager _bamManager;
 
   // actors and clients
   private final
@@ -119,6 +124,7 @@ public class HempBroker extends AbstractManagedBroker
   {
     _resinSystem = manager.getResinSystem();
     _manager = manager;
+    _bamManager = new SimpleBamManager(this);
     
     Environment.addCloseListener(this);
 
@@ -140,6 +146,11 @@ public class HempBroker extends AbstractManagedBroker
   public static HempBroker getCurrent()
   {
     return _localBroker.get();
+  }
+
+  public BamManager getBamManager()
+  {
+    return _bamManager;
   }
   
   public void setDomainManager(DomainManager domainManager)
@@ -206,10 +217,8 @@ public class HempBroker extends AbstractManagedBroker
    * Registers a actor
    */
   @Override
-  public void addMailbox(Mailbox mailbox)
+  public void addMailbox(String address, Mailbox mailbox)
   {
-    String address = mailbox.getAddress();
-
     synchronized (_actorMap) {
       Mailbox oldMailbox = _actorMap.get(address);
 
@@ -600,18 +609,53 @@ public class HempBroker extends AbstractManagedBroker
     Environment.addEnvironmentListener(startup);
   }
 
-  private void startActor(Bean bean,
+  private void startActor(Bean<?> bean,
                           String name,
                           int threadMax)
   {
     InjectManager beanManager = InjectManager.getCurrent();
+    
+    Object beanInstance = beanManager.getReference(bean);
 
-    ActorHolder actor = (ActorHolder) beanManager.getReference(bean);
+    String address = createAddress(name, bean);
+    
+    Actor actor = createActor(beanInstance, address);
 
-    actor.setBroker(this);
+    Mailbox mailbox;
+    
+    // queue
+    if (threadMax > 0) {
+      mailbox = new MultiworkerMailbox(address, actor, this, threadMax);
+      // bamActor.setActorStream(actorStream);
+    }
+    else {
+      mailbox = new PassthroughMailbox(address, actor, this);
+    }
 
-    String address = name;
+    addMailbox(address, mailbox);
 
+    Environment.addCloseListener(new ActorClose(mailbox));
+  }
+  
+  private Actor createActor(Object instance, String address)
+  {
+    if (instance instanceof ActorHolder) {
+      ActorHolder actor = (ActorHolder) instance;
+      
+      actor.setAddress(address);
+      actor.setBroker(this);
+      
+      return actor.getActor();
+    }
+    else {
+      ProxyActor proxyActor = new ProxyActor(instance, address, this);
+      
+      return proxyActor;
+    }
+  }
+  
+  private String createAddress(String address, Bean<?> bean)
+  {
     if (address == null || "".equals(address))
       address = bean.getName();
 
@@ -622,26 +666,9 @@ public class HempBroker extends AbstractManagedBroker
       address = address + '@' + getAddress();
     else if (address.endsWith("@"))
       address = address.substring(0, address.length() - 1);
-
-    actor.setAddress(address);
-
-    ActorHolder bamActor = actor;
-
-    Mailbox mailbox;
     
-    // queue
-    if (threadMax > 0) {
-      MessageStream actorStream = bamActor.getActor();
-      mailbox = new MultiworkerMailbox(address, actorStream, this, threadMax);
-      // bamActor.setActorStream(actorStream);
-    }
-    else {
-      mailbox = new PassthroughMailbox(address, bamActor.getActor(), this);
-    }
+    return address;
 
-    addMailbox(mailbox);
-
-    Environment.addCloseListener(new ActorClose(mailbox));
   }
 
   private void startActor(Bean bean, AdminService bamService)
@@ -673,7 +700,7 @@ public class HempBroker extends AbstractManagedBroker
       bamActor.setMailbox(mailbox);
     }
 
-    addMailbox(mailbox);
+    addMailbox(address, mailbox);
 
     Environment.addCloseListener(new ActorClose(mailbox));
   }

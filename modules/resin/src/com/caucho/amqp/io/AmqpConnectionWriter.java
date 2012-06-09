@@ -130,17 +130,16 @@ public class AmqpConnectionWriter
       attach.setReceiverSettleMode(ReceiverSettleMode.SECOND);
       break;
     }
-    /*
-    switch (link.getSettleMode()) {
     
-    }
-    */
+    attach.setProperties(link.getAttachProperties());
     
     LinkSource source = new LinkSource();
+    source.setDynamicNodeProperties(link.getSourceProperties());
     attach.setSource(source);
     
     LinkTarget target = new LinkTarget();
     target.setAddress(link.getAddress());
+    target.setDynamicNodeProperties(link.getTargetProperties());
     attach.setTarget(target);
     
     if (log.isLoggable(Level.FINER)) {
@@ -178,6 +177,8 @@ public class AmqpConnectionWriter
       attach.setReceiverSettleMode(ReceiverSettleMode.SECOND);
       break;
     }
+    
+    attach.setProperties(link.getAttachProperties());
     /*
     switch (link.getSettleMode()) {
     
@@ -187,9 +188,11 @@ public class AmqpConnectionWriter
     LinkSource source = new LinkSource();
     source.setAddress(link.getAddress());
     source.setDistributionMode(distMode);
+    source.setDynamicNodeProperties(link.getSourceProperties());
     attach.setSource(source);
     
     LinkTarget target = new LinkTarget();
+    target.setDynamicNodeProperties(link.getTargetProperties());
     attach.setTarget(target);
     
     if (log.isLoggable(Level.FINER)) {
@@ -218,7 +221,7 @@ public class AmqpConnectionWriter
     if (link.getRole() == Role.SENDER) {
       attach.setRole(Role.RECEIVER);
       
-      attach.setInitialDeliveryCount(link.getIncomingDeliveryCount());
+      attach.setInitialDeliveryCount(link.getDeliveryCount());
     }
     else {
       attach.setRole(Role.SENDER);

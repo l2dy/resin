@@ -1152,7 +1152,11 @@ public final class InjectManager
   {
     InjectionTarget<T> target = new InjectionTargetBuilder<T>(this, type);
 
-    return getExtensionManager().processInjectionTarget(target, type);
+    // ioc/0p14 - createInjectionTarget doesn't trigger the event, the
+    // initial scan does
+    // return getExtensionManager().processInjectionTarget(target, type);
+    
+    return target;
   }
 
   /**
@@ -4028,6 +4032,14 @@ public final class InjectManager
 
   public void checkActive()
   {
+  }
+
+  /**
+   * @return
+   */
+  public boolean isClosed()
+  {
+    return _beanMap == null;
   }
 
   public String toString()

@@ -29,14 +29,6 @@
 
 package com.caucho.quercus.env;
 
-import java.io.IOException;
-
-import java.lang.annotation.Annotation;
-import java.lang.reflect.InvocationTargetException;
-
-import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.QuercusException;
-import com.caucho.quercus.expr.ParamDefaultExpr;
 import com.caucho.quercus.expr.Expr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.util.L10N;
@@ -47,9 +39,6 @@ import com.caucho.util.L10N;
 abstract public class AbstractJavaMethod extends AbstractFunction
 {
   private static final L10N L = new L10N(AbstractJavaMethod.class);
-
-  private static final Object [] NULL_ARGS = new Object[0];
-  private static final Value [] NULL_VALUES = new Value[0];
 
   /**
    * Returns the minimally required number of arguments.
@@ -70,12 +59,18 @@ abstract public class AbstractJavaMethod extends AbstractFunction
 
   abstract public int getMarshalingCost(Expr []args);
 
-  public Class getJavaDeclaringClass()
+  @Override
+  public boolean isJavaMethod()
+  {
+    return true;
+  }
+
+  public Class<?> getJavaDeclaringClass()
   {
     return null;
   }
 
-  public Class []getJavaParameterTypes()
+  public Class<?> []getJavaParameterTypes()
   {
     return null;
   }
@@ -108,8 +103,8 @@ abstract public class AbstractJavaMethod extends AbstractFunction
   private boolean isSameMethod(AbstractJavaMethod funA,
                                AbstractJavaMethod funB)
   {
-    Class []paramTypesA = funA.getJavaParameterTypes();
-    Class []paramTypesB = funB.getJavaParameterTypes();
+    Class<?> []paramTypesA = funA.getJavaParameterTypes();
+    Class<?> []paramTypesB = funB.getJavaParameterTypes();
 
     if (paramTypesA == null || paramTypesB == null)
       return false;
@@ -126,9 +121,9 @@ abstract public class AbstractJavaMethod extends AbstractFunction
   }
 
   @Override
-  abstract public Value callMethod(Env env, 
+  abstract public Value callMethod(Env env,
                                    QuercusClass qClass,
-                                   Value qThis, 
+                                   Value qThis,
                                    Value []args);
 
   /**
@@ -156,14 +151,14 @@ abstract public class AbstractJavaMethod extends AbstractFunction
   @Override
   public Value call(Env env, Value a1)
   {
-    return callMethod(env, getQuercusClass(), (Value) null, 
+    return callMethod(env, getQuercusClass(), (Value) null,
                       new Value[] {a1});
   }
 
   @Override
   public Value call(Env env, Value a1, Value a2)
   {
-    return callMethod(env, getQuercusClass(), (Value) null, 
+    return callMethod(env, getQuercusClass(), (Value) null,
                       new Value[] {a1, a2});
   }
 
@@ -178,7 +173,7 @@ abstract public class AbstractJavaMethod extends AbstractFunction
   public Value call(Env env,
                     Value a1, Value a2, Value a3, Value a4)
   {
-    return callMethod(env, getQuercusClass(), (Value) null, 
+    return callMethod(env, getQuercusClass(), (Value) null,
                       new Value[] {a1, a2, a3, a4});
   }
 

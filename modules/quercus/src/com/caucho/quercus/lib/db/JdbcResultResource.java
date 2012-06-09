@@ -29,19 +29,24 @@
 
 package com.caucho.quercus.lib.db;
 
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.LongValue;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.ObjectValue;
+import com.caucho.quercus.env.QuercusClass;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.util.L10N;
-import com.caucho.util.Log;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Reader;
-import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.sql.Types;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -52,7 +57,8 @@ import java.util.logging.Logger;
 /**
  * Represents a JDBC Result value.
  */
-public class JdbcResultResource {
+public class JdbcResultResource
+{
   private static final Logger log
     = Logger.getLogger(JdbcResultResource.class.getName());
   private static final L10N L = new L10N(JdbcResultResource.class);
@@ -72,15 +78,18 @@ public class JdbcResultResource {
   public static final String UNKNOWN = "unknown";
   public static final String YEAR = "year";
 
-  private Statement _stmt;
+  protected static final int COLUMN_CASE_NATURAL = 0;
+  protected static final int COLUMN_CASE_UPPER = 1;
+  protected static final int COLUMN_CASE_LOWER = 2;
+
   protected ResultSet _rs;
   private boolean _isValid;
   private int _fieldOffset;
-  private JdbcConnectionResource _conn;
-  private Env _env;
 
   protected ResultSetMetaData _metaData;
   private Value[] _columnNames;
+
+  private int _columnCase = COLUMN_CASE_NATURAL;
 
   private int _affectedRows;
 
@@ -91,15 +100,16 @@ public class JdbcResultResource {
    * @param rs the corresponding result set
    * @param conn the corresponding connection
    */
-  public JdbcResultResource(Env env,
-                            Statement stmt,
-                            ResultSet rs,
-                            JdbcConnectionResource conn)
+  public JdbcResultResource(ResultSet rs)
   {
-    _env = env;
-    _stmt = stmt;
     _rs = rs;
-    _conn = conn;
+  }
+
+  public JdbcResultResource(ResultSet rs, int columnCase)
+  {
+    _rs = rs;
+
+    _columnCase = columnCase;
   }
 
   /**
@@ -108,16 +118,18 @@ public class JdbcResultResource {
    * @param metaData the corresponding result set meta data
    * @param conn the corresponding connection
    */
-  public JdbcResultResource(Env env,
-                            ResultSetMetaData metaData,
-                            JdbcConnectionResource conn)
+  public JdbcResultResource(ResultSetMetaData metaData)
   {
-    _env = env;
-
     _metaData = metaData;
-    _conn = conn;
-    _env = conn.getEnv();
   }
+
+  public JdbcResultResource(ResultSetMetaData metaData, int columnCase)
+  {
+    _metaData = metaData;
+
+    _columnCase = columnCase;
+  }
+
 
   /**
    * Closes the result set.
@@ -128,21 +140,11 @@ public class JdbcResultResource {
       ResultSet rs = _rs;
       _rs = null;
 
-      Statement stmt = _stmt;
-      _stmt = null;
-
-      JdbcConnectionResource conn = _conn;
-      _conn = null;
-
-      if (rs != null)
+      if (rs != null) {
         rs.close();
-
-      // XXX: statement no longer reused?
-      if (stmt != null && conn != null)
-        conn.closeStatement(stmt);
-
-      _env = null;
-    } catch (SQLException e) {
+      }
+    }
+    catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
     }
   }
@@ -160,11 +162,17 @@ public class JdbcResultResource {
    * @return the next result row as an associative,
    * a numeric array, or both.
    */
-  public ArrayValue fetchArray(Env env, int type)
+  protected Value fetchArray(Env env, int type)
+  {
+    return fetchArray(env, type, true);
+  }
+
+  protected Value fetchArray(Env env, int type, boolean isOrderIndexBeforeName)
   {
     try {
-      if (_rs == null)
-        return null;
+      if (_rs == null) {
+        return NullValue.NULL;
+      }
 
       if (_rs.next()) {
         _isValid = true;
@@ -179,29 +187,44 @@ public class JdbcResultResource {
           _columnNames = new Value[count];
 
           for (int i = 0; i < count; i++) {
-            String columnName = md.getColumnLabel(i + 1);
+            String columnName = getColumnLabel(md, i + 1);
 
             _columnNames[i] = env.createString(columnName);
           }
         }
 
         for (int i = 0; i < count; i++) {
-          Value value = getColumnValue(env, _rs, md, i + 1);
+          Value value = getColumnValue(env, i + 1);
 
-          if ((type & FETCH_NUM) != 0)
-            array.put(LongValue.create(i), value);
+          if (isOrderIndexBeforeName) {
+            if ((type & FETCH_NUM) != 0) {
+              array.put(LongValue.create(i), value);
+            }
 
-          if ((type & FETCH_ASSOC) != 0)
-            array.put(_columnNames[i], value);
+            if ((type & FETCH_ASSOC) != 0) {
+              array.put(_columnNames[i], value);
+            }
+          }
+          else {
+            if ((type & FETCH_ASSOC) != 0) {
+              array.put(_columnNames[i], value);
+            }
+
+            if ((type & FETCH_NUM) != 0) {
+              array.put(LongValue.create(i), value);
+            }
+          }
         }
 
         return array;
-      } else {
-        return null;
       }
-    } catch (SQLException e) {
+      else {
+        return NullValue.NULL;
+      }
+    }
+    catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
-      return null;
+      return NullValue.NULL;
     }
   }
 
@@ -211,9 +234,19 @@ public class JdbcResultResource {
    * @return an associative array representing the row
    * or null if there are no more rows in the result set
    */
-  public ArrayValue fetchAssoc(Env env)
+  public Value fetchAssoc(Env env)
   {
-    return fetchArray(env, JdbcResultResource.FETCH_ASSOC);
+    return fetchArray(env, JdbcResultResource.FETCH_ASSOC, true);
+  }
+
+  public Value fetchBoth(Env env, boolean isOrderIndexBeforeName)
+  {
+    return fetchArray(env, JdbcResultResource.FETCH_BOTH, isOrderIndexBeforeName);
+  }
+
+  public Value fetchNum(Env env)
+  {
+    return fetchArray(env, JdbcResultResource.FETCH_NUM, false);
   }
 
   /**
@@ -235,8 +268,9 @@ public class JdbcResultResource {
                           String tableName,
                           String type)
   {
-    if (_rs == null)
-      return null;
+    if (_rs == null) {
+      return BooleanValue.FALSE;
+    }
 
     ObjectValue result = env.createObject();
 
@@ -288,7 +322,8 @@ public class JdbcResultResource {
         result.putField(env, "zerofill", LongValue.ZERO);
 
       return result;
-    } catch (SQLException e) {
+    }
+    catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       return BooleanValue.FALSE;
     }
@@ -301,24 +336,38 @@ public class JdbcResultResource {
    * @param env the PHP executing environment
    * @return an object representing the current fetched row
    */
-  public Value fetchObject(Env env)
+  protected Value fetchObject(Env env, String className, Value[] args)
   {
-    if (_rs == null)
+    if (_rs == null) {
       return NullValue.NULL;
+    }
 
     try {
       if (_rs.next()) {
         _isValid = true;
 
-        Value result = env.createObject();
+        Value result;
+
+        if (className != null) {
+          QuercusClass cls = env.findClass(className);
+
+          if (args == null) {
+            args = Value.NULL_ARGS;
+          }
+
+          result = cls.callNew(env, args);
+        }
+        else {
+          result = env.createObject();
+        }
 
         ResultSetMetaData md = getMetaData();
 
         int count = md.getColumnCount();
 
         for (int i = 0; i < count; i++) {
-          String name = md.getColumnLabel(i + 1);
-          Value value = getColumnValue(env, _rs, md, i + 1);
+          String name = getColumnLabel(md, i + 1);
+          Value value = getColumnValue(env, i + 1);
 
           result.putField(env, name, value);
         }
@@ -337,11 +386,44 @@ public class JdbcResultResource {
   /**
    * Returns an array representing the row.
    *
-   * @return an array containing the fecthed row
+   * @return an array containing the fetched row
    */
-  public ArrayValue fetchRow(Env env)
+  protected Value fetchRow(Env env)
   {
-    return fetchArray(env, JdbcResultResource.FETCH_NUM);
+    return fetchArray(env, JdbcResultResource.FETCH_NUM, true);
+  }
+
+  /**
+   * Fetch results from a prepared statement into bound variables.
+   *
+   * @return true on success, false on error, null if no more rows
+   */
+  protected Value fetchBound(Env env, Value[] vars)
+  {
+    if (_rs == null) {
+      return NullValue.NULL;
+    }
+
+    try {
+      if (_rs.next()) {
+        int size = vars.length;
+
+        for (int i = 0; i < size; i++) {
+          Value value = getColumnValue(env, i + 1);
+
+          vars[i].set(value);
+        }
+
+        return BooleanValue.TRUE;
+      }
+      else {
+        return NullValue.NULL;
+      }
+    }
+    catch (SQLException e) {
+      log.log(Level.FINE, e.toString(), e);
+      return BooleanValue.FALSE;
+    }
   }
 
   /**
@@ -354,6 +436,16 @@ public class JdbcResultResource {
     return _affectedRows;
   }
 
+  protected boolean next()
+    throws SQLException
+  {
+    if (_rs == null) {
+      return false;
+    }
+
+    return _rs.next();
+  }
+
   /**
    * Gets the column number based on a generic Value.
    *
@@ -361,8 +453,7 @@ public class JdbcResultResource {
    * @param base the numbering base: 0 or 1 (usually zero).
    * @return the column number (always 0-based) or -1 on error
    */
-  protected int getColumnNumber(Value fieldNameOrNumber,
-                                int base)
+  protected int getColumnNumber(Value fieldNameOrNumber, int base)
     throws SQLException
   {
     int fieldNumber = -1;
@@ -401,14 +492,14 @@ public class JdbcResultResource {
    * @return the column number (0-based) or -1 on error
    */
   private int getColumnNumber(String colName,
-                              ResultSetMetaData rsmd)
+                              ResultSetMetaData md)
     throws SQLException
   {
-    int numColumns = rsmd.getColumnCount();
+    int numColumns = md.getColumnCount();
 
     if (colName.indexOf('.') == -1) {
       for (int i = 1; i <= numColumns; i++) {
-        if (colName.equals(rsmd.getColumnLabel(i)))
+        if (colName.equals(getColumnLabel(md, i)))
           return (i - 1);
       }
 
@@ -416,13 +507,21 @@ public class JdbcResultResource {
     }
     else {
       for (int i = 1; i <= numColumns; i++) {
-        if (colName.equals(rsmd.getTableName(i) + '.' + rsmd.getColumnLabel(i)))
+        if (colName.equals(md.getTableName(i) + '.' + md.getColumnLabel(i)))
           return (i - 1);
       }
 
       return -1;
     }
 
+  }
+
+  protected Value getColumnValue(Env env, int column)
+    throws SQLException
+  {
+    int type = getMetaData().getColumnType(column);
+
+    return getColumnValue(env, column, type);
   }
 
   /**
@@ -434,23 +533,22 @@ public class JdbcResultResource {
    * @param column the column number
    * @return the column value
    */
-  public Value getColumnValue(Env env,
-                              ResultSet rs,
-                              ResultSetMetaData metaData,
-                              int column)
+  protected Value getColumnValue(Env env, int column, int type)
     throws SQLException
   {
     // Note: typically, the PHP column value is returned as
     // a String, except for binary values.
 
+    ResultSet rs = _rs;
+
     try {
-      switch (metaData.getColumnType(column)) {
+      switch (type) {
       case Types.NULL:
         return NullValue.NULL;
 
       case Types.BIT:
         {
-          String typeName = metaData.getColumnTypeName(column);
+          String typeName = getMetaData().getColumnTypeName(column);
           // Postgres matches BIT for BOOL columns
           if (! typeName.equals("bool")) {
             String value = rs.getString(column);
@@ -458,7 +556,7 @@ public class JdbcResultResource {
             if (rs.wasNull())
               return NullValue.NULL;
             else
-              return _env.createString(value);
+              return env.createString(value);
           }
           // else fall to boolean
         }
@@ -482,7 +580,7 @@ public class JdbcResultResource {
           if (rs.wasNull())
             return NullValue.NULL;
           else
-            return _env.createString(String.valueOf(value));
+            return env.createString(value);
         }
       case Types.REAL:
       case Types.DOUBLE:
@@ -491,20 +589,20 @@ public class JdbcResultResource {
 
           if (rs.wasNull())
             return NullValue.NULL;
-          else if (metaData.isCurrency(column)) {
-            StringValue sb = _env.createUnicodeBuilder();
+          else if (getMetaData().isCurrency(column)) {
+            StringValue sb = env.createUnicodeBuilder();
 
             sb.append("$");
 
             return sb.append(value);
           }
           else if (value == 0.0) {
-            StringValue sb = _env.createUnicodeBuilder();
+            StringValue sb = env.createUnicodeBuilder();
 
             return sb.append("0");
           }
           else {
-            StringValue sb = _env.createUnicodeBuilder();
+            StringValue sb = env.createUnicodeBuilder();
 
             return sb.append(value);
           }
@@ -512,26 +610,12 @@ public class JdbcResultResource {
 
       case Types.BLOB:
         {
-          Object object = rs.getBlob(column);
-          if (object.getClass().getName().equals("oracle.sql.BLOB")) {
-            OracleOciLob ociLob = new OracleOciLob((Oracle) _conn,
-                                                   OracleModule.OCI_D_LOB);
-            ociLob.setLob(object);
-            object = ociLob;
-          }
-          return env.wrapJava(object);
+          return getBlobValue(env, rs, getMetaData(), column);
         }
 
       case Types.CLOB:
         {
-          Object object = rs.getClob(column);
-          if (object.getClass().getName().equals("oracle.sql.CLOB")) {
-            OracleOciLob ociLob = new OracleOciLob((Oracle) _conn,
-                                                   OracleModule.OCI_D_LOB);
-            ociLob.setLob(object);
-            object = ociLob;
-          }
-          return env.wrapJava(object);
+          return getClobValue(env, rs, getMetaData(), column);
         }
 
       case Types.LONGVARBINARY:
@@ -559,9 +643,9 @@ public class JdbcResultResource {
       case Types.VARCHAR:
       case Types.LONGVARCHAR:
         if (env.isUnicodeSemantics())
-          return getUnicodeColumnString(env, rs, metaData, column);
+          return getUnicodeColumnString(env, rs, getMetaData(), column);
         else
-          return getColumnString(env, rs, metaData, column);
+          return getColumnString(env, rs, getMetaData(), column);
 
       case Types.TIME:
         return getColumnTime(env, rs, column);
@@ -592,6 +676,24 @@ public class JdbcResultResource {
 
       return NullValue.NULL;
     }
+  }
+
+  protected Value getBlobValue(Env env,
+                               ResultSet rs,
+                               ResultSetMetaData metaData,
+                               int column)
+    throws SQLException
+  {
+    return getColumnString(env, rs, metaData, column);
+  }
+
+  protected Value getClobValue(Env env,
+                               ResultSet rs,
+                               ResultSetMetaData metaData,
+                               int column)
+    throws SQLException
+  {
+    return getColumnString(env, rs, metaData, column);
   }
 
   protected Value getUnicodeColumnString(Env env,
@@ -686,22 +788,12 @@ public class JdbcResultResource {
   }
 
   /**
-   * Get the connection corresponding to this result resource.
-   *
-   * @return a JDBC connection resource
-   */
-  public JdbcConnectionResource getConnection()
-  {
-    return _conn;
-  }
-
-  /**
    * Get the field catalog name.
    *
    * @param fieldOffset the field number
    * @return the field catalog name
    */
-  public Value getFieldCatalog(int fieldOffset)
+  public Value getFieldCatalog(Env env, int fieldOffset)
   {
     try {
       ResultSetMetaData md = getMetaData();
@@ -709,7 +801,7 @@ public class JdbcResultResource {
       if (md.getColumnCount() <= fieldOffset || fieldOffset < 0)
         return BooleanValue.FALSE;
       else
-        return _env.createString(md.getCatalogName(fieldOffset + 1));
+        return env.createString(md.getCatalogName(fieldOffset + 1));
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       return BooleanValue.FALSE;
@@ -811,7 +903,6 @@ public class JdbcResultResource {
    */
   public Value getFieldName(Env env, int fieldOffset)
   {
-
     try {
       ResultSetMetaData md = getMetaData();
 
@@ -820,7 +911,7 @@ public class JdbcResultResource {
         return BooleanValue.FALSE;
       }
       else
-        return env.createString(md.getColumnLabel(fieldOffset + 1));
+        return env.createString(getColumnLabel(md, fieldOffset + 1));
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
       return BooleanValue.FALSE;
@@ -834,16 +925,15 @@ public class JdbcResultResource {
    *
    * @return the column alias
    */
-  public Value getFieldNameAlias(int fieldOffset)
+  public Value getFieldNameAlias(Env env, int fieldOffset)
   {
-
     try {
       ResultSetMetaData md = getMetaData();
 
       if (md.getColumnCount() <= fieldOffset || fieldOffset < 0)
         return BooleanValue.FALSE;
       else
-        return _env.createString(md.getColumnLabel(fieldOffset + 1));
+        return env.createString(getColumnLabel(md, fieldOffset + 1));
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
       return BooleanValue.FALSE;
@@ -1006,49 +1096,40 @@ public class JdbcResultResource {
   protected String getFieldType(int fieldOffset, int jdbcType)
   {
     switch (jdbcType) {
-    case Types.BIGINT:
-    case Types.BIT:
-    case Types.INTEGER:
-    case Types.SMALLINT:
-    case Types.TINYINT:
+      case Types.BIGINT:
+      case Types.BIT:
+      case Types.INTEGER:
+      case Types.SMALLINT:
+      case Types.TINYINT:
         return INTEGER;
 
-    case Types.LONGVARBINARY:
-    case Types.LONGVARCHAR:
+      case Types.LONGVARBINARY:
+      case Types.LONGVARCHAR:
         return BLOB;
 
-    case Types.CHAR:
-    case Types.VARCHAR:
-    case Types.BINARY:
-    case Types.VARBINARY:
+      case Types.CHAR:
+      case Types.VARCHAR:
+      case Types.BINARY:
+      case Types.VARBINARY:
         return STRING;
 
-    case Types.TIME:
+      case Types.TIME:
         return TIME;
 
-    case Types.DATE:
+      case Types.DATE:
         return DATE;
 
-    case Types.TIMESTAMP:
+      case Types.TIMESTAMP:
         return DATETIME;
 
-    case Types.DECIMAL:
-    case Types.DOUBLE:
-    case Types.REAL:
+      case Types.DECIMAL:
+      case Types.DOUBLE:
+      case Types.REAL:
         return REAL;
 
-    default:
+      default:
         return UNKNOWN;
     }
-  }
-
-  /**
-   * Returns the underlying SQL statement
-   * associated to this result resource.
-   */
-  protected Statement getJavaStatement()
-  {
-    return _conn.getEnv().getQuercus().getStatement(getStatement());
   }
 
   /**
@@ -1119,8 +1200,9 @@ public class JdbcResultResource {
     }
     */
 
-    if (_metaData == null && _rs != null)
+    if (_metaData == null && _rs != null) {
       _metaData = _rs.getMetaData();
+    }
 
     return _metaData;
   }
@@ -1153,16 +1235,6 @@ public class JdbcResultResource {
   }
 
   /**
-   * Get the number of rows in this result set.
-   *
-   * @return the number of rows in this result set
-   */
-  public int getNumRows()
-  {
-    return getNumRows(_rs);
-  }
-
-  /**
    * Returns number of rows returned in query.
    * last() call is efficient for Mysql because the driver just adjusts
    * the result index.  It is very inefficient for Postgres because that
@@ -1171,10 +1243,13 @@ public class JdbcResultResource {
    * @param rs a result set
    * @return the number of rows in the specified result set
    */
-  public static int getNumRows(ResultSet rs)
+  public int getNumRows()
   {
-    if (rs == null)
+    ResultSet rs = _rs;
+
+    if (rs == null) {
       return -1;
+    }
 
     try {
       int currentRow = rs.getRow();
@@ -1182,17 +1257,21 @@ public class JdbcResultResource {
       try {
         rs.last();
         return rs.getRow();
-      } catch (Exception e) {
+      }
+      catch (Exception e) {
         log.log(Level.FINE, e.toString(), e);
         return -1;
-      } finally {
-        if (currentRow == 0)
-          rs.beforeFirst();
-        else
-          rs.absolute(currentRow);
       }
-
-    } catch (SQLException e) {
+      finally {
+        if (currentRow == 0) {
+          rs.beforeFirst();
+        }
+        else {
+          rs.absolute(currentRow);
+        }
+      }
+    }
+    catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       return -1;
     }
@@ -1235,10 +1314,32 @@ public class JdbcResultResource {
         return BooleanValue.FALSE;
       }
 
-      return getColumnValue(env, _rs, md, colNumber + 1);
+      return getColumnValue(env, colNumber + 1);
     } catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       return BooleanValue.FALSE;
+    }
+  }
+
+  protected String getColumnLabel(int index)
+    throws SQLException
+  {
+    return getColumnLabel(_rs.getMetaData(), index);
+  }
+
+  private String getColumnLabel(ResultSetMetaData md, int index)
+    throws SQLException
+  {
+    String name = md.getColumnLabel(index);
+
+    switch (_columnCase) {
+      case COLUMN_CASE_LOWER:
+        return name.toLowerCase();
+      case COLUMN_CASE_UPPER:
+        return name.toUpperCase();
+      case COLUMN_CASE_NATURAL:
+      default:
+        return name;
     }
   }
 
@@ -1250,16 +1351,6 @@ public class JdbcResultResource {
   public ResultSet getResultSet()
   {
     return _rs;
-  }
-
-  /**
-   * Get the underlying statement.
-   *
-   * @return the underlying Statement object
-   */
-  public Statement getStatement()
-  {
-    return _stmt;
   }
 
   /**
@@ -1315,50 +1406,27 @@ public class JdbcResultResource {
    */
   public boolean setRowNumber(int rowNumber)
   {
-    return setRowNumber(_rs, rowNumber);
-  }
-
-  /**
-   * Points to the row right before "rowNumber".
-   * Next fetchArray will increment to proper row.
-   *
-   * @param rs the result set to move the row pointer
-   * @param rowNumber the row offset
-   * @return true on success or false on failure
-   */
-  public static boolean setRowNumber(ResultSet rs,
-                                     int rowNumber)
-  {
     // throw error if rowNumber is after last row
-    int numRows = getNumRows(rs);
+    int numRows = getNumRows();
 
     if (numRows <= rowNumber || rowNumber < 0) {
       return false;
     }
 
     try {
-      if (rowNumber == 0)
-        rs.beforeFirst();
-      else
-        rs.absolute(rowNumber);
-    } catch (SQLException e) {
+      if (rowNumber == 0) {
+        _rs.beforeFirst();
+      }
+      else {
+        _rs.absolute(rowNumber);
+      }
+    }
+    catch (SQLException e) {
       log.log(Level.FINE, e.toString(), e);
       return false;
     }
 
     return true;
-  }
-
-  /**
-   * Convert this JDBC result resource to a hash code.
-   *
-   * @return a hash code of this JDBC result resource
-   */
-  public Value toKey()
-  {
-    // XXX: phpbb seems to want this?
-    return _env
-      .createString("JdbcResultResource$" + System.identityHashCode(this));
   }
 
   /**

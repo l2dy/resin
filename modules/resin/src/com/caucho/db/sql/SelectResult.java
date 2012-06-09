@@ -29,8 +29,10 @@
 
 package com.caucho.db.sql;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.sql.Blob;
 import java.sql.Clob;
 import java.sql.SQLException;
@@ -326,18 +328,25 @@ public class SelectResult {
       return null;
 
     case BINARY:
-      {
-        int len = read();
+    {
+      int len = read();
 
-        byte []bytes = new byte[len];
+      byte []bytes = new byte[len];
 
-        read(bytes, 0, len);
+      read(bytes, 0, len);
 
-        return bytes;
-      }
+      return bytes;
+    }
 
     case BLOB:
       return readBlobBytes();
+
+    case VARCHAR:
+      try {
+        return readString().getBytes("utf-8");
+      } catch (Exception e) {
+        throw new RuntimeException(e);
+      }
 
     default:
       throw new RuntimeException("unknown column type:" + type + " column:" + index);
@@ -658,8 +667,49 @@ public class SelectResult {
   /**
    * Returns the blob value of the given index.
    */
-  public Blob getBlob(int index)
+  public InputStream getBinaryStream(int index)
     throws SQLException
+  {
+    _wasNull = false;
+
+    setColumn(index);
+
+    int type = read();
+
+    if (type < 0)
+      return null;
+      
+    ColumnType cType = ColumnType.values()[type];
+
+    switch (cType) {
+    case NONE:
+      _wasNull = true;
+      return null;
+      
+    case BINARY:
+    {
+      int len = read();
+
+      byte []bytes = new byte[len];
+
+      read(bytes, 0, len);
+
+      return new ByteArrayInputStream(bytes);
+    }
+
+    case BLOB:
+      return getBlob().getBinaryStream();
+
+    default:
+      throw new RuntimeException("column " + cType + " can't be retrieved as a blob:" + type + " column:" + index);
+    }
+  }
+
+  /**
+   * Returns the blob value of the given index.
+   */
+  public Blob getBlob(int index)
+      throws SQLException
   {
     _wasNull = false;
 
@@ -681,7 +731,7 @@ public class SelectResult {
       return getBlob();
 
     default:
-      throw new RuntimeException("column can't be retrieved as a blob:" + type + " column:" + index);
+      throw new RuntimeException("column " + cType + " can't be retrieved as a blob:" + type + " column:" + index);
     }
   }
 

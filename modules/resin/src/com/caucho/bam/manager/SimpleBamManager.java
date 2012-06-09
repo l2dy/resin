@@ -34,14 +34,23 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.caucho.bam.actor.AbstractAgent;
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.Agent;
+import com.caucho.bam.actor.BamActorRef;
 import com.caucho.bam.actor.ManagedActor;
 import com.caucho.bam.actor.SimpleActor;
+import com.caucho.bam.actor.SimpleActorRef;
+import com.caucho.bam.actor.SimpleActorSender;
+import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
+import com.caucho.bam.broker.ManagedBrokerAdapter;
+import com.caucho.bam.mailbox.ActorMailbox;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MailboxType;
 import com.caucho.bam.mailbox.MultiworkerMailbox;
 import com.caucho.bam.mailbox.PassthroughMailbox;
+import com.caucho.bam.proxy.BamProxyFactory;
+import com.caucho.bam.proxy.ProxyActor;
 import com.caucho.bam.query.QuerySender;
+import com.caucho.bam.router.BamRouter;
 import com.caucho.bam.stream.MessageStream;
 import com.caucho.bam.stream.NullActor;
 import com.caucho.util.Alarm;
@@ -55,6 +64,12 @@ public class SimpleBamManager implements BamManager
   private final AtomicLong _sequence = new AtomicLong(CurrentTime.getCurrentTime());
   
   private ManagedBroker _broker;
+  private long _timeout = 120 * 1000L;
+  
+  public SimpleBamManager(Broker broker)
+  {
+    this(ManagedBrokerAdapter.create(broker));
+  }
   
   public SimpleBamManager(ManagedBroker broker)
   {
@@ -70,13 +85,18 @@ public class SimpleBamManager implements BamManager
     return _broker;
   }
   
+  public long getTimeout()
+  {
+    return _timeout;
+  }
+  
   /**
    * Adds a mailbox.
    */
   @Override
-  public void addMailbox(Mailbox mailbox)
+  public void addMailbox(String address, Mailbox mailbox)
   {
-    getBroker().addMailbox(mailbox);
+    getBroker().addMailbox(address, mailbox);
   }
   
   /**
@@ -88,9 +108,6 @@ public class SimpleBamManager implements BamManager
     getBroker().removeMailbox(mailbox);
   }
 
-  /* (non-Javadoc)
-   * @see com.caucho.bam.manager.BrokerManager#addActor(com.caucho.bam.actor.Actor)
-   */
   @Override
   public void addActor(String address,
                        ManagedActor actor)
@@ -103,7 +120,38 @@ public class SimpleBamManager implements BamManager
                                     MailboxType.DEFAULT);
     actor.setMailbox(mailbox);
     
-    addMailbox(mailbox);
+    addMailbox(address, mailbox);
+  }
+  
+  /**
+   * Creates a skeleton actor.
+   */
+  public void addActorBean(String address, Object bean)
+  {
+    ProxyActor<?> actor = new ProxyActor(bean, address, getBroker());
+    
+    Mailbox mailbox = createMailbox(address, 
+                                    actor,
+                                    MailboxType.DEFAULT);
+    
+    addMailbox(address, mailbox);
+  }
+  
+  /**
+   * Creates a skeleton actor.
+   */
+  @Override
+  public Mailbox createService(String address, Object bean)
+  {
+    ProxyActor<?> actor = new ProxyActor(bean, address, getBroker());
+    
+    Mailbox mailbox = createMailbox(address, 
+                                    actor,
+                                    MailboxType.MULTI_WORKER);
+    
+    addMailbox(address, mailbox);
+    
+    return mailbox;
   }
   
   /**
@@ -122,15 +170,17 @@ public class SimpleBamManager implements BamManager
   public Agent createAgent(MessageStream actorStream,
                            MailboxType mailboxType)
   {
-    Mailbox mailbox = createMailbox(actorStream.getAddress(),
+    String address = actorStream.getAddress();
+    
+    Mailbox mailbox = createMailbox(address,
                                     actorStream, 
                                     mailboxType);
     
-    Agent agent = new AbstractAgent(actorStream.getAddress(),
+    Agent agent = new AbstractAgent(address,
                                     mailbox,
                                     getBroker());
     
-    addMailbox(mailbox);
+    addMailbox(address, mailbox);
     
     return agent;
   }
@@ -148,6 +198,12 @@ public class SimpleBamManager implements BamManager
     switch (mailboxType) {
     case NON_QUEUED:
       return new PassthroughMailbox(address, actorStream, getBroker());
+      
+    case ACTOR:
+      return new ActorMailbox(address, actorStream, getBroker());
+
+    case MULTI_WORKER:
+      return new MultiworkerMailbox(address, actorStream, getBroker(), 5);
       
     default:
       return new MultiworkerMailbox(address, actorStream, getBroker(), 5);
@@ -181,7 +237,7 @@ public class SimpleBamManager implements BamManager
    
     Mailbox mailbox = new PassthroughMailbox(address, next, getBroker());
     
-    addMailbox(mailbox);
+    addMailbox(address, mailbox);
     
     return mailbox;
   }
@@ -210,6 +266,44 @@ public class SimpleBamManager implements BamManager
       address = uid + "/" + Long.toHexString(_sequence.incrementAndGet());
     }
 
+    SimpleActor actor = new SimpleActor(address, getBroker());
+
+    addActor(address, actor);
+    
+    return actor.getSender();
+  }
+
+  @Override
+  public BamActorRef createActorRef(String to)
+  {
+    return new SimpleActorRef(to, getBroker());
+  }
+
+  @Override
+  public <T> T createProxy(Class<T> api, String to)
+  {
+    ActorSender sender = createClient(api.getSimpleName(), null);
+    
+    return createProxy(api, createActorRef(to), sender);
+  }
+  
+  @Override
+  public <T> T createProxy(Class<T> api, BamActorRef to, ActorSender sender)
+  {
+    return BamProxyFactory.createProxy(api, to, sender, getTimeout());
+  }
+  
+  @Override
+  public <T> T createProxy(Class<T> api, String to, ActorSender sender)
+  {
+    return BamProxyFactory.createProxy(api, 
+                                       createActorRef(to),
+                                       sender,
+                                       getTimeout());
+  }
+  
+  public ActorSender createClient(String address)
+  {
     SimpleActor actor = new SimpleActor(address, getBroker());
 
     addActor(address, actor);

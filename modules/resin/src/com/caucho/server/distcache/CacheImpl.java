@@ -67,9 +67,9 @@ import com.caucho.distcache.ExtCacheEntry;
 import com.caucho.distcache.ObjectCache;
 import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.env.thread.AbstractWorkerQueue;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.loader.Environment;
 import com.caucho.management.server.AbstractManagedObject;
-import com.caucho.server.distcache.CacheStoreManager.DataItem;
 import com.caucho.util.ConcurrentArrayList;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
@@ -94,6 +94,8 @@ public class CacheImpl<K,V>
   private final String _guid;
 
   private final CacheConfig _config;
+  
+  private CacheMnodeListenerImpl _mnodeListener;
 
   private ConcurrentArrayList<ReadListener<K,V>> _readListeners;
   private ConcurrentArrayList<UpdatedListener<K,V>> _updatedListeners;
@@ -238,8 +240,8 @@ public class CacheImpl<K,V>
       if (_config.getEngine() == null)
         _config.setEngine(_manager.getCacheEngine());
 
-      _config.setCacheKey(_manager.createSelfHashKey(_config.getGuid(),
-                                                     _config.getKeySerializer()));
+      _config.setCacheKey(_manager.getKeyManager().createSelfHashKey(_config.getGuid(),
+                                                                     _config.getKeySerializer()));
 
       // _entryCache = new LruCache<Object,DistCacheEntry>(512);
       
@@ -247,6 +249,10 @@ public class CacheImpl<K,V>
     }
     
     _manager.initCache(this);
+    
+    _mnodeListener = new CacheMnodeListenerImpl();
+    
+    _manager.addCacheListener(getCacheKey(), _mnodeListener);
     
     _admin.register();
   }
@@ -258,7 +264,7 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry cacheEntry = getDistCacheEntry(key);
 
-    return (cacheEntry != null) ? cacheEntry.peek() : null;
+    return (cacheEntry != null) ? cacheEntry.getMnodeEntry().getValue() : null;
   }
   
   /**
@@ -279,7 +285,7 @@ public class CacheImpl<K,V>
     DistCacheEntry entry = getDistCacheEntry(key);
 
     _getCount.incrementAndGet();
-    if (! entry.isValueNull()) {
+    if (! entry.getMnodeEntry().isValueNull()) {
       _hitCount.incrementAndGet();
     }
     else {
@@ -299,6 +305,7 @@ public class CacheImpl<K,V>
    * Returns the object with the given key always checking the backing
    * store .
    */
+  /*
   @Override
   public Object getExact(Object key)
   {
@@ -308,6 +315,7 @@ public class CacheImpl<K,V>
     
     return value;
   }
+  */
 
   /**
    * Fills an output stream with the value for a key.
@@ -325,12 +333,20 @@ public class CacheImpl<K,V>
   @Override
   public ExtCacheEntry getExtCacheEntry(Object key)
   {
-    return getDistCacheEntry(key).getMnodeValue(_config);
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    entry.loadMnodeValue(_config);
+    
+    return getExtCacheEntry(entry);
   }
   
   public ExtCacheEntry getExtCacheEntry(HashKey key)
   {
-    return getDistCacheEntry(key).getMnodeValue(_config);
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    entry.loadMnodeValue(_config);
+    
+    return getExtCacheEntry(entry);
   }
 
   /**
@@ -339,12 +355,14 @@ public class CacheImpl<K,V>
   @Override
   public ExtCacheEntry peekExtCacheEntry(Object key)
   {
-    return getDistCacheEntry(key).getMnodeEntry();
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    return getExtCacheEntry(entry);
   }
   
   public ExtCacheEntry getStatCacheEntry(Object key)
   {
-    return getDistCacheEntry(key);
+    return new ExtCacheEntryFacade(getDistCacheEntry(key));
   }
 
   /**
@@ -387,10 +405,14 @@ public class CacheImpl<K,V>
                            int flags)
     throws IOException
   {
-      return getDistCacheEntry(key).put(is, _config, 
-                                        accessedExpireTimeout,
-                                        modifiedExpireTimeout,
-                                        flags);
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    entry.put(is, _config, 
+              accessedExpireTimeout,
+              modifiedExpireTimeout,
+              flags);
+    
+    return getExtCacheEntry(entry);
   }
 
   /**
@@ -408,9 +430,13 @@ public class CacheImpl<K,V>
                            long modifiedExpireTimeout)
     throws IOException
   {
-    return getDistCacheEntry(key).put(is, _config, 
-                                      accessedExpireTimeout,
-                                      modifiedExpireTimeout);
+    DistCacheEntry entry = getDistCacheEntry(key);
+    
+    entry.put(is, _config, 
+              accessedExpireTimeout,
+              modifiedExpireTimeout);
+    
+    return getExtCacheEntry(entry);
   }
 
   /**
@@ -437,9 +463,9 @@ public class CacheImpl<K,V>
    * @return true if the update succeeds, false if it fails
    */
   @Override
-  public boolean compareAndPut(Object key,
-                               long version,
-                               Object value)
+  public boolean compareVersionAndPut(Object key,
+                                      long version,
+                                      Object value)
   {
     put((K) key, (V) value);
 
@@ -456,33 +482,31 @@ public class CacheImpl<K,V>
    * @return true if the update succeeds, false if it fails
    */
   @Override
-  public boolean compareAndPut(Object key,
-                               long version,
-                               InputStream inputStream)
+  public boolean putIfNew(Object key,
+                          MnodeUpdate update,
+                          InputStream is)
     throws IOException
   {
-    // put(key, inputStream);
-
-    return true;
+    return getDistCacheEntry(key).putIfNew(update, is, _config);
   }
 
-  public void compareAndPut(HashKey key, 
-                            HashKey value,
-                            long valueLength,
-                            long version)
+  /*
+  public boolean compareAndPut(HashKey key, 
+                               long valueHash,
+                               long valueIndex,
+                               long valueLength,
+                               long version)
   {
-    getDistCacheEntry(key).compareAndPut(version, value, valueLength, _config);
+    return getDistCacheEntry(key).compareAndPut(version, valueHash, valueIndex, valueLength, _config);
   }
+  */
 
   @Override
   public boolean putIfAbsent(Object key, Object value) throws CacheException
   {
-    HashKey NULL = MnodeEntry.NULL_KEY;
+    long testHash = 0;
     
-    HashKey result
-      = getDistCacheEntry(key).compareAndPut(NULL, value, _config);
-    
-    return result != null && result.isNull();
+    return getDistCacheEntry(key).compareAndPut(testHash, value, _config);
   }
 
   @Override
@@ -491,20 +515,11 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    HashKey oldHash = entry.getValueHash(oldValue, _config);
+    long oldHash = entry.getValueHash(oldValue, _config);
     
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
-    
-    boolean isChanged;
-    
-    if (oldHash == null || oldHash.isNull()) {
-      isChanged = (result == null || result.isNull());
-    }
-    else {
-      isChanged = oldHash.equals(result);
-    }
-    
-    return isChanged;
+    boolean isReplace = entry.compareAndPut(oldHash, value, _config);
+     
+    return isReplace;
   }
 
   @Override
@@ -512,14 +527,13 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    HashKey oldHash = MnodeEntry.ANY_KEY;
+    long oldHash = MnodeEntry.ANY_KEY;
     
-    HashKey result = entry.compareAndPut(oldHash, value, _config);
+    boolean isChanged = entry.compareAndPut(oldHash, value, _config);
     
-    boolean isChanged = result != null && ! result.isNull();
-    
-    if (isChanged)
+    if (isChanged) {
       entryUpdate((K) key, (V) value);
+    }
     
     return isChanged;
   }
@@ -529,7 +543,7 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    HashKey oldHash = MnodeEntry.ANY_KEY;
+    long oldHash = MnodeEntry.ANY_KEY;
     
     return entry.getAndReplace(oldHash, value, _config);
   }
@@ -579,7 +593,7 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry cacheEntry = getDistCacheEntry(key);
 
-    if (cacheEntry.getVersion() == version) {
+    if (cacheEntry.getMnodeEntry().getVersion() == version) {
       remove(key);
 
       return true;
@@ -595,11 +609,17 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry distEntry = getDistCacheEntry(key);
    
-    long now = CurrentTime.getCurrentTime();
+    //long now = CurrentTime.getCurrentTime();
     
-    _manager.load(distEntry, _config, now);
+    distEntry.loadMnodeValue(_config);
+    //_manager.load(distEntry, _config, now);
     
-    return distEntry;
+    return getExtCacheEntry(distEntry);
+  }
+  
+  private ExtCacheEntryFacade getExtCacheEntry(DistCacheEntry distEntry)
+  {
+    return new ExtCacheEntryFacade(distEntry);
   }
 
   /**
@@ -764,7 +784,7 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    return entry != null && entry.isValid();
+    return entry != null && entry.getMnodeEntry().isValid();
   }
 
   public boolean isBackup()
@@ -819,25 +839,24 @@ public class CacheImpl<K,V>
     
     _localManager.remove(_guid);
     
-    _manager.closeCache(_guid);
-    
+    _manager.closeCache(_guid, getCacheKey());
   }
   
-  public boolean loadData(HashKey valueHash, WriteStream os)
+  public boolean loadData(long valueDataId, WriteStream os)
     throws IOException
   {
-    return getDataBacking().loadData(valueHash, os);
+    return getDataBacking().loadData(valueDataId, os);
   }
 
-  public boolean saveData(HashKey valueHash, StreamSource source, int length)
+  public long saveData(StreamSource source, int length)
     throws IOException
   {
-    return getDataBacking().saveData(valueHash, source, length);
+    return getDataBacking().saveData(source, length);
   }
 
-  public boolean isDataAvailable(HashKey valueKey)
+  public boolean isDataAvailable(long valueDataId)
   {
-    return getDataBacking().isDataAvailable(valueKey);
+    return getDataBacking().isDataAvailable(valueDataId);
   }
   
   private CacheDataBacking getDataBacking()
@@ -854,7 +873,7 @@ public class CacheImpl<K,V>
     return getDistCacheEntry(name).getKeyHash().getHash();
   }
   
-  public byte []getValueHash(Object value)
+  public long getValueHash(Object value)
   {
     return _manager.calculateValueHash(value, _config);
   }
@@ -869,20 +888,6 @@ public class CacheImpl<K,V>
   public DataStore getDataStore()
   {
     return ((CacheStoreManager) _manager).getDataStore();
-  }
-  
-  public void saveData(Object value)
-  {
-    ((CacheStoreManager) _manager).writeData(null, value, 
-                                             _config.getValueSerializer());
-  }
-  
-  public HashKey saveData(InputStream is)
-    throws IOException
-  {
-    DataItem dataItem = ((CacheStoreManager) _manager).writeData(null, is);
-    
-    return dataItem.getValue();
   }
 
   /*
@@ -930,7 +935,7 @@ public class CacheImpl<K,V>
   {
     DistCacheEntry entry = getDistCacheEntry(key);
     
-    if (entry == null || entry.isValueNull())
+    if (entry == null || entry.getMnodeEntry().isValueNull())
       return null;
     
     return entryProcessor.process(new MutableEntry(entry));
@@ -1027,6 +1032,31 @@ public class CacheImpl<K,V>
     }
   }
   
+  private void mnodeOnPutUpdate(final HashKey key, MnodeValue value)
+  {
+    ConcurrentArrayList<UpdatedListener<K,V>> updatedListeners = _updatedListeners;
+    
+    if (updatedListeners == null || updatedListeners.size() == 0)
+      return;
+
+    scheduleUpdate(key);
+  }
+  
+  private void scheduleUpdate(final HashKey key)
+  {
+    // must be run outside of thread, because the callback is single threaded
+    ThreadPool.getCurrent().schedule(new Runnable() {
+      public void run()
+      {
+        DistCacheEntry entry = _manager.getCacheEntry(key);
+    
+        if (entry != null) {
+          entryUpdate(entry.getKey(), (V) entry.get(_config));
+        }
+      }
+    });
+  }
+  
   private void entryUpdate(Object key, V value)
   {
     ConcurrentArrayList<UpdatedListener<K,V>> updatedListeners = _updatedListeners;
@@ -1114,7 +1144,7 @@ public class CacheImpl<K,V>
     @Override
     public boolean exists()
     {
-      return ! _entry.isValueNull();
+      return ! _entry.getMnodeEntry().isValueNull();
     }
 
     @Override
@@ -1138,7 +1168,7 @@ public class CacheImpl<K,V>
     @Override
     public Object getValue()
     {
-      return _entry.getValue();
+      return _entry.getMnodeEntry().getValue();
     }
   }
   
@@ -1166,13 +1196,13 @@ public class CacheImpl<K,V>
     @Override
     public Entry<K, V> next()
     {
-      Entry entry = _next;
+      DistCacheEntry entry = _next;
       
       _next = null;
       
       findNext();
       
-      return entry;
+      return new ExtCacheEntryFacade(entry);
     }
 
     @Override
@@ -1184,8 +1214,8 @@ public class CacheImpl<K,V>
     {
       while (_storeIterator.hasNext()) {
         DistCacheEntry entry = _storeIterator.next();
-        
-        if (_cacheKey.equals(entry.getCacheHash())) {
+
+        if (_cacheKey.equals(entry.getMnodeEntry().getCacheHashKey())) {
           _next = entry;
           return;
         }
@@ -1245,7 +1275,9 @@ public class CacheImpl<K,V>
     public void entryUpdated(CacheEntryEvent<? extends K,? extends V> event)
         throws CacheEntryListenerException
     {
-      if (_filter.evaluate(event)) {
+      Filter filter = _filter;
+      
+      if (filter == null || filter.evaluate(event)) {
         _listener.entryUpdated(event);
       }
     }
@@ -1536,6 +1568,14 @@ public class CacheImpl<K,V>
     @Override
     public void clearStatistics()
     {
+    }
+  }
+  
+  private class CacheMnodeListenerImpl implements CacheMnodeListener {
+    @Override
+    public void onPut(HashKey key, MnodeValue value)
+    {
+      mnodeOnPutUpdate(key, value);
     }
   }
 }

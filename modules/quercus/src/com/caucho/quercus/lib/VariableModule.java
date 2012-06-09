@@ -41,6 +41,7 @@ import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.module.AbstractQuercusModule;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
+import com.caucho.vfs.StderrStream;
 import com.caucho.vfs.StringWriter;
 import com.caucho.vfs.WriteStream;
 
@@ -77,19 +78,19 @@ public class VariableModule extends AbstractQuercusModule {
       env.warning(L.l("null passed as constant name"));
       return NullValue.NULL;
     }
-    
+
     int i = name.indexOf("::");
-    
+
     if (i > 0) {
       String cls = name.substring(0, i);
-      
+
       name = name.substring(i + 2);
-      
+
       return env.getClass(cls).getConstant(env, name);
     }
     else {
       Value constant = env.getConstant(name, false);
-      
+
       if (constant != null)
         return constant;
       else {
@@ -142,15 +143,15 @@ public class VariableModule extends AbstractQuercusModule {
   {
     if (name == null)
       return false;
-    
+
     int i = name.indexOf("::");
-    
+
     if (i > 0) {
       String clsName = name.substring(0, i);
       name = name.substring(i + 2);
-      
+
       QuercusClass cls = env.getClass(clsName);
-      
+
       return cls.hasConstant(name);
     }
     else
@@ -356,61 +357,15 @@ public class VariableModule extends AbstractQuercusModule {
    * Returns the type string for the variable
    */
   public static boolean is_callable(Env env,
-                                    Value v,
-                                    @Optional boolean isSyntaxOnly,
+                                    @ReadOnly Value v,
+                                    @Optional boolean isCheckSyntaxOnly,
                                     @Optional @Reference Value nameRef)
   {
-    if (v.isCallable(env)) {
-      return true;
+    if (nameRef.isDefault()) {
+      nameRef = null;
     }
-    
-    // XXX: this needs to be made OO through Value
-    
-    if (v instanceof StringValue) {
-      if (nameRef != null)
-        nameRef.set(v);
 
-      if (isSyntaxOnly)
-        return true;
-      else
-        return env.findFunction(v.toString()) != null;
-    }
-    else if (v instanceof ArrayValue) {
-      Value obj = v.get(LongValue.ZERO);
-      Value name = v.get(LongValue.ONE);
-
-      if (! (name instanceof StringValue))
-        return false;
-
-      if (nameRef != null)
-        nameRef.set(name);
-
-      if (obj instanceof StringValue) {
-        if (isSyntaxOnly)
-          return true;
-
-        QuercusClass cl = env.findClass(obj.toString());
-        if (cl == null)
-          return false;
-
-        return (cl.findFunction(name.toString()) != null);
-      }
-      else if (obj.isObject()) {
-        System.out.println("OBJ: " + obj.findFunction(name.toString()) + " " + isSyntaxOnly);
-        if (isSyntaxOnly)
-          return true;
-
-        return obj.findFunction(name.toString()) != null;
-      }
-      else
-        return false;
-    }
-    else if (v instanceof AbstractFunction)
-      return true;
-    else if (v instanceof Closure)
-      return true;
-    else
-      return false;
+    return v.isCallable(env, isCheckSyntaxOnly, nameRef);
   }
 
   /**
@@ -546,7 +501,7 @@ public class VariableModule extends AbstractQuercusModule {
       return false;
 
     Value value = v.toValue();
-    
+
     return (value instanceof DoubleValue
             || value instanceof StringValue
             || value instanceof LongValue
@@ -566,13 +521,14 @@ public class VariableModule extends AbstractQuercusModule {
   /**
    * Returns the type string for the variable
    */
-  public static boolean isset(@ReadOnly Value ... vList)
+  public static boolean isset(@ReadOnly Value ... values)
   {
-    for (Value v : vList) {
-      if (! v.isset())
+    for (Value v : values) {
+      if (! v.isset()) {
         return false;
+      }
     }
-    
+
     return true;
   }
 
@@ -591,22 +547,22 @@ public class VariableModule extends AbstractQuercusModule {
   {
     try {
       WriteStream out;
-      
+
       if (isReturn) {
         StringWriter writer = new StringWriter();
         out = writer.openWrite();
-        
+
         out.setNewlineString("\n");
-        
+
         v.printR(env, out, 0, new IdentityHashMap<Value, String>());
-        
+
         return env.createString(writer.getString());
       }
       else {
         out = env.getOut();
-        
+
         v.printR(env, out, 0, new IdentityHashMap<Value, String>());
-        
+
         return BooleanValue.TRUE;
       }
     } catch (IOException e) {
@@ -673,7 +629,7 @@ public class VariableModule extends AbstractQuercusModule {
       else {
         ArrayValueImpl array = new ArrayValueImpl();
         var.set(array);
-        
+
         if (! value.isNull())
           array.append(value);
       }
@@ -704,10 +660,14 @@ public class VariableModule extends AbstractQuercusModule {
    */
   public static Value unserialize(Env env, StringValue s)
   {
+    if (s.length() == 0) {
+      return BooleanValue.FALSE;
+    }
+
     Value v = null;
 
     UnserializeKey key = new UnserializeKey(s);
-    
+
     UnserializeCacheEntry entry = _unserializeCache.get(key);
 
     if (entry != null) {
@@ -721,7 +681,7 @@ public class VariableModule extends AbstractQuercusModule {
 
     try {
       is = new UnserializeReader(s);
-      
+
       v = is.unserialize(env);
     } catch (IOException e) {
       log.log(Level.FINE, e.toString(), e);
@@ -733,7 +693,7 @@ public class VariableModule extends AbstractQuercusModule {
 
     if (is != null && ! is.useReference()) {
       entry = new UnserializeCacheEntry(v);
-      
+
       _unserializeCache.put(key, entry);
 
       return entry.getValue(env);
@@ -760,10 +720,10 @@ public class VariableModule extends AbstractQuercusModule {
         env.getOut().print("NULL#java");
       else {
         v.varDump(env, env.getOut(), 0,  new IdentityHashMap<Value,String>());
-          
+
         env.getOut().println();
       }
-      
+
       if (args != null) {
         for (Value value : args) {
           if (value == null)
@@ -771,11 +731,47 @@ public class VariableModule extends AbstractQuercusModule {
           else {
             value.varDump(env, env.getOut(), 0,
                           new IdentityHashMap<Value,String>());
-            
+
             env.getOut().println();
           }
         }
       }
+
+      return NullValue.NULL;
+    } catch (IOException e) {
+      throw new QuercusModuleException(e);
+    }
+  }
+
+  public static Value stderr_var_dump(Env env,
+                                      @PassThru @ReadOnly Value v,
+                                      Value []args)
+  {
+    WriteStream out = new WriteStream(StderrStream.create());
+
+    try {
+      if (v == null)
+        out.print("NULL#java");
+      else {
+        v.varDump(env, out, 0,  new IdentityHashMap<Value,String>());
+
+        out.println();
+      }
+
+      if (args != null) {
+        for (Value value : args) {
+          if (value == null)
+            out.print("NULL#java");
+          else {
+            value.varDump(env, out, 0,
+                          new IdentityHashMap<Value,String>());
+
+            out.println();
+          }
+        }
+      }
+
+      out.flush();
 
       return NullValue.NULL;
     } catch (IOException e) {
@@ -790,14 +786,13 @@ public class VariableModule extends AbstractQuercusModule {
                                  @ReadOnly Value v,
                                  @Optional boolean isReturn)
   {
-    StringBuilder sb = new StringBuilder();
+    StringValue s = v.varExport(env);
 
-    v.varExport(sb);
-
-    if (isReturn)
-      return env.createString(sb.toString());
+    if (isReturn) {
+      return s;
+    }
     else {
-      env.print(sb);
+      env.print(s);
 
       return NullValue.NULL;
     }

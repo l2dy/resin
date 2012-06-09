@@ -213,17 +213,9 @@ abstract public class StringValue
    * Returns true for StringValue
    */
   @Override
-  public boolean isString()
+  public final boolean isString()
   {
     return true;
-  }
-
-  /*
-   * Returns true if this is a PHP5 string.
-   */
-  public boolean isPHP5String()
-  {
-    return false;
   }
 
   /**
@@ -233,6 +225,19 @@ abstract public class StringValue
   public boolean isEmpty()
   {
     return length() == 0 || length() == 1 && charAt(0) == '0';
+  }
+
+  @Override
+  public boolean isCallable(Env env, boolean isCheckSyntaxOnly, Value nameRef) {
+    if (nameRef != null) {
+      nameRef.set(this);
+    }
+
+    if (isCheckSyntaxOnly) {
+      return true;
+    }
+
+    return env.findFunction(this.toString()) != null;
   }
 
   //
@@ -802,11 +807,11 @@ abstract public class StringValue
     if (ch == '-') {
       if (len == 1)
         return this;
-      
+
       sign = -1;
       i++;
     }
-    
+
     for (; i < len; i++) {
       ch = charAt(i);
 
@@ -847,7 +852,7 @@ abstract public class StringValue
   {
     return toString();
   }
-  
+
   /**
    * Takes the values of this array, unmarshalls them to objects of type
    * <i>elementType</i>, and puts them in a java array.
@@ -895,7 +900,7 @@ abstract public class StringValue
       return null;
     }
   }
-  
+
   /**
    * Converts to a callable object
    */
@@ -921,7 +926,7 @@ abstract public class StringValue
       if (cl == null) {
         env.warning(L.l("can't find class {0}",
                         className));
-        
+
         return super.toCallable(env);
       }
 
@@ -941,6 +946,27 @@ abstract public class StringValue
       return new ArrayValueImpl().append(index, value);
     else
       return this;
+  }
+
+  /**
+   * Appends a value to an array that is a field of an object.
+   */
+  @Override
+  public Value putThisFieldArray(Env env,
+                                 Value obj,
+                                 StringValue fieldName,
+                                 Value index,
+                                 Value value)
+  {
+    // php/03mm
+
+    Value newFieldValue = setCharValueAt(index.toLong(), value);
+
+    if (newFieldValue != this) {
+      obj.putThisField(env, fieldName, newFieldValue);
+    }
+
+    return newFieldValue.get(index);
   }
 
   // Operations
@@ -1175,8 +1201,21 @@ abstract public class StringValue
    * Encodes the value in JSON.
    */
   @Override
-  public void jsonEncode(Env env, StringValue sb)
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
+    if (context.isCheckNumeric()) {
+      if (isLongConvertible()) {
+        toLongValue().jsonEncode(env, context, sb);
+
+        return;
+      }
+      else if (isDoubleConvertible()) {
+        toDoubleValue().jsonEncode(env, context, sb);
+
+        return;
+      }
+    }
+
     sb.append('"');
 
     int len = length();
@@ -1209,8 +1248,13 @@ abstract public class StringValue
         sb.append('\\');
         break;
       case '"':
-        sb.append('\\');
-        sb.append('"');
+        if (context.isEscapeQuote()) {
+          sb.append("\\u0022");
+        }
+        else {
+          sb.append('\\');
+          sb.append('"');
+        }
         break;
       case '/':
         sb.append('\\');
@@ -1218,10 +1262,10 @@ abstract public class StringValue
         break;
       default:
         if (c <= 0x1f) {
-          addUnicode(sb, c);
+          jsonEncodeUnicode(sb, c);
         }
         else if (c < 0x80) {
-          sb.append(c);
+          jsonEncodeAscii(context, sb, c);
         }
         else if ((c & 0xe0) == 0xc0 && i + 1 < len) {
           int c1 = charAt(i + 1);
@@ -1229,7 +1273,7 @@ abstract public class StringValue
 
           int ch = ((c & 0x1f) << 6) + (c1 & 0x3f);
 
-          addUnicode(sb, ch);
+          jsonEncodeUnicode(sb, ch);
         }
         else if ((c & 0xf0) == 0xe0 && i + 2 < len) {
           int c1 = charAt(i + 1);
@@ -1239,11 +1283,11 @@ abstract public class StringValue
 
           int ch = ((c & 0x0f) << 12) + ((c1 & 0x3f) << 6) + (c2 & 0x3f);
 
-          addUnicode(sb, ch);
+          jsonEncodeUnicode(sb, ch);
         }
         else {
           // technically illegal
-          addUnicode(sb, c);
+          jsonEncodeUnicode(sb, c);
         }
 
         break;
@@ -1253,7 +1297,7 @@ abstract public class StringValue
     sb.append('"');
   }
 
-  private void addUnicode(StringValue sb, int c)
+  private void jsonEncodeUnicode(StringValue sb, int c)
   {
     sb.append('\\');
     sb.append('u');
@@ -1281,6 +1325,61 @@ abstract public class StringValue
       sb.append((char) ('0' + d));
     else
       sb.append((char) ('a' + d - 10));
+  }
+
+  private void jsonEncodeAscii(JsonEncodeContext context,
+                               StringValue sb,
+                               char ch)
+  {
+    switch (ch) {
+      case '<':
+        if (context.isEscapeTag()) {
+          sb.append("\\u003C");
+        }
+        else {
+          sb.append(ch);
+        }
+        break;
+
+      case '>':
+        if (context.isEscapeTag()) {
+          sb.append("\\u003E");
+        }
+        else {
+          sb.append(ch);
+        }
+        break;
+
+      case '&':
+        if (context.isEscapeAmp()) {
+          sb.append("\\u0026");
+        }
+        else {
+          sb.append(ch);
+        }
+        break;
+
+      case '\'':
+        if (context.isEscapeApos()) {
+          sb.append("\\u0027");
+        }
+        else {
+          sb.append(ch);
+        }
+        break;
+
+      case '"':
+        if (context.isEscapeQuote()) {
+          sb.append("\\u0022");
+        }
+        else {
+          sb.append(ch);
+        }
+        break;
+
+      default:
+        sb.append(ch);
+    }
   }
 
   /*
@@ -1752,7 +1851,7 @@ abstract public class StringValue
       TempBuffer.free(tBuf);
     }
   }
-  
+
   /**
    * Append from an input stream, reading from the input stream until
    * end of file or the length is reached.
@@ -1798,21 +1897,29 @@ abstract public class StringValue
     TempBuffer tBuf = TempBuffer.allocate();
 
     try {
+      int readLength = 0;
       byte []buffer = tBuf.getBuffer();
-      int sublen = buffer.length;
-      if (length < sublen)
-        sublen = (int) length;
-      else if (length > sublen) {
-        buffer = new byte[(int) length];
-        sublen = (int) length;
+      
+      while (length > 0) {
+        int sublen = Math.min((int) length, buffer.length);
+        
+        if (readLength > 0 && is.getAvailable() <= 0) {
+          return readLength;
+        }
+
+        sublen = is.read(buffer, 0, sublen);
+
+        if (sublen > 0) {
+          append(buffer, 0, sublen);
+          readLength += sublen;
+          length -= sublen;
+        }
+        else {
+          return readLength > 0 ? readLength: sublen;
+        }
       }
-
-      sublen = is.read(buffer, 0, sublen);
-
-      if (sublen > 0)
-        append(buffer, 0, sublen);
-
-      return sublen;
+      
+      return readLength;
     } catch (IOException e) {
       throw new QuercusModuleException(e);
     } finally {
@@ -1860,14 +1967,13 @@ abstract public class StringValue
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append("'");
 
-    String value = toString();
-    int len = value.length();
+    int len = length();
     for (int i = 0; i < len; i++) {
-      char ch = value.charAt(i);
+      char ch = charAt(i);
 
       switch (ch) {
       case '\'':
@@ -1880,6 +1986,7 @@ abstract public class StringValue
         sb.append(ch);
       }
     }
+
     sb.append("'");
   }
 
@@ -2399,7 +2506,7 @@ abstract public class StringValue
   //
   // ByteAppendable methods
   //
-  
+
   public void write(int value)
   {
     throw new UnsupportedOperationException(getClass().getName());
@@ -2412,7 +2519,7 @@ abstract public class StringValue
   {
     throw new UnsupportedOperationException(getClass().getName());
   }
-  
+
   //
   // java.lang.Object methods
   //
@@ -2432,7 +2539,7 @@ abstract public class StringValue
 
     return hash;
   }
-  
+
   /**
    * Returns the case-insensitive hash code
    */
@@ -2444,10 +2551,10 @@ abstract public class StringValue
 
     for (int i = length - 1; i >= 0; i--) {
       int ch = charAt(i);
-      
+
       if ('A' <= ch && ch <= 'Z')
         ch = ch + 'a' - 'A';
-      
+
       hash = 65521 * hash + ch;
     }
 
@@ -2504,7 +2611,7 @@ abstract public class StringValue
 
     if (aLength != bLength)
       return false;
-    
+
     for (int i = aLength - 1; i >= 0; i--) {
       int chA = charAt(i);
       int chB = s.charAt(i);
@@ -2514,7 +2621,7 @@ abstract public class StringValue
       else {
         if ('A' <= chA && chA <= 'Z')
           chA += 'a' - 'A';
-        
+
         if ('A' <= chB && chB <= 'Z')
           chB += 'a' - 'A';
 
@@ -2522,7 +2629,7 @@ abstract public class StringValue
           return false;
       }
     }
-    
+
     return true;
   }
 

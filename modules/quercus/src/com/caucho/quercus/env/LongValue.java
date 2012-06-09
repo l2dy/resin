@@ -49,7 +49,7 @@ public class LongValue extends NumberValue
   public static final int STATIC_MIN = -1024;
   public static final int STATIC_MAX = 16 * 1024;
 
-  public static final LongCacheValue[]STATIC_VALUES;
+  public static final LongCacheValue []STATIC_VALUES;
 
   private final long _value;
 
@@ -273,7 +273,7 @@ public class LongValue extends NumberValue
   {
     return new Long(_value);
   }
-  
+
   /*
   @Override
   public Value toAutoArray()
@@ -310,7 +310,7 @@ public class LongValue extends NumberValue
   public Value addOne()
   {
     long newValue = _value + 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -321,7 +321,7 @@ public class LongValue extends NumberValue
   public Value subOne()
   {
     long newValue = _value - 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -332,7 +332,7 @@ public class LongValue extends NumberValue
   public Value preincr()
   {
     long newValue = _value + 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -343,7 +343,7 @@ public class LongValue extends NumberValue
   public Value predecr()
   {
     long newValue = _value - 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -354,7 +354,7 @@ public class LongValue extends NumberValue
   public Value postincr()
   {
     long newValue = _value + 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -365,7 +365,7 @@ public class LongValue extends NumberValue
   public Value postdecr()
   {
     long newValue = _value - 1;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -376,7 +376,7 @@ public class LongValue extends NumberValue
   public Value increment(int incr)
   {
     long newValue = _value + incr;
-    
+
     return LongValue.create(newValue);
   }
 
@@ -488,6 +488,20 @@ public class LongValue extends NumberValue
   }
 
   /**
+   * Encodes the value in JSON.
+   */
+  @Override
+  public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
+  {
+    if (_value > Integer.MAX_VALUE && context.isBigIntAsString()) {
+      toStringValue(env).jsonEncode(env, context, sb);
+    }
+    else {
+      sb.append(toStringValue(env));
+    }
+  }
+
+  /**
    * Prints the value.
    * @param env
    */
@@ -548,7 +562,7 @@ public class LongValue extends NumberValue
    * Exports the value.
    */
   @Override
-  public void varExport(StringBuilder sb)
+  protected void varExportImpl(StringValue sb, int level)
   {
     sb.append(_value);
   }
@@ -629,23 +643,23 @@ public class LongValue extends NumberValue
 
   static {
     STATIC_VALUES = new LongCacheValue[STATIC_MAX - STATIC_MIN + 1];
-    
+
     try {
 
     for (int i = STATIC_MAX; i >= STATIC_MIN; i--) {
       LongCacheValue value = new LongCacheValue(i, create(i + 1));
 
       STATIC_VALUES[i - STATIC_MIN] = value;
-      
+
       if (i < STATIC_MAX)
         STATIC_VALUES[i - STATIC_MIN + 1].setPrev(value);
     }
-    
+
     STATIC_VALUES[0].setPrev(create(STATIC_MIN - 1));
     } catch (Exception e) {
       e.printStackTrace();
     }
-    
+
     ZERO = create(0);
     ONE = create(1);
     MINUS_ONE = create(-1);

@@ -34,6 +34,8 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.env.thread.AbstractTaskWorker;
+import com.caucho.util.CurrentTime;
+import com.caucho.util.RingValueQueue;
 
 /**
  * Writer thread serializing dirty blocks.
@@ -45,11 +47,16 @@ public class BlockWriter extends AbstractTaskWorker {
   private final BlockStore _store;
   
   // private int _writeQueueMax = 256;
-  private final ArrayList<Block> _writeQueue = new ArrayList<Block>();
+  // private final ArrayList<Block> _writeQueue = new ArrayList<Block>();
   
   private final BlockWriteQueue _blockWriteQueue
     = new BlockWriteQueue(this);
   
+  private int _queueSize = 1024;
+
+  private final RingValueQueue<Block> _blockWriteRing
+    = new RingValueQueue<Block>(_queueSize);
+
   BlockWriter(BlockStore store)
   {
     _store = store;
@@ -66,23 +73,10 @@ public class BlockWriter extends AbstractTaskWorker {
   /**
    * Adds a block that's needs to be flushed.
    */
+
   void addDirtyBlockNoWake(Block block)
   {
     boolean isWake = false;
-/*
-    synchronized (_writeQueue) {
-      if (_writeQueueMax < _writeQueue.size()) {
-        wake();
-        
-        try {
-          _writeQueue.wait(100);
-        } catch (InterruptedException e) {
-        }
-      }
-
-      _writeQueue.add(block);
-    }
-    */
 
     synchronized (_blockWriteQueue) {
       if (_blockWriteQueue.isFilled())
@@ -95,25 +89,22 @@ public class BlockWriter extends AbstractTaskWorker {
       wake();
   }
 
+  void XX_addDirtyBlockNoWake(Block block)
+  {
+    if (_queueSize <= 2 * _blockWriteRing.getSize()) {
+      wake();
+    }
+
+    synchronized (_blockWriteRing) {
+      if (findBlock(block.getBlockId()) != block) {
+        _blockWriteRing.offer(block);
+      }
+    }
+  }
+
   boolean copyDirtyBlock(long blockId, Block block)
   {
     Block writeBlock = null;
-
-    /*
-    synchronized (_writeQueue) {
-      int size = _writeQueue.size();
-
-      // search from newest to oldest in case multiple writes
-      for (int i = size - 1; i >= 0; i--) {
-        Block testBlock = _writeQueue.get(i);
-
-        if (testBlock.getBlockId() == blockId) {
-          writeBlock = testBlock;
-          break;
-        }
-      }
-    }
-    */
 
     synchronized (_blockWriteQueue) {
       writeBlock = _blockWriteQueue.findBlock(blockId);
@@ -125,44 +116,74 @@ public class BlockWriter extends AbstractTaskWorker {
     else
       return false;
   }
-  
+
+  boolean XX_copyDirtyBlock(long blockId, Block block)
+  {
+    Block writeBlock = null;
+
+    synchronized (_blockWriteRing) {
+      writeBlock = findBlock(blockId);
+    }
+    
+    if (writeBlock != null)
+      return writeBlock.copyToBlock(block);
+    else
+      return false;
+  }
+
+  private Block findBlock(long blockId)
+  {
+    int head = _blockWriteRing.getHead();
+    int tail = _blockWriteRing.getTail();
+    int prevTail = _blockWriteRing.prevIndex(tail);
+
+    for (; head != prevTail; head = _blockWriteRing.prevIndex(head)) {
+      Block writeBlock = _blockWriteRing.getValue(head);
+
+      if (writeBlock != null && writeBlock.getBlockId() == blockId) {
+        return writeBlock;
+      }
+    }
+    
+    return null;
+  }
+
   @Override
   public boolean isClosed()
   {
-    return super.isClosed() && _writeQueue.size() == 0;
+    return super.isClosed() && _blockWriteQueue.isEmpty();
     
-    // return super.isClosed() && _blockWriteQueue.isEmpty();
+    // return super.isClosed() && _blockWriteRing.isEmpty();
   }
   
-  void waitForComplete(long timeout)
+
+  boolean waitForComplete(long timeout)
   {
     wake();
     
     _blockWriteQueue.waitForComplete(timeout);
-/*
-    long expires = Alarm.getCurrentTimeActual() + timeout;
     
-    synchronized (_writeQueue) {
-      while (_writeQueue.size() > 0) {
-        wake();
-        
-        long now = Alarm.getCurrentTimeActual();
-        
-        long delta = expires - now;
-        
-        if (delta <= 0)
-          return;
-        
-        try {
-          _writeQueue.wait(delta);
-        } catch (Exception e) {
-          
-        }
+    return true;
+  }
+
+  boolean XX_waitForComplete(long timeout)
+  {
+    wake();
+
+    long expire = CurrentTime.getCurrentTimeActual() + timeout;
+
+    while (! _blockWriteQueue.isEmpty()
+           && CurrentTime.getCurrentTimeActual() < expire) {
+      try {
+        Thread.sleep(10);
+      } catch (Exception e) {
+
       }
     }
-      */
+
+    return ! _blockWriteQueue.isEmpty();
   }
-  
+
   @Override
   public long runTask()
   {
@@ -205,38 +226,28 @@ public class BlockWriter extends AbstractTaskWorker {
 
   private Block peekFirstBlock()
   {
-    /*
-    synchronized (_writeQueue) {
-      if (_writeQueue.size() > 0) {
-        Block block = _writeQueue.get(0);
-        
-        return block;
-      }
-    }
-    
-    return null;
-    */
-    
     synchronized (_blockWriteQueue) {
       return _blockWriteQueue.peekFirstBlock();
     }
+
+    /*
+    synchronized (_blockWriteRing) {
+      return _blockWriteRing.peek();
+    }
+    */
   }
 
   private void removeFirstBlock()
   {
-    /*
-    synchronized (_writeQueue) {
-      if (_writeQueue.size() > 0) {
-        _writeQueue.remove(0);
-        
-        _writeQueue.notifyAll();
-      }
-    }
-    */
-    
     synchronized (_blockWriteQueue) {
       _blockWriteQueue.removeFirstBlock();
     }
+
+    /*
+    synchronized (_blockWriteRing) {
+      _blockWriteRing.poll();
+    }
+    */
   }
   
   @Override

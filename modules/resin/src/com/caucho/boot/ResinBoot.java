@@ -69,6 +69,7 @@ import com.caucho.vfs.Vfs;
  */
 public class ResinBoot
 {
+  private static final Logger log = Logger.getLogger(ResinBoot.class.getName());
   private static L10N _L;
 
   private WatchdogArgs _args;
@@ -81,11 +82,12 @@ public class ResinBoot
 
     Path resinHome = _args.getResinHome();
 
+    // required for license check
+    System.setProperty("resin.home", resinHome.getNativePath());
+
     ClassLoader loader = ProLoader.create(resinHome, _args.is64Bit());
 
     if (loader != null) {
-      System.setProperty("resin.home", resinHome.getNativePath());
-
       Thread.currentThread().setContextClassLoader(loader);
 
       Environment.init();
@@ -99,16 +101,6 @@ public class ResinBoot
     else {
       Environment.init();
     }
-    
-    String jvmVersion = System.getProperty("java.runtime.version");
-    
-    if ("1.6".compareTo(jvmVersion) > 0) {
-      throw new ConfigException(L().l("Resin requires Java 1.6 or later but was started with {0}",
-                                      jvmVersion));
-    }
-
-    // required for license check
-    System.setProperty("resin.home", resinHome.getNativePath());
 
     // watchdog/0210
     // Vfs.setPwd(_rootDirectory);
@@ -190,13 +182,25 @@ public class ResinBoot
       initClient();
   }
   
+  public String getServerId()
+  {
+    String serverId = _args.getServerId();
+    
+    if (serverId == null) {
+      serverId = _resinConfig.getHomeServer();
+    }
+    
+    return serverId;
+  }
+  
   private void initClient()
   {
     if (! (_args.isDynamicServer() || _resinConfig.isHomeCluster()))
       return;
     
-    if (_args.getServerId() != null)
+    if (getServerId() != null) {
       return;
+    }
 
     if (findLocalClients().isEmpty()) {
       WatchdogClient client = _resinConfig.addDynamicClient(_args);
@@ -218,7 +222,7 @@ public class ResinBoot
  
   ArrayList<WatchdogClient> findLocalClients()
   {
-    return _resinConfig.findLocalClients();
+    return _resinConfig.findLocalClients(getServerId());
   }
 
   BootCommand getCommand()
@@ -274,6 +278,13 @@ public class ResinBoot
    */
   public static void main(String []argv)
   {
+    final String jvmVersion = System.getProperty("java.runtime.version");
+
+    if ("1.6".compareTo(jvmVersion) > 0) {
+      throw new ConfigException(L().l("Resin requires Java 1.6 or later but was started with {0}",
+                                      jvmVersion));
+    }
+
     if (System.getProperty("log.level") != null) {
       Logger.getLogger("").setLevel(Level.FINER);
     }
@@ -304,6 +315,10 @@ public class ResinBoot
       System.exit(ExitCode.OK.ordinal());
     } catch (BootArgumentException e) {
       System.err.println(e.getMessage());
+      
+      if (log.isLoggable(Level.FINER)) {
+        e.printStackTrace();
+      }
 
       if (command != null)
         command.usage();
@@ -311,6 +326,10 @@ public class ResinBoot
       System.exit(ExitCode.UNKNOWN_ARGUMENT.ordinal());
     } catch (ConfigException e) {
       System.err.println(e.getMessage());
+      
+      if (log.isLoggable(Level.FINER)) {
+        e.printStackTrace();
+      }
 
       System.exit(ExitCode.BAD_CONFIG.ordinal());
     } catch (Exception e) {
