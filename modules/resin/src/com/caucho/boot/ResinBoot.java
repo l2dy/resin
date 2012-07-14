@@ -189,24 +189,29 @@ public class ResinBoot
     if (serverId == null) {
       serverId = _resinConfig.getHomeServer();
     }
+
     
     return serverId;
   }
   
   private void initClient()
   {
-    if (! (_args.isDynamicServer() || _resinConfig.isHomeCluster()))
+    if (! (_args.isElasticServer() || _resinConfig.isHomeCluster()))
       return;
     
-    if (getServerId() != null) {
+    if (_args.isElasticServer()) {
+    }
+    else if (getServerId() != null) {
+      return;
+    }
+    else if (! findLocalClients().isEmpty()) {
       return;
     }
 
-    if (findLocalClients().isEmpty()) {
-      WatchdogClient client = _resinConfig.addDynamicClient(_args);
+    WatchdogClient client = _resinConfig.addElasticClient(_args);
 
-      if (client != null)
-        _args.setDynamicServerId(client.getId());
+    if (client != null) {
+      _args.setElasticServerId(client.getId());
     }
   }
 
@@ -215,14 +220,19 @@ public class ResinBoot
     return _resinConfig.findClient(serverId, args);
   }
 
-  WatchdogClient findShutdownClient(WatchdogArgs args)
+  WatchdogClient findWatchdogClient(WatchdogArgs args)
   {
-    return _resinConfig.findShutdownClient(args.getClusterId());
+    return _resinConfig.findWatchdogClient(args.getClusterId());
   }
  
   ArrayList<WatchdogClient> findLocalClients()
   {
     return _resinConfig.findLocalClients(getServerId());
+  }
+
+  ArrayList<String> findLocalClientIds()
+  {
+    return _resinConfig.findLocalClientIds(getServerId());
   }
 
   BootCommand getCommand()
@@ -287,6 +297,12 @@ public class ResinBoot
 
     if (System.getProperty("log.level") != null) {
       Logger.getLogger("").setLevel(Level.FINER);
+      
+      for (Handler handler : Logger.getLogger("").getHandlers()) {
+        if (handler instanceof ConsoleHandler) {
+          handler.setLevel(Level.FINER);
+        }
+      }
     }
     else {
       for (Handler handler : Logger.getLogger("").getHandlers()) {

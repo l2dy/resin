@@ -148,7 +148,6 @@ import com.caucho.loader.EnvironmentApply;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.EnvironmentListener;
 import com.caucho.loader.EnvironmentLocal;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
@@ -330,6 +329,7 @@ public final class InjectManager
     = new ConcurrentHashMap<Long,InjectionTarget<?>>();
 
   private boolean _isBeforeBeanDiscoveryComplete;
+  private boolean _isBeforeBeanDiscoverFired;
   private boolean _isAfterBeanDiscoveryComplete;
   
   private final AtomicLong _xmlCookieSequence
@@ -432,10 +432,10 @@ public final class InjectManager
       factory.type(InjectManager.class);
       factory.type(BeanManager.class);
       factory.annotation(ModulePrivateLiteral.create());
-      addBean(factory.singleton(this));
+      addBeanDiscover(factory.singleton(this));
       
       // ioc/0162
-      addBean(new InjectionPointStandardBean());
+      addBeanDiscover(new InjectionPointStandardBean());
 
       _xmlExtension = new XmlStandardPlugin(this);
       addExtension(_xmlExtension);
@@ -934,7 +934,7 @@ public final class InjectManager
     
     Bean<T> bean = builder.singleton(obj);
     
-    addBean(bean);
+    addBeanDiscover(bean);
     
     return bean;
   }
@@ -1164,6 +1164,22 @@ public final class InjectManager
    */
   public <T> InjectionTarget<T> createInjectionTarget(Class<T> type)
   {
+    // ioc/0062 (vs discover)
+    try {
+      AnnotatedType<T> annType = ReflectionAnnotatedFactory.introspectType(type);
+      
+      // special call from servlet, etc.
+      return createInjectionTarget(annType);
+    } catch (Exception e) {
+      throw ConfigException.createConfig(e);
+    }
+  }
+
+  /**
+   * Creates a managed bean.
+   */
+  public <T> InjectionTarget<T> discoverInjectionTarget(Class<T> type)
+  {
     try {
       AnnotatedType<T> annType = ReflectionAnnotatedFactory.introspectType(type);
       
@@ -1214,12 +1230,36 @@ public final class InjectManager
     
     AnnotatedType<T> type = createAnnotatedType(cl);
     
+    return createManagedBean(type);
+  }
+
+  /**
+   * Creates a managed bean.
+   */
+  public <T> ManagedBeanImpl<T> discoverManagedBean(Class<T> cl)
+  {
+    if (cl == null)
+      throw new NullPointerException();
+    
+    AnnotatedType<T> type = createAnnotatedType(cl);
+    
     AnnotatedType<T> extType = getExtensionManager().processAnnotatedType(type);
     
     if (extType != null)
       return createManagedBean(extType);
     else
       return createManagedBean(type);
+  }
+
+  /**
+   * Processes the discovered bean
+   */
+  public <T> void addBeanDiscover(Bean<T> bean)
+  {
+    if (bean == null)
+      throw new NullPointerException(L.l("null bean passed to addBean"));
+    
+    addBeanDiscover(bean, (Annotated) null);
   }
 
   /**
@@ -1237,11 +1277,20 @@ public final class InjectManager
    * Processes the discovered bean
    */
   @Module
-  public <T> void addBean(Bean<T> bean, Annotated ann)
+  public <T> void addBeanDiscover(Bean<T> bean, Annotated ann)
   {
-    if (ann == null && bean instanceof AbstractBean<?>)
+    if (ann != null) {
+    }
+    else if (bean instanceof AbstractBean<?>) {
       ann = ((AbstractBean<T>) bean).getAnnotatedType();
-    
+    }
+    else if (bean instanceof InjectionPointStandardBean) {
+      ann = ((InjectionPointStandardBean) bean).getAnnotated();
+    }
+    else if (bean instanceof InterceptorBean) {
+      ann = ((InterceptorBean)bean).getAnnotatedType();
+    }
+
     if (bean instanceof ManagedBeanImpl<?>) {
       ManagedBeanImpl<T> managedBean = (ManagedBeanImpl<T>) bean;
       
@@ -1259,7 +1308,13 @@ public final class InjectManager
     }
     else
       bean = getExtensionManager().processBean(bean, ann);
-    
+
+    addBean(bean, ann);
+  }
+  
+  @Module
+  public <T> void addBean(Bean<T> bean, Annotated ann)
+  {
     addBeanImpl(bean, ann);
   }
   
@@ -1454,7 +1509,7 @@ public final class InjectManager
    * Returns the beans matching a class and annotation set
    *
    * @param type the bean's class
-   * @param qualifiers required @Qualifier annotations
+   * @param qualifierSet required @Qualifier annotations
    */
   private Set<Bean<?>> getBeans(Type type,
                                 Set<Annotation> qualifierSet)
@@ -2230,6 +2285,11 @@ public final class InjectManager
       thread.setContextClassLoader(getClassLoader());
       
       ReferenceFactory factory = getReferenceFactory(bean);
+      
+      if (factory == null) {
+        throw new IllegalStateException(L.l("{0} is an uninstantiable bean",
+                                            bean));
+      }
 
       if (createContext instanceof CreationalContextImpl<?>)
         return factory.create((CreationalContextImpl) createContext, null, null);
@@ -2289,8 +2349,9 @@ public final class InjectManager
   {
     Class<? extends Annotation> scopeType = bean.getScope();
     
-    if (InjectionPoint.class.equals(bean.getBeanClass()))
+    if (InjectionPoint.class.equals(bean.getBeanClass())) {
       return (ReferenceFactory) new InjectionPointReferenceFactory();
+    }
 
     if (Dependent.class == scopeType) {
       if (bean instanceof ManagedBeanImpl<?>)
@@ -2489,8 +2550,8 @@ public final class InjectManager
     Type type = ij.getType();
     Set<Annotation> qualifiers = ij.getQualifiers();
 
-    ReferenceFactory factory = getReferenceFactory(type, qualifiers, ij);
-    
+    ReferenceFactory<?> factory = getReferenceFactory(type, qualifiers, ij);
+
     RuntimeException exn = validatePassivation(ij);
     
     if (exn != null) {
@@ -2780,8 +2841,8 @@ public final class InjectManager
   /**
    * Returns the observers listening for an event
    *
-   * @param eventType event to resolve
-   * @param bindings the binding set for the event
+   * @param event to resolve
+   * @param qualifiers the binding set for the event
    */
   @Override
   public <T> Set<ObserverMethod<? super T>>
@@ -3063,8 +3124,13 @@ public final class InjectManager
       }
 
       _isBeforeBeanDiscoveryComplete = true;
-      getExtensionManager().fireBeforeBeanDiscovery();
-      
+
+      if (! _isBeforeBeanDiscoverFired)
+        getExtensionManager().fireBeforeBeanDiscovery();
+
+      _isBeforeBeanDiscoverFired = true;
+
+      _xmlExtension.processRoots();
       /*
       // ioc/0061
       if (rootContextList.size() == 0)
@@ -3360,7 +3426,7 @@ public final class InjectManager
     if (annType.isAnnotationPresent(javax.interceptor.Interceptor.class)) {
       InterceptorBean interceptorBean = new InterceptorBean(this, annType.getJavaClass());
       
-      addBean(interceptorBean);
+      addBeanDiscover(interceptorBean);
       return;
     }
     
@@ -3392,7 +3458,7 @@ public final class InjectManager
     // ioc/0680
     if (! managedBean.isAlternative() || isEnabled(managedBean)) {
       // ioc/0680
-      addBean(managedBean);
+      addBeanDiscover(managedBean);
 
       // ioc/0b0f
       if (! _specializedMap.containsKey(managedBean.getBeanClass()))
@@ -3447,8 +3513,9 @@ public final class InjectManager
     producer = getExtensionManager().processProducer(producesMethod, producer);
     
     bean.setProducer(producer);
-    
-    addBean(bean, producesMethod);
+
+    //addBean(bean, producesMethod);
+     addBeanDiscover(bean, producesMethod);
   }
   
   public <X,T> void addProducesFieldBean(ProducesFieldBean<X,T> bean)
@@ -3462,12 +3529,13 @@ public final class InjectManager
     
     bean.setProducer(producer);
     
-    addBean(bean, producesField);
+    //addBean(bean, producesField);
+    addBeanDiscover(bean, producesField);
   }
 
   public <X> void addManagedBean(ManagedBeanImpl<X> managedBean)
   {
-    addBean(managedBean);
+    addBeanDiscover(managedBean);
     
     managedBean.introspectProduces();
   }

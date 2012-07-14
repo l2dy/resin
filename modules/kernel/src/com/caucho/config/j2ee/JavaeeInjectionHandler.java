@@ -67,7 +67,10 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
     return _manager;
   }
   
-  protected Bean<?> bind(String location, Class<?> type, String name)
+  protected Bean<?> bind(String location, 
+                         Class<?> type, 
+                         String name,
+                         Annotation ...bindings)
   {
     try {
       InjectManager injectManager = getManager();
@@ -85,7 +88,10 @@ abstract public class JavaeeInjectionHandler extends InjectionPointHandler {
       if (beans != null && beans.size() != 0)
         return injectManager.resolve(beans);
 
-      beans = injectManager.getBeans(type, AnyLiteral.ANY);
+      // ioc/1204
+      if (name != null) {
+        beans = injectManager.getBeans(type, AnyLiteral.ANY);
+      }
 
       if (beans == null || beans.size() == 0)
         return null;

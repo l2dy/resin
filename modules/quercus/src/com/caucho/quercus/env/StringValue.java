@@ -42,6 +42,7 @@ import java.util.zip.CRC32;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.QuercusRuntimeException;
+import com.caucho.quercus.env.StringBuilderValue.BuilderOutputStream;
 import com.caucho.quercus.lib.file.BinaryInput;
 import com.caucho.quercus.lib.i18n.Decoder;
 import com.caucho.quercus.marshal.Marshal;
@@ -435,6 +436,9 @@ abstract public class StringValue
       double r = rValue.toDouble();
 
       return l == r;
+    }
+    else if (rValue.isObject()) {
+      return super.eq(rValue);
     }
     else {
       return toString().equals(rValue.toString());
@@ -1899,10 +1903,10 @@ abstract public class StringValue
     try {
       int readLength = 0;
       byte []buffer = tBuf.getBuffer();
-      
+
       while (length > 0) {
         int sublen = Math.min((int) length, buffer.length);
-        
+
         if (readLength > 0 && is.getAvailable() <= 0) {
           return readLength;
         }
@@ -1918,7 +1922,7 @@ abstract public class StringValue
           return readLength > 0 ? readLength: sublen;
         }
       }
-      
+
       return readLength;
     } catch (IOException e) {
       throw new QuercusModuleException(e);
@@ -2485,6 +2489,14 @@ abstract public class StringValue
     } catch (IOException e) {
       throw new QuercusModuleException(e);
     }
+  }
+
+  /**
+   * Returns an OutputStream.
+   */
+  public OutputStream getOutputStream()
+  {
+    throw new UnsupportedOperationException();
   }
 
   /**

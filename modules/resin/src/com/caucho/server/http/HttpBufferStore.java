@@ -57,18 +57,14 @@ public final class HttpBufferStore
    *
    * @param server the parent server
    */
-  public HttpBufferStore(int urlLengthMax)
+  public HttpBufferStore(int urlLengthMax,
+                         int headerSizeMax,
+                         int headerCountMax)
   {
     _uri = new byte[urlLengthMax];
 
-    if (TempBuffer.isSmallmem()) {
-      _headerBuffer = new char[4 * 1024];
-      _headerCapacity = 64;
-    }
-    else {
-      _headerBuffer = new char[16 * 1024];
-      _headerCapacity = 256;
-    }
+    _headerBuffer = new char[headerSizeMax];
+    _headerCapacity = headerCountMax;
 
     _headerKeys = new CharSegment[_headerCapacity];
     _headerValues = new CharSegment[_headerCapacity];

@@ -31,6 +31,7 @@ package com.caucho.quercus.expr;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.Var;
@@ -709,6 +710,14 @@ abstract public class Expr {
   }
 
   /**
+   * Evaluates the expression as an isset() statement.
+   */
+  public Value evalIssetValue(Env env)
+  {
+    return eval(env);
+  }
+
+  /**
    * Evaluates the expression as an array index unset
    */
   public void evalUnsetArray(Env env, Value index)
@@ -716,6 +725,16 @@ abstract public class Expr {
     Value array = evalDirty(env);
 
     array.remove(index);
+  }
+
+  /**
+   * Evaluates as a QuercusClass.
+   */
+  public QuercusClass evalQuercusClass(Env env)
+  {
+    String className = evalString(env);
+
+    return env.getClass(className);
   }
 
   /**

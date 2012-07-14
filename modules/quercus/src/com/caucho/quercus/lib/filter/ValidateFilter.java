@@ -30,7 +30,6 @@
 package com.caucho.quercus.lib.filter;
 
 import com.caucho.quercus.env.ArrayValue;
-import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.Value;
 
@@ -38,17 +37,7 @@ import java.util.Map;
 
 public abstract class ValidateFilter implements Filter
 {
-  public final Value filter(Env env, Value value, Value flagV)
-  {
-    if (isValid(env, value, flagV)) {
-      return value;
-    }
-    else {
-      return BooleanValue.FALSE;
-    }
-  }
-
-  protected boolean isValid(Env env, Value value, Value flagsV)
+  public Value filter(Env env, Value value, Value flagsV)
   {
     int flags = 0;
 
@@ -65,10 +54,10 @@ public abstract class ValidateFilter implements Filter
       flags = flagsV.toInt();
     }
 
-    return isValid(env, value, flags);
+    return filterImpl(env, value, flags);
   }
 
-  protected boolean isValid(Env env, Value value, int flags)
+  protected Value filterImpl(Env env, Value value, int flags)
   {
     throw new UnsupportedOperationException();
   }

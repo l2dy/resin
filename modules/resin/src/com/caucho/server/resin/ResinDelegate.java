@@ -44,6 +44,7 @@ import com.caucho.cloud.topology.CloudServer;
 import com.caucho.cloud.topology.CloudSystem;
 import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.ConfigException;
+import com.caucho.db.block.BlockManager;
 import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.log.LogSystem;
 import com.caucho.env.repository.AbstractRepository;
@@ -272,9 +273,10 @@ public class ResinDelegate
     return (AbstractRepository) localRepository;
   }
 
-  protected CloudServer joinCluster(CloudSystem system)
+  protected CloudServer joinCluster(CloudSystem system,
+                                    BootClusterConfig cluster)
   {
-    throw new ConfigException(L.l("-join-cluster requires Resin Professional"));
+    throw new ConfigException(L.l("--elastic requires Resin Professional"));
   }
 
   /**
@@ -369,7 +371,14 @@ public class ResinDelegate
 
     if (! getResin().isWatchdog()) {
       createDistCacheService();
+      
+      ShutdownSystem.getCurrent().addMemoryFreeTask(new BlockManagerMemoryFreeTask());
     }
+  }
+
+  public LicenseCheck getLicenseCheck()
+  {
+    return null;
   }
 
   @Override
@@ -377,9 +386,18 @@ public class ResinDelegate
   {
     return getClass().getSimpleName() + "[]";
   }
-
-  public LicenseCheck getLicenseCheck()
-  {
-    return null;
+  
+  static class BlockManagerMemoryFreeTask implements Runnable {
+    private BlockManager _blockManager = BlockManager.create();
+    
+    @Override
+    public void run()
+    {
+      BlockManager blockManager = _blockManager;
+      
+      if (blockManager != null) {
+        blockManager.clear();
+      }
+    }
   }
 }

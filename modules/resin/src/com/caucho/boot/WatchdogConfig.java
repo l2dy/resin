@@ -50,8 +50,8 @@ class WatchdogConfig
 {
   private static final int WATCHDOG_PORT_DEFAULT = 6600;
   
-  private String _id = "";
-  private int _index;
+  private String _id;
+  private final int _index;
   
   private final BootClusterConfig _cluster;
 
@@ -89,7 +89,7 @@ class WatchdogConfig
   private String _userName;
   private String _groupName;
 
-  private ArrayList<TcpPort> _ports = new ArrayList<TcpPort>();
+  private ArrayList<OpenPort> _ports = new ArrayList<OpenPort>();
   
   private long _shutdownWaitTime = 60000L;
 
@@ -97,14 +97,20 @@ class WatchdogConfig
   private boolean _hasWatchdogXss;
   private boolean _hasWatchdogXmx;
   
-  private boolean _isDynamic;
+  private boolean _isElastic;
 
-  WatchdogConfig(BootClusterConfig cluster,
+  WatchdogConfig(String id,
+                 BootClusterConfig cluster,
                  WatchdogArgs args,
                  Path rootDirectory,
                  int index)
   {
+    if (id == null || "".equals(id))
+      id = "default";
+    
+    _id = id;
     _cluster = cluster;
+    _index = index;
     
     _args = args;
     _rootDirectory = rootDirectory;
@@ -115,9 +121,12 @@ class WatchdogConfig
 
     _is64bit = args.is64Bit();
   }
-
+  
   public void setId(String id)
   {
+    if (id == null || "".equals(id))
+      id = "default";
+    
     _id = id;
   }
 
@@ -136,14 +145,14 @@ class WatchdogConfig
     return _args.getArgv();
   }
 
-  public void setDynamic(boolean isDynamic)
+  public void setElastic(boolean isElastic)
   {
-    _isDynamic = isDynamic;
+    _isElastic = isElastic;
   }
   
-  public boolean isDynamic()
+  public boolean isElastic()
   {
-    return _isDynamic;
+    return _isElastic;
   }
 
   public void setVerbose(boolean isVerbose)
@@ -239,7 +248,7 @@ class WatchdogConfig
   /**
    * Adds a custom-protocol port.
    */
-  public TcpPort createProtocol()
+  public OpenPort createProtocol()
     throws ConfigException
   {
     OpenPort port = new OpenPort();
@@ -252,7 +261,7 @@ class WatchdogConfig
   /**
    * Adds a watchdog managed port
    */
-  public void addOpenPort(TcpPort port)
+  public void addOpenPort(OpenPort port)
   {
     _ports.add(port);
   }
@@ -364,6 +373,11 @@ class WatchdogConfig
     _watchdogAddress = addr;
   }
   
+  public void addWatchdogArg(String arg)
+  {
+    addWatchdogJvmArg(arg);
+  }
+  
   public void addWatchdogJvmArg(String arg)
   {
     _watchdogJvmArgs.add(arg);
@@ -430,7 +444,7 @@ class WatchdogConfig
     return _args;
   }
 
-  Iterable<TcpPort> getPorts()
+  Iterable<OpenPort> getPorts()
   {
     return _ports;
   }

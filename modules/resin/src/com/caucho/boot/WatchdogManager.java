@@ -110,10 +110,17 @@ class WatchdogManager implements AlarmListener {
     _args = new WatchdogArgs(argv);
     
     String serverId = _args.getServerId();
+    
+    if (serverId == null) {
+      // server/6e0d
+      serverId = _args.getClientServerId();
+    }
 
+    /*
     if (_args.isDynamicServer()) {
       serverId = _args.getDynamicServerId();
     }
+    */
     
     ResinArgs resinArgs = new ResinArgs();
     resinArgs.setRootDirectory(_args.getRootDirectory());
@@ -182,7 +189,7 @@ class WatchdogManager implements AlarmListener {
     Config.setProperty("system", System.getProperties());
     Config.setProperty("getenv", System.getenv());
     
-    Config.setProperty("rvar0", _args.getServerId());
+    Config.setProperty("rvar0", serverId);
 
     ResinConfigLibrary.configure(cdiManager);
     ResinServerConfigLibrary.configure(cdiManager);
@@ -198,10 +205,13 @@ class WatchdogManager implements AlarmListener {
     
     _watchdogPort = _args.getWatchdogPort();
     
-    readConfig(serverId, _args);
+    BootResinConfig resinConfig = readConfig(serverId, _args);
+
+    WatchdogChild server = findConfig(resinConfig, serverId, _args);
     
-    WatchdogChild server = null;
+    server = getWatchdog(server, serverId, _args);
     
+    /*
     if (serverId == null)
       server = findLocalServer();
       
@@ -210,6 +220,7 @@ class WatchdogManager implements AlarmListener {
 
     if (server == null && "".equals(serverId))
       server = _watchdogMap.get("default");
+      */
     
     if (server == null) {
       if (serverId == null) {
@@ -291,7 +302,7 @@ class WatchdogManager implements AlarmListener {
         factory.type(AdminAuthenticator.class);
         factory.qualifier(DefaultLiteral.DEFAULT);
 
-        cdiManager.addBean(factory.singleton(auth));
+        cdiManager.addBeanDiscover(factory.singleton(auth));
       }
 
       DependencyCheckInterval depend = new DependencyCheckInterval();
@@ -304,7 +315,7 @@ class WatchdogManager implements AlarmListener {
 
       HempBroker broker = HempBroker.getCurrent();
       
-      WatchdogService service = new WatchdogService(this);
+      WatchdogActor service = new WatchdogActor(this);
       
       broker.getBamManager().createService("watchdog@admin.resin.caucho", service);
 
@@ -357,10 +368,20 @@ class WatchdogManager implements AlarmListener {
   {
     return _server.isActive() && _httpPort.isActive();
   }
+  
+  WatchdogArgs getArgs()
+  {
+    return _args;
+  }
 
   Path getRootDirectory()
   {
     return _args.getRootDirectory();
+  }
+
+  Path getResinHome()
+  {
+    return _args.getResinHome();
   }
 
   Path getLogDirectory()
@@ -453,17 +474,20 @@ class WatchdogManager implements AlarmListener {
     String serverId = cliServerId;
     
     synchronized (_watchdogMap) {
-      WatchdogArgs args = new WatchdogArgs(argv, false);
+      WatchdogArgs args = new WatchdogArgs(argv, null, false);
 
       Vfs.setPwd(_args.getRootDirectory());
       
-      if (serverId == null)
+      if (serverId == null) {
         serverId = args.getServerId();
-      
+      }
+
       WatchdogChild server;
 
       try {
-        server = readConfig(serverId, args);
+        BootResinConfig resin = readConfig(serverId, args);
+        
+        server = findConfig(resin, serverId, args);
       } catch (Exception e) {
         throw ConfigException.create(e);
       }
@@ -478,6 +502,63 @@ class WatchdogManager implements AlarmListener {
                    String serverId,
                    WatchdogArgs args)
   {
+    watchdog = getWatchdog(watchdog, serverId, args);
+
+    if (watchdog == null) {
+      throw new ConfigException(L().l("No matching <server> found for start -server '{0}' in '{1}'",
+                                      serverId, _args.getResinConf()));
+    }
+
+    watchdog.start();
+  }
+  
+  /**
+   * Called from the hessian API to gracefully stop a Resin instance
+   *
+   * @param serverId the Resin instance to stop
+   */
+  void stopServer(String serverId, String []argv)
+  {
+    WatchdogArgs args = new WatchdogArgs(argv, false);
+    
+    // serverId = getServerId(serverId, args);
+    
+    synchronized (_watchdogMap) {
+      WatchdogChild watchdog = getWatchdog(null, serverId, args);
+
+      if (watchdog == null)
+        throw new ConfigException(L().l("No matching <server> found for stop -server '{0}' in {1}",
+                                        serverId, _args.getResinConf()));
+
+      watchdog.stop();
+    }
+  }
+  
+  /**
+   * Called from the hessian API to gracefully stop a Resin instance
+   *
+   * @param serverId the Resin instance to stop
+   */
+  private void stopServer(WatchdogChild watchdog)
+  {
+    // serverId = getServerId(serverId, args);
+    
+    watchdog.stop();
+  }
+
+  WatchdogChild getWatchdog(WatchdogChild watchdog,
+                            String serverId,
+                            WatchdogArgs args)
+  {
+    if (watchdog != null)
+      return watchdog;
+    
+    if (serverId == null)
+      watchdog = findLocalServer();
+    
+    if (serverId == null)
+      serverId = "default";
+  
     // server/6e09
     String defaultServerId = getServerId(serverId, args);
     
@@ -493,34 +574,10 @@ class WatchdogManager implements AlarmListener {
         watchdog = _watchdogMap.get(defaultServerId);
       }
     }
-
-    if (watchdog == null)
-      throw new ConfigException(L().l("No matching <server> found for start -server '{0}' in '{1}'",
-                                      defaultServerId, _args.getResinConf()));
-
-    watchdog.start();
-
-  }
-  /**
-   * Called from the hessian API to gracefully stop a Resin instance
-   *
-   * @param serverId the Resin instance to stop
-   */
-  void stopServer(String serverId)
-  {
-    serverId = getServerId(serverId, _args);
     
-    synchronized (_watchdogMap) {
-      WatchdogChild watchdog = getWatchdog(serverId);
-      
-      if (watchdog == null)
-        throw new ConfigException(L().l("No matching <server> found for stop -server '{0}' in {1}",
-                                        serverId, _args.getResinConf()));
-
-      watchdog.stop();
-    }
+    return watchdog;
   }
-  
+
   private String getServerId(String serverId, WatchdogArgs args)
   {
     /*
@@ -539,7 +596,7 @@ class WatchdogManager implements AlarmListener {
     if (serverId == null && ! isDynamicServer(args))
       serverId = args.getServerId();
     else if (serverId == null && isDynamicServer(args))
-      serverId = args.getDynamicServerId();
+      serverId = args.getElasticServerId();
 
     if (serverId == null)
       serverId = "default";
@@ -549,7 +606,7 @@ class WatchdogManager implements AlarmListener {
   
   private boolean isDynamicServer(WatchdogArgs args)
   {
-    if (args.isDynamicServer())
+    if (args.isElasticServer())
       return true;
     else
       return false;
@@ -602,6 +659,23 @@ class WatchdogManager implements AlarmListener {
   }
 
   /**
+   * Called from the hessian API to forcibly kill a Resin instance
+   *
+   * @param serverId the server id to kill
+   */
+  void shutdown()
+  {
+    ArrayList<String> keys = new ArrayList<String>();
+    
+    keys.addAll(_watchdogMap.keySet());
+    
+    for (String serverId : keys) {
+      stopServer(_watchdogMap.get(serverId));
+      killServer(serverId);
+    }
+  }
+  
+  /**
    * Called from the HMTP API to restart a Resin instance.
    *
    * @param serverId the server identifier to restart
@@ -612,10 +686,11 @@ class WatchdogManager implements AlarmListener {
     synchronized (_watchdogMap) {
       WatchdogChild server = _watchdogMap.get(serverId);
 
-      if (server != null)
-        server.restart();
-      else
-        startServer(serverId, argv);
+      if (server != null) {
+        server.stop();
+      }
+
+      startServer(serverId, argv);
     }
   }
 
@@ -624,7 +699,7 @@ class WatchdogManager implements AlarmListener {
     return _server != null && _server.isActive();
   }
 
-  private WatchdogChild readConfig(String serverId, WatchdogArgs args)
+  private BootResinConfig readConfig(String cliServerId, WatchdogArgs args)
     throws Exception
   {
     Config config = new Config();
@@ -642,55 +717,27 @@ class WatchdogManager implements AlarmListener {
 
     if (_management == null)
       _management = resin.getManagement();
-
-    /*
-    // The configuration file has already been validated by ResinBoot, so
-    // it doesn't need a second validation
-    config.configure(resin,
-                     args.getResinConf());
-    */
-
-    if (serverId == null)
-      serverId = args.getServerId();
     
-    WatchdogConfig serverConfig = null;
+    return resin;
+  }
+  
+  private WatchdogChild findConfig(BootResinConfig resin,
+                                   String cliServerId,
+                                   WatchdogArgs args)
+  {
+    String serverId = resin.getServerId(args);
     
-    WatchdogClient client;
+    WatchdogClient client = findClient(resin, cliServerId, args);
     
-    if (serverId != null)
-      client = resin.findClient(serverId);
-    else
-      client = resin.findClient(serverId, args); 
-
-    //resin.findClient(serverId);
-    if (client != null)
-      serverConfig = client.getConfig();
-    else
-      serverConfig = resin.findServer(serverId);
-
-    if (serverConfig == null && resin.isDynamicServer(args)) {
-      String clusterId = resin.getClusterId(args);
-      
-      String address = args.getDynamicAddress();
-      int port = args.getDynamicPort();
-
-      BootClusterConfig cluster = resin.findCluster(clusterId);
-
-      if (cluster == null) {
-        throw new ConfigException(L().l("'{0}' is an unknown cluster",
-                                      clusterId));
-      }
-
-      serverConfig = cluster.createServer();
-      serverId = args.getDynamicServerId();
-      serverConfig.setId(serverId);
-      serverConfig.setAddress(address);
-      serverConfig.setPort(port);
-      cluster.addServer(serverConfig);
+    if (client == null) {
+      throw new ConfigException(L().l("server '{0}' cannot be started because no configuration has been found.",
+                                      cliServerId != null ? cliServerId : ""));
     }
+    
+    serverId = client.getId();
 
     WatchdogChild watchdog = _watchdogMap.get(serverId);
-
+    
     if (watchdog != null) {
       if (watchdog.isActive()) {
         throw new ConfigException(L().l("server '{0}' cannot be started because a running instance already exists.  stop or restart the old server first.",
@@ -703,19 +750,64 @@ class WatchdogManager implements AlarmListener {
         watchdog.close();
     }
     
-    if (serverConfig == null) {
-      throw new ConfigException(L().l("server '{0}' cannot be started because no configuration has been found.",
-                                      serverId));
-    }
-
-    watchdog = new WatchdogChild(_system, serverConfig);
-    
-    if (serverId == null || "".equals(serverId))
-      serverId = "default";
+    watchdog = new WatchdogChild(_system, client.getConfig());
 
     _watchdogMap.put(serverId, watchdog);
 
     return watchdog;
+  }
+  
+  private WatchdogClient findClient(BootResinConfig resin,
+                                    String cliServerId,
+                                    WatchdogArgs args)
+  {
+    String serverId = resin.getServerId(args);
+    
+    WatchdogClient client = resin.findClient(cliServerId, args);
+    
+    if (client != null) {
+      return client;
+    }
+
+
+    if (! resin.isElasticServer(args)) {
+      if (serverId != null) {
+        return null;
+      }
+      
+      client = resin.findUniqueLocalClient(cliServerId, args);
+      
+      if (client != null) {
+        // server/6e12
+        return client;
+      }
+    }
+    
+    if (resin.isDynamicServerAllowed(args)) {
+      String clusterId = resin.getClusterId(args);
+      
+      String address = args.getDynamicAddress();
+      int port = args.getDynamicPort();
+
+      BootClusterConfig cluster = resin.findCluster(clusterId);
+
+      if (cluster == null) {
+        throw new ConfigException(L().l("server cannot be started because '{0}' is an unknown cluster",
+                                        clusterId));
+      }
+
+      WatchdogConfigHandle configHandle = cluster.createServer();
+      serverId = args.getElasticServerId();
+      configHandle.setId(serverId);
+      configHandle.setAddress(address);
+      configHandle.setPort(port);
+      
+      WatchdogConfig serverConfig = cluster.addServer(configHandle);
+
+      return resin.findClient(serverConfig.getId());
+    }
+
+    return null;
   }
   
   private int getWatchdogPid()
@@ -771,6 +863,24 @@ class WatchdogManager implements AlarmListener {
     
     return null;
   }
+  
+  private WatchdogChild findUniqueLocalServer()
+  {
+    ArrayList<InetAddress> localAddresses = BootResinConfig.getLocalAddresses();
+    
+    WatchdogChild server = null;
+    
+    for (WatchdogChild child : _watchdogMap.values()) {
+      if (BootResinConfig.isLocalClient(localAddresses, child.getConfig())) {
+        if (server != null)
+          return null;
+        
+        server = child;
+      }
+    }
+    
+    return server;
+  }
 
   @Override
   public void handleAlarm(Alarm alarm)
@@ -801,8 +911,8 @@ class WatchdogManager implements AlarmListener {
 
       JniCauchoSystem.create().initJniBackground();
 
-      String serverId = null;
       WatchdogManager manager = new WatchdogManager(argv);
+      String serverId = manager.getArgs().getClientServerId();
       manager.startServer(serverId, argv);
 
       isValid = manager.isActive() && manager.isValid();

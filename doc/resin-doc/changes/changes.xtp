@@ -10,7 +10,53 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.28 - snapshot">
+<s2 title="4.0.29 - Jul 13, 2012">
+<ul>
+<li>config: watchdog needs to enable rvar variables (#5126, rep by Kirk Kirkconnell)</li>
+<li>cloud: validate that no two servers have the same IP:address (#5122)</li>
+<li>cdi: Serialization with bean with writeReplace in parent (#4992, rep by guus)</li>
+<li>servlet: add JMX ServletManager.getStickySessionServer (#5072)</li>
+<li>mod_caucho: update ./configure detection of mod_caucho (#5117)</li>
+<li>cli: validate that watchdog resin.home matches CLI resin.home (#5099)</li>
+<li>deploy: update repository failure message (#4051, rep by spance)</li>
+<li>json: Double.NaN needs to print as 0.0 (#5111, rep by Alexey Abashev)</li>
+<li>health: HttpStatusHealthCheck must configure a singleton (#5019)</li>
+<li>cdi: BeforeBeanDiscovery must occur before any ProcessAnnotatedType (#5103)</li>
+<li>openssl: on openssl read, need to check SSL_pending before poll (#5120, rep by Mattias Jiderhamn)</li>
+<li>watchdog: OOM issue with startup of multiple servers (#5096, rep by chiefgeek)</li>
+<li>init.d: add START_CMD to /etc/init.d/resin to allow changes to start-all (#5022)</li>
+<li>config: cluster-socket-timeout is configurable (#5096)</li>
+<li>client socket: modify client timeout to extend from ClientDisconnect (#4975, rep by Y. Hsu)</li>
+<li>watchdog: shutdown was killing processes, not stopping them, skipping graceful shutdown (#4969, rep by aiman_a)</li>
+<li>cgi: error codes above 400 did not allow custom bodies from cgi (#4953)</li>
+<li>ext: upgrade to slf4j 1.6.6 (#4853)</li>
+<li>config: ~/.resin not properly read by Resin (#4947)</li>
+<li>resin-admin: lazy lookup of server id for dynamic server (#4790)</li>
+<li>resin-admin: update server selection param (#4789)</li>
+<li>jsp: scanning for ok:foo.tld issues (#4960, rep by Sean Moore)</li>
+<li>servlet: add &lt;env> to CgiServlet (#4915, rep by William Au)</li>
+<li>mod_caucho: add TCP/OS SND/RCV timeouts to sockets (#4988)</li>
+<li>cli: handle -server "" by renaming to -server "default" (#5005, rep by K. Ding)</li>
+<li>admin: both health.xml and resin-admin use "Restart" as the PDF name (#4935)</li>
+<li>load-balance: clear DNS lookup when connect fails (#4902, rep by B. Plump)</li>
+<li>jsp: issues with pushBody(Writer) (#4964, rep by mcamca)</li>
+<li>cli: watchdog-arg was not working properly with start-all (#4978)</li>
+<li>deploy: undeploy needs to remove webapps directory (#4875, rep by jafr)</li>
+<li>alarm: allow Alarm to be instantiated in maven context (#4796, #5112 rep by Alexey Abashev)</li>
+<li>config: app-inf in cluster wasn't picked up properly (#5004)</li>
+<li>cloud: EC2elastic server with "ext:" address and missing cluster-system-key (#5015)</li>
+<li>servlet: add header-size-max and header-count-max (#4986, rep by Deepak Ramaprasad)</li>
+<li>deploy: web-socket issue causing large deployment problems (#5113, rep by Alexey Abashev)</li>
+<li>servlet: multipart-mime with forward parameters was double-parsing (#4896)</li>
+<li>deploy: ear-deploy allows dependency-check-interval (#4901)</li>
+<li>cli: "start" message with no -server and multiple ids (#4898)</li>
+<li>cli: "restart" needs to re-read configuration file (#4788)</li>
+<li>embed: add ResinEmbed.setIgnoreClientDisconnect (#4774)</li>
+<li>jmx: add getClassPath to WebAppMXBean (#5007)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.28 - Jun 7, 2012">
 <ul>
 <li>install: --disable-ssl does not disable SSL (#5090, rep by R. Aughenbaugh)</li>
 <li>install: --disable-jni causes make to fail (#5094, rep by R. Aughenbaugh)</li>

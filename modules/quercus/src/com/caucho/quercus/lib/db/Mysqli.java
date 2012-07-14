@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
+import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.QuercusException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.ReturnNullAsFalse;
@@ -37,7 +38,6 @@ import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.LongValue;
 import com.caucho.quercus.env.StringValue;
-import com.caucho.quercus.env.UnsetValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.util.L10N;
 import com.caucho.util.SQLExceptionWrapper;
@@ -47,7 +47,6 @@ import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.DataTruncation;
 import java.sql.Driver;
-import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLWarning;
@@ -65,26 +64,6 @@ public class Mysqli extends JdbcConnectionResource
 {
   private static final Logger log = Logger.getLogger(Mysqli.class.getName());
   private static final L10N L = new L10N(Mysqli.class);
-
-  protected static final String DEFAULT_DRIVER = "com.mysql.jdbc.Driver";
-
-  private static HashMap<String,String> _DEFAULT_JDBC_DRIVER_MAP
-    = new HashMap<String,String>();
-
-  static {
-    _DEFAULT_JDBC_DRIVER_MAP.put("mysql", DEFAULT_DRIVER);
-    _DEFAULT_JDBC_DRIVER_MAP.put("google:rdbms",
-                                 "com.google.appengine.api.rdbms.AppEngineDriver");
-  }
-
-  // Because _checkedDriverVersion is static, it affects spy output
-  // for various qa's.  If running them individually, there is an
-  // extra call to getMetaData in the log, but if a Mysqli object
-  // is created in a non-spy qa before the spy qa in question, there
-  // is no getMetaData call logged.  The spy qa's are written with
-  // the assumption that _checkedDriverVersion has already been set,
-  // i.e. without the getMetaData call.
-  private static volatile String _checkedDriverVersion = null;
 
   private static MysqlMetaDataMethod _lastMetaDataMethod;
 
@@ -185,9 +164,7 @@ public class Mysqli extends JdbcConnectionResource
       return null;
     }
 
-    if (port <= 0) {
-      port = 3306;
-    }
+    JdbcDriverContext driverContext = env.getQuercus().getJdbcDriverContext();
 
     try {
       if (host == null || host.equals("")) {
@@ -199,21 +176,11 @@ public class Mysqli extends JdbcConnectionResource
         if (slashPos > 5) {
           String protocol = host.substring(5, slashPos);
 
-          Value driverMap = env.getConfigVar("quercus.jdbc_drivers");
+          driver = driverContext.getDriver(protocol);
 
-          if (driverMap.isArray()) {
-            Value driverValue = driverMap.get(env.createString(protocol));
-
-            if (driverValue != UnsetValue.UNSET) {
-              driver = driverValue.toString();
-            }
+          if (driver != null) {
+            url = host;
           }
-
-          if (driver == null) {
-            driver = _DEFAULT_JDBC_DRIVER_MAP.get(protocol);
-          }
-
-          url = host;
         }
       }
 
@@ -222,12 +189,12 @@ public class Mysqli extends JdbcConnectionResource
           driver = "com.caucho.quercus.mysql.QuercusMysqlDriver";
         }
         else {
-          driver = DEFAULT_DRIVER;
+          driver = driverContext.getDefaultDriver();
         }
       }
 
-      if (url == null || url.equals("")) {
-        url = getUrl(host, port, dbname, ENCODING,
+      if (url == null || url.length() == 0) {
+        url = getUrl(env, host, port, dbname, driverContext.getDefaultEncoding(),
                      (flags & MysqliModule.MYSQL_CLIENT_INTERACTIVE) != 0,
                      (flags & MysqliModule.MYSQL_CLIENT_COMPRESS) != 0,
                      (flags & MysqliModule.MYSQL_CLIENT_SSL) != 0);
@@ -252,7 +219,6 @@ public class Mysqli extends JdbcConnectionResource
     } catch (SQLException e) {
       env.warning(L.l("A link to the server could not be established.\n  "
                       + "url={0}\n  driver={1}\n  {2}", url, driver, e.toString()), e);
-      
 
       env.setSpecialValue("mysqli.connectErrno", LongValue.create(e.getErrorCode()));
       env.setSpecialValue("mysqli.connectError", env.createString(e.getMessage()));
@@ -267,7 +233,8 @@ public class Mysqli extends JdbcConnectionResource
     }
   }
 
-  protected static String getUrl(String host,
+  protected static String getUrl(Env env,
+                                 String host,
                                  int port,
                                  String dbname,
                                  String encoding,
@@ -277,12 +244,21 @@ public class Mysqli extends JdbcConnectionResource
   {
     StringBuilder urlBuilder = new StringBuilder();
 
-    urlBuilder.append("jdbc:mysql://");
+    JdbcDriverContext driverContext = env.getQuercus().getJdbcDriverContext();
+    String jdbcUrlPrefix = driverContext.getDefaultUrlPrefix();
+
+    urlBuilder.append(jdbcUrlPrefix);
     urlBuilder.append(host);
-    urlBuilder.append(":");
-    urlBuilder.append(port);
-    urlBuilder.append("/");
-    urlBuilder.append(dbname);
+
+    if (port > 0) {
+      urlBuilder.append(":");
+      urlBuilder.append(port);
+    }
+
+    if (dbname.length() > 0) {
+      urlBuilder.append("/");
+      urlBuilder.append(dbname);
+    }
 
     // Ignore MYSQL_CLIENT_LOCAL_FILES and MYSQL_CLIENT_IGNORE_SPACE flags.
 
@@ -464,18 +440,18 @@ public class Mysqli extends JdbcConnectionResource
   /**
    * Quercus function to get the field 'client_info'.
    */
-  public StringValue getclient_info(Env env)
+  public String getclient_info(Env env)
   {
-    return getClientInfo(env);
+    String version = getClientInfo(env);
+
+    return version;
   }
 
-  /**
-   * Returns the client information.
-   */
-
-  static StringValue getClientInfo(Env env)
+  protected static String getClientInfoStatic(Env env)
   {
-    String version = env.getQuercus().getMysqlVersion();
+    QuercusContext quercus = env.getQuercus();
+
+    String version = quercus.getMysqlVersion();
 
     if (version != null) {
       // php/1f2h
@@ -483,33 +459,33 @@ public class Mysqli extends JdbcConnectionResource
       // Initialized to a specific version via:
       // <init mysql-version="X.X.X">
     } else {
-      // php/142h
+      try {
+        JdbcDriverContext jdbcDriverContext = quercus.getJdbcDriverContext();
 
-      if (_checkedDriverVersion != null && _checkedDriverVersion != "") {
-        // A connection has already been made and the driver
-        // version has been validated.
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        Class<?> cls = loader.loadClass(jdbcDriverContext.getDefaultDriver());
 
-        version = _checkedDriverVersion;
-      } else {
-        // A connection has not been made or a valid driver
-        // version was not found. The JDBC API provides no
-        // way to get the release number without a connection,
-        // so just grab the major and minor number and use
-        // zero for the release number.
+        Driver driver = (Driver) cls.newInstance();
 
-        try {
-          Driver driver = DriverManager.getDriver("jdbc:mysql://localhost/");
-
-          version = driver.getMajorVersion() + "."
-              + driver.getMinorVersion() + ".00";
-        }
-        catch (SQLException e) {
-          version = "0.00.00";
-        }
+        version = driver.getMajorVersion() + "."
+                  + driver.getMinorVersion() + ".00";
+      }
+      catch (Exception e) {
+        log.log(Level.FINE, e.getMessage(), e);
       }
     }
 
-    return env.createString(version);
+    if (version == null) {
+      version = "0.00.00";
+    }
+
+    return version;
+  }
+
+  @Override
+  protected String getClientInfo(Env env)
+  {
+    return getClientInfoStatic(env);
   }
 
   /**
@@ -1057,6 +1033,18 @@ public class Mysqli extends JdbcConnectionResource
       return "HY" + errno;
   }
 
+  @Override
+  protected String getDriverName()
+  {
+    return "mysql";
+  }
+
+  @Override
+  protected Value getServerStat(Env env)
+  {
+    return stat(env);
+  }
+
   /**
    * returns a string with the status of the connection
    * or FALSE if error
@@ -1073,24 +1061,62 @@ public class Mysqli extends JdbcConnectionResource
 
       Statement stmt = null;
 
-      StringBuilder str = new StringBuilder();
-
       try {
         stmt = conn.createStatement();
         stmt.execute("SHOW STATUS");
 
+        HashMap<String,String> statusMap = new HashMap<String,String>();
+
         ResultSet rs = stmt.getResultSet();
 
         while (rs.next()) {
-          if (str.length() > 0)
-            str.append(' ');
-          str.append(rs.getString(1));
-          str.append(": ");
-          str.append(rs.getString(2));
+          statusMap.put(rs.getString(1), rs.getString(2));
         }
 
-        return env.createString(str.toString());
-      } finally {
+        StringValue sb = env.createStringBuilder();
+        sb.append("Uptime: ");
+        sb.append(statusMap.get("Uptime"));
+
+        sb.append("  ");
+        sb.append("Threads: ");
+        sb.append(statusMap.get("Threads_connected"));
+
+        sb.append("  ");
+        sb.append("Questions: ");
+        sb.append(statusMap.get("Queries"));
+
+        sb.append("  ");
+        sb.append("Slow queries: ");
+        sb.append(statusMap.get("Slow_queries"));
+
+        sb.append("  ");
+        sb.append("Opens: ");
+        sb.append(statusMap.get("Opened_tables")); // XXX: right open?
+
+        sb.append("  ");
+        sb.append("Flush tables: ");
+        sb.append(statusMap.get("Flush_commands"));
+
+        sb.append("  ");
+        sb.append("Open tables: ");
+        sb.append(statusMap.get("Open_tables"));
+
+        sb.append("  ");
+        sb.append("Queries per second avg: ");
+
+        String totalQueriesStr = statusMap.get("Queries");
+        String uptimeStr = statusMap.get("Uptime");
+
+        long totalQueries = Long.valueOf(totalQueriesStr);
+        long uptime = Long.valueOf(uptimeStr);
+
+        double average = ((double) totalQueries) / uptime;
+
+        sb.append(String.format("%.2f", average));
+
+        return sb;
+      }
+      finally {
         if (stmt != null)
           stmt.close();
       }
@@ -1354,7 +1380,7 @@ public class Mysqli extends JdbcConnectionResource
       }
     } catch (SQLException e) {
       saveErrors(e);
-      log.log(Level.WARNING, e.toString(), e);
+      log.log(Level.FINE, e.toString(), e);
       return null;
     }
   }
@@ -1428,12 +1454,12 @@ public class Mysqli extends JdbcConnectionResource
         setWarnings(stmt.getWarnings());
       } catch (SQLException e) {
         saveErrors(e);
-        log.log(Level.WARNING, e.toString(), e);
+        log.log(Level.FINE, e.toString(), e);
         return false;
       }
     } catch (SQLException e) {
       saveErrors(e);
-      log.log(Level.WARNING, e.toString(), e);
+      log.log(Level.FINE, e.toString(), e);
       return false;
     }
 

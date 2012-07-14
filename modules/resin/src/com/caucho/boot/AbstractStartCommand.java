@@ -29,6 +29,8 @@
 
 package com.caucho.boot;
 
+import java.util.ArrayList;
+
 
 public abstract class AbstractStartCommand extends AbstractBootCommand
 {
@@ -36,9 +38,10 @@ public abstract class AbstractStartCommand extends AbstractBootCommand
   {
     addFlagOption("verbose", "log command-line and environment information");
     addFlagOption("preview", "run as a preview (staging) server");
+    addFlagOption("elastic", "join a cluster as an elastic server (pro)");
     
     addValueOption("data-directory", "dir", "override the working directory");
-    addValueOption("cluster", "id", "join a cluster as a dynamic server (pro)");
+    addValueOption("cluster", "id", "cluster to join as an elastic server (pro)");
     addValueOption("root-directory", "dir", "set the root directory");
     addValueOption("log-directory", "dir", "set the log directory");
     addValueOption("server", "id", "select a configured server");
@@ -87,22 +90,36 @@ public abstract class AbstractStartCommand extends AbstractBootCommand
     _intValueKeys.add("--jmx-port");
     */
   }
-  
+
   @Override
-  protected WatchdogClient findShutdownClient(ResinBoot boot, WatchdogArgs args)
+  protected WatchdogClient findLocalClient(ResinBoot boot, WatchdogArgs args)
+  {
+    if (args.isElasticServer())
+      return super.findLocalClient(boot, args);
+    else
+      return findUniqueLocalClient(boot, args);
+  }
+
+  @Override
+  protected WatchdogClient findWatchdogClient(ResinBoot boot, WatchdogArgs args)
   {
     // server/6e09
-    return null;
+    if (args.isElasticServer()) {
+      return super.findWatchdogClient(boot, args);
+    }
+    else {
+      return null;
+    }
   }
 
   protected String getServerUsageArg(WatchdogArgs args, String clientId)
   {
     if (args.getServerId() != null)
       return " -server '" + args.getServerId() + "'";
-    else if (! args.isDynamicServer())
-      return " -server '" + clientId + "'";
+    else if (args.isElasticServer())
+      return " -server '" + args.getElasticServerId() + "'";
     else
-      return "";
+      return " -server '" + clientId + "'";
   }
 
   @Override

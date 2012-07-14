@@ -123,7 +123,18 @@ public class QuercusServlet
     }
 
     if (impl == null) {
-      impl = new ProQuercusServlet();
+      try {
+        Class<?> cls = Class.forName("com.caucho.quercus.servlet.ProQuercusServlet");
+
+        impl = (QuercusServletImpl) cls.newInstance();
+      }
+      catch (Exception e) {
+        log.finest(e.getMessage());
+      }
+    }
+
+    if (impl == null) {
+      impl = new QuercusServletImpl();
     }
 
     return impl;
@@ -473,6 +484,57 @@ public class QuercusServlet
   private void initImpl(ServletConfig config)
     throws ServletException
   {
+    /*
+    DynamicClassLoader loader = new DynamicClassLoader(Thread.currentThread().getContextClassLoader());
+    loader.setServletHack(true);
+
+    Path root = Vfs.lookup("WEB-INF/lib/quercus.jar");
+
+    MemoryPath memoryPath = new MemoryPath();
+
+    Path toWrite = memoryPath.lookup("quercus.jar");
+
+    WriteStream os = null;
+
+    try {
+      os = toWrite.openWrite();
+
+      root.writeToStream(os);
+    }
+    catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    finally {
+      IoUtil.close(os);
+    }
+
+    System.err.println("QuercusServlet->initImpl0: " + root + " . " + toWrite);
+
+    loader.addRoot(JarPath.create(toWrite));
+
+
+    for (Loader l : loader.getLoaders()) {
+      System.err.println("\t" + l);
+    }
+
+    Thread.currentThread().setContextClassLoader(loader);
+    */
+
+    /*
+    Path quercusPath = Vfs.lookup("WEB-INF/lib/quercus.jar");
+    Path kernelPath = Vfs.lookup("WEB-INF/lib/resin-kernel.jar");
+
+    try {
+      GoogleQuercusClassLoader loader = new GoogleQuercusClassLoader(Thread.currentThread().getContextClassLoader(),
+                                                                     quercusPath, kernelPath);
+
+      Thread.currentThread().setContextClassLoader(loader);
+    }
+    catch (IOException e) {
+      throw new ServletException(e);
+    }
+    */
+
     long start = CurrentTime.getCurrentTime();
 
     Class<?> configClass = config.getClass();
@@ -513,6 +575,8 @@ public class QuercusServlet
       quercus.setIniFile(getQuercus().getPwd().lookup(realPath));
     }
 
+    long e0 = System.currentTimeMillis();
+
     if (_scriptEncoding != null)
       quercus.setScriptEncoding(_scriptEncoding);
 
@@ -550,8 +614,8 @@ public class QuercusServlet
     _impl.init(config);
 
     long end = CurrentTime.getCurrentTime();
-    log.info(L.l("Quercus finished initialization in {0}ms ({1}s)",
-                 (end - start), (end - start) / 1000));
+    log.info(L.l("Quercus finished initialization in {0}ms",
+                 end - start));
   }
 
   /**

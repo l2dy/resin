@@ -62,11 +62,14 @@ public class ResinArgs
   private Path _rootDirectory;
   private Path _dataDirectory;
   private Path _licenseDirectory;
+  
+  private Path _userProperties;
 
   private String _resinConf;
   
   private Socket _pingSocket;
   
+  private boolean _isElastic;
   private String _homeCluster;
   private String _serverAddress;
   private int _serverPort;
@@ -77,6 +80,8 @@ public class ResinArgs
   private boolean _isOpenSource;
   
   private String _stage = "production";
+  private String _mode = "default";
+  
   private boolean _isDumpHeapOnExit;
   
   public ResinArgs()
@@ -124,6 +129,8 @@ public class ResinArgs
     } catch (java.lang.Error e) {
       //operation permitted once per jvm; catching for harness.
     }
+    
+    _userProperties = Vfs.lookup(System.getProperty("user.home") + "/.resin");
   }
   
   public void setServerId(String serverId)
@@ -210,6 +217,16 @@ public class ResinArgs
   {
     _resinConf = resinConf;
   }
+  
+  public Path getUserProperties()
+  {
+    return _userProperties;
+  }
+  
+  public String getMode()
+  {
+    return _mode;
+  }
 
   public Path getResinConfPath()
   {
@@ -277,6 +294,16 @@ public class ResinArgs
     _stage = stage;
   }
   
+  public void setElastic(boolean isElastic)
+  {
+    _isElastic = isElastic;
+  }
+  
+  public boolean isElasticServer()
+  {
+    return _isElastic;
+  }
+  
   public void setHomeCluster(String homeCluster)
   {
     _homeCluster = homeCluster;
@@ -337,8 +364,8 @@ public class ResinArgs
         arg = "-" + arg;
 
       if (i + 1 < len
-          && (argv[i].equals("-stdout")
-              || argv[i].equals("--stdout"))) {
+          && (arg.equals("-stdout")
+              || arg.equals("--stdout"))) {
         Path path = Vfs.lookup(argv[i + 1]);
 
         RotateStream stream = RotateStream.create(path);
@@ -414,6 +441,10 @@ public class ResinArgs
         _dataDirectory = Vfs.lookup(argv[i + 1]);
 
         i += 2;
+      }
+      else if (argv[i].equals("-elastic")) {
+        _isElastic = true;
+        i += 1;
       }
       else if (argv[i].equals("-service")) {
         JniCauchoSystem.create().initJniBackground();
@@ -560,9 +591,13 @@ public class ResinArgs
         i += 2;
       }
       else if ("--user-properties".equals(arg)) {
+        _userProperties = Vfs.lookup(argv[i + 1]);
+        
         i += 2;
       }
       else if ("--mode".equals(arg)) {
+        _mode = argv[i + 1];
+        
         i += 2;
       }
       else {

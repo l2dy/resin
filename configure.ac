@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.28)
+AC_INIT([resin],4.0.29)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -46,6 +46,24 @@ AC_SUBST(resin_version)
 AC_SUBST(usr_share)
 AC_SUBST(build_dir)
 AC_SUBST(initd_dir)
+
+#
+# --with-resin-root
+#
+
+AC_ARG_WITH(resin-root,
+[AS_HELP_STRING([--with-resin-root=DIR],
+                [resin data directory])],
+[resin_root=${withval}])
+
+if test -z "$resin_root"; then
+  if test "$prefix" == "NONE"; then
+    resin_root="/var/resin"
+  else
+    resin_root="$prefix"
+  fi
+fi
+
 #
 # --with-resin-root
 #
@@ -372,10 +390,14 @@ AC_ARG_WITH(apache,
 apache_dir=${withval}
 
 if test "${apache_dir}" = "yes"; then
-  apache_dir=/usr/local/apache
+  if test -d /usr/local/apache; then
+    apache_dir=/usr/local/apache
+  else
+    apxs=`which apxs2`
+  fi
 fi
 
-if test ! -d "${apache_dir}"; then
+if test ! -d "${apache_dir}" -a ! -x "${apxs}"; then
   AC_MSG_ERROR([--with-apache=${apache_dir} is not a valid Apache directory])
 fi
 
@@ -392,7 +414,20 @@ AC_ARG_WITH(apxs,
 apxs=${withval}
 
 if test "${apxs}" = "yes"; then
-  apxs=apxs
+
+  apxs=`which apxs2` 2>/dev/null
+  if test -z "$apxs"; then
+    apxs=`which apxs` 2>/dev/null
+  fi
+
+  if test -z "$apxs"; then
+    apxs=apxs2
+  fi
+  
+  if test ! -x "$apxs"; then
+    AC_ERROR("'$apxs' is not a valid apxs")
+  fi   
+
 fi
 
 apache=1
@@ -474,7 +509,7 @@ apache=1
 if test -n "${apxs}"; then
   ${apxs} -q PREFIX >/dev/null 2>/dev/null
   if test "$?" -ne 0; then
-    AC_MSG_ERROR(bad apxs ${apxs})
+    AC_MSG_ERROR(Apache ${apxs} is not a valid apxs script)
   fi
 elif test -x "${apache_bin}/apxs"; then
   apxs=${apache_bin}/apxs
@@ -641,6 +676,29 @@ AC_SUBST(apache_libexec)
 AC_SUBST(apache_conf)
 AC_SUBST(apache_dir)
 AC_SUBST(apache_cflags)
+
+#
+# --with-setuid
+#
+setuid_user=resin
+setuid_group=resin
+
+AC_ARG_WITH(setuid,
+[AS_HELP_STRING([--with-setuid=user],
+                [configure default setuid user])],
+[setuid_user=${withval}])
+
+#
+# --with-setgid
+#
+
+#AC_ARG_WITH(setgid
+#[AS_HELP_STRING([--with-setgid=user],
+#                [configure default setgid user])],
+#[setuid_group=${withval}])
+
+AC_SUBST(setuid_user)
+AC_SUBST(setuid_group)
 
 #
 # fill in compilation stuff

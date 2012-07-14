@@ -43,7 +43,6 @@ import com.caucho.config.types.Period;
 import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositorySystem;
 import com.caucho.env.repository.RepositoryTagListener;
-import com.caucho.loader.DependencyCheckInterval;
 import com.caucho.loader.Environment;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
@@ -600,8 +599,9 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
         }
 
         for (String key : newKeys) {
-          if (! oldKeys.contains(key))
+          if (! oldKeys.contains(key)) {
             updatedKeys.add(key);
+          }
         }
 
         for (String key : updatedKeys) {

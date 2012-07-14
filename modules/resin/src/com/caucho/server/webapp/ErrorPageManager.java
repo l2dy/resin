@@ -234,7 +234,7 @@ public class ErrorPageManager {
     String location = null;
 
     String title = "500 Servlet Exception";
-    boolean badRequest = false;
+    boolean isBadRequest = false;
     boolean doStackTrace = true;
     boolean isCompileException = false;
     boolean isServletException = false;
@@ -279,8 +279,9 @@ public class ErrorPageManager {
           lineMessage = rootExn.getMessage();
       }
 
-      if (rootExn instanceof BadRequestException)
-        badRequest = true;
+      if (rootExn instanceof BadRequestException) {
+        isBadRequest = true;
+      }
       
       if (rootExn instanceof OutOfMemoryError) {
         String msg = "TcpSocketLink OutOfMemory";
@@ -309,6 +310,9 @@ public class ErrorPageManager {
 
       if (location != null)
         lookupErrorPage = false;
+      
+      if (isBadRequest)
+        break;
 
       Throwable cause = null;
       if (rootExn instanceof ServletException
@@ -338,15 +342,16 @@ public class ErrorPageManager {
       return;
     }
 
-    if (badRequest) {
-      // server/05a0
+    if (isBadRequest) {
+      // server/05a0, server/0532
+
       if (rootExn instanceof CompileException)
         title = rootExn.getMessage();
       else
         title = String.valueOf(rootExn);
 
       doStackTrace = false;
-      badRequest = true;
+      isBadRequest = true;
 
       if (request instanceof CauchoRequest)
         ((CauchoRequest) request).killKeepalive("bad request: " + rootExn);
@@ -355,8 +360,10 @@ public class ErrorPageManager {
 
       response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
 
+      /*
       if (location == null)
         log.warning(e.toString());
+        */
     }
     else if (rootExn instanceof UnavailableException) {
       UnavailableException unAvail = (UnavailableException) rootExn;
@@ -386,8 +393,9 @@ public class ErrorPageManager {
       title = "503 Unavailable";
     }
     */
-    else
+    else {
       response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+    }
 
     if (location == null)
       location = _defaultLocation;
@@ -399,7 +407,10 @@ public class ErrorPageManager {
     else if (isCompileException) {
       level = location == null ? Level.WARNING : Level.INFO;
       
-      log.log(level, compileException.getMessage());
+      if (isBadRequest)
+        log.log(level, BadRequestException.class.getSimpleName() + ": " + compileException.getMessage());
+      else
+        log.log(level, compileException.getMessage());
     }
     else if (! doStackTrace)
       log.log(level, rootExn.toString());

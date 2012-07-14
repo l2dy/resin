@@ -38,8 +38,6 @@ import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.hessian.io.Hessian2Input;
-import com.caucho.hessian.io.Hessian2Output;
 import com.caucho.util.IoUtil;
 import com.caucho.vfs.GoogleInode.FileType;
 import com.google.appengine.api.files.AppEngineFile;
@@ -115,6 +113,23 @@ abstract public class GooglePath extends FilesystemPath {
 
       writeDir(_inode.getDirMap());
     }
+  }
+
+  @Override
+  public String getFullPath()
+  {
+    // need to normalize paths like "/foo/" to "/foo" or memcache won't work
+    // XXX: test case
+
+    String fullPath = super.getFullPath();
+
+    int len = fullPath.length();
+
+    if (len > 1 && fullPath.charAt(len - 1) == '/') {
+      fullPath = fullPath.substring(0, len - 1);
+    }
+
+    return fullPath;
   }
 
   /**
@@ -407,8 +422,6 @@ abstract public class GooglePath extends FilesystemPath {
     ReadStream is = null;
     WriteStream os = null;
 
-    boolean isSuccessful = false;
-
     TempBuffer tempBuffer = TempBuffer.allocate();
 
     try {
@@ -427,21 +440,24 @@ abstract public class GooglePath extends FilesystemPath {
         os.write(buffer, 0, readLen);
       }
 
-      isSuccessful = true;
+      IoUtil.close(is);
+
+      // don't silently close remote write streams except on error
+      os.close();
+      remove();
+
       return true;
     }
-    finally {
-      TempBuffer.free(tempBuffer);
-
+    catch (IOException e) {
       IoUtil.close(is);
       IoUtil.close(os);
 
-      if (isSuccessful) {
-        remove();
-      }
-      else {
-        path.remove();
-      }
+      path.remove();
+
+      throw e;
+    }
+    finally {
+      TempBuffer.free(tempBuffer);
     }
   }
 

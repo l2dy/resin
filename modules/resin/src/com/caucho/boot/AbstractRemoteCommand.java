@@ -36,13 +36,10 @@ import java.net.UnknownHostException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import com.caucho.bam.RemoteConnectionFailedException;
-import com.caucho.bam.RemoteListenerUnavailableException;
-import com.caucho.bam.actor.ActorSender;
+import com.caucho.bam.*;
 import com.caucho.bam.actor.RemoteActorSender;
 import com.caucho.config.ConfigException;
 import com.caucho.hmtp.HmtpClient;
-import com.caucho.network.listen.TcpPort;
 import com.caucho.server.admin.HmuxClientFactory;
 import com.caucho.util.L10N;
 
@@ -136,13 +133,11 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
 
       return client;
     } catch (RemoteConnectionFailedException e) {
-      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
-                                                    url, e.getMessage()),
-                                                e);
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote administration.\n  Ensure the local server has started, or include --server and --port parameters to connect to a remote server.\n  {1}",
+                                                    url, e.getMessage()), e);
     } catch (RemoteListenerUnavailableException e) {
-      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote deploy because no RemoteAdminService (HMTP) was configured. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
-                                                    url, e.getMessage()),
-                                                e);
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_cli_enable' is set true in resin.properties.\n  {1}",
+                                                       url, e.getMessage()), e);
     }
   }
   
@@ -158,7 +153,7 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
       triad = findTriad(client, address, port);
     else
       triad = findLiveTriad(client);
-
+    
     if (triad == null)
       return null;
     
@@ -171,13 +166,11 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
     try {
       return hmuxFactory.create();
     } catch (RemoteConnectionFailedException e) {
-      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote deploy. Check the server has started and make sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
-                                                    triad, e.getMessage()),
-                                                e);
+      throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote administration.\n  Ensure the local server has started, or include --server and --port parameters to connect to a remote server.\n  {1}",
+                                                    triad, e.getMessage()), e);
     } catch (RemoteListenerUnavailableException e) {
-      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote deploy because the RemoteAdminService (HMTP) is not enabled. Check the server to sure <resin:RemoteAdminService> is enabled in the resin.xml.\n  {1}",
-                                                       triad, e.getMessage()),
-                                                e);
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_cli_enable' is set true in resin.properties.\n  {1}",
+                                                       triad, e.getMessage()), e);
     }
   }
   
@@ -268,13 +261,9 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   
   private int findPort(WatchdogClient client)
   {
-    for (TcpPort listener : client.getConfig().getPorts()) {
-      if (listener instanceof OpenPort) {
-        OpenPort openPort = (OpenPort) listener;
-        
-        if ("http".equals(openPort.getProtocolName()))
-          return openPort.getPort();
-      }
+    for (OpenPort openPort : client.getConfig().getPorts()) {
+      if ("http".equals(openPort.getProtocolName()))
+        return openPort.getPort();
     }
     
     return 0;

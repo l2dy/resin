@@ -32,9 +32,13 @@ package com.caucho.server.resin;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.BindException;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -50,8 +54,10 @@ import com.caucho.cloud.topology.CloudServer;
 import com.caucho.cloud.topology.CloudSystem;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
+import com.caucho.config.core.ResinProperties;
 import com.caucho.config.inject.WebBeansAddLoaderListener;
 import com.caucho.config.program.ConfigProgram;
+import com.caucho.db.block.BlockManager;
 import com.caucho.ejb.manager.EjbEnvironmentListener;
 import com.caucho.env.deploy.DeployControllerService;
 import com.caucho.env.git.GitSystem;
@@ -84,6 +90,7 @@ import com.caucho.server.resin.BootConfig.BootType;
 import com.caucho.server.resin.ResinArgs.BoundPort;
 import com.caucho.util.CompileException;
 import com.caucho.util.CurrentTime;
+import com.caucho.util.HostUtil;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 import com.caucho.vfs.MemoryPath;
@@ -183,21 +190,6 @@ public class Resin
     _startTime = CurrentTime.getCurrentTime();
     
     _args = args;
-
-    String serverId = args.getServerId();
-
-    if (serverId == null && args.getHomeCluster() != null)
-      serverId = "dyn-"+ args.getServerAddress() + ':' + args.getServerPort();
-
-    _resinSystem = new ResinSystem(serverId);
-
-    // _licenseErrorMessage = licenseErrorMessage;
-    
-    _resinLocal.set(this, _resinSystem.getClassLoader());
-
-    Environment.init();
- 
-    _serverId = serverId;//args.getServerId();
     
     _resinHome = args.getResinHome();
     
@@ -218,6 +210,22 @@ public class Resin
     _stage = args.getStage();
  
     _pingSocket = _args.getPingSocket();
+
+    String serverId = args.getServerId();
+
+    if (serverId == null && args.isElasticServer()) {
+      serverId = "dyn-"+ getDynamicDisplayAddress() + ':' + getDynamicServerPort();
+    }
+
+    _resinSystem = new ResinSystem(serverId);
+
+    // _licenseErrorMessage = licenseErrorMessage;
+    
+    _resinLocal.set(this, _resinSystem.getClassLoader());
+
+    Environment.init();
+ 
+    _serverId = serverId;//args.getServerId();
     
     preConfigureInit();
     
@@ -259,7 +267,8 @@ public class Resin
     return _serverId;
   }
 
-  public String getServerIdFilePart() {
+  public String getServerIdFilePart() 
+  {
     if (_serverId == null || _serverId.isEmpty())
       return "default";
     else return _serverId.replace(':', '_');
@@ -415,6 +424,11 @@ public class Resin
       return null;
   }
   
+  public boolean isElasticServer()
+  {
+    return _args.isElasticServer();
+  }
+  
   public String getClusterSystemKey()
   {
     return _clusterSystemKey;
@@ -438,9 +452,41 @@ public class Resin
     return _dynamicAddress;
   }
   
+  public String getDynamicServerAddress()
+  {
+    String address = getServerAddress();
+
+    if (address != null)
+      return address;
+    else
+      return getLocalHostAddress();
+  }
+  
+  public String getDynamicDisplayAddress()
+  {
+    String address = getServerAddress();
+
+    if (address != null)
+      return address;
+    else if (CurrentTime.isTest())
+      return "192.168.1.x";
+    else
+      return getLocalHostAddress();
+  }
+  
   public int getServerPort()
   {
     return _dynamicPort;
+  }
+  
+  public int getDynamicServerPort()
+  {
+    int port = getServerPort();
+    
+    if (port > 0)
+      return port;
+    else
+      return 6830;
   }
 
   public Path getLogDirectory()
@@ -684,6 +730,8 @@ public class Resin
         Environment.addChildLoaderListener(new EjbEnvironmentListener());
       }
 
+      readUserProperties();
+      
       _bootConfig
         = new BootConfig(_resinSystem,
                          getServerId(),
@@ -705,7 +753,24 @@ public class Resin
       thread.setContextClassLoader(oldLoader);
     }
   }
-  
+
+  // read $HOME/.resin
+  private void readUserProperties()
+  {
+    if (_args.getUserProperties() != null && _args.getUserProperties().canRead()) {
+      ResinProperties properties = new ResinProperties();
+      properties.setPath(_args.getUserProperties());
+    
+      properties.setMode(_args.getMode());
+    
+      try {
+        properties.init();
+      } catch (Exception e) {
+        log().info(e.toString());
+      }
+    }
+  }
+
   /*
   private String findLocalServerId()
   {
@@ -777,6 +842,38 @@ public class Resin
     } catch (Exception e) {
       log().log(Level.WARNING, e.toString(), e);
     }
+  }
+  
+  String getLocalHostAddress()
+  {
+    try {
+      InetAddress addr = InetAddress.getLocalHost();
+    
+      if (addr.isLinkLocalAddress() || addr.isLoopbackAddress()) {
+        addr = findLocalHost();
+      }
+      return addr.getHostAddress();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private InetAddress findLocalHost() throws SocketException
+  {
+    for (NetworkInterface iface : HostUtil.getNetworkInterfaces()) {
+      if (iface.isLoopback() || ! iface.isUp())
+        continue;
+      
+      Enumeration<InetAddress> eInet = iface.getInetAddresses();
+      while (eInet.hasMoreElements()) {
+        InetAddress iAddr = eInet.nextElement();
+
+        if (! iAddr.isLinkLocalAddress() && ! iAddr.isLoopbackAddress())
+          return iAddr;
+      }
+    }
+    
+    throw new ConfigException(L().l("Cannot find active interface for the server. Check the network configuration."));
   }
 
   /**
@@ -918,12 +1015,13 @@ public class Resin
       _bootServerConfig = bootResin.findServer(serverId);
     }
     
-    if (serverId == null) {
+    if (serverId == null && ! _args.isElasticServer()) {
+      // server/2s00
       _bootServerConfig = bootResin.findServer("default");
     }
 
     CloudSystem cloudSystem = bootResin.initTopology();
-    
+
     if (_bootServerConfig != null) {
     }
     else if (isEmbedded()) { 
@@ -935,17 +1033,18 @@ public class Resin
     else if (isWatchdog()) {
       _bootServerConfig = joinWatchdog();
     }
-    else if (_serverId != null && getHomeCluster() == null) {
+    else if (_serverId != null && ! isElasticServer()) {
       throw new ConfigException(L().l("-server '{0}' is an unknown server in the configuration file.",
                                       _serverId));
     }
-    else if ((_bootServerConfig = bootResin.findLocalServer()) != null) {
+    else if (! isElasticServer()
+             && (_bootServerConfig = bootResin.findLocalServer()) != null) {
     }
     
-    if (_bootServerConfig == null && getHomeCluster() != null) {
+    if (_bootServerConfig == null && isElasticServer()) {
       _bootServerConfig = joinCluster(cloudSystem);
     }
-    
+
     if (_bootServerConfig == null) {
       throw new ConfigException(L().l("unknown server {0} in unknown cluster",
                                       _serverId));
@@ -953,8 +1052,10 @@ public class Resin
     
     _selfServer = cloudSystem.findServer(_bootServerConfig.getId());
     
-    if (_selfServer ==  null)
-      throw new ConfigException(L().l("unexpected empty server"));
+    if (_selfServer ==  null) {
+      throw new ConfigException(L().l("unexpected empty server '{0}'",
+                                      _bootServerConfig));
+    }
     
     Config.setProperty("rvar0", _selfServer.getId());
     Config.setProperty("rvar1", _selfServer.getCluster().getId());
@@ -979,11 +1080,32 @@ public class Resin
                                       clusterId));
     }
     
-    CloudServer cloudServer = getDelegate().joinCluster(cloudSystem);
+    CloudServer cloudServer = getDelegate().joinCluster(cloudSystem, bootCluster);
 
     if (cloudServer == null) {
-      throw new ConfigException(L().l("unable to join cluster {0}",
-                                      clusterId));
+      String cause = null;
+      
+      if (bootCluster.getPodList().isEmpty() || 
+          bootCluster.getPodList().get(0).getServerList().isEmpty()) {
+        cause = L().l("No triad servers are configured in {0}.", bootCluster);
+      } else {
+        ArrayList<BootServerConfig> servers = 
+          bootCluster.getPodList().get(0).getServerList();
+        
+        boolean isFirst = true;
+        StringBuilder sb = new StringBuilder();
+        for (BootServerConfig server : servers) {
+          if (! isFirst)
+            sb.append(", ");
+          sb.append(server.getFullAddress());
+        }
+        
+        cause = L().l("No triad servers were reachable.\n" +
+                      "  Triad servers are {0}", sb);
+      }
+      
+      throw new ConfigException(L().l("{0} unable to join cluster {1}: {2}",
+                                      getDelegate(), clusterId, cause));
     }
     
     return bootCluster.addDynamicServer(cloudServer);
@@ -1000,15 +1122,13 @@ public class Resin
     bootServer.setAddress("127.0.0.1");
     bootCluster.addServer(bootServer);
     
-    bootResin.initTopology();
+    bootServer.initTopology();
     
     return bootServer;
   }
   
   private BootServerConfig joinTest()
   {
-    BootResinConfig bootResin = _bootResinConfig;
-    
     BootClusterConfig bootCluster = findDefaultCluster();
     
     if (bootCluster.getPodList().size() == 0) {
@@ -1027,7 +1147,7 @@ public class Resin
     bootServer.setAddress("127.0.0.1");
     bootCluster.addServer(bootServer);
     
-    bootResin.initTopology();
+    bootServer.initTopology();
     
     return bootServer;
   }
@@ -1062,7 +1182,16 @@ public class Resin
     }
     else if (bootCluster.getPodList().get(0).getServerList().size() == 1) {
       // server/1e06
-      return bootCluster.getPodList().get(0).getServerList().get(0);
+      BootServerConfig server
+        = bootCluster.getPodList().get(0).getServerList().get(0);
+      
+      if (! server.isRequireExplicitId()) {
+        return server;
+      }
+      else {
+        // cloud/12c0
+        return null;
+      }
     }
     else if (bootCluster.getPodList().get(0).getServerList().size() > 0) {
       // server/0342
@@ -1074,8 +1203,8 @@ public class Resin
     bootServer.setAddress("127.0.0.1");
     bootCluster.addServer(bootServer);
     
-    bootResin.initTopology();
-    
+    bootServer.initTopology();
+
     return bootServer;
   }
 

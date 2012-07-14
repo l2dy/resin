@@ -53,6 +53,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -67,6 +68,8 @@ public class CGIServlet extends GenericServlet {
   private String _executable;
   private boolean _stderrIsException = true;
   private boolean _ignoreExitCode = false;
+  
+  private ArrayList<String> _envMap = new ArrayList<String>();
 
   /**
    * Sets an executable to run the script.
@@ -88,10 +91,16 @@ public class CGIServlet extends GenericServlet {
   {
     _ignoreExitCode = ignoreExitCode;
   }
+  
+  public CgiEnv createEnv()
+  {
+    return new CgiEnv();
+  }
 
   /**
    * Handle the request.
    */
+  @Override
   public void service(ServletRequest request, ServletResponse response)
     throws ServletException, IOException
   {
@@ -484,6 +493,8 @@ public class CGIServlet extends GenericServlet {
       else
         env.add(convertHeader(key, value));
     }
+    
+    env.addAll(_envMap);
 
     return (String []) env.toArray(new String[env.size()]);
   }
@@ -573,8 +584,9 @@ public class CGIServlet extends GenericServlet {
 
         if (status < 304)
           res.setStatus(status);
-        else
-          res.sendError(status, valueStr.substring(i));
+        else {
+          res.setStatus(status, valueStr.substring(i));
+        }
       }
       else if (keyStr.equalsIgnoreCase("Location")) {
         String uri;
@@ -618,6 +630,13 @@ public class CGIServlet extends GenericServlet {
       } catch (Throwable e) {
         log.log(Level.WARNING, e.toString(), e);
       }
+    }
+  }
+  
+  public class CgiEnv {
+    public void setProperty(String key, String value)
+    {
+      _envMap.add(key + "=" + value);
     }
   }
 }

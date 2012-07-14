@@ -86,7 +86,7 @@ class WatchdogChildProcess
   private final WatchdogChild _watchdog;
   private final Lifecycle _lifecycle = new Lifecycle();
 
-  private WatchdogActor _watchdogActor;
+  private WatchdogChildActor _watchdogActor;
   private WatchdogChildTask _task;
 
   private Socket _childSocket;
@@ -472,7 +472,7 @@ class WatchdogChildProcess
     InputStream watchdogIs = s.getInputStream();
     OutputStream watchdogOs = s.getOutputStream();
 
-    _watchdogActor = new WatchdogActor(this);
+    _watchdogActor = new WatchdogChildActor(this);
 
     HmtpLinkWorker link = new HmtpLinkWorker(_watchdogActor, watchdogIs, watchdogOs);
 
@@ -525,7 +525,7 @@ class WatchdogChildProcess
 
       try {
         if (_watchdog.getUserName() != null) {
-          for (TcpPort port : _watchdog.getPorts()) {
+          for (OpenPort port : _watchdog.getPorts()) {
             QServerSocket ss = port.bindForWatchdog();
 
             if (ss == null)
@@ -538,6 +538,8 @@ class WatchdogChildProcess
               jvmArgs.add(String.valueOf(ss.getSystemFD()));
               jvmArgs.add(String.valueOf(port.getAddress()));
               jvmArgs.add(String.valueOf(port.getPort()));
+              
+              System.out.println("PORT: " + ss.getSystemFD() + " " + port.getAddress() + " " +port.getPort());
             }
             else {
               ss.close();
@@ -785,21 +787,18 @@ class WatchdogChildProcess
       resinArgs.add(_watchdog.getResinConf().getNativePath());
     }
     
-    if (_watchdog.getId() != null
-        && ! _watchdog.isDynamicServer()) {
+    if (_watchdog.getId() != null) {
       resinArgs.add("-server");
-      if ("".equals(_watchdog.getId()) && CauchoSystem.isWindows())
-        resinArgs.add("\"\"");
+      if ("".equals(_watchdog.getId()) || _watchdog.getId() == null)
+        resinArgs.add("default");
       else
         resinArgs.add(_watchdog.getId());
     }
-    
-    /*
-    if (_watchdog.getArgs().getClusterId() != null) {
-      resinArgs.add("-cluster");
-      resinArgs.add(_watchdog.getArgs().getClusterId());
+
+    // server/2k54
+    if (_watchdog.isElasticServer()) {
+      resinArgs.add("-elastic");
     }
-    */
     
     resinArgs.add("-socketwait");
     resinArgs.add(String.valueOf(socketPort));

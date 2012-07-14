@@ -2758,7 +2758,7 @@ public class WebApp extends ServletContextImpl
       */
 
       // server/5030
-      _cdiManager.addBean(_cdiManager.createManagedBean(WebServiceContextProxy.class));
+      _cdiManager.addBeanDiscover(_cdiManager.createManagedBean(WebServiceContextProxy.class));
 
       /*
       _beanManager.addObserver(new WebBeansObserver(),
@@ -3635,7 +3635,7 @@ public class WebApp extends ServletContextImpl
       if (_login == null) {
         Bean<?> loginBean = _cdiManager.createManagedBean(BasicLogin.class);
         
-        _cdiManager.addBean(loginBean);
+        _cdiManager.addBeanDiscover(loginBean);
         // server/1aj0
         _defaultLogin = _cdiManager.getReference(Login.class);
 
@@ -3938,9 +3938,10 @@ public class WebApp extends ServletContextImpl
     // the CacheListener in ServletInvocation needs the top to
     // be a CacheListener.  Otherwise, the cache won't get lru.
     
-    if (getRequestListeners() != null && getRequestListeners().length > 0)
+    if (getRequestListeners() != null && getRequestListeners().length > 0) {
       chain = new WebAppListenerFilterChain(chain, this, getRequestListeners());
-
+    }
+    
     // TCK: cache needs to be outside because the cache flush conflicts
     // with the request listener destroy callback
     // top-level filter elements

@@ -55,9 +55,6 @@ import com.caucho.vfs.WriteStream;
 
 /**
  * Represents a PHP expression value.
- *
- * XXX: nam: 2012-05-14 make Value an interface that Var, ArgVar, and
- *      AbstractValue extends
  */
 abstract public class Value implements java.io.Serializable
 {
@@ -224,7 +221,7 @@ abstract public class Value implements java.io.Serializable
     return false;
   }
 
-  /*
+  /**
    * Returns true for a resource.
    */
   public boolean isResource()
@@ -438,8 +435,11 @@ abstract public class Value implements java.io.Serializable
   public boolean eq(Value rValue)
   {
     if (rValue.isArray())
+      return false;
+    else if (rValue.isObject()) {
       return rValue.eq(this);
-    else if (rValue instanceof BooleanValue)
+    }
+    else if (rValue.isBoolean())
       return toBoolean() == rValue.toBoolean();
     else if (isLongConvertible() && rValue.isLongConvertible())
       return toLong() == rValue.toLong();

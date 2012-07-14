@@ -69,7 +69,7 @@ class WatchdogClient
   public static final String WATCHDOG_ADDRESS = "watchdog@admin.resin.caucho";
 
   private final BootResinConfig _bootManager;
-  private String _id = "";
+  private final String _id;
 
   private ResinSystem _system;
   private WatchdogConfig _config;
@@ -108,6 +108,16 @@ class WatchdogClient
   public int getIndex()
   {
     return _config.getIndex();
+  }
+  
+  public String getAddress()
+  {
+    return _config.getAddress();
+  }
+  
+  public int getPort()
+  {
+    return _config.getPort();
   }
 
   public String getWatchdogAddress()
@@ -248,7 +258,7 @@ class WatchdogClient
     }
   }
 
-  public Process startWatchdog(String []argv)
+  public Process startWatchdog(String []argv, boolean isLaunch)
     throws ConfigException, IOException
   {
     if (getUserName() != null && ! hasBoot()) {
@@ -270,38 +280,53 @@ class WatchdogClient
     }
 
     ActorSender conn = null;
-
-    try {
-      conn = getConnection();
+    
+    long timeout = isLaunch ? -1 : 10000;
+    long expireTime = CurrentTime.getCurrentTimeActual() + timeout;
+    
+    do {
+      try {
+        conn = getConnection();
       
-      WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
+        WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
       
-      String serverId = getId();
+        String serverId = getId();
 
-      ResultStatus status = watchdogProxy.start(serverId, argv);
+        ResultStatus status = watchdogProxy.start(serverId, argv);
 
-      if (status.isSuccess()) {
-        return null;
+        if (status.isSuccess()) {
+          return null;
+        }
+
+        throw new ConfigException(L.l("{0}: watchdog start failed because of '{1}'",
+                                      this, status.getMessage()));
+      } catch (RemoteConnectionFailedException e) {
+        log.log(Level.FINE, e.toString(), e);
+      } catch (RemoteListenerUnavailableException e) {
+        log.log(Level.FINE, e.toString(), e);
+      } catch (RuntimeException e) {
+        log.log(Level.FINE, e.toString(), e);
+        throw e;
+      } finally {
+        if (conn != null)
+          conn.close();
       }
-
-      throw new ConfigException(L.l("{0}: watchdog start failed because of '{1}'",
-                                    this, status.getMessage()));
-    } catch (RemoteConnectionFailedException e) {
-      log.log(Level.FINE, e.toString(), e);
-    } catch (RemoteListenerUnavailableException e) {
-      log.log(Level.FINE, e.toString(), e);
-    } catch (RuntimeException e) {
-      log.log(Level.FINE, e.toString(), e);
-      throw e;
-    } finally {
-      if (conn != null)
-        conn.close();
+      
+      try {
+        Thread.sleep(250);
+      } catch (Exception e) {
+      }
+    } while (CurrentTime.getCurrentTimeActual() <= expireTime);
+    
+    if (! isLaunch) {
+      throw new ConfigException(L.l("Can't contact watchdog at {0}:{1}.",
+                                    getWatchdogAddress(), getWatchdogPort()));
     }
 
     Process process = launchManager(argv);
     
-    long timeout = 15 * 1000L;
-    long expireTime = CurrentTime.getCurrentTimeActual() + timeout;
+    timeout = 15 * 1000L;
+    expireTime = CurrentTime.getCurrentTimeActual() + timeout;
     
     while (CurrentTime.getCurrentTimeActual() <= expireTime) {
       if (pingWatchdog()) {
@@ -309,7 +334,7 @@ class WatchdogClient
       }
       
       try {
-        Thread.sleep(10);
+        Thread.sleep(250);
       } catch (Exception e) {
       }
     }
@@ -335,14 +360,14 @@ class WatchdogClient
     return false;
   }
 
-  public void stopWatchdog(String serverId)
+  public void stopWatchdog(String serverId, String []argv)
   {
     ActorSender conn = getConnection();
 
     try {
       WatchdogProxy watchdogProxy = getWatchdogProxy(conn);
       
-      ResultStatus status = watchdogProxy.stop(serverId);
+      ResultStatus status = watchdogProxy.stop(serverId, argv);
 
       if (! status.isSuccess())
         throw new RuntimeException(L.l("{0}: watchdog '{1}' stop failed because of '{2}'",
@@ -433,9 +458,20 @@ class WatchdogClient
     
     BamActorRef toRef = bamManager.createActorRef(to);
 
-    return bamManager.createProxy(WatchdogProxy.class, 
-                                  toRef,
-                                  conn);
+    WatchdogProxy proxy = bamManager.createProxy(WatchdogProxy.class, 
+                                                 toRef,
+                                                 conn);
+    
+    String cliResinHome = _bootManager.getResinHome().getFullPath();
+    String watchdogResinHome = proxy.getResinHome();
+    
+    if (watchdogResinHome == null || ! watchdogResinHome.equals(cliResinHome)) {
+      throw new ConfigException(L.l("Unexpected resin.home mismatch:\n  CLI resin.home: {0}\n  watchdog resin.home: {1}",
+                                    cliResinHome,
+                                    watchdogResinHome));
+    }
+    
+    return proxy;
   }
   
   private ActorSender getConnection()
@@ -470,7 +506,7 @@ class WatchdogClient
     return _conn;
   }
 
-  public Process launchManager(String []argv)
+  private Process launchManager(String []argv)
     throws IOException
   {
     System.out.println(L.l("Resin/{0} launching watchdog at {1}:{2}",
@@ -527,7 +563,6 @@ class WatchdogClient
     // #3759 - user args are first so they're displayed by ps
 
     list.addAll(_config.getWatchdogJvmArgs());
-
     list.add("-Dresin.watchdog=" + _id);
     list.add("-Djava.util.logging.manager=com.caucho.log.LogManagerImpl");
     list.add("-Djavax.management.builder.initial=com.caucho.jmx.MBeanServerBuilderImpl");
@@ -595,15 +630,16 @@ class WatchdogClient
       list.add(getId());
     }
 */
-    //server/6f05
-    if (("".equals(args.getServerId()) || args.getServerId() == null)
-        && ! args.isDynamicServer()) {
+    //server/6f05 vs server/6e09
+    /*
+    if (args.getServerId() == null && ! args.isDynamicServer()) {
       list.add("-server");
-      if ((getId() == null || "".equals(getId())) && CauchoSystem.isWindows())
-        list.add("\"\"");
+      if (getId() == null || "".equals(getId()))
+        list.add("default");
       else
         list.add(getId());
     }
+    */
 
     for (int i = 0; i < argv.length; i++) {
       if (argv[i].equals("-conf")
@@ -618,10 +654,13 @@ class WatchdogClient
         list.add(argv[i]);
     }
 
+    // server/6e07
+    /*
     if (! args.isDynamicServer() && _config.getHomeCluster() != null) {
       list.add("--cluster");
       list.add(_config.getHomeCluster());
     }
+    */
 
     list.add("--log-directory");
     list.add(getLogDirectory().getFullPath());

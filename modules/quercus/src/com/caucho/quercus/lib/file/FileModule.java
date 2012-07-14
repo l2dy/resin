@@ -70,9 +70,11 @@ public class FileModule extends AbstractQuercusModule {
   private static final Logger log
     = Logger.getLogger(FileModule.class.getName());
 
-  public static final String DIRECTORY_SEPARATOR = ""
-      + Path.getFileSeparatorChar();
-  public static final String PATH_SEPARATOR = "" + Path.getPathSeparatorChar();
+  public static final String DIRECTORY_SEPARATOR
+    = String.valueOf(Path.getFileSeparatorChar());
+
+  public static final String PATH_SEPARATOR
+    = String.valueOf(Path.getPathSeparatorChar());
 
   public static final int UPLOAD_ERR_OK = 0;
   public static final int UPLOAD_ERR_INI_SIZE = 1;
@@ -2648,7 +2650,7 @@ public class FileModule extends AbstractQuercusModule {
       return env.getEmptyString();
 
     if (path == null) {
-      if (! (optionsV instanceof DefaultValue)) {
+      if (! (optionsV.isDefault())) {
         return env.getEmptyString();
       }
 
@@ -2670,7 +2672,7 @@ public class FileModule extends AbstractQuercusModule {
       dirname = ".";
     }
 
-    p = path.indexOf('.');
+    p = path.lastIndexOf('.');
 
     String filename = path;
     String ext = "";
@@ -2948,7 +2950,8 @@ public class FileModule extends AbstractQuercusModule {
    *
    * @param fileName the directory
    */
-  public static Value scandir(Env env, StringValue fileName,
+  public static Value scandir(Env env,
+                              StringValue fileName,
                               @Optional("1") int order,
                               @Optional Value context)
   {

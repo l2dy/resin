@@ -29,6 +29,7 @@
 
 package com.caucho.quercus.lib.db;
 
+import com.caucho.quercus.UnimplementedException;
 import com.caucho.quercus.env.BooleanValue;
 import com.caucho.quercus.env.ConnectionEntry;
 import com.caucho.quercus.env.Env;
@@ -48,7 +49,7 @@ import java.util.logging.Logger;
  * Represents a JDBC Connection value.
  */
 public abstract class JdbcConnectionResource
-    implements EnvCleanup
+  implements EnvCleanup
 {
   private static final L10N L = new L10N(JdbcConnectionResource.class);
   private static final Logger log
@@ -90,12 +91,21 @@ public abstract class JdbcConnectionResource
 
   protected SqlParseToken _sqlParseToken = new SqlParseToken();
 
-  // php/144b, php/1464, php/1465
-  protected static final String ENCODING = "ISO8859_1";
-
   protected JdbcConnectionResource(Env env)
   {
     env.addCleanup(this);
+  }
+
+  protected String getDriverName()
+  {
+    return "mysql";
+  }
+
+  protected Value getServerStat(Env env)
+  {
+    env.warning(L.l("driver does not support server stat"));
+
+    return BooleanValue.FALSE;
   }
 
   /**
@@ -171,9 +181,9 @@ public abstract class JdbcConnectionResource
                                           String url,
                                           boolean isNewLink)
   {
-    if (_conn != null)
-      throw new IllegalStateException(
-        getClass().getSimpleName() + " attempt to open multiple connections");
+    if (_conn != null) {
+      throw new IllegalStateException(getClass().getSimpleName() + " attempt to open multiple connections");
+    }
 
     _host = host;
     _userName = userName;
@@ -357,6 +367,11 @@ public abstract class JdbcConnectionResource
   public boolean setClientEncoding(String encoding)
   {
     return true;
+  }
+
+  protected String getClientInfo(Env env)
+  {
+    throw new UnimplementedException();
   }
 
   /**

@@ -196,8 +196,11 @@ public class LongKeyLruCache<V> {
       
       synchronized (lock) {
         CacheItem<V> item = _entries[i];
+        CacheItem<V> nextItem = null;
 
-        for (; item != null; item = item._nextHash) {
+        for (; item != null; item = nextItem) {
+          nextItem = item._nextHash;
+
           removeLruItem(item);
           if (item._value instanceof CacheListener) {
             if (listeners == null)
@@ -602,10 +605,10 @@ public class LongKeyLruCache<V> {
           SyncCacheListener syncListener = null;
 
           // sync must occur before remove because get() is non-locking
-          if (value instanceof SyncCacheListener) {
+          if (isTail && value instanceof SyncCacheListener) {
             syncListener = (SyncCacheListener) value;
             
-            if (isTail && ! syncListener.startLruRemove()) {
+            if (! syncListener.startLruRemove()) {
               item._lruCounter = (_lruCounter - _lruTimeout - 2) & LRU_MASK;
               updateLruImpl(item);
               return null;

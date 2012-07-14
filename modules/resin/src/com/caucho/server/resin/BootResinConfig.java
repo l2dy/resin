@@ -37,6 +37,7 @@ import java.util.logging.Logger;
 import com.caucho.cloud.topology.CloudCluster;
 import com.caucho.cloud.topology.CloudSystem;
 import com.caucho.cloud.topology.TopologyService;
+import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.DependencyBean;
@@ -163,11 +164,25 @@ public class BootResinConfig implements SchemaBean, DependencyBean
       cluster.setId(id);
     
       _clusters.add(cluster);
-
-      for (int i = 0; i < _clusterDefaults.size(); i++)
-        _clusterDefaults.get(i).configure(cluster);
       
-      cluster.init();
+      Thread thread = Thread.currentThread();
+      ClassLoader loader = thread.getContextClassLoader();
+      Object oldCluster = null;
+      
+      try {
+        oldCluster = Config.getProperty("cluster");
+        Config.setProperty("cluster", new ClusterConfigVar(cluster));
+        
+        for (int i = 0; i < _clusterDefaults.size(); i++) {
+          _clusterDefaults.get(i).configure(cluster);
+        }
+      
+        cluster.init();
+      } finally {
+        Config.setProperty("cluster", oldCluster);
+        
+        thread.setContextClassLoader(loader);
+      }
     }
     
     return cluster;
@@ -176,7 +191,10 @@ public class BootResinConfig implements SchemaBean, DependencyBean
   public BootClusterConfig findCluster(String id)
   {
     if (id == null) {
-      return null;
+      if (_clusters.size() == 1)
+        return _clusters.get(0);
+      else
+        return null;
     }
     
     for (BootClusterConfig cluster : _clusters) {
@@ -245,15 +263,23 @@ public class BootResinConfig implements SchemaBean, DependencyBean
   private void initTopology(CloudSystem cloudSystem)
   {
     for (BootClusterConfig bootCluster : _clusters) {
-      CloudCluster cloudCluster;
-      
-      cloudCluster = cloudSystem.findCluster(bootCluster.getId());
-      
-      if (cloudCluster == null)
-        cloudCluster = cloudSystem.createCluster(bootCluster.getId());
-      
-      bootCluster.initTopology(cloudCluster);
+      initTopology(bootCluster);
     }
+  }
+
+  /**
+   * @param bootClusterConfig
+   */
+  public void initTopology(BootClusterConfig bootCluster)
+  {
+    CloudSystem cloudSystem = TopologyService.getCurrentSystem();
+    
+    CloudCluster cloudCluster = cloudSystem.findCluster(bootCluster.getId());
+    
+    if (cloudCluster == null)
+      cloudCluster = cloudSystem.createCluster(bootCluster.getId());
+    
+    bootCluster.initTopology(cloudCluster);
   }
 
   public BootServerConfig findLocalServer()
@@ -280,5 +306,19 @@ public class BootResinConfig implements SchemaBean, DependencyBean
     }
     
     return null;
+  }
+  
+  static class ClusterConfigVar {
+    private BootClusterConfig _cluster;
+
+    public ClusterConfigVar(BootClusterConfig cluster)
+    {
+      _cluster = cluster;
+    }
+    
+    public String getId()
+    {
+      return _cluster.getId();
+    }
   }
 }

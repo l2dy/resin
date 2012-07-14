@@ -85,7 +85,7 @@ public class BootClusterConfig {
     _isDynamicServerEnable = isEnabled;
   }
   
-  public boolean isDynamicServerEnable()
+  public boolean isClusterServerEnable()
   {
     return _isDynamicServerEnable;
   }
@@ -103,13 +103,13 @@ public class BootClusterConfig {
     _resin.setManagement(management);
   }
 
-  public WatchdogConfig createServer()
+  public WatchdogConfigHandle createServer()
   {
-    WatchdogConfig config
-      = new WatchdogConfig(this, _resin.getArgs(), 
-                           _resin.getRootDirectory(),
-                           _serverList.size());
-
+    WatchdogConfigHandle config
+      = new WatchdogConfigHandle(this, _resin.getArgs(), 
+                                 _resin.getRootDirectory(),
+                                 _serverList.size());
+    
     for (int i = 0; i < _serverDefaultList.size(); i++) {
       _serverDefaultList.get(i).configure(config);
     }
@@ -117,20 +117,42 @@ public class BootClusterConfig {
     return config;
   }
 
-  public void addServer(WatchdogConfig config)
+  public WatchdogConfig addServer(WatchdogConfigHandle configHandle)
     throws ConfigException
   {
+    WatchdogConfig config = configHandle.configure();
+    
+    addServerImpl(config);
+    
+    return config;
+  }
+    
+  public void addServerImpl(WatchdogConfig config)
+  {
+    // server/6e09
+    /*
     if (_resin.isWatchdogManagerConfig())
       return;
-      
+      */
+    
     if (_resin.findClient(config.getId()) != null) {
       throw new ConfigException(L.l("<server id='{0}'> is a duplicate server.  servers must have unique ids.",
                                     config.getId()));
     }
+    
+    WatchdogClient client;
+    
+    if ((client = _resin.findClientByAddress(config.getAddress(), config.getPort())) != null) {
+      throw new ConfigException(L.l("<server id='{0}'> has a duplicate address {1}:{2} to server '{3}'.\nServers must have unique addresses.",
+                                    config.getId(),
+                                    config.getAddress(),
+                                    config.getPort(),
+                                    client.getId()));
+    }
       
     _resin.addServer(config);
     
-    WatchdogClient client = new WatchdogClient(_system, _resin, config);
+    client = new WatchdogClient(_system, _resin, config);
     _resin.addClient(client);
     
     _serverList.add(client);
@@ -141,9 +163,9 @@ public class BootClusterConfig {
     int index = 0;
 
     for (String address : multiServer.getAddressList()) {
-      WatchdogConfig server = createServer();
+      WatchdogConfigHandle serverHandle = createServer();
       
-      server.setId(multiServer.getIdPrefix() + index++);
+      serverHandle.setId(multiServer.getIdPrefix() + index++);
       
       boolean isExternal = false;
       
@@ -162,8 +184,8 @@ public class BootClusterConfig {
       
       boolean isAllowNonReservedIp = multiServer.isAllowNonReservedIp();
       
-      server.setAddress(address);
-      server.setPort(port);
+      serverHandle.setAddress(address);
+      serverHandle.setPort(port);
       // server.setExternalAddress(isExternal);
       
       /*
@@ -172,9 +194,16 @@ public class BootClusterConfig {
       }
       */
       
-      multiServer.getServerProgram().configure(server);
+      multiServer.getServerProgram().configure(serverHandle);
       
-      addServer(server);
+      WatchdogConfig server = addServer(serverHandle);
+
+      // server.setExternalAddress(isExternal);
+      /*
+      if (isAllowNonReservedIp) {
+        server.setAllowNonReservedIp(true);
+      }
+      */
     }
   }
   

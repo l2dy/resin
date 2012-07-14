@@ -558,7 +558,7 @@ public class WebAppController
     factory.type(ServletContext.class);
     // factory.stereotype(CauchoDeploymentLiteral.create());
 
-    beanManager.addBean(factory.singleton(webApp));
+    beanManager.addBeanDiscover(factory.singleton(webApp));
 
     Config.setProperty("webApp", getVar());
     Config.setProperty("app", getVar());
@@ -608,8 +608,11 @@ public class WebAppController
     if (! super.destroy())
       return false;
 
+    // server/1h03
+    /*
     if (_container != null)
       _container.removeWebApp(this);
+      */
 
     return true;
   }

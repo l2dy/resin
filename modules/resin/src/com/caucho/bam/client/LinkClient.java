@@ -35,6 +35,7 @@ import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.SimpleActorSender;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.PassthroughBroker;
+import com.caucho.bam.mailbox.ActorMailbox;
 import com.caucho.bam.mailbox.Mailbox;
 import com.caucho.bam.mailbox.MultiworkerMailbox;
 import com.caucho.bam.stream.MessageStream;
@@ -106,7 +107,12 @@ public class LinkClient {
   
   public void close()
   {
+    Broker outboundBroker = _outboundBroker;
+    _outboundBroker = null;
     
+    if (outboundBroker != null) {
+      outboundBroker.close();
+    }
   }
   
   protected Mailbox createInboundMailbox(MessageStream inboundStream,
@@ -118,7 +124,7 @@ public class LinkClient {
   protected Mailbox createOutboundMailbox(MessageStream outboundStream,
                                           Broker inboundBroker)
   {
-    return new MultiworkerMailbox(outboundStream, inboundBroker, 1);
+    return new ActorMailbox(outboundStream, inboundBroker);
   }
 
   @Override

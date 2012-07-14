@@ -227,7 +227,7 @@ public class ExtensionManager
         .createBeanFactory(ext.getClass());
     // TODO Is singleton equivalent to ApplicationScoped? That is what the
     // extension is supposed to be as per CDI specification.
-    _cdiManager.addBean(beanBuilder.singleton(ext));
+    _cdiManager.addBeanDiscover(beanBuilder.singleton(ext));
     
     ExtensionItem item = introspect(ext.getClass());
 
@@ -304,6 +304,9 @@ public class ExtensionManager
   public <T> Bean<T> processBean(Bean<T> bean, Annotated ann)
   {
     InjectManager cdi = _cdiManager;
+
+    if (ann == null)
+      ann = cdi.createAnnotatedType(bean.getBeanClass());
     
     ProcessBeanImpl<T> event = new ProcessBeanImpl<T>(_cdiManager, bean, ann);
     

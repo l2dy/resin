@@ -100,6 +100,7 @@ public final class ClusterServer {
   private boolean _isBackup;
   
   private long _clusterIdleTime = 3 * 60000L;
+  private long _clusterSocketTimeout = 10 * 60000L;
   
   private ConfigProgram _portDefaults = new ContainerProgram();
 
@@ -161,7 +162,7 @@ public final class ClusterServer {
 
     _serverDomainId = _serverClusterId + "." + clusterId.replace('.', '_');
 
-    _bamAddress = _serverDomainId + ".admin.resin";
+    _bamAddress = getBamAdminName(cloudServer);
     
     if (! isExternal()) {
       _address = cloudServer.getAddress();
@@ -172,6 +173,30 @@ public final class ClusterServer {
     else {
       _address = "127.0.0.2";
     }
+  }
+  
+  public static CloudServer getSelfServer()
+  {
+    NetworkClusterSystem system = NetworkClusterSystem.getCurrent();
+    
+    if (system == null)
+      throw new IllegalStateException();
+    
+    return system.getSelfServer();
+  }
+  
+  public static String getBamAdminName(CloudServer server)
+  {
+    String serverClusterId = getServerAddress(server.getIndex(), 
+                                              server.getPod().getIndex());
+
+    String clusterId = server.getCluster().getId();
+    if (clusterId.equals(""))
+      clusterId = "default";
+
+    String serverDomainId = serverClusterId + "." + clusterId.replace('.', '_');
+
+    return serverDomainId + ".admin.resin";
   }
   
   public static ClusterServer getCurrent()
@@ -400,6 +425,20 @@ public final class ClusterServer {
   public long getClusterIdleTime()
   {
     return _clusterIdleTime;
+  }
+  
+  @Configurable
+  public void setClusterSocketTimeout(Period period)
+  {
+    _clusterSocketTimeout = period.getPeriod();
+  }
+
+  /**
+   * The cluster socket-timeout
+   */
+  public long getClusterSocketTimeout()
+  {
+    return _clusterSocketTimeout;
   }
 
   

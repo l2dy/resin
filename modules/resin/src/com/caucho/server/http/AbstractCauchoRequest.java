@@ -225,7 +225,8 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       throw new ServletException("multipart-form is disabled; check <multipart-form> configuration tag.");
       */
 
-    if (! getContentType().startsWith("multipart/form-data"))
+    String contentType = getContentType();
+    if (contentType == null || ! getContentType().startsWith("multipart/form-data"))
       throw new ServletException("Content-Type must be of 'multipart/form-data'.");
 
     if (_filledForm == null)
@@ -252,7 +253,13 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   public Part getPart(String name)
     throws IOException, ServletException
   {
-    for (Part part : getParts()) {
+    Collection<Part> parts = getParts();
+    
+    if (parts == null) {
+      return null;
+    }
+
+    for (Part part : parts) {
       if (name.equals(part.getName()))
         return part;
     }
@@ -748,7 +755,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   /**
    * Returns the next request in a chain.
    */
-  protected HttpServletRequest getRequest()
+  public HttpServletRequest getRequest()
   {
     return null;
   }

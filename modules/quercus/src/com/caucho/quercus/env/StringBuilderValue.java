@@ -1696,9 +1696,7 @@ public class StringBuilderValue
     out.print("\"");
   }
 
-  /**
-   * Returns an OutputStream.
-   */
+  @Override
   public OutputStream getOutputStream()
   {
     return new BuilderOutputStream();
@@ -1878,6 +1876,9 @@ public class StringBuilderValue
       }
 
       return true;
+    }
+    else if (rValue.isObject()) {
+      return super.eq(rValue);
     }
     else {
       String rString = rValue.toString();

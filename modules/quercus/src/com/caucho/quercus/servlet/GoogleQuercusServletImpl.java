@@ -51,16 +51,8 @@ public class GoogleQuercusServletImpl extends QuercusServletImpl
   private static final Logger log
     = Logger.getLogger(GoogleQuercusServletImpl.class.getName());
 
-  @Override
-  protected void handleThrowable(HttpServletResponse response, Throwable e)
-    throws IOException, ServletException
+  public GoogleQuercusServletImpl()
   {
-    log.log(Level.WARNING, e.toString(), e);
-
-    OutputStream os = response.getOutputStream();
-    WriteStream out = Vfs.openWrite(os);
-    out.println(e);
-    out.close();
   }
 
   /**
@@ -74,6 +66,18 @@ public class GoogleQuercusServletImpl extends QuercusServletImpl
     }
 
     return _quercus;
+  }
+
+  @Override
+  protected void handleThrowable(HttpServletResponse response, Throwable e)
+    throws IOException, ServletException
+  {
+    log.log(Level.WARNING, e.toString(), e);
+
+    OutputStream os = response.getOutputStream();
+    WriteStream out = Vfs.openWrite(os);
+    out.println(e);
+    out.close();
   }
 }
 

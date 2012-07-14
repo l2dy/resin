@@ -35,6 +35,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.caucho.Version;
 import com.caucho.config.ConfigException;
 import com.caucho.util.L10N;
 
@@ -56,6 +57,7 @@ public abstract class AbstractBootCommand implements BootCommand {
     addValueOption("log-directory", "dir", "alternate log directory");
     addValueOption("license-directory", "dir", "alternate license directory");
     
+    addFlagOption("elastic", "use an elastic server in the cluster");
     addFlagOption("verbose", "produce verbose output");
   }
 
@@ -108,21 +110,30 @@ public abstract class AbstractBootCommand implements BootCommand {
   @Override
   public int doCommand(ResinBoot boot, WatchdogArgs args)
   {
+    WatchdogClient client = findClient(boot, args);
+    
+    return doCommand(args, client);
+  }
+  
+  protected WatchdogClient findClient(ResinBoot boot, WatchdogArgs args)
+  {
     WatchdogClient client = boot.findClient(args.getServerId(), args);
     
-    if (client == null) {
-      client = findLocalClient(boot, args);
+    if (client != null) {
+      return client;
     }
     
+    client = findLocalClient(boot, args);
+    
     if (client == null) {
-      client = findShutdownClient(boot, args);
+      client = findWatchdogClient(boot, args);
     }
     
     if (client == null) {
       throw new ConfigException(L.l("No <server> can be found listening to a local IP address"));
     }
     
-    return doCommand(args, client);
+    return client;
   }
   
   protected WatchdogClient findLocalClient(ResinBoot boot, WatchdogArgs args)
@@ -142,9 +153,39 @@ public abstract class AbstractBootCommand implements BootCommand {
     return null;
   }
   
-  protected WatchdogClient findShutdownClient(ResinBoot boot, WatchdogArgs args)
+  protected WatchdogClient findUniqueLocalClient(ResinBoot boot, WatchdogArgs args)
   {
-    return boot.findShutdownClient(args);
+    ArrayList<WatchdogClient> clients = boot.findLocalClients();
+    
+    if (clients == null) {
+      return null;
+    }
+    
+    WatchdogClient foundClient = null;
+    
+    for (WatchdogClient client : clients) {
+      if (client.getConfig().isRequireExplicitId()) {
+        continue;
+      }
+        
+      if (foundClient == null) {
+        foundClient = client;
+      }
+      else {
+        throw new ConfigException(L.l("Resin/{0}: server '{1}' does not match a unique <server> or <server-multi>\nwith a unique local IP in {2}.\n  server ids: {3}",
+                                      Version.VERSION,
+                                      "",
+                                      args.getResinConf().getNativePath(),
+                                      boot.findLocalClientIds()));
+      }
+    }
+    
+    return foundClient;
+  }
+  
+  protected WatchdogClient findWatchdogClient(ResinBoot boot, WatchdogArgs args)
+  {
+    return boot.findWatchdogClient(args);
   }
   
   protected int doCommand(WatchdogArgs args, WatchdogClient client)
@@ -318,6 +359,12 @@ public abstract class AbstractBootCommand implements BootCommand {
   
   @Override
   public boolean isStart()
+  {
+    return false;
+  }
+  
+  @Override
+  public boolean isStartAll()
   {
     return false;
   }

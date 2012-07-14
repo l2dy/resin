@@ -57,6 +57,12 @@ public class StartAllCommand extends AbstractStartCommand
   {
     return true;
   }
+  
+  @Override
+  public boolean isStartAll()
+  {
+    return true;
+  }
 
   @Override
   public int doCommand(ResinBoot boot, WatchdogArgs args)
@@ -69,15 +75,15 @@ public class StartAllCommand extends AbstractStartCommand
                                VersionFactory.getVersion()));
     }
 
-    boolean isFirst = true;
+    int watchdogPort = -2;
     for (WatchdogClient client : clientList) {
       try {
-        if (! isFirst)
-          Thread.sleep(2000);
+        int clientWatchdogPort = client.getWatchdogPort();
         
-        client.startWatchdog(args.getArgv());
+        boolean isLaunch = (watchdogPort != clientWatchdogPort);
+        client.startWatchdog(args.getArgv(), isLaunch);
         
-        isFirst = false;
+        watchdogPort = clientWatchdogPort;
 
         System.out.println(L().l("Resin/{0} started -server '{1}' for watchdog at {2}:{3}",
                                  VersionFactory.getVersion(),
@@ -129,26 +135,4 @@ public class StartAllCommand extends AbstractStartCommand
 
     return _L;
   }
-
-  /*
-  @Override
-  public void usage()
-  {
-    System.out.println("usage: bin/resin.sh [-options] start-all");
-    System.out.println();
-    System.out.println("where options include:");
-    System.out.println("   -conf <file>          : select a configuration file");
-    System.out.println("   -data-directory <dir> : select a resin-data directory");
-    System.out.println("   -join-cluster <cluster>       : join a cluster as a dynamic server");
-    System.out.println("   -log-directory <dir>  : select a logging directory");
-    System.out.println("   -resin-home <dir>     : select a resin home directory");
-    System.out.println("   -root-directory <dir> : select a root directory");
-    System.out.println("   -server <id>          : select a <server> to run");
-    System.out.println("   -watchdog-port <port> : override the watchdog-port");
-    System.out.println("   -verbose              : print verbose starting information");
-    System.out.println("   -preview              : run as a preview server");
-    System.out.println("   -debug-port <port>    : configure a debug port");
-    System.out.println("   -jmx-port <port>      : configure an unauthenticated jmx port");  
-  }
-  */
 }

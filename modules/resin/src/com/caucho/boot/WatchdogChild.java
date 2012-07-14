@@ -81,7 +81,7 @@ class WatchdogChild
     _id = id;
     
     _system = system;
-    _config = new WatchdogConfig(cluster, args, rootDirectory, index);
+    _config = new WatchdogConfig(id, cluster, args, rootDirectory, index);
 
     _admin = new WatchdogAdmin();
   }
@@ -236,7 +236,7 @@ class WatchdogChild
     return _config.getWatchdogAddress();
   }
 
-  Iterable<TcpPort> getPorts()
+  Iterable<OpenPort> getPorts()
   {
     return _config.getPorts();
   }
@@ -274,9 +274,9 @@ class WatchdogChild
       return null;
   }
   
-  boolean isDynamicServer()
+  boolean isElasticServer()
   {
-    return _config.isDynamic();
+    return _config.isElastic();
   }
 
   boolean hasXmx()

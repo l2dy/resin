@@ -268,9 +268,12 @@ public class SessionModule extends AbstractQuercusModule
     String sessionId = env.generateSessionId();
 
     if (deleteOld) {
+      SessionArrayValue session = env.getSession();
+
       session_destroy(env);
 
-      SessionArrayValue session = env.createSession(sessionId, true);
+      // php/1k6z
+      env.setSession(session);
     }
     else {
       SessionArrayValue session = env.getSession();
@@ -505,23 +508,21 @@ public class SessionModule extends AbstractQuercusModule
 
       if ("nocache".equals(cacheLimiter)) {
         response.setHeader("Expires", "Thu, 19 Nov 1981 08:52:00 GMT");
-        response.setHeader(
-            "Cache-Control",
-            "no-store, no-cache, must-revalidate, post-check=0, pre-check=0");
+        response.setHeader("Cache-Control",
+                           "no-store, no-cache, must-revalidate, post-check=0, pre-check=0");
         response.setHeader("Pragma", "no-cache");
       }
       else if ("private".equals(cacheLimiter)) {
         response.setHeader("Cache-Control", "private, max-age="
-            + cacheExpire + ", pre-check=" + cacheExpire);
+                           + cacheExpire + ", pre-check=" + cacheExpire);
       }
       else if ("private_no_expire".equals(cacheLimiter)) {
         response.setHeader("Cache-Control", "private, max-age="
-            + cacheExpire + ", pre-check=" + cacheExpire);
+                           + cacheExpire + ", pre-check=" + cacheExpire);
       }
       else if ("public".equals(cacheLimiter)) {
-        response.setHeader(
-            "Cache-Control", "public, max-age=" + cacheExpire
-                + ", pre-check=" + cacheExpire);
+        response.setHeader("Cache-Control", "public, max-age=" + cacheExpire
+                           + ", pre-check=" + cacheExpire);
       }
       else if ("none".equals(cacheLimiter)) {
       }
