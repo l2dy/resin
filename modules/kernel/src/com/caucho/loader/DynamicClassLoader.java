@@ -46,6 +46,7 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.logging.Level;
@@ -63,6 +64,7 @@ import com.caucho.management.server.DynamicClassLoaderMXBean;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.ByteBuffer;
 import com.caucho.util.Crc64;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.util.TimedCache;
 import com.caucho.vfs.Dependency;
@@ -112,7 +114,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private TimedCache<String,URL> _resourceCache;
 
   // Dependencies
-  private DependencyContainer _dependencies = new DependencyContainer();
+  private DependencyContainer _dependencies = new DependencyContainer(this);
   private boolean _isEnableDependencyCheck = false;
 
   // Makes
@@ -161,6 +163,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private ZombieClassLoaderMarker _zombieMarker;
 
   private boolean _hasNewLoader = true;
+  private final AtomicBoolean _isScanning = new AtomicBoolean();
 
   /**
    * Create a new class loader.
@@ -190,6 +193,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     _isEnableDependencyCheck = enableDependencyCheck;
 
     _dependencies.setCheckInterval(_globalDependencyCheckInterval);
+    if (! CurrentTime.isTest()) {
+      _dependencies.setAsync(true);
+    }
 
     for (; parent != null; parent = parent.getParent()) {
       if (parent instanceof RootDynamicClassLoader) {
@@ -250,6 +256,11 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   public static boolean isJarCacheEnabledDefault()
   {
     return _isJarCacheEnabled;
+  }
+  
+  public boolean isRoot()
+  {
+    return false;
   }
 
   /**
@@ -869,18 +880,37 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     return listeners;
   }
 
+  public final void updateScan()
+  {
+    ClassLoader parent = getParent();
+    
+    if (parent instanceof DynamicClassLoader) {
+      DynamicClassLoader dynLoader = (DynamicClassLoader) parent;
+      
+      dynLoader.updateScan();
+    }
+    
+    sendAddLoaderEvent();
+  }
+  
   /**
    * Adds a listener to detect class loader changes.
    */
   protected final void sendAddLoaderEvent()
   {
-    if (_hasNewLoader) {
-      _hasNewLoader = false;
+    if (_hasNewLoader && _isScanning.compareAndSet(false, true)) {
+      try {
+        while (_hasNewLoader) {
+          _hasNewLoader = false;
 
-      scan();
+          scan();
 
-      configureEnhancerEvent();
-      configurePostEnhancerEvent();
+          configureEnhancerEvent();
+          configurePostEnhancerEvent();
+        }
+      } finally {
+        _isScanning.set(false);
+      }
     }
   }
 
@@ -977,8 +1007,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void addTransformer(ClassFileTransformer transformer)
   {
-    if (_classFileTransformerList == null)
+    if (_classFileTransformerList == null) {
       _classFileTransformerList = new ArrayList<ClassFileTransformer>();
+    }
 
     _classFileTransformerList.add(transformer);
   }
@@ -1334,8 +1365,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   public static boolean isModified(ClassLoader loader)
   {
     for (; loader != null; loader = loader.getParent()) {
-      if (loader instanceof DynamicClassLoader)
+      if (loader instanceof DynamicClassLoader) {
         return ((DynamicClassLoader) loader).isModified();
+      }
     }
 
     return false;
@@ -1430,7 +1462,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     _hasNewLoader = true;
   }
   
-  public void scan()
+  protected void scan()
   {
   }
 
@@ -1513,8 +1545,9 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (_lifecycle.isBeforeInit())
       init();
 
+    // ioc/0h41 vs ioc/0043 - can't scan during class loading
     // Force scanning if any loaders have been added
-    sendAddLoaderEvent();
+    // sendAddLoaderEvent();
 
     if (normalJdkOrder) {
       try {
@@ -1551,7 +1584,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
           cl = findSystemClass(name);
       }
     }
-
+    
     if (resolve && cl != null)
       resolveClass(cl);
 
@@ -2209,8 +2242,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void stop()
   {
-    if (_zombieMarker == null)
-      _zombieMarker = new ZombieClassLoaderMarker();
   }
 
   /**
@@ -2218,6 +2249,10 @@ public class DynamicClassLoader extends java.net.URLClassLoader
    */
   public void destroy()
   {
+    if (_zombieMarker == null) {
+      _zombieMarker = new ZombieClassLoaderMarker();
+    }
+    
     try {
       stop();
     } catch (Throwable e) {

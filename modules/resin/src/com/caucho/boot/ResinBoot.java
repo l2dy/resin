@@ -196,15 +196,7 @@ public class ResinBoot
   
   private void initClient()
   {
-    if (! (_args.isElasticServer() || _resinConfig.isHomeCluster()))
-      return;
-    
-    if (_args.isElasticServer()) {
-    }
-    else if (getServerId() != null) {
-      return;
-    }
-    else if (! findLocalClients().isEmpty()) {
+    if (! _resinConfig.isElasticServer(_args)) {
       return;
     }
 
@@ -213,6 +205,16 @@ public class ResinBoot
     if (client != null) {
       _args.setElasticServerId(client.getId());
     }
+  }
+  
+  boolean isElasticServer(WatchdogArgs args)
+  {
+    return _resinConfig.isElasticServer(args);
+  }
+  
+  public boolean isElasticIp(WatchdogArgs args)
+  {
+    return _resinConfig.isElasticDns(args);
   }
 
   WatchdogClient findClient(String serverId, WatchdogArgs args)
@@ -349,7 +351,11 @@ public class ResinBoot
 
       System.exit(ExitCode.BAD_CONFIG.ordinal());
     } catch (Exception e) {
-      e.printStackTrace();
+      System.err.println(e.getMessage());
+      
+      if (log.isLoggable(Level.FINE)) {
+        e.printStackTrace();
+      }
 
       System.exit(ExitCode.UNKNOWN.ordinal());
     }

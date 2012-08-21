@@ -292,22 +292,28 @@ public class SessionManagerAdmin extends AbstractManagedObject
   /**
    * Returns a debug string for the session
    */
-  public String getSessionSerializationDebug(String id)
+  public String sessionSerializationDebug(String id)
   {
     return _manager.getSessionSerializationDebug(id);
   }
 
   @Override
-  public String getSessionAsJsonString(String id)
+  public String sessionAsJsonString(String id)
   {
     return _manager.getSessionAsJsonString(id);
   }
 
   @Override
-  public String getSessionsAsJsonString()
+  public String []sessionIdList()
+  {
+    return _manager.sessionIdList();
+  }
+  
+  @Override
+  public String sessionsAsJsonString()
   {
     return _manager.getSessionsAsJsonString();
-  }
+  }  
 
   @Override
   public long getEstimatedMemorySize()
@@ -316,7 +322,7 @@ public class SessionManagerAdmin extends AbstractManagedObject
   }
   
   @Override
-  public int getStickySessionServer(String sessionId, int count)
+  public int stickySessionServer(String sessionId, int count)
   {
     int hash = SessionManager.getServerCode(sessionId, count);
     

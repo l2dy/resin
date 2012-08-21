@@ -57,6 +57,8 @@ public class AnnotatedElementImpl implements Annotated, BaseTypeAnnotated
 
   private AnnotationSet _annSet;
   
+  private AnnotationSet _analysisAnnSet;
+  
   private Annotated _sourceAnnotated;
 
   public AnnotatedElementImpl(BaseType type,
@@ -225,28 +227,32 @@ public class AnnotatedElementImpl implements Annotated, BaseTypeAnnotated
 
   public void addAnnotations(Collection<Annotation> annSet)
   {
-    for (Annotation ann : annSet)
+    for (Annotation ann : annSet) {
       addAnnotation(ann);
+    }
   }
 
   public void addAnnotations(Annotation []annSet)
   {
-    for (Annotation ann : annSet)
+    for (Annotation ann : annSet) {
       addAnnotation(ann);
+    }
   }
   
   public void addAnnotation(Annotation newAnn)
   {
-    if (_annSet == null)
+    if (_annSet == null) {
       _annSet = new AnnotationSet();
+    }
     
     _annSet.replace(newAnn);
   }
   
   public void addAnnotationIfAbsent(Annotation newAnn)
   {
-    if (! isAnnotationPresent(newAnn.annotationType()))
+    if (! isAnnotationPresent(newAnn.annotationType())) {
       addAnnotation(newAnn);
+    }
   }
 
   public void removeAnnotation(Annotation ann)
@@ -274,6 +280,34 @@ public class AnnotatedElementImpl implements Annotated, BaseTypeAnnotated
       
       baseAnn.addOverrideAnnotation(ann);
     }
+  }
+  
+  @Override
+  public void addAnalysisAnnotation(Annotation ann)
+  {
+    if (_analysisAnnSet == null)
+      _analysisAnnSet = new AnnotationSet();
+    
+    _analysisAnnSet.add(ann);
+
+    // ioc/10a0 - @NoAspect - cache that base class has no aspect
+    if (_sourceAnnotated instanceof BaseTypeAnnotated) {
+      BaseTypeAnnotated baseAnn = (BaseTypeAnnotated) _sourceAnnotated;
+      
+      baseAnn.addAnalysisAnnotation(ann);
+    }
+  }
+  
+  public <T extends Annotation> T getAnalysisAnnotation(Class<T> annType)
+  {
+    if (_analysisAnnSet != null) {
+      T ann = (T) _analysisAnnSet.getAnnotation(annType);
+      
+      if (ann != null)
+        return ann;
+    }
+    
+    return getAnnotation(annType);
   }
 
   /**

@@ -46,8 +46,7 @@ public class CallbackObjectMethod extends Callback {
   private final StringValue _methodName;
   private final int _hash;
 
-  public CallbackObjectMethod(Value obj,
-                              StringValue methodName)
+  public CallbackObjectMethod(Value obj, StringValue methodName)
   {
     // XXX: obj and fun should not be mixed
 
@@ -174,5 +173,12 @@ public class CallbackObjectMethod extends Callback {
                     _obj.getClassName(), _methodName));
 
     return NullValue.NULL;
+  }
+
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _obj.getClassName()
+                                      + "::" + _methodName + "]";
   }
 }

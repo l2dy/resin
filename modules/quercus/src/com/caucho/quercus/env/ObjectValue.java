@@ -492,14 +492,17 @@ abstract public class ObjectValue extends Value {
   @Override
   public boolean eq(Value rValue)
   {
-    rValue = rValue.toValue();
+    if (rValue.isObject()) {
+      rValue = rValue.toValue();
 
-    if (rValue.isObject())
       return cmpObject((ObjectValue) rValue) == 0;
+    }
+    else if (rValue.isArray()) {
+      return false;
+    }
     else {
-      Env env = Env.getInstance();
-
-      return toString(env).equals(rValue.toString(env));
+      // php/03q0
+      return rValue.eq(this.toStringValue());
     }
   }
 

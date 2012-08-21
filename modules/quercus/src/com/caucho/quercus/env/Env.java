@@ -509,7 +509,8 @@ public class Env
 
     // Define the constant string PHP_VERSION
 
-    addConstant("PHP_VERSION", OptionsModule.phpversion(this, null), true);
+    String version = quercus.getPhpVersion();
+    addConstant("PHP_VERSION", createString(version), true);
 
     // STDIN, STDOUT, STDERR
     // php://stdin, php://stdout, php://stderr
@@ -527,7 +528,7 @@ public class Env
 
   public static Env getCurrent()
   {
-    return  _threadEnv.get();
+    return _threadEnv.get();
   }
 
   public static Env getInstance()
@@ -548,6 +549,7 @@ public class Env
                            true,
                            getHttpInputEncoding(),
                            isMagicQuotes,
+                           true,
                            _querySeparatorMap);
 
     /*
@@ -607,7 +609,8 @@ public class Env
                         array,
                         cookie.getName(),
                         new String[] { decodedValue },
-                        isMagicQuotes);
+                        isMagicQuotes,
+                        true);
     }
   }
 
@@ -778,8 +781,7 @@ public class Env
     if (! _isUnicodeSemantics)
       return null;
 
-    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING
-      .getAsString(this);
+    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING.getAsString(this);
 
     if (encoding == null)
       encoding = QuercusContext.INI_UNICODE_FALLBACK_ENCODING.getAsString(this);
@@ -5108,11 +5110,11 @@ public class Env
     int id = _quercus.getClassId(name);
 
     if (useAutoload) {
-      StringValue nameString = createString(name);
-
       if (! _autoloadClasses.contains(name)) {
         try {
           _autoloadClasses.add(name);
+
+          StringValue nameString = createString(name);
 
           int size = _autoloadList != null ? _autoloadList.size() : 0;
 
@@ -5328,7 +5330,7 @@ public class Env
   /*
    * Registers an SPL autoload function.
    */
-  public void addAutoloadFunction(Callable fun)
+  public void addAutoloadFunction(Callable fun, boolean isPrepend)
   {
     if (fun == null)
       throw new NullPointerException();
@@ -5336,7 +5338,12 @@ public class Env
     if (_autoloadList == null)
       _autoloadList = new ArrayList<Callable>();
 
-    _autoloadList.add(fun);
+    if (isPrepend) {
+      _autoloadList.add(0, fun);
+    }
+    else {
+      _autoloadList.add(fun);
+    }
   }
 
   /*

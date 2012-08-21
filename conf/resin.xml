@@ -73,9 +73,9 @@
 
   <!-- For resin.properties dynamic cluster joining -->
   <home-cluster>${home_cluster}</home-cluster>
-  <!-- <home-server>${home_server}</home-server> -->
-
-
+  <home-server>${home_server}</home-server>
+  <elastic-server>${elastic_server}</elastic-server>
+  <elastic-dns>${elastic_dns}</elastic-dns>
 
   <!--
      - Configures the main application cluster.  Load-balancing configurations
@@ -93,7 +93,11 @@
     </host-default>
 
     <!-- auto virtual host deployment in hosts/foo.example.com/webapps -->
-    <host-deploy path="hosts"/>
+    <host-deploy path="hosts">
+      <host-default>
+        <resin:import path="host.xml" optional="true"/>
+      </host-default>
+    </host-deploy>
 
     <!-- the default host, matching any host name -->
     <host id="" root-directory=".">

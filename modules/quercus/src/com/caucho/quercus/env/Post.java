@@ -168,7 +168,7 @@ public class Post
 
         if (contentType != null
             && contentType.startsWith("application/x-www-form-urlencoded"))
-          StringUtility.parseStr(env, bb, postArray, true, encoding);
+          StringUtility.parseStr(env, bb, postArray, true, encoding, true);
       }
 
     }
@@ -222,7 +222,7 @@ public class Post
         value.appendReadAll(is, Integer.MAX_VALUE);
 
         if (name != null) {
-          addFormValue(env, postArray, name, value, null, addSlashesToValues);
+          addFormValue(env, postArray, name, value, null, addSlashesToValues, true);
         }
         else {
           env.warning(L.l("file upload is missing name and filename"));
@@ -312,7 +312,7 @@ public class Post
       = env.getIniBytes("upload_max_filesize", 2 * 1024 * 1024);
 
     // php/085j
-    fileName = fileName.replaceAll("\u0000", "");
+    fileName = fileName.replace("\u0000", "");
 
     if (fileName.length() == 0)
       // php/0864
@@ -325,7 +325,7 @@ public class Post
       error = FileModule.UPLOAD_ERR_OK;
 
     addFormValue(env, entry, "name", env.createString(fileName),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     long size;
 
@@ -340,21 +340,21 @@ public class Post
 
     if (mimeType != null) {
       addFormValue(env, entry, "type", env.createString(mimeType),
-                   null, addSlashesToValues);
+                   null, addSlashesToValues, true);
 
       entry.put("type", mimeType);
     }
 
     addFormValue(env, entry, "tmp_name", env.createString(tmpName),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     addFormValue(env, entry, "error", LongValue.create(error),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     addFormValue(env, entry, "size", LongValue.create(size),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
-    addFormValue(env, files, null, entry, null, addSlashesToValues);
+    addFormValue(env, files, null, entry, null, addSlashesToValues, true);
   }
 
   private static void addFormFile(Env env,
@@ -374,6 +374,9 @@ public class Post
       name = name.substring(0, p);
     }
 
+    // php/085j
+    name = name.replace("\u0000", "");
+
     StringValue nameValue = env.createString(name);
     Value v = files.get(nameValue).toValue();
     ArrayValue entry = null;
@@ -392,7 +395,7 @@ public class Post
       = env.getIniBytes("upload_max_filesize", 2 * 1024 * 1024);
 
     // php/085j
-    fileName = fileName.replaceAll("\u0000", "");
+    fileName = fileName.replace("\u0000", "");
 
     if (fileName.length() == 0)
       // php/0864
@@ -405,7 +408,7 @@ public class Post
       error = FileModule.UPLOAD_ERR_OK;
 
     addFormValue(env, entry, "name" + index, env.createString(fileName),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     long size;
 
@@ -421,26 +424,27 @@ public class Post
 
     if (mimeType != null) {
       addFormValue(env, entry, "type" + index, env.createString(mimeType),
-                   null, addSlashesToValues);
+                   null, addSlashesToValues, true);
     }
 
     addFormValue(env, entry, "tmp_name" + index, env.createString(tmpName),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     addFormValue(env, entry, "error" + index, LongValue.create(error),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
     addFormValue(env, entry, "size" + index, LongValue.create(size),
-                 null, addSlashesToValues);
+                 null, addSlashesToValues, true);
 
-    addFormValue(env, files, name, entry, null, addSlashesToValues);
+    addFormValue(env, files, name, entry, null, addSlashesToValues, true);
   }
 
   public static void addFormValue(Env env,
                                   ArrayValue array,
                                   String key,
                                   String []formValueList,
-                                  boolean addSlashesToValues)
+                                  boolean addSlashesToValues,
+                                  boolean isReplaceSpacesWithUnderscores)
   {
     // php/081b
     String formValue = formValueList[formValueList.length - 1];
@@ -454,7 +458,8 @@ public class Post
     addFormValue(env, array, key,
                  value,
                  formValueList,
-                 addSlashesToValues);
+                 addSlashesToValues,
+                 isReplaceSpacesWithUnderscores);
   }
 
   public static void addFormValue(Env env,
@@ -462,7 +467,8 @@ public class Post
                                   String key,
                                   Value formValue,
                                   String []formValueList,
-                                  boolean addSlashesToValues)
+                                  boolean addSlashesToValues,
+                                  boolean isReplaceSpacesWithUnderscores)
   {
     int p = -1;
     int q = -1;
@@ -478,77 +484,56 @@ public class Post
         return;
       }
 
-      String index = key;
+      int keyStart = 0;
+      int keyEnd = p;
 
-      Value keyValue;
-      Value existingValue;
+      while (p > 0 && p < q) {
+        String currentKey = key.substring(keyStart, keyEnd);
 
-      key = key.substring(0, p);
-      key = key.replaceAll("\\.", "_");
-      // php/080h
-      key = key.replaceAll(" ", "_");
-
-      keyValue = env.createString(key);
-      existingValue = array.get(keyValue);
-
-      if (existingValue == null || ! existingValue.isset()) {
-        existingValue = new ArrayValueImpl();
-        array.put(keyValue, existingValue);
-      }
-      else if (! existingValue.isArray()) {
-        // existing is overwritten
-        // php/115g
-
-        existingValue = new ArrayValueImpl();
-        array.put(keyValue, existingValue);
-      }
-
-      array = (ArrayValue) existingValue;
-
-      int q1 = q;
-
-      while (true) {
-        int p1 = index.indexOf('[', q1);
-
-        if (p1 < 0) {
-          break;
+        if (keyStart == 0) {
+          // php/081p
+          currentKey = currentKey.replace('.', '_');
         }
 
-        q1 = index.indexOf(']', p1);
-
-        if (q1 < 0) {
-          break;
+        if (isReplaceSpacesWithUnderscores) {
+          // php/080h
+          currentKey = currentKey.replace(' ', '_');
         }
 
-        key = index.substring(p1 + 1, q1);
+        StringValue currentKeyValue = env.createString(currentKey);
+        Value currentArray = array.get(currentKeyValue);
 
-        if (key.length() == 0) {
-          existingValue = new ArrayValueImpl();
-          array.put(existingValue);
+        if (! currentArray.isArray()) {
+          currentArray = new ArrayValueImpl();
+        }
+
+        if (currentKeyValue.length() == 0) {
+          array.append(currentArray);
         }
         else {
-          keyValue = env.createString(key);
-          existingValue = array.get(keyValue);
-
-          if (existingValue == null || ! existingValue.isset()) {
-            existingValue = new ArrayValueImpl();
-            array.put(keyValue, existingValue);
-          }
-          else if (! existingValue.isArray()) {
-            existingValue = new ArrayValueImpl().put(existingValue);
-            array.put(keyValue, existingValue);
-          }
+          array.put(currentKeyValue, currentArray);
         }
 
-        array = (ArrayValue) existingValue;
+        array = currentArray.toArrayValue(env);
+
+        keyStart = p + 1;
+        keyEnd = q;
+
+        p = key.indexOf('[', q + 1);
+        q = key.indexOf(']', p + 1);
       }
 
-      if (q > 0)
-        index = index.substring(p + 1, q);
+      if (keyEnd > 0)
+        key = key.substring(keyStart, keyEnd);
       else
-        index = index.substring(p + 1);
+        key = key.substring(keyStart);
 
-      if (index.length() == 0) {
+      if (isReplaceSpacesWithUnderscores) {
+        // php/080h
+        key = key.replace(' ', '_');
+      }
+
+      if (key.length() == 0) {
         if (formValueList != null) {
           for (int i = 0; i < formValueList.length; i++) {
             Value value;
@@ -564,20 +549,25 @@ public class Post
         else
           array.put(formValue);
       }
-      else if ('0' <= index.charAt(0) && index.charAt(0) <= '9')
+      else if ('0' <= key.charAt(0) && key.charAt(0) <= '9') {
         put(array,
-            LongValue.create(StringValue.toLong(index)),
+            LongValue.create(StringValue.toLong(key)),
             formValue,
             addSlashesToValues);
-      else
-        put(array, env.createString(index), formValue, addSlashesToValues);
+      }
+      else {
+        put(array, env.createString(key), formValue, addSlashesToValues);
+      }
     }
     else {
       if (key != null) {
-        key = key.replaceAll("\\.", "_");
+        key = key.replace('.', '_');
 
-        // php/080h
-        key = key.replaceAll(" ", "_");
+        if (isReplaceSpacesWithUnderscores) {
+          // php/080h
+          key = key.replace(' ', '_');
+        }
+
         put(array, env.createString(key), formValue, addSlashesToValues);
       }
       else {
@@ -772,7 +762,7 @@ public class Post
     for (String key : keys) {
       String []value = request.getParameterValues(key);
 
-      Post.addFormValue(env, post, key, value, addSlashesToValues);
+      Post.addFormValue(env, post, key, value, addSlashesToValues, true);
     }
   }
 }

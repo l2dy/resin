@@ -589,7 +589,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
       
       Set<String> newKeys = _deployedKeys;
       Set<String> newVersion = _versionKeys;
-
+      
       if (! oldKeys.equals(newKeys)) {
         ArrayList<String> updatedKeys = new ArrayList<String>();
 
@@ -627,6 +627,10 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   private void deploy()
   {
     try {
+      if (_directoryManager == null) {
+        return;
+      }
+      
       _expandManager = new ExpandManager(getId(),
                                          _directoryManager,
                                          _archiveManager,

@@ -31,11 +31,14 @@ package com.caucho.quercus.module;
 
 import com.caucho.config.ConfigException;
 import com.caucho.quercus.QuercusRuntimeException;
+import com.caucho.quercus.env.ConstStringValue;
 import com.caucho.quercus.env.DoubleValue;
 import com.caucho.quercus.env.LongValue;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.StringBuilderValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.UnicodeBuilderValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.expr.ExprFactory;
 import com.caucho.quercus.marshal.Marshal;
@@ -96,6 +99,8 @@ public class ModuleContext
   protected MarshalFactory _marshalFactory;
   protected ExprFactory _exprFactory;
 
+  private boolean _isUnicodeSemantics;
+
   /**
    * Constructor.
    */
@@ -133,19 +138,35 @@ public class ModuleContext
     }
   }
 
-  public static ModuleContext getLocalContext(ClassLoader loader)
+  public boolean isUnicodeSemantics()
   {
-    throw new UnsupportedOperationException();
-    /*
-    ModuleContext context = _localModuleContext.getLevel(loader);
+    return _isUnicodeSemantics;
+  }
 
-    if (context == null) {
-      context = new ModuleContext(loader);
-      _localModuleContext.set(context, loader);
+  public void setUnicodeSemantics(boolean isUnicodeSemantics)
+  {
+    // XXX: need to refactor static vs runtime unicode handling
+    _isUnicodeSemantics = isUnicodeSemantics;
+  }
+
+  public StringValue createString(String s)
+  {
+    if (_isUnicodeSemantics) {
+      return new UnicodeBuilderValue(s);
     }
+    else {
+      return new ConstStringValue(s);
+    }
+  }
 
-    return context;
-    */
+  public StringValue createStringBuilder()
+  {
+    if (_isUnicodeSemantics) {
+      return new UnicodeBuilderValue();
+    }
+    else {
+      return new StringBuilderValue();
+    }
   }
 
   /**
@@ -163,7 +184,7 @@ public class ModuleContext
   {
     _serviceClassUrls.add(url);
   }
-  
+
   /**
    * Adds a URL for the context module
    */
@@ -182,7 +203,7 @@ public class ModuleContext
       ModuleInfo info = _moduleInfoMap.get(name);
 
       if (info == null) {
-        info = new ModuleInfo(this, name, module);
+        info = new ModuleInfo(name, module);
         _moduleInfoMap.put(name, info);
       }
 
@@ -351,23 +372,6 @@ public class ModuleContext
       return new JavaClassDef(this, className, type, extension);
   }
 
-  /**
-   * Finds the java class wrapper.
-   */
-  /*
-  public ClassDef findJavaClassWrapper(String name)
-  {
-    synchronized (_javaClassWrappers) {
-      ClassDef def = _javaClassWrappers.get(name);
-
-      if (def != null)
-        return def;
-
-      return _lowerJavaClassWrappers.get(name.toLowerCase(Locale.ENGLISH));
-    }
-  }
-  */
-
   public MarshalFactory getMarshalFactory()
   {
     return _marshalFactory;
@@ -386,47 +390,12 @@ public class ModuleContext
   }
 
   /**
-   * Returns an array of the defined functions.
-   */
-  /*
-  public ArrayValue getDefinedFunctions()
-  {
-    ArrayValue internal = new ArrayValueImpl();
-
-    synchronized (_staticFunctions) {
-      for (String name : _staticFunctions.keySet()) {
-        internal.put(name);
-      }
-    }
-
-    return internal;
-  }
-  */
-
-  /**
    * Returns the stdClass definition.
    */
   public QuercusClass getStdClass()
   {
     return _stdClass;
   }
-
-  /**
-   * Returns the class with the given name.
-   */
-  /*
-  public ClassDef findClass(String name)
-  {
-    synchronized (_staticClasses) {
-      ClassDef def = _staticClasses.get(name);
-
-      if (def == null)
-        def = _lowerStaticClasses.get(name.toLowerCase(Locale.ENGLISH));
-
-      return def;
-    }
-  }
-  */
 
   /**
    * Returns the class maps.
@@ -477,7 +446,7 @@ public class ModuleContext
     return _extensionSet;
   }
 
-  /*
+  /**
    * Adds a class to the extension's list of classes.
    */
   public void addExtensionClass(String ext, String clsName)
@@ -534,7 +503,7 @@ public class ModuleContext
 
       while (urls.hasMoreElements()) {
         URL url = urls.nextElement();
-        
+
         InputStream is = null;
         ReadStream rs = null;
         try {

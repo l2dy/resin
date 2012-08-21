@@ -97,7 +97,8 @@ class WatchdogArgs
   private ArrayList<String> _tailArgs = new ArrayList<String>();
   private String []_defaultArgs;
 
-  private boolean _isElastic;
+  private boolean _isElasticServer;
+  private boolean _isElasticIp;
   private String _elasticAddress;
   private int _elasticPort;
   
@@ -121,8 +122,9 @@ class WatchdogArgs
     
     String logLevel = System.getProperty("resin.log.level");
 
-    if (isTop)
+    if (isTop) {
       setLogLevel(logLevel);
+    }
 
     setResinHome(calculateResinHome());
     
@@ -206,12 +208,12 @@ class WatchdogArgs
   void setElasticServerId(String serverId)
   {
     _serverId = serverId;
-    setElastic(true);
+    setElasticServer(true);
   }
   
-  void setElastic(boolean isElastic)
+  void setElasticServer(boolean isElastic)
   {
-    _isElastic = isElastic;
+    _isElasticServer = isElastic;
   }
 
   String getClusterId()
@@ -226,12 +228,17 @@ class WatchdogArgs
 
   boolean isElasticServer()
   {
-    return _isElastic;
+    return _isElasticServer;
+  }
+
+  boolean isElasticDns()
+  {
+    return getArgBoolean("-elastic-dns", false);
   }
 
   String getDynamicAddress()
   {
-    if (! _isElastic) {
+    if (! _isElasticServer) {
       return null;
     }
     else if (_elasticAddress != null)
@@ -329,9 +336,9 @@ class WatchdogArgs
   public String getArg(String arg)
   {
     for (int i = 0; i + 1 < _argv.length; i++) {
-      if (_argv[i].equals(arg)
-          || _argv[i].equals("-" + arg))
+      if (_argv[i].equals(arg) || _argv[i].equals("-" + arg)) {
         return _argv[i + 1];
+      }
     }
 
     return null;
@@ -422,23 +429,6 @@ class WatchdogArgs
       defaultArg = _defaultArgs[0];
 
     return defaultArg;
-
-/*
-    ArrayList<String> tailArgs = getTailArgs();
-
-    for (int i = 0; i < tailArgs.size(); i++) {
-      String arg = tailArgs.get(i);
-
-      if (arg.startsWith("-")) {
-        i++;
-        continue;
-      }
-
-      return arg;
-    }
-
-    return null;
-*/
   }
 
   public String []getDefaultArgs() {
@@ -502,7 +492,7 @@ class WatchdogArgs
         i++;
       }
       else if ("--join-cluster".equals(resinArg)) {
-        setElastic(true);
+        setElasticServer(true);
         _clusterId = argv[i + 1];
 
         i++;
@@ -529,8 +519,8 @@ class WatchdogArgs
         argv[i + 1] = _dataDirectory.getFullPath();
         i++;
       }
-      else if ("--elastic".equals(resinArg)) {
-        setElastic(true);
+      else if ("--elastic-server".equals(resinArg)) {
+        setElasticServer(true);
       }
       else if ("--log-directory".equals(resinArg)) {
         _logDirectory = _rootDirectory.lookup(argv[i + 1]);
@@ -545,7 +535,9 @@ class WatchdogArgs
         argv[i + 1] = _resinHome.getFullPath();
         i++;
       }
-      else if ("--root-directory".equals(resinArg)) {
+      else if ("--root-directory".equals(resinArg)
+               || "--server-root".equals(resinArg)
+               || "--resin-root".equals(resinArg)) {
         setRootDirectory(Vfs.lookup(argv[i + 1]));
         argv[i + 1] = _rootDirectory.getFullPath();
         i++;
@@ -556,11 +548,6 @@ class WatchdogArgs
         if ("".equals(_serverId))
           _serverId = "default";
         
-        i++;
-      }
-      else if ("--server-root".equals(resinArg)) {
-        _rootDirectory = Vfs.lookup(argv[i + 1]);
-        argv[i + 1] = _rootDirectory.getFullPath();
         i++;
       }
       else if ("--stage".equals(resinArg)) {
@@ -610,7 +597,14 @@ class WatchdogArgs
         _command = _commandMap.get(arg);
       }
       else if (_command != null) {
-        _tailArgs.add(arg);
+        if (_command.isFlag(arg)) {
+        }
+        else if (_command.isValueOption(arg)) {
+          i++;
+        }
+        else {
+          _tailArgs.add(arg);
+        }
       }
       else if (_isHelp) {
       }
@@ -1160,6 +1154,7 @@ class WatchdogArgs
     addCommand(new RestartCommand());
 
     addCommand(new ShutdownCommand());
+    // addCommand(new StartCloudCommand());
     addCommand(new StartCommand());
     addCommand(new StartAllCommand());
     addCommand(new StartWithForegroundCommand());
@@ -1177,6 +1172,7 @@ class WatchdogArgs
 
     addCommand(new WebAppDeployCommand());
     addCommand(new WebAppRestartCommand());
+    addCommand(new WebAppRestartClusterCommand());
     addCommand(new WebAppStartCommand());
     addCommand(new WebAppStopCommand());
     addCommand(new WebAppUndeployCommand());
@@ -1187,6 +1183,7 @@ class WatchdogArgs
     _commandMap.put("deploy-start", new WebAppStartCommand());
     _commandMap.put("deploy-stop", new WebAppStopCommand());
     _commandMap.put("deploy-restart", new WebAppRestartCommand());
+    _commandMap.put("deploy-restart-cluster", new WebAppRestartClusterCommand());
 
     _commandMap.put("generate-password", new PasswordGenerateCommand());
 

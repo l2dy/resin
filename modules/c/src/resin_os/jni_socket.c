@@ -114,6 +114,29 @@ Java_com_caucho_vfs_JniSocketImpl_nativeAllocate(JNIEnv *env,
 }
 
 static int
+resin_get_byte_array_region(JNIEnv *env,
+			    jbyteArray j_buf,
+			    jint offset,
+			    jint sublen,
+			    char *c_buf)
+{
+  /* JDK uses GetByteArrayRegion */
+  (*env)->GetByteArrayRegion(env, j_buf, offset, sublen, (void*) c_buf);
+
+  /*
+  jbyte *cBuf = (*env)->GetPrimitiveArrayCritical(env, j_buf, 0);
+  if (! cBuf)
+    return 0;
+
+  memcpy(c_buf, cBuf + offset, sublen);
+
+  (*env)->ReleasePrimitiveArrayCritical(env, j_buf, cBuf, 0);
+  */
+  
+  return 1;
+}
+
+static int
 resin_tcp_nodelay(connection_t *conn)
 {
   int fd = conn->fd;
@@ -1091,16 +1114,18 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
       return 0;
     }
 
-    sin = lookup_addr(env, addr_name, port, sin_data,
-                      &family, &protocol, &sin_length);
+    lookup_addr(env, addr_name, port, sin_data,
+                &family, &protocol, &sin_length);
   }
   else {
-    sin = (struct sockaddr_in *) sin_data;
-    sin->sin_family = AF_INET;
-    sin->sin_port = htons(port);
-    family = AF_INET;
+    struct sockaddr_in6 *sin6;
+    
+    sin6 = (struct sockaddr_in6 *) sin_data;
+    sin6->sin6_family = AF_INET6;
+    sin6->sin6_port = htons(port);
+    family = AF_INET6;
     protocol = IPPROTO_TCP;
-    sin_length = sizeof(struct sockaddr_in);
+    sin_length = sizeof(struct sockaddr_in6);
   }
   
   if (! sin)
@@ -1118,7 +1143,17 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
     return 0;
   }
 
-  if (bind(sock, (struct sockaddr *) sin, sin_length) < 0) {
+  val = 0;
+#ifdef IPV6_V6ONLY
+  if (family != AF_INET6) {
+  }
+  else if (setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY,
+                 (char *) &val, sizeof(int)) < 0) {
+    fprintf(stderr, "Cannot set ipv6_v6only");
+  }
+#endif
+
+  if (bind(sock, (struct sockaddr *) sin_data, sin_length) < 0) {
     int i = 5;
     int result = 0;
     
@@ -1132,13 +1167,13 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
       fcntl(fd, F_SETFL, O_NONBLOCK|flags);
 #endif
 
-      result = connect(fd, (struct sockaddr *) &sin, sizeof(sin));
+      result = connect(fd, (struct sockaddr *) &sin_data, sizeof(sin));
       closesocket(fd);
     }
 
     result = -1;
     for (i = 50; result < 0 && i >= 0; i--) {
-      result = bind(sock, (struct sockaddr *) sin, sin_length);
+      result = bind(sock, (struct sockaddr *) sin_data, sin_length);
 
       if (result < 0) {
 	struct timeval tv;
@@ -1157,7 +1192,7 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
   }
 
   sin_length = sizeof(sin_data);
-  getsockname(sock, (struct sockaddr *) sin, &sin_length);
+  getsockname(sock, (struct sockaddr *) sin_data, &sin_length);
 
   /* must be 0 if the poll is missing for accept */
 #if 0 && defined(O_NONBLOCK)
@@ -1375,8 +1410,9 @@ Java_com_caucho_vfs_JniServerSocketImpl_getLocalPort(JNIEnv *env,
   if (socket) {
     return socket->port;
   }
-  else
+  else {
     return 0;
+  }
 }
 
 JNIEXPORT jint JNICALL
@@ -1492,9 +1528,11 @@ socket_fill_address(JNIEnv *env, jobject obj,
 {
   char temp_buf[1024];
   struct sockaddr_in *sin;
+  struct sockaddr_in6 *sin6;
 
-  if (! local_addr || ! remote_addr)
+  if (! local_addr || ! remote_addr) {
     return;
+  }
 
   if (ss->_isSecure) {
     jboolean is_secure = conn->ssl_sock != 0 && conn->ssl_cipher != 0;
@@ -1513,7 +1551,12 @@ socket_fill_address(JNIEnv *env, jobject obj,
     jint local_port;
 
     sin = (struct sockaddr_in *) conn->server_sin;
-    local_port = ntohs(sin->sin_port);
+    if (sin->sin_family == AF_INET6) {
+      sin6 = (struct sockaddr_in6 *) conn->server_sin;
+      local_port = ntohs(sin6->sin6_port);
+    } else {
+      local_port = ntohs(sin->sin_port);
+    }
 
     (*env)->SetIntField(env, obj, ss->_localPort, local_port);
   }
@@ -1526,10 +1569,15 @@ socket_fill_address(JNIEnv *env, jobject obj,
   }
 
   if (ss->_remotePort) {
-	jint remote_port;
+    jint remote_port;
 
     sin = (struct sockaddr_in *) conn->client_sin;
-    remote_port = ntohs(sin->sin_port);
+    if (sin->sin_family == AF_INET6) {
+      sin6 = (struct sockaddr_in6 *) conn->server_sin;
+      remote_port = ntohs(sin6->sin6_port);
+    } else {
+      remote_port = ntohs(sin->sin_port);
+    }
 
     (*env)->SetIntField(env, obj, ss->_remotePort, remote_port);
   }

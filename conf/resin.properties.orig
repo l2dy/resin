@@ -19,6 +19,9 @@
 # Enable verbose browser error reporting
 dev_mode      : true
 
+# How often Resin should check for updated files.
+# dependency_check_interval : 5m
+
 # Enable /resin-doc Resin documentation
 resin_doc     : true
 
@@ -43,6 +46,16 @@ app_servers      : 127.0.0.1:6800
 # The cluster that elastic nodes should join - each will contact a Triad server
 # Use a separate resin.properties file for each cluster
 home_cluster : app
+
+# Used for an elastic server to join the cluster in home_cluster
+# elastic_server : true
+
+# Used for cloud servers with dynamic IP addresses where the DNS name for the
+# server is assigned after the server starts. Resin will retry the start.
+# elastic_dns : true
+
+# specifies the --server in the config file
+# home_server : app-0
 
 # Set HTTP and HTTPS bind address
 # http_address  : *
@@ -94,7 +107,7 @@ sendfile : true
 # self-signed development certificate if HTTPS is enabled
 
 # Enable the proxy-cache - for caching static content in memory
-proxy_cache_enable: false
+proxy_cache_enable : true
 
 # Sets the proxy cache memory size
 # proxy_cache_size : 256m

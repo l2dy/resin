@@ -10,6 +10,42 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.30 - Aug 12, 2012">
+<ul>
+<li>cloud: added --elastic-dns for Amazon-style local dns or elastic ip</li>
+<li>cloud: elastic servers now require --elastic or &lt;elastic-server></li>
+<li>websocket: build standalone resin-websocket-client.jar (#5142, rep by Judd Gaddie)</li>
+<li>init.d: update status return code (#5166, rep by nmmn)</li>
+<li>install: add --with-setuid and --with-setgid (#5105)</li>
+<li>health: scheduled pdf reports as started asynchronously (#5164, rep by Keith Fetterman)</li>
+<li>mod_caucho: updated load balance to better distribute backups (#5116)</li>
+<li>ejb: skipped ejb.xml must not throw validation exceptions (#5165, rep by Anand Talari)</li>
+<li>install: solaris build issues (#5098, rep by tokyoturnip)</li>
+<li>db: transaction-isolation reset issues when double-set (#5150, rep by Ryan Johnson)</li>
+<li>http-cache: check for valid before checking is-modified (#4865)</li>
+<li>comet/async: keepalive close was not allowed with async written from separate thread (#5159, rep by Adrian Sutton)</li>
+<li>embed: isModified class-loader-context issue (#5156, rep by M Barker)</li>
+<li>debian: update to debian post install scripts (#5140, rep by Alex Sharaz)</li>
+<li>jsf: upgrade mojarra distribution (#5137, rep by mate)</li>
+<li>jsp: add start-timeout to thread spawning to quickly fail when threads full (#5153, rep by TheScrumMaster)</li>
+<li>port/thread: add config warning when port-thread-max is greated than thread-max (#5138, rep by Mark Price)</li>
+<li>debian: update debian postinst script to change the user (#5140)</li>
+<li>quercus: NPE on curl_exec (#5145)</li>
+<li>cli: deploy can now be used with a director instead of a .war (#5139, rep by S. Bjornebekk)</li>
+<li>ejb: @Async uses LinkedBlockingQueue to avoid blocking on offer (#4994, rep by Yen-Fen Hsu)</li>
+<li>servlet: Part.getInputStream() now uses request.getCharacterEncoding() (#4954, rep by Mattias Jiderhamn)</li>
+<li>cli: add deploy-restart-cluster (#4812)</li>
+<li>log: timestamp offset issues with min:sec (#5149, rep by Shinomiya Nobuaki)</li>
+<li>network: bind to IPv6 when address="*" (#5147, #5151, #4825, rep by Alex Sharaz, S Nobuaki)</li>
+<li>load-balance: issue with empty cookie values (#5144, rep by Scott Weatbrook)</li>
+<li>jmx: updated session jmx debug (#5143)</li>
+<li>jsp-el: add enum marshal for methods (#5131, rep by mate)</li>
+<li>embed: setRootDirectory applied in incorrect order (#5132, rep by M. Barker)</li>
+<li>jni: JNI compile warnings fixed (#5129)</li>
+<li>server: check dependencies in separate thread to avoid delays (#5128, rep by Russ Pridemore)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.29 - Jul 13, 2012">
 <ul>
 <li>config: watchdog needs to enable rvar variables (#5126, rep by Kirk Kirkconnell)</li>

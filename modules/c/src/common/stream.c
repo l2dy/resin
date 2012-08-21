@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2010 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1999-2012 Caucho Technology.  All rights reserved.
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1413,6 +1413,10 @@ select_host(cluster_t *cluster, time_t now)
     cluster->round_robin_index = round_robin % size;
   }
 
+  /* #5116 */
+  round_robin = rand();
+
+  /*
   round_robin = (cluster->round_robin_index + 1) % size;
 
   for (i = 0; i < size; i++) {
@@ -1423,18 +1427,20 @@ select_host(cluster_t *cluster, time_t now)
 
     round_robin = (round_robin + 1) % size;
   }
+  */
   
   cluster->round_robin_index = round_robin;
 
   /* if round-robin server is failing, choose one randomly */
   for (i = 0; i < size; i++) {
+    round_robin = (rand() & 0x7fffffff) % size;
+
     cluster_srun = &cluster->srun_list[round_robin];
     srun = cluster_srun->srun;
 
-    if (! srun->is_fail)
+    if (! cluster_srun->is_backup && ! srun->is_fail) {
       break;
-
-    round_robin = (rand() & 0x7fffffff) % size;
+    }
   }
 
   best_srun = round_robin;
@@ -1512,24 +1518,32 @@ open_connection_any_host(stream_t *s, cluster_t *cluster, int host,
   int i;
 
   int size = cluster->srun_size;
+  int backup = rand() & 0x0fffffff;
 
   /*
    * Okay, the primaries failed.  So try the secondaries.
    */
   for (i = 0; i < size; i++) {
-    cluster_srun_t *cluster_srun = cluster->srun_list + (host + i) % size;
+    int index = (backup + i) % size;
+    cluster_srun_t *cluster_srun = cluster->srun_list + index;
     srun_t *srun = cluster_srun->srun;
 
-    if (! srun) {
+    if (index == host) {
+      continue;
+    }
+    else if (! srun) {
+      continue;
     }
     else if (cse_alloc_idle_socket(s, cluster, cluster_srun, now, web_pool)) {
       srun->is_fail = 0;
       return 1;
     }
     else if (ignore_dead && cluster_srun->is_backup) {
+      continue;
     }
     else if (ignore_dead && srun->is_fail
 	     && now < srun->fail_time + srun->fail_recover_timeout) {
+      continue;
     }
     else if (cse_open(s, cluster, cluster_srun, web_pool, 0)) {
       srun->is_fail = 0;
@@ -1538,6 +1552,7 @@ open_connection_any_host(stream_t *s, cluster_t *cluster, int host,
     else {
       srun->is_fail = 1;
       srun->fail_time = now;
+      continue;
     }
   }
 

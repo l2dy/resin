@@ -31,6 +31,7 @@ package com.caucho.server.resin;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.instrument.Instrumentation;
 import java.net.BindException;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
@@ -229,8 +230,9 @@ public class Resin
     
     preConfigureInit();
     
-    if (! isWatchdog())
+    if (! isWatchdog()) {
       configureFile(_resinConf);
+    }
   }
 
   /**
@@ -426,7 +428,7 @@ public class Resin
   
   public boolean isElasticServer()
   {
-    return _args.isElasticServer();
+    return _bootResinConfig.isElasticServer(_args);
   }
   
   public String getClusterSystemKey()
@@ -1015,7 +1017,7 @@ public class Resin
       _bootServerConfig = bootResin.findServer(serverId);
     }
     
-    if (serverId == null && ! _args.isElasticServer()) {
+    if (serverId == null && ! bootResin.isElasticServer(_args)) {
       // server/2s00
       _bootServerConfig = bootResin.findServer("default");
     }
@@ -1097,7 +1099,10 @@ public class Resin
         for (BootServerConfig server : servers) {
           if (! isFirst)
             sb.append(", ");
+
           sb.append(server.getFullAddress());
+
+          isFirst = false;
         }
         
         cause = L().l("No triad servers were reachable.\n" +

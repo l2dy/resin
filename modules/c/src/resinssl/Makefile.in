@@ -1,21 +1,18 @@
 CC=@CC@
-CFLAGS_SHLIB=@CFLAGS_SHLIB@
+CFLAGS_SHLIB=@jni_cflags_shlib@
 CFLAGS_OPENSSL=@CFLAGS_OPENSSL@
 LD=@LD@
 OS=@OS@
 SO=@SO@
 CPU=@CPU@
-LDFLAGS=@LDFLAGS@
-LDFLAGS_SHLIB=@LDFLAGS_SHLIB@
+LDFLAGS=@jni_ldflags@
+LDFLAGS_SHLIB=@jni_ldflags_shlib@
 PROXY_LIBS=@PROXY_LIBS@ @SSL_LIBS@
-APACHE_INC=@APACHE_INC@
-resin_conf=@apache_conf@
-resin_libexec=@apache_libexec@
 LIBEXEC=@LIBEXEC@
 resin_home=$(DESTDIR)@resin_home@
 JNI_INCLUDE=@JNI_INCLUDE@
 INCLUDES = @INCLUDES@ $(JNI_INCLUDE) -I../common -I@resin_os@
-CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @CFLAGS_JNI@ @CFLAGS_SHLIB@ @CFLAGS_OPENSSL@
+CFLAGS = @CFLAGS@ -DRESIN_HOME=\"$(resin_home)\" $(INCLUDES) -DCPU=\"$(CPU)\" -DOS=$(OS) @jni_cflags@ @jni_cflags_shlib@ @CFLAGS_OPENSSL@
 OBJ=@SSL_OBJ@ @resin_os@/memory.o @resin_os@/std.o @resin_os@/java.o
 
 all	: libresinssl.$(SO)

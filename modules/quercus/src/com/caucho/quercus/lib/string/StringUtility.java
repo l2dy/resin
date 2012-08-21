@@ -51,10 +51,12 @@ public class StringUtility
                                CharSequence str,
                                ArrayValue result,
                                boolean isRef,
-                               String encoding)
+                               String encoding,
+                               boolean isReplaceSpacesWithUnderscores)
   {
     return parseStr(env, str, result, isRef, encoding,
                     env.getIniBoolean("magic_quotes_gpc"),
+                    isReplaceSpacesWithUnderscores,
                     Env.DEFAULT_QUERY_SEPARATOR_MAP);
   }
 
@@ -64,6 +66,7 @@ public class StringUtility
                                boolean isRef,
                                String encoding,
                                boolean isMagicQuotes,
+                               boolean isReplaceSpacesWithUnderscores,
                                int []querySeparatorMap)
   {
     try {
@@ -115,7 +118,8 @@ public class StringUtility
         }
         else if (isRef) {
           Post.addFormValue(env, result, key,
-                            new String[] { value }, isMagicQuotes);
+                            new String[] { value },
+                            isMagicQuotes, isReplaceSpacesWithUnderscores);
         }
         else {
           // If key is an exsiting array, then append
@@ -131,7 +135,7 @@ public class StringUtility
           }
           else if (openBracketIndex > 0) {
             String arrayName = key.substring(0, openBracketIndex);
-            arrayName = arrayName.replaceAll("\\.", "_");
+            arrayName = arrayName.replace('.', '_');
 
             Value v = env.getVar(arrayName).getRawValue();
             if (v instanceof ArrayValue) {
@@ -150,11 +154,13 @@ public class StringUtility
               }
             } else {
               Post.addFormValue(env, result, key,
-                                new String[] { value }, isMagicQuotes);
+                                new String[] { value },
+                                isMagicQuotes, isReplaceSpacesWithUnderscores);
             }
           } else {
             Post.addFormValue(env, result, key,
-                              new String[] { value }, isMagicQuotes);
+                              new String[] { value },
+                              isMagicQuotes, isReplaceSpacesWithUnderscores);
           }
         }
       }

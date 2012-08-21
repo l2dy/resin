@@ -29,12 +29,15 @@
 
 package com.caucho.make;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
+import com.caucho.env.thread.AbstractTaskWorker;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.loader.DynamicClassLoader;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.vfs.Dependency;
 
@@ -44,6 +47,8 @@ import com.caucho.vfs.Dependency;
 public class DependencyContainer implements Dependency
 {
   private static Logger _log;
+  
+  private WeakReference<ClassLoader> _classLoaderRef;
   
   private ArrayList<Dependency> _dependencyList = new ArrayList<Dependency>();
 
@@ -58,11 +63,21 @@ public class DependencyContainer implements Dependency
   // When the dependency check last occurred
   private volatile long _checkExpiresTime = 0;
 
+  private final AtomicReference<DependencyCheckWorker> _checkWorkerRef
+    = new AtomicReference<DependencyCheckWorker>();
+  
   private final AtomicBoolean _isChecking = new AtomicBoolean();
+  
+  private boolean _isAsync = false;
 
   public DependencyContainer()
   {
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    this(Thread.currentThread().getContextClassLoader());
+  }
+
+  public DependencyContainer(ClassLoader loader)
+  {
+    _classLoaderRef = new WeakReference<ClassLoader>(loader);
 
     _checkInterval = DynamicClassLoader.getGlobalDependencyCheckInterval();
     
@@ -72,6 +87,16 @@ public class DependencyContainer implements Dependency
         break;
       }
     }
+  }
+  
+  public boolean isAsync()
+  {
+    return _isAsync;
+  }
+  
+  public void setAsync(boolean isAsync)
+  {
+    _isAsync = isAsync;
   }
   
   /**
@@ -156,6 +181,14 @@ public class DependencyContainer implements Dependency
   {
     return _checkInterval;
   }
+  
+  public ClassLoader getClassLoader()
+  {
+    if (_classLoaderRef != null)
+      return _classLoaderRef.get();
+    else
+      return null;
+  }
 
   /**
    * Sets the modified.
@@ -195,6 +228,14 @@ public class DependencyContainer implements Dependency
   @Override
   public boolean isModified()
   {
+    return isModified(isAsync());
+  }
+
+  /**
+   * Returns true if the underlying dependencies have changed.
+   */
+  public boolean isModified(boolean isAsync)
+  {
     long now = CurrentTime.getCurrentTime();
 
     if (now < _checkExpiresTime)
@@ -202,29 +243,68 @@ public class DependencyContainer implements Dependency
     
     if (_isChecking.getAndSet(true))
       return _isModified;
+    
+    _checkExpiresTime = now + _checkInterval;
 
+    if (isAsync) {
+      getWorker().wake();
+    }
+    else {
+      try {
+        checkImpl();
+      } finally {
+        _isChecking.set(false);
+      }
+    }
+
+    return _isModified;
+  }
+  
+  private DependencyCheckWorker getWorker()
+  {
+    DependencyCheckWorker worker = _checkWorkerRef.get();
+    
+    if (worker != null)
+      return worker;
+    
+    worker = new DependencyCheckWorker(getClassLoader());
+      
+    _checkWorkerRef.compareAndSet(null, worker);
+    
+    return _checkWorkerRef.get();
+  }
+  
+  private void checkImpl()
+  {
+    Thread thread = Thread.currentThread();
+    ClassLoader oldLoader = thread.getContextClassLoader();
+    
     try {
-      _checkExpiresTime = now + _checkInterval;
+      ClassLoader loader = getClassLoader();
+      
+      if (loader != null) {
+        // server/1e87, #5156
+        thread.setContextClassLoader(loader);
+      }
 
       for (int i = _dependencyList.size() - 1; i >= 0; i--) {
         Dependency dependency = _dependencyList.get(i);
 
         if (dependency.isModified()) {
           setModified(true);
-        
-          return _isModified;
+      
+          return;
         }
       }
-      
-      return _isModified;
     } finally {
-      _isChecking.set(false);
+      thread.setContextClassLoader(oldLoader);
     }
   }
 
   /**
    * Logs the reason for modification.
    */
+  @Override
   public boolean logModified(Logger log)
   {
     if (_isModifiedLog)
@@ -249,7 +329,7 @@ public class DependencyContainer implements Dependency
   {
     _checkExpiresTime = 0;
 
-    return isModified();
+    return isModified(false);
   }
 
   private Logger log()
@@ -260,8 +340,30 @@ public class DependencyContainer implements Dependency
     return _log;
   }
   
+  @Override
   public String toString()
   {
     return "DependencyContainer" + _dependencyList;
+  }
+  
+  // #5128
+  private class DependencyCheckWorker extends AbstractTaskWorker {
+    private DependencyCheckWorker(ClassLoader loader)
+    {
+      super(loader, ThreadPool.getCurrent());
+    }
+    
+    @Override
+    public long runTask()
+    {
+      try {
+        checkImpl();
+      } finally {
+        _isChecking.set(false);
+      }
+      
+      return 0;
+    }
+    
   }
 }

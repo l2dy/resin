@@ -37,6 +37,7 @@ import java.util.logging.Logger;
 
 import com.caucho.bam.BamError;
 import com.caucho.bam.BamException;
+import com.caucho.bam.QueueFullException;
 import com.caucho.bam.RemoteConnectionFailedException;
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.packet.Message;
@@ -49,6 +50,7 @@ import com.caucho.bam.stream.MessageStream;
 import com.caucho.env.thread.ValueActorQueue.ValueProcessor;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.L10N;
+import com.caucho.util.ThreadDump;
 
 /**
  * mailbox for BAM messages waiting to be sent to the Actor.
@@ -174,7 +176,15 @@ public class MultiworkerMailbox implements Mailbox, Closeable
   @Override
   public void message(String to, String from, Serializable value)
   {
-    enqueue(new Message(to, from, value));
+    try {
+      enqueue(new Message(to, from, value));
+    } catch (RuntimeException e) {
+      log.warning(this + ": message "
+          + value + " {to:" + to + ", from:" + from + "}"
+          + "\n  " + e.toString());
+      
+      log.log(Level.FINE, e.toString(), e);
+    }
   }
 
   /**
@@ -186,7 +196,15 @@ public class MultiworkerMailbox implements Mailbox, Closeable
                                Serializable value,
                                BamError error)
   {
-    enqueue(new MessageError(to, from, value, error));
+    try {
+      enqueue(new MessageError(to, from, value, error));
+    } catch (RuntimeException e) {
+      log.warning(this + ": messageError "
+          + value + " {to:" + to + ", from:" + from + "}"
+          + "\n  " + e.toString());
+      
+      log.log(Level.FINE, e.toString(), e);
+    }
   }
 
   /**
@@ -208,7 +226,15 @@ public class MultiworkerMailbox implements Mailbox, Closeable
       return;
     }
 
-    enqueue(new Query(id, to, from, query));
+    try {
+      enqueue(new Query(id, to, from, query));
+    } catch (RuntimeException e) {
+      log.warning(this + ": query "
+          + query + " {to:" + to + ", from:" + from + "}"
+          + "\n  " + e.toString());
+      
+      getBroker().queryError(id, from, to, query, BamError.create(e));
+    }
   }
 
   /**
@@ -220,7 +246,15 @@ public class MultiworkerMailbox implements Mailbox, Closeable
                           String from,
                           Serializable value)
   {
-    enqueue(new QueryResult(id, to, from, value));
+    try {
+      enqueue(new QueryResult(id, to, from, value));
+    } catch (RuntimeException e) {
+      log.warning(this + ": queryResult "
+                  + value + " {to:" + to + ", from:" + from + "}"
+                  + "\n  " + e.toString());
+    
+      log.log(Level.FINE, e.toString(), e);
+    }
   }
 
   /**
@@ -233,7 +267,15 @@ public class MultiworkerMailbox implements Mailbox, Closeable
                          Serializable query,
                          BamError error)
   {
-    enqueue(new QueryError(id, to, from, query, error));
+    try {
+      enqueue(new QueryError(id, to, from, query, error));
+    } catch (RuntimeException e) {
+      log.warning(this + ": queryError "
+          + error + " {to:" + to + ", from:" + from + "}"
+          + "\n  " + e.toString());
+  
+      log.log(Level.FINE, e.toString(), e);
+    }
   }
 
   protected final void enqueue(Packet packet)
@@ -249,9 +291,18 @@ public class MultiworkerMailbox implements Mailbox, Closeable
       log.finest(this + " enqueue(" + size + ") " + packet);
     }
     
-    workerQueue.offer(packet);
+    long timeout = 1;
+    if (! workerQueue.offer(packet, false)) {
+      if (! _isFull) {
+        _isFull = true;
+        ThreadDump.create().dumpThreads();
+      }
+      throw new QueueFullException(this + " size=" + workerQueue.getSize() + " " + packet);
+    }
     workerQueue.wake();
   }
+  
+  private boolean _isFull;
   
   private MailboxQueue2 findWorker()
   {

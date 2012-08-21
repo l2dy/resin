@@ -29,7 +29,9 @@
 
 package com.caucho.server.admin;
 
-public interface ManagerProxyApi
+import com.caucho.bam.proxy.BamClientProxy;
+
+public interface ManagerProxyApi extends BamClientProxy
 {
   public String enable();
   

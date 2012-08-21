@@ -45,6 +45,7 @@ import com.caucho.cloud.topology.CloudSystem;
 import com.caucho.cloud.topology.TopologyService;
 import com.caucho.config.ConfigException;
 import com.caucho.db.block.BlockManager;
+import com.caucho.db.block.BlockManagerSubSystem;
 import com.caucho.env.health.HealthStatusService;
 import com.caucho.env.log.LogSystem;
 import com.caucho.env.repository.AbstractRepository;
@@ -276,7 +277,7 @@ public class ResinDelegate
   protected CloudServer joinCluster(CloudSystem system,
                                     BootClusterConfig cluster)
   {
-    throw new ConfigException(L.l("--elastic requires Resin Professional"));
+    throw new ConfigException(L.l("--elastic-server requires Resin Professional"));
   }
 
   /**
@@ -368,6 +369,8 @@ public class ResinDelegate
     TopologyService.createAndAddService(getResin().getServerId());
     
     SecurityService.createAndAddService();
+    
+    BlockManagerSubSystem.createAndAddService();
 
     if (! getResin().isWatchdog()) {
       createDistCacheService();

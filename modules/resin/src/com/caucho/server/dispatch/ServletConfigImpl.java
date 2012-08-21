@@ -46,6 +46,7 @@ import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
 import javax.enterprise.inject.InjectionException;
+import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.InjectionTarget;
 import javax.naming.NamingException;
@@ -157,6 +158,7 @@ public class ServletConfigImpl
   private Principal _runAs;
 
   private FRAGMENT_MODE _fragmentMode = FRAGMENT_MODE.IN_WEBXML;
+  private AnnotatedType<?> _annType;
 
   /**
    * Creates a new servlet configuration object.
@@ -448,14 +450,17 @@ public class ServletConfigImpl
     }
 
     InjectManager cdiManager = InjectManager.create();
-    cdiManager.addConfiguredBean(servletClassName);
+    // ioc/0p16
+    // cdiManager.addConfiguredBean(servletClassName);
     
     ClassLoader loader = Thread.currentThread().getContextClassLoader();
     try {
       _servletClass = Class.forName(servletClassName, false, loader);
 
-      if (_comp == null) {
-        _comp = cdiManager.createInjectionTarget(_servletClass);
+      if (_annType == null) {
+        // ioc/0p2b
+        _annType = cdiManager.createAnnotatedType(_servletClass);
+        cdiManager.discoverBean(_annType);
       }
     } catch (ClassNotFoundException e) {
       log.log(Level.ALL, e.toString(), e);
@@ -1323,7 +1328,22 @@ public class ServletConfigImpl
       InjectManager inject = InjectManager.create();
 
       if (_comp == null) {
-        _comp = inject.createInjectionTarget(servletClass);
+        // ioc/0p2b
+        if (_annType != null) {
+          Set<Bean<?>> beanSet = inject.getBeans(servletClass);
+
+          if (beanSet.size() > 0) {
+            Bean<?> bean = beanSet.iterator().next();
+            
+            if (bean instanceof ManagedBeanImpl<?>) {
+              _comp = ((ManagedBeanImpl) bean).getInjectionTarget();
+            }
+          }
+        }
+
+        if (_comp == null) {
+          _comp = inject.createInjectionTarget(servletClass);
+        }
       }
 
       CreationalContextImpl env = new OwnerCreationalContext(null);

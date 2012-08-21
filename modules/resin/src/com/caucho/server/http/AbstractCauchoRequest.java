@@ -84,7 +84,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   static final String FORM_LOCALE = "resin.form.local";
   static final String CAUCHO_CHAR_ENCODING = "caucho.form.character.encoding";
 
-  static final Charset UTF8 = Charset.forName("UTF-8");
+  private static final Charset UTF8 = Charset.forName("UTF-8");
 
   private int _sessionGroup = -1;
 
@@ -163,8 +163,9 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
   public final Map<String,String[]> getParameterMapImpl()
   {
-    if (_filledForm == null)
+    if (_filledForm == null) {
       _filledForm = parseQueryImpl();
+    }
 
     return Collections.unmodifiableMap(_filledForm);
   }
@@ -332,7 +333,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
   protected void parsePostQueryImpl(HashMapImpl<String,String[]> form)
   {
     AbstractHttpRequest request = getAbstractHttpRequest();
-    
+
     if (request == null)
       return;
 
@@ -1087,6 +1088,7 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       _value = value;
     }
 
+    @Override
     public void delete()
       throws IOException
     {
@@ -1099,11 +1101,13 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       _tempFile.remove();
     }
 
+    @Override
     public String getContentType()
     {
       return _contentType;
     }
 
+    @Override
     public String getHeader(String name)
     {
       name = name.toLowerCase(Locale.ENGLISH);
@@ -1116,23 +1120,32 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       return null;
     }
 
+    @Override
     public Collection<String> getHeaderNames()
     {
       return _headers.keySet();
     }
 
+    @Override
     public Collection<String> getHeaders(String name)
     {
       name = name.toLowerCase(Locale.ENGLISH);
       return _headers.get(name);
     }
 
+    @Override
     public InputStream getInputStream()
       throws IOException
     {
       if (_value != null) {
-        ByteArrayInputStream is
-          = new ByteArrayInputStream(_value.getBytes(UTF8));
+        String encoding = getCharacterEncoding();
+        
+        ByteArrayInputStream is;
+        
+        if (encoding != null)
+          is = new ByteArrayInputStream(_value.getBytes(encoding));
+        else
+          is = new ByteArrayInputStream(_value.getBytes(UTF8));
 
         return is;
       } else if (_tempFile != null) {
@@ -1142,12 +1155,13 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
       }
     }
 
-
+    @Override
     public String getName()
     {
       return _name;
     }
 
+    @Override
     public long getSize()
     {
       if (_tempFile != null)

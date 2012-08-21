@@ -186,6 +186,16 @@ public class ResinConfig implements EnvironmentBean
   }
   
   @Configurable
+  public void setElasticServer(boolean isElasticServer)
+  {
+  }
+  
+  @Configurable
+  public void setElasticDns(boolean isElasticServer)
+  {
+  }
+  
+  @Configurable
   public void setJoinCluster(String joinCluster)
   {
   }

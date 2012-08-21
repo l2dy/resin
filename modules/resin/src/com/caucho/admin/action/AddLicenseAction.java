@@ -58,41 +58,52 @@ public class AddLicenseAction implements AdminAction
                         boolean overwrite,
                         boolean restart)
   {
-    Class<?> cl = null;
-    
     try {
+      Class<?> cl = null;
+      
       cl = Class.forName("com.caucho.license.LicenseCheckImpl");
     }
     catch (ClassNotFoundException e) {
       throw new ConfigException(L.l("add-license requires the Resin Professional download"), e);
     }
+    
+    WriteStream out = null;
 
-    File licenseDir = Resin.getCurrent().getLicenseStore().getLicenseDirectory();
-
-    File licenseFile = new File(licenseDir, fileName);
-    if (licenseFile.exists() && ! overwrite) {
-      log.log(Level.FINE,
-              L.l("add-license will not overwrite {0} (use -overwrite)",
-                  licenseFile));
-      return L.l("add-license will not overwrite {0} (use -overwrite)",
-                 licenseFile);
-    }
-
-    if (! licenseDir.exists())
-      licenseDir.mkdir();
-
-    FileWriter out = null;
     try {
-      out = new FileWriter(licenseFile);
-      out.write(licenseContent);
-      out.flush();
+      Resin resin = Resin.getCurrent();
+      Path resinRoot = resin.getRootDirectory();
+      
+      // Path licensePath = resinRoot.lookup("licenses");
+      
+      Path licensePath = resin.getLicenseDirectory();
+      
+      if (licensePath == null 
+          || ! licensePath.isDirectory()
+          || ! licensePath.canWrite()) {
+        licensePath = resinRoot.lookup("licenses");
+      }
+
+      Path licenseFile = licensePath.lookup(fileName);
+      
+      if (licenseFile.exists() && ! overwrite) {
+        log.log(Level.FINE,
+                L.l("add-license will not overwrite {0} (use -overwrite)",
+                    licenseFile));
+        return L.l("add-license will not overwrite {0} (use -overwrite)",
+                   licenseFile);
+      }
+
+      licensePath.mkdirs();
+      
+      log.info(this + " adding license " + licenseFile.getNativePath());
+
+      out = licenseFile.openWrite();
+      out.print(licenseContent);
     } catch (IOException e) {
       throw new ConfigException(L.l("add-license failed to write {0}: {1}", 
                                     fileName, e.toString()), e);
     } finally {
-      if (out != null) {
-        try { out.close(); } catch (Exception e2) { }
-      }
+      IoUtil.close(out);
     }
     
     if (restart) {
@@ -115,5 +126,11 @@ public class AddLicenseAction implements AdminAction
       log.log(Level.FINE, L.l("add-license wrote {0} successfully", fileName));
       return L.l("add-license wrote {0} successfully", fileName);
     }
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[]";
   }
 }

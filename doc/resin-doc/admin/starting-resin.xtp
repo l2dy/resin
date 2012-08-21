@@ -5,9 +5,8 @@
     <title>Resin Installation Quick Start</title>
 
     <description>
-<p>You can start using Resin by simply expanding the archive and
-starting Resin with a Java command line. You can also start Resin directly 
-from an IDE.</p>
+<p>If you're using Resin for the first time, this section will
+show you how to install Resin, start it, and deploy your application.</p>
     </description>
   </header>
 
@@ -17,13 +16,69 @@ from an IDE.</p>
 <s1 title="Preconditions">
 
 <ul>
-<li>Resin requires JDK 6.0 or later</li>
+<li>Resin requires JDK 6.0 or later.</li>
 <li>An HTML 5 browser for some /resin-admin features.</li>
 </ul>
  
 <p>Oracle's JDK for Windows, Solaris, and Linux can be found at
-<a href="http://www.oracle.com/technetwork/java/javase/overview/index.html">http://www.oracle.com/technetwork/java/javase/overview/index.html</a>.
-Oracle also has links to some other ports of the JDK.</p>
+<a href="http://www.oracle.com/technetwork/java/javase/downloads/index.html">http://www.oracle.com/technetwork/java/javase/downloads/index.html</a>.
+Oracle also has links to some other ports of the JDK.  Resin will not be fully functional while using a JRE.</p>
+
+</s1>
+
+<s1 title="Directory Overview">
+
+<p>When Resin is installed on a <b>Unix</b> system:</p>
+
+<ul>
+<li><b>resinctl</b> is the <a href="starting-resin-command-line.xtp">command-line interface</a>.</li>
+<li><a href="config-resin-properties.xtp">Configuration properties</a>
+are in <em>/etc/resin/resin.properties</em></li>
+<li><a href="deploy.xtp">Deployed applications</a> are
+put in <em>/var/resin/webapps</em></li>
+<li>Logs are in <em>/var/log/resin</em></li>
+<li>Licenses belong in  <em>/etc/resin/licenses</em></li>
+<li>OpenSSL keys belong in <em>/etc/resin/keys</em></li>
+</ul>
+
+<example title="Unix Directories">
+/etc/resin/resin.properties  # configuration properties
+/etc/resin/resin.xml         # configuration file
+/etc/resin/licenses/         # license location
+/etc/resin/keys/             # openssl keys
+
+/var/resin/                  # resin.root (content)
+/var/resin/webapps/          # default deployment directory
+
+/var/log/resin/              # resin logs
+
+/usr/local/share/resin/      # resin.home (binaries and libraries)
+</example>
+
+<p>When Resin is installed on a <b>Windows</b> system:</p>
+
+<ul>
+<li><b>resin</b> is the <a href="starting-resin-command-line.xtp">command-line interface</a>.</li>
+<li><a href="config-resin-properties.xtp">Configuration properties</a>
+are in <em>conf/resin.properties</em></li>
+<li><a href="deploy.xtp">Deployed applications</a> are
+in <em>webapps</em></li>
+<li>Logs are in <em>log</em></li>
+<li>Licenses belong in  <em>conf/licenses</em></li>
+<li>OpenSSL keys belong in <em>conf/keys</em></li>
+</ul>
+
+<example title="Windows/unzip Directories">
+resin-4.0.x/                 # installation directory: resin.home, resin.root
+  conf/resin.properties      # configuration properties
+  conf/resin.xml             # configuration file
+  conf/licenses/             # license location
+  conf/keys/                 # openssl keys
+
+  webapps/                   # default deployment directory
+
+  logs/                      # resin logs
+</example>
 
 </s1>
 
@@ -31,25 +86,9 @@ Oracle also has links to some other ports of the JDK.</p>
 
 <p>Installation steps for the major operating systems are outlined below:</p>
 
-<s2 title="Windows">
-
-<ol>
-<li>Install JDK 1.6 or later.</li>
-<li>Check that the environment variable <var>JAVA_HOME</var> is set to the JDK 
-location, e.g. <code>c:\java\jdk1.6.0_14</code></li>
-<li>Unzip resin-4.0.x.zip</li>
-<li>Define the environment variable <var>RESIN_HOME</var> to the location of
-Resin, for example <code>c:\resin-4.0.x</code></li>
-<li>Execute <code>resin.exe</code>
-  <ul><li>or run <code>java -jar lib/resin.jar start</code></li></ul>
-</li>
-<li>Browse to <a href="http://localhost:8080">http://localhost:8080</a></li>
-</ol>
-</s2>
-
 <s2 title="Debian Unix .deb and apt-get">
 <p>
-Debian users can download a .deb packagated version of Resin
+Debian users can download a .deb packaged version of Resin
 or use apt-get to install Resin. The Debian package performs all
 of the installation steps above for you and creates all
 the recommended server and content directories.  Simply download from the <a
@@ -59,7 +98,7 @@ using dpkg.
 <p>
 Alternatively, you can add Caucho's Debian repository to your system's
 repositories to use automated update tools like Synaptic and apt-get.
-To do this, add the following line to your <var>/etc/apt/sources.list</var>
+To do this, you can add the debian repository as follows:
 </p>
 <example>
 unix# add-apt-repository http://caucho.com/download/debian
@@ -70,19 +109,14 @@ After adding this line, update your local repository cache by running:
 <example>
 unix# apt-get update
 </example>
+
 <p>
-Finally, install Resin Professional using the following:
+Install Resin Professional  with this command:
 </p>
 <example>
 unix# apt-get install resin-pro
 </example>
-<p>
-If you have a license file for Resin, save it in <var>/etc/resin/licenses</var>.
-You can also install the license from the command line with:
-<example>
-unix# resinctl license-add mylicense.license
-</example>
-</p>
+
 <p>
 Or install Resin Open Source with this command:
 </p>
@@ -102,42 +136,78 @@ http://caucho.com/download/rpm/RPM-GPG-KEY-caucho</a>.
 
 <example title="RPM/yum install">
 unix# rpm --import http://caucho.com/download/rpm/RPM-GPG-KEY-caucho
-unix# yum install http://caucho.com/download/rpm/4.0.24/x86_64/resin-pro-4.0.24-1.x86_64.rpm
+unix# yum install http://caucho.com/download/rpm/4.0.30/x86_64/resin-pro-4.0.30-1.x86_64.rpm
 </example>
 
 </s2>
 
-<s2 title="Other Unix, Linux, and Mac OS X">
+<s2 title="Other Unix, Linux, Solaris, and Mac OS X">
 
 <ol>
-<li>Install JDK 1.6 or later and link /usr/java to the Java home or define the 
+<li>Install JDK 6 or later and link /usr/java to the Java home or define the 
 environment variable <var>JAVA_HOME</var>.</li>
 <li><code>tar -vzxf resin-4.0.x.tar.gz</code></li>
 <li><code>cd resin-4.0.x</code></li>
-<li><code>./configure --prefix=`pwd`</code>
+<li><code>./configure</code>
   <ul><li>some details on the <a href="starting-resin-command-line.xtp">./configure options</a>.</li></ul>
 </li>
 <li><code>make</code></li>
-<li><code>make install</code></li>
-<li>Execute <code>resinctl console</code>
-  <ul><li>or run <code>java -jar lib/resin.jar console</code></li></ul>
+<li><code>sudo make install</code></li>
+<li>Execute <code>sudo resinctl start</code>
+  <ul><li>or run <code>java -jar lib/resin.jar start</code></li></ul>
 </li>
 <li>Browse to <a href="http://localhost:8080">http://localhost:8080</a></li>
 </ol>
 
 </s2>
+
+<s2 title="Windows">
+
+<ol>
+<li>Install JDK 6 or later.</li>
+<li>Check that the environment variable <var>JAVA_HOME</var> is set to the JDK 
+location, e.g. <code>c:\java\jdk1.6.0_14</code></li>
+<li>Unzip resin-4.0.x.zip</li>
+<li>Define the environment variable <var>RESIN_HOME</var> to the location of
+Resin, for example <code>c:\resin-4.0.x</code></li>
+<li>Execute <code>resin.exe</code>
+  <ul><li>or run <code>java -jar lib/resin.jar start</code></li></ul>
+</li>
+<li>Browse to <a href="http://localhost:8080">http://localhost:8080</a></li>
+</ol>
+</s2>
+
+</s1>
+
+<s1 title="Installing a license file for Resin Pro">
+<p>
+After installing Resin Professional, you need to install the license file.
+</p>
+
+<p>
+If you have a license file for Resin, save it in <var>/etc/resin/licenses</var>.
+You can also install the license from the command line with:
+<example>
+unix> resinctl license-add mylicense.license
+</example>
+</p>
 </s1>
 
 <s1 title="Resin as a Web Server">
 
-<p>Resin includes a high-performance HTTP server. The easiest and fastest
+<p>Resin includes a high-performance HTTP server that outperforms NginX and Apache httpd. The easiest and fastest
 Resin configuration uses Resin as the web server as well as 
 the application server. We highly recommend you start with this configuration 
 although you are free to use other web servers like Apache or IIS
 with Resin.</p>
 
-<p>Keep in mind, Resin can be used for
-development or evaluation in addition to using it in production. If desired,
+<p>Resin Web Server has been tested to serve 100,000 requests per second,
+making it comparable in performance to top C-based web servers.
+See <a href="http://wiki4.caucho.com/NginX_1.2.0_versus_Resin_4.0.29_performance_tests">Wiki: Resin Web Server: Resin 4.0.x vs nginx 1.2 performance</a> for
+a comparison of Resin's performance vs nginx, a fast C-based HTTP server.</p>
+
+<p>Keep in mind, Resin can be used for development or evaluation in addition
+to using it in production. If desired,
 you can easily apply for a development license to enable Resin Pro features.
 You can also simply use Resin Open Source to start development.</p>
 
@@ -168,11 +238,11 @@ configuration page.</p>
 
 <s1 title="Browser-Based Administration (/resin-admin)">
 
-<p>To enable the /resin-admin, you'll need to create an admin user and
-password. You can either create the user in resin-admin itself, or
-if you are using the standard resin.xml and resin.properties you can
-generate the key from the command line resinctl</p>
-
+<p>To enable the /resin-admin browser-based administration, you'll need
+to create an admin user and password. You can either create the user in
+resin-admin itself, or if you are using the standard resin.xml and
+resin.properties you can generate the key from the command
+line <em>resinctl</em></p>
 
 <s2 title="Installation with resin.properties and generate-password">
 
@@ -203,13 +273,12 @@ unix# resinctl generate-password my-user my-password >> /etc/resin/resin.propert
 
 <ol>
 <li>Create an admin user following the prompt at /resin-admin.</li>
-<li>Copy the <em>resin.root/admin-users.xml.generated</em> to <em>resin.conf/admin-users.xml</em>.</li>
+<li>Rename <em>admin-users.xml.generated</em> to <em>admin-users.xml</em>.</li>
 <li>Change the resin_admin_external to true in the resin.xml if you need access from a non-local IP address.</li>
 <li>Browse /resin-admin with an HTML 5 browser.</li>
 </ol>
 
-<p>On Linux, <var>resin.conf</var> is typically <em>/etc/resin/</em>, and 
-<var>resin.root</var> is typically <em>/var/resin</em>.</p>
+<p>On Linux, <var>admin-users.xml.generated</var> is typically generated in <em>/etc/resin/</em>.</p>
 
 <p>The steps are for security reasons. Copying the admin-users.xml
 verifies that you have access to the server. And the default
@@ -226,7 +295,7 @@ documentation</a>.</p>
 <s1 title="Deploying Applications">
 
 <p>Once you've made sure Resin is working, you can start to run
-applications and add content</p>
+applications and add content.</p>
 
 <s2 title="Local network command-line deployment">
 
@@ -235,14 +304,21 @@ a running Resin server, using the .war file's name as the context-path.
 It looks like the following example.</p>
 
 <example title="Example: command-line deployment">
-resinctl deploy hello.war
+unix> resinctl deploy hello.war
 
-resinctl undeploy hello.war
+unix> resinctl undeploy hello.war
 </example>
 
 <p>The URL for the application would be: <em>http://localhost:8080/hello</em>.</p>
 
-<p>To deploy to the root context-path, use a file name ROOT.war.</p>
+<p>To deploy to the root context-path, use a file name ROOT.war
+or use the --name attribute.</p>
+
+<example title="Example: root command-line deployment">
+unix> resinctl deploy --name ROOT mywar.war
+
+unix> resinctl undeploy --name ROOT
+</example>
 
 </s2>
 
@@ -272,9 +348,6 @@ admin_remote_enable : true
 unix> resinctl deploy --user my-user --password my-password hello.war
 </example>
 
-<p>(In 4.0.24, you will need to modify the local resin.properties to
-point to the app server.)</p>
-
 </s2>
 
 <s2 title="webapps directory deployment">
@@ -299,11 +372,9 @@ The URL for the application would be:
 
 <s1 title="Running Resin as a Daemon">
 
-<p>In most production environments, Resin will run as a background daemon.
-The previous steps ran Resin in the foreground, which is convenient
-for development since the logging output goes to the console.
+<p>Most production environments will run Resin as a background daemon.
 When running as a daemon, Resin detaches from the console and continues
-running until told to stop.</p>
+running until it is stopped.</p>
 
 <p>The following are the basic steps to running Resin as a daemon:</p>
 <ol>
@@ -319,8 +390,8 @@ start Resin when the system boots.</p>
 
 <s1 title="Command-Line PDF Reports">
 
-<p>PDF reports about the Resin running status are available from the
-command-line, from /resin-admin browser-based GUI, and as automatic health
+<p>PDF reports about the Resin server can be generated with the
+command-line, the /resin-admin browser-based GUI, or as automatic health
 system tasks.</p>
 
 <p>From the command-line you can generate a pdf-report with the following:</p>
@@ -363,6 +434,33 @@ for Resin Pro.</p>
 
 <p>More installation and configuration are available at
 <a href="install.xtp">installation options</a>.</p>
+
+</s1>
+
+<s1 title="Next Steps">
+
+<ul>
+<li><b><a href="config-resin-properties.xtp">resin.properties</a></b> configuration shows how to customize basic configuration.</li>
+<li><b><a href="config-resin-xml.xtp">resin.xml</a></b> configuration shows more advanced and specialized configuration.</li>
+<li><b><a href="resin-admin-command-line.xtp">command-line</a></b> describes
+using the <b>resinctl</b> command line interface.</li>
+<li><b><a href="deploy.xtp">deployment</a></b> deploying applications to
+a running server.</li>
+<li><b><a href="clustering.xtp">clustering</a></b> describes clustering,
+cloud, and dynamic servers.</li>
+<li><b><a href="resin-admin.xtp">resin-admin</a></b> describes the
+/resin-admin browser-based interface.</li>
+<li><b><a href="health.xtp">health</a></b> describes the
+Resin health and monitoring system.</li>
+<li><b><a href="resin-admin-rest.xtp">REST admin</a></b> describes the
+REST interface for remote third-party admin integration.</li>
+<li><b><a href="http.xtp">Resin HTTP Web Server</a></b>
+describes fast, scalable HTTP web server.</li>
+<li><b><a href="http-rewrite.xtp">HTTP URL Rewrite</a></b>
+describes Resin's URL rewriting (like mod_rewrite).</li>
+<li><b><a href="security.xtp">Security</a></b>
+describes authentication, authorization and SSL.</li>
+</ul>
 
 </s1>
 

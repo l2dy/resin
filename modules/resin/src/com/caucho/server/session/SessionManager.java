@@ -1741,6 +1741,26 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     return null;
   }
 
+  public String []sessionIdList()
+  {
+    ArrayList<String> sessionIds = new ArrayList<String>();
+    
+    synchronized (_sessions) {
+      Iterator<LruCache.Entry<String, SessionImpl>> sessionsIterator
+        = _sessions.iterator();
+
+      while (sessionsIterator.hasNext()) {
+        sessionIds.add(sessionsIterator.next().getKey());
+      }
+    }
+
+    String []ids= new String[sessionIds.size()];
+
+    sessionIds.toArray(ids);
+    
+    return ids;
+  }
+  
   public String getSessionsAsJsonString() {
 
     List<SessionImpl> sessionList;
@@ -1784,14 +1804,14 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     return null;
   }
 
-
   public long getEstimatedMemorySize()
   {
     Iterator<SessionImpl> sessions = _sessions.values();
     long l = 0;
 
-    while (sessions.hasNext())
+    while (sessions.hasNext()) {
       l += sessions.next().getLastSaveLength();
+    }
 
     return l;
   }

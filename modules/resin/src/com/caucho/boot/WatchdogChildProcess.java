@@ -226,6 +226,7 @@ class WatchdogChildProcess
         logStatus(_status);
       }
     } catch (Exception e) {
+      System.err.println(e.getMessage());
       log.log(Level.WARNING, e.toString(), e);
 
       try {
@@ -538,8 +539,6 @@ class WatchdogChildProcess
               jvmArgs.add(String.valueOf(ss.getSystemFD()));
               jvmArgs.add(String.valueOf(port.getAddress()));
               jvmArgs.add(String.valueOf(port.getPort()));
-              
-              System.out.println("PORT: " + ss.getSystemFD() + " " + port.getAddress() + " " +port.getPort());
             }
             else {
               ss.close();
@@ -683,11 +682,15 @@ class WatchdogChildProcess
     }
     
     Path resinHome = _watchdog.getResinHome();
+    Path resinRoot = _watchdog.getResinRoot();
     
     if (! isEndorsed) {
       String endorsed = System.getProperty("java.endorsed.dirs");
+      
       String resinEndorsed = resinHome.getNativePath() + File.separator + "endorsed";
       
+      resinEndorsed += (File.pathSeparator
+                        + resinRoot .getNativePath() + File.separator + "endorsed");
       
       if (endorsed != null)
         endorsed = endorsed + File.pathSeparator + resinEndorsed;
@@ -797,7 +800,7 @@ class WatchdogChildProcess
 
     // server/2k54
     if (_watchdog.isElasticServer()) {
-      resinArgs.add("-elastic");
+      resinArgs.add("-elastic-server");
     }
     
     resinArgs.add("-socketwait");

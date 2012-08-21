@@ -34,6 +34,7 @@ import java.io.OutputStream;
 import java.sql.SQLException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -125,6 +126,9 @@ public class BlockStore {
     = (int) ((BLOCK_SIZE - 64) / MINI_FRAG_SIZE);
   public final static int MINI_FRAG_ALLOC_OFFSET
     = MINI_FRAG_PER_BLOCK * MINI_FRAG_SIZE;
+  
+  private final static int MINI_FRAG_FREE_STRIDE = 4;
+  private final static int MINI_FRAG_STRIDE_MASK = MINI_FRAG_FREE_STRIDE - 1;
 
   public final static long METADATA_START = BLOCK_SIZE;
 
@@ -158,6 +162,8 @@ public class BlockStore {
 
   private int _freeMiniAllocIndex; // index for finding a free mini
   private int _freeMiniAllocCount;
+  
+  private final AtomicLong _freeMiniOffset = new AtomicLong();
 
   private final Object _allocationWriteLock = new Object();
   private final AtomicInteger _allocationWriteCount = new AtomicInteger();
@@ -1585,16 +1591,23 @@ public class BlockStore {
   private long allocateMiniFragmentBlock()
     throws IOException
   {
+    int offsetStride =  MINI_FRAG_FREE_STRIDE;
+    int offsetMask = MINI_FRAG_STRIDE_MASK;
+    int allocStride = ALLOC_BYTES_PER_BLOCK * offsetStride;
+    
     while (true) {
       byte []allocationTable = _allocationTable;
+      
+      int offset = (int) (_freeMiniOffset.getAndIncrement() & offsetMask);
 
-      for (int i = _freeMiniAllocIndex;
+      for (int i = _freeMiniAllocIndex + offset * ALLOC_BYTES_PER_BLOCK;
            i < allocationTable.length;
-           i += ALLOC_BYTES_PER_BLOCK) {
+           i += allocStride) {
         int fragMask = allocationTable[i + 1] & 0xff;
 
         if (allocationTable[i] == ALLOC_MINI_FRAG && fragMask != 0xff) {
-          _freeMiniAllocIndex = i;
+          updateFreeMiniAllocIndex(i);
+
           _freeMiniAllocCount++;
 
           synchronized (_allocationLock) {
@@ -1617,11 +1630,14 @@ public class BlockStore {
       if (_freeMiniAllocCount == 0) {
         // if no fragment, allocate a new one.
 
+        /*
         int count;
         if (_blockCount >= 256)
           count = 16;
         else
           count = 1;
+          */
+        int count = 32;
 
         for (int i = 0; i < count; i++) {
           Block block = allocateBlockMiniFragment();
@@ -1633,7 +1649,33 @@ public class BlockStore {
       _freeMiniAllocIndex = 0;
     }
   }
-
+  
+  private void updateFreeMiniAllocIndex(int i)
+  {
+    byte []allocationTable = _allocationTable;
+    
+    int offset = _freeMiniAllocIndex;
+    
+    if (offset == (i & ~MINI_FRAG_STRIDE_MASK)) {
+      return;
+    }
+    
+    // if current stride has a free mini-frag, use it
+    for (int j = 0; j < MINI_FRAG_FREE_STRIDE; j++) {
+      int code = allocationTable[offset];
+      int fragMask = allocationTable[offset + 1] & 0xff;
+      
+      if (code == ALLOC_MINI_FRAG && fragMask != 0xff) {
+        return;
+      }
+      
+      offset += ALLOC_BYTES_PER_BLOCK;
+    }
+    
+    _freeMiniAllocIndex = i & ~MINI_FRAG_STRIDE_MASK;
+    
+  }
+  
   /**
    * Deletes a miniFragment.
    */
@@ -1803,6 +1845,9 @@ public class BlockStore {
       if (_blockManager != null) {
         _blockManager.flush(this);
       }
+      
+      long timeout = 100;
+      getWriter().waitForComplete(timeout);
     }
   }
   
@@ -1830,8 +1875,10 @@ public class BlockStore {
       return;
 
     log.finer(this + " closing");
-    if (_blockManager != null) {
-      _blockManager.freeStore(this);
+    BlockManager blockManager = _blockManager;
+    
+    if (blockManager != null) {
+      blockManager.freeStore(this);
     }
     
     _writer.close();
@@ -1843,8 +1890,8 @@ public class BlockStore {
 
     _readWrite.close();
 
-    if (_blockManager != null) {
-      _blockManager.freeStoreId(id);
+    if (blockManager != null) {
+      blockManager.freeStoreId(id);
     }
   }
 

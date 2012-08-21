@@ -30,6 +30,7 @@
 package com.caucho.env.thread2;
 
 import java.io.Closeable;
+import java.lang.ref.WeakReference;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -49,8 +50,7 @@ import com.caucho.util.CurrentTime;
 abstract public class AbstractTaskWorker2
   implements Runnable, TaskWorker, Closeable
 {
-  private static final Logger log
-    = Logger.getLogger(AbstractTaskWorker2.class.getName());
+  private static Logger _log;
   
   private static final int TASK_PARK = 0;
   private static final int TASK_SLEEP = 1;
@@ -63,7 +63,7 @@ abstract public class AbstractTaskWorker2
   private final AtomicInteger _taskState = new AtomicInteger();
   private final AtomicBoolean _isActive = new AtomicBoolean();
 
-  private final ClassLoader _classLoader;
+  private final WeakReference<ClassLoader> _classLoaderRef;
   
   private String _threadName;
   
@@ -75,7 +75,7 @@ abstract public class AbstractTaskWorker2
 
   protected AbstractTaskWorker2(ClassLoader classLoader)
   {
-    _classLoader = classLoader;
+    _classLoaderRef = new WeakReference<ClassLoader>(classLoader);
     
     Environment.addCloseListener(this, classLoader);
   }
@@ -101,6 +101,11 @@ abstract public class AbstractTaskWorker2
   public boolean isClosed()
   {
     return _isClosed;
+  }
+  
+  protected ClassLoader getClassLoader()
+  {
+    return _classLoaderRef.get();
   }
   
   abstract public long runTask();
@@ -180,7 +185,7 @@ abstract public class AbstractTaskWorker2
     
     try {
       _thread = thread;
-      thread.setContextClassLoader(_classLoader);
+      thread.setContextClassLoader(getClassLoader());
       thread.setName(getThreadName());
       
       onThreadStart();
@@ -203,7 +208,7 @@ abstract public class AbstractTaskWorker2
         
         while (_taskState.getAndSet(TASK_SLEEP) == TASK_READY
                && ! isClosed()) {
-          thread.setContextClassLoader(_classLoader);
+          thread.setContextClassLoader(getClassLoader());
           
           isExpireRetry = false;
           
@@ -244,7 +249,7 @@ abstract public class AbstractTaskWorker2
     } catch (Throwable e) {
       System.out.println("EXN: " + e);
       WarningService.sendCurrentWarning(this, e);
-      log.log(Level.WARNING, e.toString(), e);
+      log().log(Level.WARNING, e.toString(), e);
     } finally {
       _thread = null;
 
@@ -263,6 +268,15 @@ abstract public class AbstractTaskWorker2
   protected long getCurrentTimeActual()
   {
     return CurrentTime.getCurrentTimeActual();
+  }
+  
+  private Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(AbstractTaskWorker2.class.getName()); 
+    }
+    
+    return _log;
   }
 
   @Override

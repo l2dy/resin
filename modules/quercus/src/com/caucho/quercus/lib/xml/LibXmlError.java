@@ -19,17 +19,41 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *   Free SoftwareFoundation, Inc.
+ *
+ *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Scott Ferguson
+ * @author Nam Nguyen
  */
 
-package com.caucho.util;
+package com.caucho.quercus.lib.xml;
 
-/**
- * JNI calls for misc system utilities.
- */
-public class JniCaucho {
+public class LibXmlError
+{
+  public int level;
+  public int code;
+  public int column;
+
+  public String message;
+  public String file;
+  public int line;
+
+  protected LibXmlError(int level, int code, int column,
+                        String message, String file, int line)
+  {
+    this.level = level;
+    this.code = code;
+    this.column = column;
+    this.message = message;
+    this.file = file;
+    this.line = line;
+  }
+
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + line
+                                      + "," + message + "]";
+  }
 }
