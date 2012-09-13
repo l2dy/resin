@@ -31,6 +31,8 @@ package com.caucho.management.server;
 
 import java.io.Serializable;
 
+import com.caucho.util.CurrentTime;
+
 /**
  * Information about a tcp connection
  */
@@ -47,7 +49,11 @@ public class TcpConnectionInfo implements java.io.Serializable
   // the connection state
   private final String _state;
   // the request time
-  private final long _requestTime;
+  private final long _requestStartTime;
+  
+  private String _remoteAddress;
+  
+  private String _url;
 
   /**
    * null-arg constructor for Hessian.
@@ -58,20 +64,22 @@ public class TcpConnectionInfo implements java.io.Serializable
     _threadId = 0;
     _portName = null;
     _state = null;
-    _requestTime = 0;
+    _requestStartTime = 0;
+    _remoteAddress = null;
+    _url = null;
   }
 
   public TcpConnectionInfo(int id,
                            long threadId,
                            String portName,
                            String state,
-                           long requestTime)
+                           long requestStartTime)
   {
     _id = id;
     _threadId = threadId;
     _portName = portName;
     _state = state;
-    _requestTime = requestTime;
+    _requestStartTime = requestStartTime;
   }
 
   public int getId()
@@ -93,12 +101,45 @@ public class TcpConnectionInfo implements java.io.Serializable
   {
     return _state;
   }
-
-  public long getRequestTime()
+  
+  public boolean hasRequest()
   {
-    return _requestTime;
+    return _requestStartTime > 0;
   }
 
+  public long getRequestStartTime()
+  {
+    return _requestStartTime;
+  }
+  
+  public long getRequestActiveTime()
+  {
+    if (_requestStartTime > 0)
+      return CurrentTime.getCurrentTime() - _requestStartTime;
+    else
+      return -1;
+  }
+  
+  public void setRemoteAddress(String remoteAddress)
+  {
+    _remoteAddress = remoteAddress;
+  }
+  
+  public String getRemoteAddress()
+  {
+    return _remoteAddress;
+  }
+  
+  public void setUrl(String url)
+  {
+    _url = url;
+  }
+  
+  public String getUrl()
+  {
+    return _url;
+  }
+  
   public String toString()
   {
     return (getClass().getSimpleName()

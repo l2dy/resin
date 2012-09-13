@@ -1018,12 +1018,12 @@ abstract public class AbstractHttpResponse {
       
       for (int i = 0; i < len; i++) {
         char ch = v.charAt(i);
-        
+        /*
         if (ch == ' ') {
           // server/010y, #3897
           return fillCookie(cb, cookie, date, version, true);
         }
-        
+        */
         cb.append(ch);
       }
     }

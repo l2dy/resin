@@ -31,7 +31,6 @@ package com.caucho.boot;
 
 import java.net.InetAddress;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -86,7 +85,9 @@ public class BootResinConfig // implements EnvironmentBean
   private String _homeCluster;
   private String _homeServer;
   private boolean _isElasticServer;
+  private int _elasticServerPort;
   private boolean _isElasticDns;
+  private ArrayList<ElasticServer> _elasticServerList;
   
   BootResinConfig(ResinSystem system,
                   WatchdogArgs args)
@@ -190,16 +191,69 @@ public class BootResinConfig // implements EnvironmentBean
   {
     return _homeCluster != null && ! "".equals(_homeCluster);
   }
-  
-  @Configurable
-  public void setElasticServer(boolean isElasticServer)
-  {
-    _isElasticServer = isElasticServer;
-  }
-  
+
   public boolean isElasticServer()
   {
     return _isElasticServer;
+  }
+  
+  @Configurable
+  public void setElasticServer(String servers)
+  {
+    if (servers == null
+        || "".equals(servers)
+        || "no".equalsIgnoreCase(servers)
+        || "false".equalsIgnoreCase(servers)) {
+      _isElasticServer = false;
+      return;
+    }
+    
+    _elasticServerList = new ArrayList<ElasticServer>();
+    
+    if ("yes".equalsIgnoreCase(servers)
+        || "true".equalsIgnoreCase(servers)) {
+      _isElasticServer = true;
+      
+      _elasticServerList.add(new ElasticServer(null, 1));
+      
+      return;
+    }
+    
+    parseElasticServers(servers);
+    
+    _isElasticServer = true;
+  }
+  
+  private void parseElasticServers(String servers)
+  {
+    String []serverList = servers.split("[\\s,]+");
+    
+    for (String server : serverList) {
+      int p = server.indexOf(':');
+      
+      String cluster;
+      int count;
+      
+      if (p >= 0) {
+        cluster = server.substring(0, p);
+        count = Integer.parseInt(server.substring(p + 1));
+      }
+      else if (Character.isDigit(server.charAt(0))) {
+        cluster = null;
+        count = Integer.parseInt(server);
+      }
+      else {
+        cluster = server;
+        count = 1; 
+      }
+      
+      _elasticServerList.add(new ElasticServer(cluster, count));
+    }
+  }
+
+  public ArrayList<ElasticServer> getElasticServers()
+  {
+    return _elasticServerList;
   }
   
   @Configurable
@@ -211,6 +265,30 @@ public class BootResinConfig // implements EnvironmentBean
   public boolean isElasticDns()
   {
     return _isElasticDns;
+  }
+  
+  @Configurable
+  public void setElasticServerPort(int port)
+  {
+    _elasticServerPort = port;
+  }
+  
+  public int getElasticServerPort()
+  {
+    return _elasticServerPort;
+  }
+  
+  public int getElasticServerPort(WatchdogArgs arg, int count)
+  {
+    int port = arg.getDynamicPort();
+    
+    if (port <= 0)
+      port = _elasticServerPort;
+    
+    if (port <= 0)
+      port = 6830 + count;
+    
+    return port;
   }
 
   /*
@@ -606,17 +684,55 @@ public class BootResinConfig // implements EnvironmentBean
    */
   WatchdogClient addElasticClient(WatchdogArgs args)
   {
-    if (! isElasticServer(args) && ! isHomeCluster())
+    if (! isElasticServer(args) && ! isHomeCluster()) {
       throw new IllegalStateException();
+    }
+    
+    int count = 0;
+    
+    for (ElasticServer elasticServer : getElasticServerList()) {
+      int serverCount = elasticServer.getCount();
+      
+      for (int i = 0; i < serverCount; i++) {
+        WatchdogClient client = addElasticServer(elasticServer, args, 
+                                                 i, count++); 
+      
+        return client;
+      }
+    }
+    
+    return null;
+  }
+  
+  ArrayList<ElasticServer> getElasticServerList()
+  {
+    ArrayList<ElasticServer> elasticServers = _elasticServerList;
+    
+    if (elasticServers == null) {
+      elasticServers = new ArrayList<ElasticServer>();
+      elasticServers.add(new ElasticServer(null, 1));
+    }
+    
+    return elasticServers;
+  }
+  
+  private WatchdogClient addElasticServer(ElasticServer elasticServer,
+                                          WatchdogArgs args,
+                                          int index,
+                                          int count)
+  {
+    String clusterId = elasticServer.getCluster();
 
-    String clusterId = args.getClusterId();
+    if (clusterId == null) {
+      clusterId = args.getClusterId();
+    }
     
     if (clusterId == null) {
       clusterId = getHomeCluster();
     }
     
     String address = args.getDynamicAddress();
-    int port = args.getDynamicPort();
+    int port = getElasticServerPort(args, count);
     
     BootClusterConfig cluster = findCluster(clusterId);
 
@@ -629,17 +745,33 @@ public class BootResinConfig // implements EnvironmentBean
       throw new ConfigException(L.l("cluster '{0}' does not have <resin:ElasticCloudService>. --elastic-server requires a <resin:ElasticCloudService> tag.",
                                     clusterId));
     }
-
+    
+    clusterId = cluster.getId();
+    
+    String serverId = args.getServerId();
+    
+    if (serverId == null) {
+      serverId = "dyn-" + clusterId + "-" + index;
+    }
+    
     WatchdogConfigHandle configHandle = cluster.createServer();
-    configHandle.setId(args.getElasticServerId());
+    configHandle.setId(serverId);
     // configHandle.setDynamic(true);
     configHandle.setAddress(address);
     configHandle.setPort(port);
     
+    if (findClient(configHandle.getId()) != null) {
+      throw new ConfigException(L.l("--elastic-server '{0}' already exists as a static server."
+                                    + " Elastic server names must not conflict with static server names.",
+                                    configHandle.getId()));
+    }
+    
     WatchdogConfig config = cluster.addServer(configHandle);
     
     config.setElastic(true);
-
+    config.setElasticServerPort(port);
+    config.setElasticServerCluster(clusterId);
+    
     addServer(config);
 
     WatchdogClient client
@@ -739,6 +871,27 @@ public class BootResinConfig // implements EnvironmentBean
     public int compare(WatchdogClient a, WatchdogClient b)
     {
       return a.getId().compareTo(b.getId());
+    }
+  }
+  
+  static class ElasticServer {
+    private final String _cluster;
+    private final int _count;
+    
+    ElasticServer(String cluster, int count)
+    {
+      _cluster = cluster;
+      _count = count;
+    }
+    
+    String getCluster()
+    {
+      return _cluster;
+    }
+    
+    int getCount()
+    {
+      return _count;
     }
   }
 }

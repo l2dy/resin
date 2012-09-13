@@ -36,6 +36,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.VersionFactory;
+import com.caucho.boot.BootResinConfig.ElasticServer;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.config.core.ResinProperties;
@@ -199,7 +200,7 @@ public class ResinBoot
     if (! _resinConfig.isElasticServer(_args)) {
       return;
     }
-
+    
     WatchdogClient client = _resinConfig.addElasticClient(_args);
 
     if (client != null) {
@@ -212,9 +213,29 @@ public class ResinBoot
     return _resinConfig.isElasticServer(args);
   }
   
+  ArrayList<ElasticServer> getElasticServerList()
+  {
+    return _resinConfig.getElasticServerList();
+  }
+  
   public boolean isElasticIp(WatchdogArgs args)
   {
     return _resinConfig.isElasticDns(args);
+  }
+  
+  String getHomeCluster(WatchdogArgs args)
+  {
+    String clusterId = args.getClusterId();
+    
+    if (clusterId != null)
+      return clusterId;
+    else
+      return _resinConfig.getHomeCluster();
+  }
+
+  BootClusterConfig findCluster(String clusterId)
+  {
+    return _resinConfig.findCluster(clusterId);
   }
 
   WatchdogClient findClient(String serverId, WatchdogArgs args)
@@ -334,7 +355,7 @@ public class ResinBoot
     } catch (BootArgumentException e) {
       System.err.println(e.getMessage());
       
-      if (log.isLoggable(Level.FINER)) {
+      if (e.getMessage() == null || log.isLoggable(Level.FINER)) {
         e.printStackTrace();
       }
 
@@ -345,7 +366,7 @@ public class ResinBoot
     } catch (ConfigException e) {
       System.err.println(e.getMessage());
       
-      if (log.isLoggable(Level.FINER)) {
+      if (e.getMessage() == null || log.isLoggable(Level.FINER)) {
         e.printStackTrace();
       }
 
@@ -353,7 +374,7 @@ public class ResinBoot
     } catch (Exception e) {
       System.err.println(e.getMessage());
       
-      if (log.isLoggable(Level.FINE)) {
+      if (e.getMessage() == null || log.isLoggable(Level.FINE)) {
         e.printStackTrace();
       }
 

@@ -104,7 +104,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   private boolean _isNew = true;
   // true if the application has modified the data
   @Transient
-  private boolean _isModified = false;
+  private boolean _isModified;
   // true if the session is still valid, i.e. not invalidated
   @Json(name = "Valid")
   private boolean _isValid = true;
@@ -141,7 +141,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     creationTime = CurrentTime.getExactTime();
 
     _creationTime = creationTime;
-    _accessTime = creationTime;
+    setAccessTime(creationTime);
     _lastUseTime = _accessTime;
     _idleTimeout = manager.getSessionTimeout();
 
@@ -535,16 +535,20 @@ public class SessionImpl implements HttpSession, CacheListener {
     }
 
     // e.g. server 'C' when 'A' and 'B' have no record of session
-    if (_isValid)
+    if (_isValid) {
       unbind();
+    }
     
     // TCK now cares about exact time
     now = CurrentTime.getExactTime();
 
     _isValid = true;
     _isNew = true;
-    _accessTime = now;
+    setAccessTime(now);
     _creationTime = now;
+    
+    // server/01np
+    _isModified = true;
 
     /*
     if (_clusterObject != null && isCreate)
@@ -609,10 +613,10 @@ public class SessionImpl implements HttpSession, CacheListener {
     _accessTime = now;*/
   }
   
-  public void setAccessTime(long now)
+  public void setAccessTime(long accessTime)
   {
     // server/0123 (vs TCK?)
-    _accessTime = now;
+    _accessTime = accessTime;
   }
 
   public int getLastSaveLength()
@@ -631,7 +635,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     // server/0122
     // TCK cares about exact time
-    _accessTime = CurrentTime.getExactTime();
+    setAccessTime(CurrentTime.getExactTime());
     _isNew = false;
 
     // update cache access?
@@ -652,10 +656,11 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public boolean load(boolean isNew)
   {
+    long now = CurrentTime.getCurrentTime();
+    
     if (! _isValid)
       return false;
-    else if (_isIdleSet
-             && _accessTime + _idleTimeout < CurrentTime.getCurrentTime()) {
+    else if (_isIdleSet && _accessTime + _idleTimeout < now) {
       // server/01o2 (tck)
     
       return false;
@@ -668,12 +673,14 @@ public class SessionImpl implements HttpSession, CacheListener {
     try {
       ByteStreamCache cache = _manager.getCache();
 
-      if (cache == null)
+      if (cache == null) {
         return ! isNew;
+      }
 
       // server/015m
-      if (! isNew && _manager.isSaveOnShutdown())
+      if (! isNew && _manager.isSaveOnShutdown()) {
         return true;
+      }
 
       ExtCacheEntry entry = cache.getExtCacheEntry(_id);
       ExtCacheEntry cacheEntry = _cacheEntry;
@@ -682,16 +689,26 @@ public class SessionImpl implements HttpSession, CacheListener {
         // server/01a1, #4419
         
         _idleTimeout = entry.getAccessedExpireTimeout();
+        
+        long lastAccessTime = entry.getLastAccessedTime();
+
+        if (lastAccessTime + _idleTimeout * 5 / 4 < now) {
+          return false;
+        }
         // _idleTimeout = entry.getIdleTimeout() * 4 / 5;
         //_isIdleSet = true;
       }
-      
+ 
       if (entry != null && cacheEntry != null
           && cacheEntry.getValueHash() == entry.getValueHash()) {
         if (log.isLoggable(Level.FINE)) {
           log.fine(this + " session load-same valueHash="
                    + (entry != null ? Long.toHexString(entry.getValueHash()) : null));
         }
+        
+        entry.updateAccessTime();
+        
+        _isModified = false;
         
         return true;
       }
@@ -714,6 +731,7 @@ public class SessionImpl implements HttpSession, CacheListener {
         is.close();
 
         _cacheEntry = entry;
+        _isModified = false;
 
         return true;
       }
@@ -814,7 +832,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     unbind();
     _isValid = true;
     _isNew = true;
-    _accessTime = now;
+    setAccessTime(now);
     _creationTime = now;
   }
 
@@ -880,14 +898,20 @@ public class SessionImpl implements HttpSession, CacheListener {
       _manager.addSessionSaveSample(length);
 
       _lastSaveLength = length;
+      
+      // #5170
+      long lastAccessTime = _accessTime;
+      long lastModifiedTime = lastAccessTime;
 
       _cacheEntry = _manager.getCache().put(_id, os.getInputStream(),
                                             _idleTimeout,
-                                            -1);
+                                            -1,
+                                            lastAccessTime,
+                                            lastModifiedTime);
 
       if (log.isLoggable(Level.FINE)) {
         log.fine(this + " session save valueHash="
-                 + (_cacheEntry != null ? _cacheEntry.getValueHash() : null));
+                 + (_cacheEntry != null ? Long.toHexString(_cacheEntry.getValueHash()) : null));
       }
 
       os.close();

@@ -38,12 +38,15 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.types.FileSetType;
 import com.caucho.config.types.Period;
 import com.caucho.env.repository.Repository;
 import com.caucho.env.repository.RepositorySystem;
 import com.caucho.env.repository.RepositoryTagListener;
+import com.caucho.env.service.ResinSystem;
 import com.caucho.loader.Environment;
+import com.caucho.server.resin.Resin;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
@@ -78,12 +81,12 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   
   private final DeployControllerService _deployService;
   
-  private String _entryNamePrefix = "";
-
   private String _extension = ".jar";
   
   private String _expandPrefix = "";
   private String _expandSuffix = "";
+  
+  private String _pathSuffix;
 
   private boolean _isVersioning;
   
@@ -109,9 +112,9 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   private long _lastCheckTime;
   private AtomicBoolean _isChecking = new AtomicBoolean();
   private long _checkInterval = 1000L;
-  private long _digest;
   private volatile boolean _isModified;
   private AtomicBoolean _isDeploying = new AtomicBoolean();
+  private final AtomicBoolean _isInit = new AtomicBoolean();
 
   /**
    * Creates the deploy.
@@ -181,6 +184,22 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   {
     return getArchiveDirectory().lookup(name + getExtension());
   }
+  
+  /**
+   * true if the webapps directory should be an elastic suffix.
+   */
+  public String getPathSuffix()
+  {
+    return _pathSuffix;
+  }
+  
+  /**
+   * true if the webapps directory should be an elastic suffix.
+   */
+  public void setPathSuffix(String pathSuffix)
+  {
+    _pathSuffix = pathSuffix;
+  }
 
   /**
    * Sets the war expand dir to check for new applications.
@@ -229,26 +248,24 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
     return _cronInterval;
   }
 
-  /**
-   * Sets the expand remove file set.
-   */
-  public void addExpandCleanupFileset(FileSetType fileSet)
+  @Configurable
+  public void addExpandCleanupFileset(FileSetType include)
   {
-    if (_expandCleanupFileSet == null)
-      _expandCleanupFileSet = fileSet;
-    else
-      _expandCleanupFileSet.add(fileSet);
+    if (_expandCleanupFileSet == null) {
+      _expandCleanupFileSet = new FileSetType();
+    }
+
+    _expandCleanupFileSet.add(include);
   }
 
-  /**
-   * Sets the expand remove file set.
-   */
-  public void addExpandPreserveFileset(FileSetType fileSet)
+  @Configurable
+  public void addExpandPreserveFileset(FileSetType exclude)
   {
-    if (_expandCleanupFileSet == null)
+    if (_expandCleanupFileSet == null) {
       _expandCleanupFileSet = new FileSetType();
+    }
 
-    _expandCleanupFileSet.addInverse(fileSet);
+    _expandCleanupFileSet.addInverse(exclude);
   }
 
   /**
@@ -322,7 +339,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
 
   public void setEntryNamePrefix(String entryNamePrefix)
   {
-    _entryNamePrefix = entryNamePrefix;
+    // _entryNamePrefix = entryNamePrefix;
   }
 
   /**
@@ -340,7 +357,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   {
     _path = path;
   }
-
+  
   /**
    * Adds a required file in the expansion.
    */
@@ -390,7 +407,19 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
   protected void initImpl()
     throws ConfigException
   {
+    if (_isInit.getAndSet(true)) {
+      return;
+    }
+    
     super.initImpl();
+    
+    if (_pathSuffix != null && ! "".equals(_pathSuffix)) {
+      String tail = _path.getTail();
+      
+      tail += "-" + _pathSuffix;
+      
+      _path = _path.getParent().lookup(tail);
+    }
 
     if (getExpandDirectory() == null)
       throw new ConfigException(L.l("<expand-directory> must be specified for deployment of archive expansion."));
@@ -430,7 +459,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
    * Returns the location of an expanded archive, or null if no archive with
    * the passed name is deployed.
    *
-   * @param name a name, without an extension
+   * @param key a name, without an extension
    */
   public Path getExpandPath(String key)
   {
@@ -473,7 +502,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
 
       if (_expandManager != null) {
         _isModified = _expandManager.isModified();
-        _digest = _expandManager.getDigest();
+        // _digest = _expandManager.getDigest();
       }
       else
         _isModified = true;
@@ -677,7 +706,7 @@ abstract public class ExpandDeployGenerator<E extends ExpandDeployController<?>>
       E controller = createController(version);
 
       if (controller != null) {
-        controller.addExpandCleanupFileSet(_expandCleanupFileSet);
+        controller.addParentExpandCleanupFileSet(_expandCleanupFileSet);
         controllerList.add(controller);
 
         // _controllerNames.add(name); // server/1d19

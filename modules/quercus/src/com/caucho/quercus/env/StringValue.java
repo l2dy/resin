@@ -42,7 +42,6 @@ import java.util.zip.CRC32;
 
 import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.QuercusRuntimeException;
-import com.caucho.quercus.env.StringBuilderValue.BuilderOutputStream;
 import com.caucho.quercus.lib.file.BinaryInput;
 import com.caucho.quercus.lib.i18n.Decoder;
 import com.caucho.quercus.marshal.Marshal;
@@ -2627,6 +2626,57 @@ abstract public class StringValue
     for (int i = aLength - 1; i >= 0; i--) {
       int chA = charAt(i);
       int chB = s.charAt(i);
+
+      if (chA == chB) {
+      }
+      else {
+        if ('A' <= chA && chA <= 'Z')
+          chA += 'a' - 'A';
+
+        if ('A' <= chB && chB <= 'Z')
+          chB += 'a' - 'A';
+
+        if (chA != chB)
+          return false;
+      }
+    }
+
+    return true;
+  }
+
+  public boolean equalsString(CharSequence s)
+  {
+    int lenA = length();
+    int lenB = s.length();
+
+    if (lenA != lenB) {
+      return false;
+    }
+
+    for (int i = 0; i < lenA; i++) {
+      char chA = charAt(i);
+      char chB = s.charAt(i);
+
+      if (chA != chB) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  public boolean equalsStringIgnoreCase(CharSequence s)
+  {
+    int lenA = length();
+    int lenB = s.length();
+
+    if (lenA != lenB) {
+      return false;
+    }
+
+    for (int i = 0; i < lenA; i++) {
+      char chA = charAt(i);
+      char chB = s.charAt(i);
 
       if (chA == chB) {
       }

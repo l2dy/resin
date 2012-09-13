@@ -112,6 +112,10 @@ public class HmtpServlet extends GenericServlet {
     if ("true".equals(admin))
       _isAdmin = true;
 
+    // _authManager = new ServerAuthManager(_auth);
+    _authManager = new ServerAuthManager();
+    _authManager.setAuthenticationRequired(_isAuthenticationRequired);
+
     try {
       if (_isAdmin)
         _auth = _adminInstance.get();
@@ -122,16 +126,14 @@ public class HmtpServlet extends GenericServlet {
         log.log(Level.FINER, L.l("{0} requires an active com.caucho.security.Authenticator because HMTP messaging requires authenticated login for security.",
                                  this), e);
       }
+      else if (_authManager.isClusterSystemKey()) {
+      }
       else if (_isAuthenticationRequired){
         // network/03f0
         log.info(L.l("{0} requires an active com.caucho.security.Authenticator because HMTP messaging requires authenticated login for security.  In the resin.xml, add an <sec:AdminAuthenticator>",
                    this));
       }
     }
-
-    // _authManager = new ServerAuthManager(_auth);
-    _authManager = new ServerAuthManager();
-    _authManager.setAuthenticationRequired(_isAuthenticationRequired);
 
     if (_isAdmin)
       _broker = ServletService.getCurrent().getAdminBroker();
@@ -144,6 +146,7 @@ public class HmtpServlet extends GenericServlet {
   /**
    * Service handling
    */
+  @Override
   public void service(ServletRequest request, ServletResponse response)
     throws IOException, ServletException
   {
@@ -184,6 +187,8 @@ public class HmtpServlet extends GenericServlet {
     
     private ServerLinkActor _linkService;
 
+    private ClientStubManager _clientManager;
+
     WebSocketHandler(String ipAddress)
     {
       _ipAddress = ipAddress;
@@ -196,22 +201,26 @@ public class HmtpServlet extends GenericServlet {
       _out = new HmtpWebSocketContextWriter(context);
       
       ManagedBroker broker = getBroker();
-      Mailbox toLinkMailbox = new MultiworkerMailbox(_out.getAddress(), _out, broker, 1);
+      Mailbox toLinkMailbox = new MultiworkerMailbox(_out.getAddress(), _out, 
+                                                     broker, 1);
       
       _linkStream = new PassthroughBroker(toLinkMailbox);
-      ClientStubManager clientManager = new ClientStubManager(broker, toLinkMailbox);
-      _linkService = new ServerLinkActor(_linkStream, clientManager, _authManager, _ipAddress);
-      _broker = new ServerProxyBroker(broker, clientManager,
+      _clientManager = new ClientStubManager(broker, toLinkMailbox);
+      _linkService = new ServerLinkActor(_linkStream, _clientManager, 
+                                         _authManager, _ipAddress);
+      _broker = new ServerProxyBroker(broker, _clientManager,
                                       _linkService.getActor());
     }
 
     @Override
     public void onDisconnect(WebSocketContext context) throws IOException
     {
-      /*
-      if (_linkService != null)
-        _linkService.close();
-        */
+      ClientStubManager clientManager = _clientManager;
+      _clientManager = null;
+      
+      if (clientManager != null) {
+        clientManager.logout();
+      }
     }
 
     @Override

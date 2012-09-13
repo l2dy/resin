@@ -203,6 +203,18 @@ namespace Caucho
       if (isStart && ResinArgs.Cluster != null)
         arguments.Append(" -cluster ").Append(ResinArgs.Cluster);
 
+      if (isStart
+        && ResinArgs.ElasticServer
+        && ! String.IsNullOrEmpty(ResinArgs.ElasticServerAddress)) {
+        arguments.Append(" --elastic-server-address ").Append(ResinArgs.ElasticServerAddress).Append(' ');
+      }
+
+      if (isStart
+        && ResinArgs.ElasticServer
+        && ! String.IsNullOrEmpty(ResinArgs.ElasticServerPort)) {
+        arguments.Append(" --elastic-server-port ").Append(ResinArgs.ElasticServerPort).Append(' ');
+      }
+
       arguments.Append(' ').Append(ResinArgs.ResinArguments);
 
       startInfo.Arguments = arguments.ToString();

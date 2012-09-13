@@ -63,6 +63,7 @@ public class CloudServer {
   private static final int DECODE[];
 
   private final String _id;
+  private final String _displayId;
 
   private final CloudPod _pod;
   private final int _index;
@@ -88,6 +89,7 @@ public class CloudServer {
   private CloudServerState _state = CloudServerState.UNKNOWN;
 
   public CloudServer(String id,
+                     String displayId,
                      CloudPod pod, 
                      int index,
                      String address,
@@ -100,7 +102,8 @@ public class CloudServer {
       throw new IllegalArgumentException();
     
     _id = id;
-
+    _displayId = displayId;
+    
     _pod = pod;
     _index = index;
     
@@ -206,6 +209,11 @@ public class CloudServer {
   public final String getId()
   {
     return _id;
+  }
+  
+  public final String getDisplayId()
+  {
+    return _displayId;
   }
 
   public final String getDebugId()

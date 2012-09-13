@@ -13,6 +13,9 @@ resin_pro=@resin_pro@
 build_dir=@build_dir@
 setuid_user=@setuid_user@
 setuid_group=@setuid_group@
+setuid_set=@setuid_set@
+user_add=@user_add@
+group_add=@group_add@
 LIBEXEC=@LIBEXEC@
 skip_check_resin_sh=@SKIP_CHECK_RESIN_SH@
 root_subdirs_preserve=project-jars webapps webapp-jars endorsed resin-inf app-inf
@@ -28,13 +31,20 @@ all	:
 	fi
 
 rpm-dist	:
-	cp conf/resin.properties conf/resin.properties.orig
-	awk '/setuid_user/ { print "setuid_user : @setuid_user@"; next; } \
-	       /setuid_group/ { print "setuid_group : @setuid_group@"; next; } \
-	             { print $0; }' \
-	conf/resin.properties.orig > conf/resin.properties
+	@ cp conf/resin.properties conf/resin.properties.orig
+	@ awk '/setuid_user/ { print "setuid_user : $(setuid_user)"; next; } \
+	    /setuid_group/ { print "setuid_group : $(setuid_group)"; next; } \
+	    { print $0; }' \
+	    conf/resin.properties.orig > conf/resin.properties
 
 install	:
+	@ if test "$(setuid_set)" = "true"; then \
+	  cp conf/resin.properties conf/resin.properties.orig; \
+	  awk '/setuid_user/ { print "setuid_user : $(setuid_user)"; next; } \
+	      /setuid_group/ { print "setuid_group : $(setuid_group)"; next; } \
+	      { print $0; }' \
+	      conf/resin.properties.orig > conf/resin.properties; \
+	fi
 	@ if test "$(resin_root)" != "$(build_dir)"; then \
 	  echo "Installing Resin root $(resin_root)."; \
 	  if test ! -e "$(resin_root)"; then \
@@ -58,8 +68,10 @@ install	:
 	      if test $$? != "0"; then \
 	        echo "ABORT: Resin root subdir creation failed. Ensure $(resin_root)/$$subdir can be created by $$USER, or run 'make install' as root."; \
 	        exit 42; \
+	      elif cp -r $$subdir/* $(resin_root)/$$subdir; then \
+	        echo "updated $(resin_root)/$$subdir"; \
 	      else \
-	        cp -r $$subdir/* $(resin_root)/$$subdir; \
+	        echo "skipped $$subdir"; \
 	      fi; \
 	    fi; \
 	  done; \
@@ -102,7 +114,11 @@ install	:
 	        exit 42; \
 	      fi; \
 	    fi; \
-	    cp -r $$subdir/* $(resin_home)/$$subdir; \
+	    if cp -r $$subdir/* $(resin_home)/$$subdir; then \
+	      echo "updated $(resin_home)/$$subdir"; \
+            else \
+              echo "skipped $$subdir"; \
+	    fi; \
 	  done; \
 	fi
 	@ if test -e "$(resin_log)"; then \
@@ -167,15 +183,17 @@ install	:
 	  fi; \
 	  for subdir in $(conf_subdirs); do \
 	    if test -e "$(resin_conf)/$$subdir"; then \
-	      echo "Preserving existing Resin conf subdir $(resin_conf)/$$subdir.";\
+	      echo "Preserving existing Resin conf subdir $(resin_conf)/$$subdir."; \
 	    else \
 	      echo "Installing Resin conf subdir $(resin_conf)/$$subdir."; \
 	      mkdir -p $(resin_conf)/$$subdir; \
 	      if test $$? != "0"; then \
 	        echo "ABORT: Resin conf subdir creation failed. Ensure $(resin_conf)/$$subdir can be created by $$USER, or run 'make install' as root."; \
 	        exit 42; \
+	      elif cp -r $$subdir/* $(resin_conf)/$$subdir; then \
+	        echo "updated $(resin_conf)/$$subdir"; \
 	      else \
-	        cp -r $$subdir/* $(resin_conf)/$$subdir; \
+	        echo "skipped $$subdir"; \
 	      fi; \
 	    fi; \
 	  done; \
@@ -208,6 +226,46 @@ install	:
 	@ (cd modules/c/src; $(MAKE) install)
 	@ if test $(resin_pro) != "." -a -r $(resin_pro)/modules/c/src/Makefile; then \
 	  (cd $(resin_pro)/modules/c/src; $(MAKE) install) \
+	fi
+	@ if test "$(setuid_set)" = "true"; then \
+	  if test -n "$(group_add)"; then \
+	    echo "Creating setuid group $(setuid_group)."; \
+	    egrep '$$$(setuid_group):' /etc/group 1>/dev/null 2>/dev/null; \
+	    if test $$? = "0"; then \
+	      echo "setuid group $(setuid_group) already exists."; \
+	    else \
+	      groupadd $(setuid_group); \
+	      if test $$? != "0"; then \
+	        echo "WARNING: failed to create the $(setuid_group) group. The group may already exist, or run 'make install' as root."; \
+	      fi; \
+	    fi; \
+	  fi; \
+	  if test -n "$(user_add)"; then \
+	    echo "Creating setuid user $(setuid_user)."; \
+	    egrep '$$$(setuid_user):' /etc/passwd 1>/dev/null 2>/dev/null; \
+	    if test $$? = "0"; then \
+	      echo "setuid user $(setuid_user) already exists."; \
+	    else \
+	      useradd -d /nonexistent -s /bin/false -g $(setuid_group) $(setuid_user); \
+	      if test $$? != "0"; then \
+	        echo "WARNING: failed to create the $(setuid_user) user. The user may already exist, or run 'make install' as root."; \
+	      fi; \
+	    fi; \
+	  fi; \
+	  if test -n "$(user_add)"; then \
+	    echo "Changing the owner of Resin root $(resin_root) to $(setuid_user):$(setuid_group)."; \
+	    chown -R $(setuid_user):$(setuid_group) $(resin_root); \
+	    if test $$? != "0"; then \
+	      echo "WARNING: failed change owner of Resin root to $(setuid_user). Ensure $(resin_root) is writable by $$USER, or run 'make install' as root."; \
+	    fi; \
+	  fi; \
+	  if test -n "$(group_add)"; then \
+	    echo "Changing the owner of Resin log $(resin_log) to $(setuid_user):$(setuid_group)."; \
+	    chown -R $(setuid_user):$(setuid_group) $(resin_log); \
+	    if test $$? != "0"; then \
+	      echo "WARNING: failed change owner of Resin log to $(setuid_user). Ensure $(resin_log) is writable by $$USER, or run 'make install' as root."; \
+	    fi; \
+	  fi; \
 	fi
 
 clean	:

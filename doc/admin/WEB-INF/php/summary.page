@@ -47,16 +47,10 @@ if (require_professional()) {
 }
 
 echo "</div>";
-/*
-echo "<div id='meter-tab'>\n";
 
-print_graphs();
-
-echo "</div><!-- meter-tab -->\n";
-*/
 echo "<div id='table-tab'>\n";
 
-print_threads();
+print_connections();
 print_tcp_ports();
 print_load_balance();
 print_database_pools();
@@ -280,14 +274,14 @@ function print_overview_graphs()
 	$mem_params = new GraphParams("sum-memory", $width, $height);
 	$mem_params->title = gettext('Memory');
 	$mem_params->alt = gettext('A line graph representing the amount of free and used memory in each of the heap, tenured, and permgen pools over the last 6 hours.');
-  
+
   stat_graph($mem_params,
-             array("$g_si|JVM|Memory|Heap Memory Free",
-                   "$g_si|JVM|Memory|Heap Memory Used",
-                   "$g_si|JVM|Memory|Tenured Memory Free",
-                   "$g_si|JVM|Memory|Tenured Memory Used",
-             			 "$g_si|JVM|Memory|PermGen Memory Free"),
-             			 "$g_si|JVM|Memory|PermGen Memory Used");
+    array("$g_si|JVM|Memory|Heap Memory Free",
+      "$g_si|JVM|Memory|Heap Memory Used",
+      "$g_si|JVM|Memory|Tenured Memory Free",
+      "$g_si|JVM|Memory|Tenured Memory Used",
+      "$g_si|JVM|Memory|PermGen Memory Free",
+      "$g_si|JVM|Memory|PermGen Memory Used"));
 
   echo "</td><td>\n";
 
@@ -347,8 +341,8 @@ function recent_messages($max)
 {
   global $g_server, $g_mbean_server;
 
-  $mbean = $g_mbean_server->lookup("resin:type=LogService");
-  
+  $mbean = $g_mbean_server->getLogService();
+
   if (! require_professional()) {
     return;
   } else if (! $mbean) {
@@ -381,7 +375,7 @@ function recent_messages($max)
       $messages = array_reverse($messages);
 
       if ($max < sizeof($messages)) {
-        $messages = array_slice($array, 0, $max);
+        $messages = array_slice($messages, 0, $max);
       }
 
       echo "<tbody class='scroll'>\n";
@@ -639,20 +633,17 @@ function print_tcp_ports()
   }
 }
 
-function print_threads()
+function print_connections()
 {
   global $g_mbean_server;
   global $g_server;
 
-  $conn = null;
-
-  $jvm_thread = $g_mbean_server->lookup("java.lang:type=Threading");
+  $jvm_thread_mbean = $g_mbean_server->lookup("java.lang:type=Threading");
 
   $connInfoList = array();
 
   foreach ($g_server->Ports as $port) {
     $portConnInfo = $port->connectionInfo();
-
     if ($portConnInfo)
       $connInfoList = array_merge($connInfoList, $portConnInfo);
   }
@@ -660,7 +651,7 @@ function print_threads()
   $row = 0;
   @ usort($connInfoList, "conn_time_cmp");
 
-  echo "<h3>" . gettext('Open Connections') . "</h3>";
+  echo "<h2>" . gettext('Open Connections') . "</h2>";
 
   echo "<table class='data' summary='" . gettext("Open Connections") . "'>";
   echo "<tr><th scope='col'>" . gettext('action') . "</th>";
@@ -670,54 +661,43 @@ function print_threads()
   echo "<th scope='col'>" . gettext('IP') . "</th></tr>\n";
 
   foreach ($connInfoList as $connInfo) {
-    if ($connInfo->requestTime >= 0 && $connInfo->threadId >= 0) {
-      echo "<tr class='" . ($row++ % 2 == 0 ? "ra" : "rb") . "'>\n";
-      echo "<tr>\n";
-      echo "<td>\n";
-
-      $pname = "port_" . $row;
-    
-      $threadId = $connInfo->threadId;
-    
-      $show = "hide('s_$pname');show('h_$pname');show('h1_$pname')";
-      $hide = "show('s_$pname');hide('h_$pname');hide('h1_$pname')";
-      echo "<a id='s_$pname' href=\"javascript:$show\">" . gettext('[show]') . "</a> ";
-      echo "<a id='h_$pname' href=\"javascript:$hide\" style='display:none'>" . gettext('[hide]') . "</a> ";
-      echo "<td>";
-    
-      echo sprintf("%.3fs", $connInfo->requestTime * 0.001);
-      // echo " thread=" . $threadId;
-      echo "<td>";
-      echo $connInfo->id;
-    
-      echo "<td>";
-      $conn = $g_server->findConnectionByThreadId($threadId);
-      if ($conn)
-        echo $conn->getUrl();
-      else
-        echo $connInfo->state;
-
-      echo "<td>";
-      echo " " . ($conn ? $conn->getRemoteAddress() : "");
-      echo "\n";
-      echo "</tr>";
-
-      echo "<tr><td colspan='5'>";
-      echo "<pre id='h1_$pname' style='display:none'>";
-
-      $thread = $jvm_thread->getThreadInfo($threadId, 50);
-      /*
-      foreach ($thread->stackTrace as $trace) {
-        echo "     at " . $trace->className . "." . $trace->methodName . "\n";
-      }
-      */
-
-      echo $thread;
-
-      echo "</pre>";
-      echo "</td>";
-      echo "</tr>";
-    }
+  	if ($connInfo->hasRequest()) {
+	    echo "<tr class='" . ($row++ % 2 == 0 ? "ra" : "rb") . "'>\n";
+	    echo "<td>\n";
+	
+	    $pname = "port_" . $row;
+	    
+	    $threadId = $connInfo->threadId;
+	    
+	    $show = "hide('s_$pname');show('h_$pname');show('h1_$pname')";
+	    $hide = "show('s_$pname');hide('h_$pname');hide('h1_$pname')";
+	    echo "<a id='s_$pname' href=\"javascript:$show\">" . gettext('[show]') . "</a> ";
+	    echo "<a id='h_$pname' href=\"javascript:$hide\" style='display:none'>" . gettext('[hide]') . "</a> ";
+	    
+	    echo "</td>\n<td>";
+	    echo sprintf("%.3fs", $connInfo->requestActiveTime * 0.001);
+	    
+	    echo "</td>\n<td>";
+	    echo $connInfo->id;
+	    
+	    echo "</td>\n<td>";
+	    echo $connInfo->getUrl();
+	
+	    echo "</td>\n<td>";
+	    echo $connInfo->getRemoteAddress();
+	    echo "</td>\n";
+	    echo "</tr>";
+	
+	    echo "<tr><td colspan='6'>";
+	    echo "<pre id='h1_$pname' style='display:none'>";
+	
+	    $thread = $jvm_thread_mbean->getThreadInfo($threadId, 50);
+	    echo $thread;
+	
+	    echo "</pre>";
+	    echo "</td>";
+	    echo "</tr>\n";
+	}
   }
 
   echo "</table>\n";
@@ -801,25 +781,9 @@ function print_database_pools()
   }
 }
 
-/*
-$store = $mbean_server->lookup("resin:type=PersistentStore");
-
-if ($store) {
-  echo "<h2>Persistent Store: $store->StoreType</h2>\n";
-  echo "<table class='data'>";
-
-  echo "<tr><th>Object Count</th><td>$store->ObjectCount</td>\n";
-  echo "<tr><th>Load Count</th><td>$store->LoadCountTotal</td>\n";
-  echo "<tr><th>Load Fail Count</th><td>$store->LoadFailCountTotal</td>\n";
-  echo "<tr><th>Save Count</th><td>$store->SaveCountTotal</td>\n";
-  echo "<tr><th>Save Fail Count</th><td>$store->SaveFailCountTotal</td>\n";
-  echo "</table>";
-}
-*/
-
 function conn_time_cmp($conn_a, $conn_b)
 {
-  return $conn_b->requestTime - $conn_a->requestTime;
+  return $conn_b->requestStartTime - $conn_a->requestStartTime;
 }
 
 display_footer($g_page, javascript_create_tab("summary-tabs"));

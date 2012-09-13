@@ -161,7 +161,7 @@ public class ReflectionClass
     return ! _cls.isInterface();
   }
 
-  public boolean hasConstant(String name)
+  public boolean hasConstant(StringValue name)
   {
     return _cls.hasConstant(name);
   }
@@ -214,8 +214,7 @@ public class ReflectionClass
     if (fun == null)
       throw new QuercusLanguageException(
         env.createException("ReflectionException",
-                            L.l(
-                                "method {0}::{1}() does not exist",
+                            L.l("method {0}::{1}() does not exist",
                                 _name,
                                 name)));
 
@@ -275,10 +274,10 @@ public class ReflectionClass
   {
     ArrayValue array = new ArrayValueImpl();
 
-    HashMap<String, Value> _constMap = _cls.getConstantMap(env);
+    HashMap<StringValue, Value> _constMap = _cls.getConstantMap(env);
 
-    for (Map.Entry<String, Value> entry : _constMap.entrySet()) {
-      Value name = env.createString(entry.getKey());
+    for (Map.Entry<StringValue, Value> entry : _constMap.entrySet()) {
+      Value name = entry.getKey();
 
       array.put(name, entry.getValue());
     }
@@ -286,7 +285,7 @@ public class ReflectionClass
     return array;
   }
 
-  public Value getConstant(Env env, String name)
+  public Value getConstant(Env env, StringValue name)
   {
     if (hasConstant(name))
       return _cls.getConstant(env, name);

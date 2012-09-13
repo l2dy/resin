@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights - reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -219,6 +219,7 @@ public class TreeLoader extends JarListLoader implements Dependency
       }
       
     } catch (IOException e) {
+      e.printStackTrace();
     }
   }
   

@@ -252,6 +252,8 @@ namespace Caucho
       UpdateServers();
 
       UpdateJmxAndDebugPorts();
+
+      UpdateElasticAddress();
     }
 
     private void UpdateServers()
@@ -266,7 +268,7 @@ namespace Caucho
         foreach (Object o in servers) {
           ResinConfServer server = (ResinConfServer)o;
           if (_resinConf.IsDynamicServerEnabled(server.Cluster)) {
-            String dynamic = "dynamic:" + server.Cluster + ":dyn-0";
+            String dynamic = "dyn-" + server.Cluster + "-0";
             if (! dynamicServers.Contains(dynamic))
               dynamicServers.Add(dynamic);
           }
@@ -289,7 +291,7 @@ namespace Caucho
       } else {
         _serviceNameTxtBox.Text = _resinService.Name;
         if (_resinService.DynamicServer)
-          _serverCmbBox.Text = "dynamic:" + _resinService.Server;
+          _serverCmbBox.Text = _resinService.Server;
         else if (_resinService.Server == null)
           _serverCmbBox.Text = "default";
         else
@@ -297,7 +299,14 @@ namespace Caucho
 
         _serviceUserCmbBox.DataSource = null;
       }
+    }
 
+    private void UpdateElasticAddress()
+    {
+      if (_resinService != null) {
+        ElasticAddressEdit.Text = _resinService.ElasticServerAddress;
+        ElasticPortEdit.Text = _resinService.ElasticServerPort;
+      }
     }
 
     private void UpdateJmxAndDebugPorts()
@@ -348,6 +357,7 @@ namespace Caucho
     {
       UpdateServers();
       UpdateJmxAndDebugPorts();
+      UpdateElasticAddress();
     }
 
     private void SelectJavaHome(object sender, EventArgs e)
@@ -445,6 +455,7 @@ namespace Caucho
     private void ServerSelectionChanged(object sender, EventArgs e)
     {
       UpdateJmxAndDebugPorts();
+      UpdateElasticAddress();
     }
 
     private void SelectLogDirectory(object sender, EventArgs e)
@@ -712,7 +723,7 @@ namespace Caucho
 
       ResinConfServer server = null;
       if (_serverCmbBox.SelectedItem is ResinConfServer)
-        server = (ResinConfServer)_serverCmbBox.SelectedItem;
+        server = (ResinConfServer)_serverCmbBox.SelectedItem; 
 
       if (isNew)
       {
@@ -734,7 +745,14 @@ namespace Caucho
         resinService.Cluster = _resinService.Cluster;
         resinService.Server = _resinService.Server;
         resinService.DynamicServer = _resinService.DynamicServer;
+        resinService.ElasticServer = _resinService.ElasticServer;
       }
+
+      if (resinService.ElasticServer && ! String.IsNullOrEmpty(ElasticAddressEdit.Text))
+        resinService.ElasticServerAddress = ElasticAddressEdit.Text.Trim();
+
+      if (resinService.ElasticServer && ! String.IsNullOrEmpty(ElasticPortEdit.Text))
+        resinService.ElasticServerPort = ElasticPortEdit.Text.Trim();
 
       if (!"Not Specified".Equals(_jmxPortTxtBox.Text)) {
         String jmxPort = _resinConf.GetJmxPort(resinService.Cluster, resinService.Server);
@@ -1284,7 +1302,7 @@ namespace Caucho
         return;
       }
 
-      if (_serverCmbBox.Text.StartsWith("dynamic")) {
+      if (_serverCmbBox.Text.StartsWith("dyn")) {
         try {
           ResinConfServer r = ResinConf.ParseDynamic(_serverCmbBox.Text);
         }

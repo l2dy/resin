@@ -54,7 +54,6 @@ import com.caucho.network.listen.TcpPort;
 import com.caucho.server.cluster.ProtocolPort;
 import com.caucho.server.cluster.ProtocolPortConfig;
 import com.caucho.server.http.HttpProtocol;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 
@@ -116,6 +115,7 @@ public final class ClusterServer {
   // runtime
   
   private String _address;
+  private int _port;
 
   private AtomicReference<SocketPool> _clusterSocketPool
     = new AtomicReference<SocketPool>();
@@ -163,6 +163,7 @@ public final class ClusterServer {
     _serverDomainId = _serverClusterId + "." + clusterId.replace('.', '_');
 
     _bamAddress = getBamAdminName(cloudServer);
+    _port = cloudServer.getPort();
     
     if (! isExternal()) {
       _address = cloudServer.getAddress();
@@ -298,6 +299,16 @@ public final class ClusterServer {
   public String getAddress()
   {
     return _address;
+  }
+  
+  public int getPort()
+  {
+    return _port;
+  }
+  
+  public void setPort(int port)
+  {
+    _port = port;
   }
   
   private boolean isExternal()
@@ -716,14 +727,6 @@ public final class ClusterServer {
   }
 
   /**
-   * Gets the port.
-   */
-  public int getPort()
-  {
-    return getCloudServer().getPort();
-  }
-
-  /**
    * Returns true for the self server
    */
   public boolean isSelf()
@@ -860,19 +863,26 @@ public final class ClusterServer {
   {
     SocketPool socketPool = _clusterSocketPool.get();
     
-    if (socketPool != null)
+    if (socketPool != null) {
       return socketPool.getFactory();
+    }
     
-    if (! isExternal())
+    if (! isExternal()) {
       return null;
+    }
     
-    String address = _clusterSystem.getLocalSocketAddress(this);
+    NetworkAddressResult result = _clusterSystem.getLocalSocketAddress(this);
+
+    if (log.isLoggable(Level.FINE)) {
+      log.fine(this + " getLocalSocketAddress -> " + result);
+    }
     
-    if (address == null)
+    if (result == null)
       return null;
     
     ClientSocketFactory factory
-      = createClusterPool(_clusterSystem.getServerId(), address);
+      = createClusterPool(_clusterSystem.getServerId(), 
+                          result.getAddress(), result.getPort());
     
     factory.init();
     factory.start();
@@ -956,7 +966,7 @@ public final class ClusterServer {
         && getCloudServer().getPort() >= 0
         && ! isExternal()) {
       ClientSocketFactory clusterFactory
-      = createClusterPool(_clusterSystem.getServerId(), getAddress());
+      = createClusterPool(_clusterSystem.getServerId(), getAddress(), getPort());
       clusterFactory.init();
       
       _clusterSocketPool.set(new SocketPool(clusterFactory));
@@ -993,14 +1003,18 @@ public final class ClusterServer {
   }
 
   private ClientSocketFactory createClusterPool(String serverId,
-                                                String address)
+                                                String address,
+                                                int port)
   {
+    if (port <= 0)
+      port = getPort();
+    
     ClientSocketFactory pool = new ClientSocketFactory(serverId,
                                                        getId(),
                                                        "Resin|ClusterSocket",
                                                        getStatId(),
                                                        address,
-                                                       getPort(),
+                                                       port,
                                                        isSSL());
     
     pool.setLoadBalanceSocketTimeout(getClusterIdleTime());
@@ -1057,7 +1071,7 @@ public final class ClusterServer {
   {
     long now = CurrentTime.getCurrentTime();
     
-    _lastHeartbeatTime.set(now);
+    long oldHeartbeatTime = _lastHeartbeatTime.getAndSet(now);
 
     boolean isActive = _isHeartbeatActive.getAndSet(true);
     
@@ -1069,11 +1083,17 @@ public final class ClusterServer {
     _cloudServer.onHeartbeatStart();
 
     ClientSocketFactory clusterSocketPool = getClusterSocketPool();
-    if (clusterSocketPool != null)
+    if (clusterSocketPool != null) {
       clusterSocketPool.notifyHeartbeatStart();
+    }
 
-    if (log.isLoggable(Level.FINER))
+    if (oldHeartbeatTime > 0) {
+      // #5173
+      log.warning(this + " notify-heartbeat-start");
+    }
+    else if (log.isLoggable(Level.FINER)) {
       log.finer(this + " notify-heartbeat-start");
+    }
 
     _clusterSystem.notifyHeartbeatStart(this);
 
@@ -1104,7 +1124,10 @@ public final class ClusterServer {
     
     _stateTimestamp.set(CurrentTime.getCurrentTime());
 
-    log.warning(this + " notify-heartbeat-stop");
+    if (_clusterSystem.isActive())
+      log.warning(this + " notify-heartbeat-stop");
+    else
+      log.fine(this + " notify-heartbeat-stop");
     
     _cloudServer.onHeartbeatStop();
 

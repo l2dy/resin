@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.30)
+AC_INIT([resin],4.0.31)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -46,23 +46,6 @@ AC_SUBST(resin_version)
 AC_SUBST(usr_share)
 AC_SUBST(build_dir)
 AC_SUBST(initd_dir)
-
-#
-# --with-resin-root
-#
-
-AC_ARG_WITH(resin-root,
-[AS_HELP_STRING([--with-resin-root=DIR],
-                [resin data directory])],
-[resin_root=${withval}])
-
-if test -z "$resin_root"; then
-  if test "$prefix" == "NONE"; then
-    resin_root="/var/resin"
-  else
-    resin_root="$prefix"
-  fi
-fi
 
 #
 # --with-resin-root
@@ -625,19 +608,32 @@ setuid_group=resin
 AC_ARG_WITH(setuid,
 [AS_HELP_STRING([--with-setuid=user],
                 [configure default setuid user])],
-[setuid_user=${withval}])
+[
+setuid_user=${withval} 
+setuid_set=true
+])
 
 #
 # --with-setgid
 #
 
 AC_ARG_WITH(setgid,
-[AS_HELP_STRING([--with-setgid=user],
+[AS_HELP_STRING([--with-setgid=group],
                 [configure default setgid group])],
-[setuid_group=${withval}])
+[
+setuid_group=${withval}; 
+setuid_set=true
+])
 
 AC_SUBST(setuid_user)
 AC_SUBST(setuid_group)
+AC_SUBST(setuid_set)
+
+user_add=`which useradd`
+group_add=`which groupadd`
+
+AC_SUBST(user_add)
+AC_SUBST(group_add)
 
 #
 # fill in compilation stuff
@@ -1016,7 +1012,7 @@ esac
 case "$target_os" in
   linux*)
   jni_os=linux
-        PROXY_LIBS="-lpthread -lrt -lc"
+  PROXY_LIBS="-lpthread -lrt -lc"
   ;;
 
   *solaris*)
@@ -1027,7 +1023,7 @@ case "$target_os" in
 
   *freebsd*)
   PROXY_LIBS='-lpthread'
-        jni_os=freebsd
+  jni_os=freebsd
 
   tmp=`ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libc_r`
   tmp=$tmp `ldd $JAVA_HOME/bin/java | sed 's/.*=>//' | grep -c libpthread`

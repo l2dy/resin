@@ -40,6 +40,7 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.caucho.admin.RemoteAdminService;
+import com.caucho.boot.BootResinConfig.ElasticServer;
 import com.caucho.cloud.network.NetworkListenSystem;
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
@@ -116,12 +117,6 @@ class WatchdogManager implements AlarmListener {
       // server/6e0d
       serverId = _args.getClientServerId();
     }
-
-    /*
-    if (_args.isDynamicServer()) {
-      serverId = _args.getDynamicServerId();
-    }
-    */
     
     ResinArgs resinArgs = new ResinArgs();
     resinArgs.setRootDirectory(_args.getRootDirectory());
@@ -204,7 +199,7 @@ class WatchdogManager implements AlarmListener {
     
     _watchdogPort = _args.getWatchdogPort();
     
-    _resinConfig = readConfig(serverId, _args);
+    _resinConfig = readConfig(_args);
 
     WatchdogChild server = findConfig(_resinConfig, serverId, _args);
     
@@ -315,13 +310,6 @@ class WatchdogManager implements AlarmListener {
       
       broker.getBamManager().createService("watchdog@admin.resin.caucho", service);
 
-
-      /*
-      broker.setAdmin(true);
-      broker.setAllowNullAdminAuthenticator(true);
-      */
-
-      // broker.createAgent(service.getActor());
 
       ResinSystem.getCurrent().start();
 
@@ -469,8 +457,59 @@ class WatchdogManager implements AlarmListener {
    *
    * @param argv the command-line arguments to start the server
    */
-  String startServer(String cliServerId, String []argv)
+  String startServerAll(String cliServerId, String []argv)
     throws ConfigException
+  {
+    WatchdogArgs args = new WatchdogArgs(argv, null, false);
+
+    Vfs.setPwd(_args.getRootDirectory());
+    
+    String serverId = args.getServerId();
+
+    WatchdogChild server;
+
+    try {
+      BootResinConfig resin = readConfig(args);
+      
+      if (resin.isElasticServer()) {
+        int totalCount = 0;
+        
+        for (ElasticServer elasticServer : resin.getElasticServers()) {
+          String cluster = elasticServer.getCluster();
+          int count = elasticServer.getCount();
+          
+          for (int index = 0; index < count; index++) {
+            server = addElasticServer(resin, args, cluster, index, totalCount);
+            
+            startServer(server, serverId, args);
+            
+            totalCount++;
+          }
+          
+        }
+        
+        return "test";
+        
+        // server = findConfig(resin, serverId, args);
+      } else {
+        server = findConfig(resin, serverId, args);
+      }
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+    
+    startServer(server, serverId, args);
+    
+    return serverId;
+  }
+  
+  /**
+   * Called from the Hessian API to start a server.
+   *
+   * @param argv the command-line arguments to start the server
+   */
+  String startServer(String cliServerId, String []argv)
+      throws ConfigException
   {
     String serverId = cliServerId;
     
@@ -486,7 +525,7 @@ class WatchdogManager implements AlarmListener {
       WatchdogChild server;
 
       try {
-        BootResinConfig resin = readConfig(serverId, args);
+        BootResinConfig resin = readConfig(args);
         
         server = findConfig(resin, serverId, args);
       } catch (Exception e) {
@@ -527,9 +566,10 @@ class WatchdogManager implements AlarmListener {
     synchronized (_watchdogMap) {
       WatchdogChild watchdog = getWatchdog(null, serverId, args);
 
-      if (watchdog == null)
+      if (watchdog == null) {
         throw new ConfigException(L().l("No matching <server> found for stop -server '{0}' in {1}",
                                         serverId, _args.getResinConf()));
+      }
 
       watchdog.stop();
     }
@@ -684,11 +724,15 @@ class WatchdogManager implements AlarmListener {
    */
   void restartServer(String serverId, String []argv)
   {
+    WatchdogArgs args = new WatchdogArgs(argv, false);
+    
+    // serverId = getServerId(serverId, args);
+    
     synchronized (_watchdogMap) {
-      WatchdogChild server = _watchdogMap.get(serverId);
+      WatchdogChild watchdog = getWatchdog(null, serverId, args);
 
-      if (server != null) {
-        server.stop();
+      if (watchdog != null) {
+        watchdog.stop();
       }
 
       startServer(serverId, argv);
@@ -700,7 +744,7 @@ class WatchdogManager implements AlarmListener {
     return _server != null && _server.isActive();
   }
 
-  private BootResinConfig readConfig(String cliServerId, WatchdogArgs args)
+  private BootResinConfig readConfig(WatchdogArgs args)
     throws Exception
   {
     Config config = new Config();
@@ -726,8 +770,6 @@ class WatchdogManager implements AlarmListener {
                                    String cliServerId,
                                    WatchdogArgs args)
   {
-    String serverId = resin.getServerId(args);
-    
     WatchdogClient client = findClient(resin, cliServerId, args);
     
     if (client == null) {
@@ -735,29 +777,13 @@ class WatchdogManager implements AlarmListener {
                                       cliServerId != null ? cliServerId : ""));
     }
     
-    serverId = client.getId();
-
-    WatchdogChild watchdog = _watchdogMap.get(serverId);
+    WatchdogChild watchdog = new WatchdogChild(_system, client.getConfig());
     
-    if (watchdog != null) {
-      if (watchdog.isActive()) {
-        throw new ConfigException(L().l("server '{0}' cannot be started because a running instance already exists.  stop or restart the old server first.",
-                                        serverId));
-      }
-
-      watchdog = _watchdogMap.remove(serverId);
-
-      if (watchdog != null)
-        watchdog.close();
-    }
-    
-    watchdog = new WatchdogChild(_system, client.getConfig());
-
-    _watchdogMap.put(serverId, watchdog);
+    updateChild(watchdog);
 
     return watchdog;
   }
-  
+
   private WatchdogClient findClient(BootResinConfig resin,
                                     String cliServerId,
                                     WatchdogArgs args)
@@ -769,7 +795,6 @@ class WatchdogManager implements AlarmListener {
     if (client != null) {
       return client;
     }
-
 
     if (! resin.isElasticServer(args)) {
       if (serverId != null) {
@@ -785,32 +810,100 @@ class WatchdogManager implements AlarmListener {
     }
     
     if (resin.isDynamicServerAllowed(args)) {
-      String clusterId = resin.getClusterId(args);
-      
-      String address = args.getDynamicAddress();
-      int port = args.getDynamicPort();
-
-      BootClusterConfig cluster = resin.findCluster(clusterId);
-
-      if (cluster == null) {
-        throw new ConfigException(L().l("server cannot be started because '{0}' is an unknown cluster",
-                                        clusterId));
+      for (ElasticServer server : resin.getElasticServerList()) {
+        return addElasticServerChild(resin, args, server.getCluster(), 0, 0);
       }
-
-      WatchdogConfigHandle configHandle = cluster.createServer();
-      serverId = args.getElasticServerId();
-      configHandle.setId(serverId);
-      configHandle.setAddress(address);
-      configHandle.setPort(port);
-      
-      WatchdogConfig serverConfig = cluster.addServer(configHandle);
-
-      return resin.findClient(serverConfig.getId());
     }
 
     return null;
   }
   
+  private WatchdogChild addElasticServer(BootResinConfig resin,
+                                         WatchdogArgs args,
+                                         String cluster,
+                                         int index,
+                                         int totalCount)
+  {
+    WatchdogClient client = addElasticServerChild(resin, args, cluster, index, totalCount);
+    
+    WatchdogChild watchdog = new WatchdogChild(_system, client.getConfig());
+    
+    updateChild(watchdog);
+    
+    return watchdog;
+  }
+  
+  private WatchdogClient addElasticServerChild(BootResinConfig resin,
+                                               WatchdogArgs args,
+                                               String clusterId,
+                                               int index,
+                                               int totalCount)
+  {
+    if (clusterId == null) {
+      clusterId = resin.getClusterId(args);
+    }
+    
+    String address = args.getDynamicAddress();
+    int port = resin.getElasticServerPort(args, totalCount);
+
+    BootClusterConfig cluster = resin.findCluster(clusterId);
+
+    if (cluster == null) {
+      throw new ConfigException(L().l("server cannot be started because '{0}' is an unknown cluster",
+                                      clusterId));
+    }
+    
+    clusterId = cluster.getId();
+    String serverId = args.getServerId();
+    
+    if (serverId == null) {
+      serverId = "dyn-" + clusterId + "-" + index;
+    }
+    else if (totalCount > 1) {
+      throw new ConfigException(L().l("--elastic-server with --server '{0}' and multiple elastic servers is not allowed.",
+                                      serverId));
+    }
+    
+    System.out.println("WATHCOD: " + serverId + " " + port);
+
+    WatchdogConfigHandle configHandle = cluster.createServer();
+    // String serverId = args.getElasticServerId();
+    configHandle.setId(serverId);
+    configHandle.setAddress(address);
+    configHandle.setPort(port);
+
+    WatchdogConfig serverConfig = cluster.addServer(configHandle);
+    
+    serverConfig.setElastic(true);
+    serverConfig.setElasticServerCluster(clusterId);
+    serverConfig.setElasticServerPort(port);
+
+    return resin.findClient(serverConfig.getId());
+  }
+  
+  private WatchdogChild updateChild(WatchdogChild newWatchdog)
+  {
+    String serverId = newWatchdog.getId();
+
+    WatchdogChild oldWatchdog = _watchdogMap.get(serverId);
+    
+    if (oldWatchdog != null) {
+      if (oldWatchdog.isActive()) {
+        throw new ConfigException(L().l("server '{0}' cannot be started because a running instance already exists.  stop or restart the old server first.",
+                                        serverId));
+      }
+
+      oldWatchdog = _watchdogMap.remove(serverId);
+
+      if (oldWatchdog != null)
+        oldWatchdog.close();
+    }
+    
+    _watchdogMap.put(serverId, newWatchdog);
+
+    return newWatchdog;
+  }
+
   private int getWatchdogPid()
   {
     try {
@@ -909,6 +1002,7 @@ class WatchdogManager implements AlarmListener {
 
     try {
       DynamicClassLoader.setJarCacheEnabled(false);
+      DynamicClassLoader.setGlobalDependencyCheckInterval(-1);
 
       JniCauchoSystem.create().initJniBackground();
 

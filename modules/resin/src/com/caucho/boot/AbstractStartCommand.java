@@ -31,25 +31,74 @@ package com.caucho.boot;
 
 import java.util.ArrayList;
 
+import com.caucho.boot.BootResinConfig.ElasticServer;
+import com.caucho.config.ConfigException;
+import com.caucho.util.L10N;
+
 
 public abstract class AbstractStartCommand extends AbstractBootCommand
 {
+  private static final L10N L = new L10N(AbstractStartCommand.class);
+  
   protected AbstractStartCommand()
   {
     addFlagOption("verbose", "log command-line and environment information");
     addFlagOption("preview", "run as a preview (staging) server");
     addFlagOption("elastic-server", "join a cluster as an elastic server (pro)");
     
-    addValueOption("data-directory", "dir", "override the working directory");
     addValueOption("cluster", "id", "cluster to join as an elastic server (pro)");
+    addValueOption("data-directory", "dir", "override the working directory");
+    addValueOption("elastic-server-address", "ip", "cluster IP address for an elastic server");
     addValueOption("root-directory", "dir", "set the root directory");
     addValueOption("log-directory", "dir", "set the log directory");
     addValueOption("server", "id", "select a configured server");
     addValueOption("stage", "stage", "select a configuration stage (production, preview)");
 
-    addIntValueOption("watchdog-port", "port", "set watchdog port to listen to");
+    addIntValueOption("elastic-server-port", "port",
+                      "cluster port for an elastic server");
     addIntValueOption("debug-port", "port", "listen to a JVM debug port");
     addIntValueOption("jmx-port", "port", "listen to an unauthenticated JMX port");
+    addIntValueOption("watchdog-port", "port", "set watchdog port to listen to");
+  }
+
+  @Override
+  public int doCommand(ResinBoot boot, WatchdogArgs args)
+  {
+    if (boot.isElasticServer(args)) {
+      validateElasticServer(boot, args);
+    }
+    return super.doCommand(boot, args);
+  }
+  
+  private void validateElasticServer(ResinBoot boot, WatchdogArgs args)
+  {
+    for (ElasticServer server : boot.getElasticServerList()) {
+      String clusterId = server.getCluster();
+      
+      if (clusterId == null) {
+        clusterId = boot.getHomeCluster(args);
+      }
+    
+      BootClusterConfig cluster = boot.findCluster(clusterId);
+
+      if (cluster != null) {
+      }
+      else if (clusterId == null) {
+        throw new ConfigException(L.l("--elastic-server requires a --cluster or <home-cluster> configuration."
+            + " --elastic-server needs to know which cluster to join."));
+      }
+      else {
+        throw new ConfigException(L.l("--cluster '{0}' is an unknown cluster."
+                                    + "  --elastic-server requires a configured --cluster.",
+                                    clusterId));
+      }
+    
+      ArrayList<WatchdogClient> serverList = cluster.getServerList();
+    
+      for (int i = 0; i < serverList.size() && i < 3; i++) {
+        WatchdogClient triad = serverList.get(i);
+      }
+    }
   }
 
   @Override
@@ -61,7 +110,28 @@ public abstract class AbstractStartCommand extends AbstractBootCommand
     
     manager.startServer(serverId, args.getArgv());
   }
- 
+  
+  @Override
+  protected WatchdogClient findNamedClient(ResinBoot boot, 
+                                           WatchdogArgs args,
+                                           String serverId)
+  {
+    WatchdogClient client = findNamedClientImpl(boot, args, serverId);
+
+    /*
+    if (boot.isElasticServer(args)) {
+      Thread.dumpStack();
+      throw new ConfigException(L.l("-server '{0}' is a static server, but --elastic-server is requested.",
+                                    serverId));
+    }
+    else {
+      return client;
+    }
+    */
+    
+    return client;
+  }
+
   @Override
   protected WatchdogClient findLocalClient(ResinBoot boot, WatchdogArgs args)
   {

@@ -10,7 +10,36 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.30 - Aug 12, 2012">
+<s2 title="4.0.31 - Sep 12, 2012">
+<ul>
+<li>elastic: elastic server joining in EC2 configuration (#5177)</li>
+<li>servlet: parent/child servlet instantiation could result in incorrect instantiation (#5208, rep by Keith Fetterman)</li>
+<li>config: allow resin:import with path="http://..." and optional (#5206)</li>
+<li>cookie: cookie with space generation issues (#5179, rep by kiilerich)</li>
+<li>session: persistent session timing with on-shutdown and lru (#5170, rep by Mathias Lagerwall)</li>
+<li>install: 'make install' target fails on solaris(#5207, rep by Leonid Kaminsky)</li>
+<li>IIS: isapi_srun.dll fix for can't connect to resin issue (#5198, rep by Claudio H Braga)</li>
+<li>mod_caucho: linux timeout issue millis vs sec in read timeout (#5203, rep by ssmax)</li>
+<li>http: sendfile needs to open file using O_RDONLY (#5202, rep by ssmax)</li>
+<li>health: log notify-heartbeat-start when heartbeat recovers (#5173)</li>
+<li>session: save session on first request even if no data stored (#5196)</li>
+<li>jsp: EL triggering back-compat issues with jsp-fragment (#4768, #5200, rep by evernat, cyttesen)</li>
+<li>jsp: flushing issue with JSP/filter and buffer size (#5201, rep by evernat)</li>
+<li>ejb: improved ejb-ee skipping for jira</li>
+<li>cloud: added oracle jdbc-store (#4643, rep by Eric Kreiser)</li>
+<li>server: web-app-deploy expand issues with expand-preserve-fileset &amp; expand-cleanup-fileset (#5193, #5194)</li>
+<li>cloud: --elastic-server warning messages improved (#5184)</li>
+<li>health-check: changed health-check timeout and warning message</li>
+<li>resin-admin: specific warning for missing &lt;resin:AdminServices/>(#5183)</li>
+<li>watchdog: memory leak issue with "status" command (#5178, rep by nmmn)</li>
+<li>config: restore support for old &lt;management> tag (#5176)</li>
+<li>cdi: normal scope proxy issues with 'char' parameters (#5182)</li>
+<li>cloud: added --elastic-server-port and --elastic-server-address</li>
+<li>jsp: added integration with Jasper jsp engine (#4982)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.30 - Aug 21, 2012">
 <ul>
 <li>cloud: added --elastic-dns for Amazon-style local dns or elastic ip</li>
 <li>cloud: elastic servers now require --elastic or &lt;elastic-server></li>

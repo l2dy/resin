@@ -95,7 +95,7 @@ public final class MnodeEntry extends MnodeValue {
     
     // server/0165
     // _lastAccessTime = CurrentTime.getCurrentTime();
-    _lastAccessTime = lastAccessTime;
+    setLastAccessTime(lastAccessTime);
 
     _isImplicitNull = isImplicitNull;
     _isServerVersionValid = isServerVersionValid;
@@ -156,7 +156,9 @@ public final class MnodeEntry extends MnodeValue {
     _valueDataId = valueDataId;
     
     _lastRemoteAccessTime = lastAccessTime;
-    _lastAccessTime = CurrentTime.getCurrentTime();
+    //_lastAccessTime = CurrentTime.getCurrentTime();
+    // server/01o9
+    setLastAccessTime(lastAccessTime);
     
     _lastModifiedTime = oldMnodeValue._lastModifiedTime;
 
@@ -172,13 +174,19 @@ public final class MnodeEntry extends MnodeValue {
       _valueRef = new SoftReference<Object>(value);
   }
   
-  public static MnodeEntry createInitialNull()
+  public static MnodeEntry createInitialNull(CacheConfig config)
   {
     long accessedExpireTimeout = 0;
     long modifiedExpireTimeout = 0;
     long leaseExpireTimeout = 0;
     
     long now = 0;//CurrentTime.getCurrentTime();
+    
+    if (config != null) {
+      accessedExpireTimeout = config.getAccessedExpireTimeout();
+      modifiedExpireTimeout = config.getModifiedExpireTimeout();
+      leaseExpireTimeout = config.getLeaseExpireTimeout();
+    }
     
     return new MnodeEntry(0, 0, 0, null, 
                           0, 
@@ -265,7 +273,8 @@ public final class MnodeEntry extends MnodeValue {
     else if (now <= _lastAccessTime + localExpireTimeout) {
       return false;
     }
-    else if (serverIndex <= 2 && getLeaseExpireTimeout() > 0
+    else if ((serverIndex <= 2 
+              && (localExpireTimeout > 0 || getLeaseExpireTimeout() > 0))
              || _leaseOwner == serverIndex && now <= _leaseExpireTime) {
       return false;
     }
@@ -340,6 +349,18 @@ public final class MnodeEntry extends MnodeValue {
     _leaseOwner = -1;
 
     _leaseExpireTime = 0;
+  }
+
+  /**
+   * Sets the owner
+   */
+  public final void clearLease(int oldLeaseOwner)
+  {
+    if (_leaseOwner == oldLeaseOwner) {
+      _leaseOwner = -1;
+
+      _leaseExpireTime = 0;
+    }
   }
 
   /**

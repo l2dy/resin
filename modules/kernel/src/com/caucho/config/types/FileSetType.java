@@ -97,12 +97,22 @@ public class FileSetType {
     int starP = text.indexOf('*');
     
     if (starP > 0) {
+      int colonP = text.indexOf(':');
       int slashP = text.lastIndexOf('/', starP);
       
-      if (slashP >= 0) {
-        _dir = Vfs.lookup(text.substring(0, slashP));
+      if (colonP > 0 && colonP < slashP) {
+        String prefix = text.substring(0, slashP);
+        
+        // server/6p04
+        _dir = Vfs.lookup(prefix);
         
         addInclude(new PathPatternType(text.substring(slashP + 1)));
+        return;
+      }
+      else if (slashP >= 0) {
+        String prefix = text.substring(0, slashP);
+        
+        addInclude(new PathPatternType(prefix, text));
         return;
       }
     }
@@ -117,12 +127,22 @@ public class FileSetType {
   {
     _excludeList.add(pattern);
   }
-  
+
   public void add(FileSetType fileSet)
   {
     if (fileSet == this)
       return;
     
+    if (_dir == null) {
+      _dir = fileSet.getDir();
+    }
+
+    if (! isSameDir(fileSet)) {
+      throw new IllegalArgumentException(L.l("fileset directory: mismatch can't add {0} to {1}",
+                                             fileSet,
+                                             this));
+    }
+
     if (fileSet._includeList != null) {
       for (PathPatternType include : fileSet._includeList){
         addInclude(include);
@@ -138,6 +158,18 @@ public class FileSetType {
   
   public void addInverse(FileSetType fileSet)
   {
+    if (fileSet == this)
+      return;
+    
+    if (_dir == null) {
+      _dir = fileSet.getDir();
+    }
+    
+    if (! isSameDir(fileSet))
+      throw new IllegalArgumentException(L.l("fileset directory mismatch: can't add {0} to {1}",
+                                             fileSet,
+                                             this));
+
     if (fileSet._includeList != null) {
       for (PathPatternType include : fileSet._includeList){
         addExclude(include);
@@ -187,27 +219,43 @@ public class FileSetType {
    */
   public ArrayList<Path> getPaths(ArrayList<Path> paths)
   {
-    String dirPath = _dir.getPath();
-    
-    if (! dirPath.endsWith("/"))
-      dirPath += "/";
+    PathListCallback cb = new PathListCallback(paths);
 
-    getPaths(paths, _dir, dirPath);
+    filterPaths(cb);
     
     Collections.sort(paths);
 
     return paths;
   }
-
+  
   /**
    * Returns the set of files.
    */
-  public void getPaths(ArrayList<Path> paths, Path path, String prefix)
+  public void filterPaths(PathCallback cb)
+  {
+    String dirPath = _dir.getPath();
+    
+    if (! dirPath.endsWith("/")) {
+      dirPath += "/";
+    }
+    
+    filterPaths(_dir, dirPath, cb);
+  }
+  
+  /**
+   * Returns the set of files.
+   */
+  public void filterPaths(Path path, String prefix, PathCallback cb)
   {
     if (! path.exists() || ! path.canRead()) {
       return;
     }
-    else if (path.isDirectory()) {
+    
+    if (! isValidPrefix(path, prefix)) {
+      return;
+    }
+    
+    if (path.isDirectory()) {
       try {
         String []list = path.list();
 
@@ -220,13 +268,14 @@ public class FileSetType {
           // jsp/187j
           Path subpath = path.lookup("./" + name);
           
-          getPaths(paths, subpath, prefix);
+          filterPaths(subpath, prefix, cb);
         }
       } catch (IOException e) {
         log.log(Level.WARNING, e.toString(), e);
       }
     }
-    else if (path.exists()) {
+    
+    if (path.exists()) {
       // server/2438 - logging on unreadable
       //  if (path.canRead()) {
       if (isMatch(path, prefix)) {
@@ -238,9 +287,30 @@ public class FileSetType {
 
         path.setUserPath(_userPathPrefix + suffix);
 
-        paths.add(path);
+        cb.onMatch(path);
       }
     }
+  }
+  
+  private boolean isValidPrefix(Path path, String prefix)
+  {
+    String suffix = "";
+    String fullPath = path.getPath();
+
+    if (prefix.length() < fullPath.length())
+      suffix = path.getPath().substring(prefix.length());
+
+    if (_includeList == null || _includeList.size() == 0) {
+      return true;
+    }
+    
+    for (PathPatternType pattern : _includeList) {
+      if (pattern.isValidPrefix(suffix)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   /**
@@ -274,9 +344,78 @@ public class FileSetType {
     return false;
   }
 
+  private boolean isSameDir(FileSetType fileSet)
+  {
+    if (fileSet == null)
+      throw new NullPointerException();
+
+    if (_dir == fileSet._dir)
+      return true;
+
+    if (_dir != null && _dir.equals(fileSet._dir))
+      return true;
+
+    return false;
+  }
+  
+  public ArrayList<Path> getRoots()
+  {
+    ArrayList<Path> roots = new ArrayList<Path>();
+    
+    if (_includeList == null || _includeList.size() == 0) {
+      roots.add(_dir);
+      
+      return roots;
+    }
+    
+    for (PathPatternType pattern : _includeList) {
+      String prefix = pattern.getPrefix();
+      
+      if (prefix == null || "".equals(prefix)) {
+        roots.add(_dir);
+        
+        return roots;
+      }
+      
+      roots.add(_dir.lookup(prefix));
+    }
+    
+    return roots;
+  }
+
   @Override
   public String toString()
   {
     return "FileSetType[" + _dir + "]";
+  }
+  
+  public interface PathCallback {
+    public void onMatch(Path path);
+  }
+  
+  private static class PathListCallback implements PathCallback {
+    private ArrayList<Path> _list = new ArrayList<Path>();
+    
+    private PathListCallback(ArrayList<Path> list)
+    {
+      _list = list;
+    }
+    
+    public ArrayList<Path> getList()
+    {
+      return _list;
+    }
+    
+    @Override
+    public void onMatch(Path path)
+    {
+      _list.add(path);
+    }
+    
+    @Override
+    public String toString()
+    {
+      return getClass().getSimpleName() + _list;
+    }
   }
 }

@@ -42,6 +42,8 @@ import com.caucho.vfs.Depend;
 import com.caucho.vfs.Path;
 
 import javax.annotation.PostConstruct;
+
+import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -101,6 +103,16 @@ public class ResinImport extends ResinControl implements FlowBean
   public void init()
     throws Exception
   {
+    try {
+      initImpl();
+    } catch (Exception e) {
+      throw e;
+    }
+  }
+  
+  private void initImpl()
+    throws Exception
+  {
     if (_path == null) {
       if (_fileSet == null)
         throw new ConfigException(L.l("'path' attribute missing from resin:import."));
@@ -131,7 +143,9 @@ public class ResinImport extends ResinControl implements FlowBean
     if (_fileSet != null) {
       paths = _fileSet.getPaths();
       
-      Environment.addDependency(new Depend(_fileSet.getDir()));
+      for (Path root : _fileSet.getRoots()) {
+        Environment.addDependency(new Depend(root));
+      }
     }
     else {
       paths = new ArrayList<Path>();
@@ -156,6 +170,14 @@ public class ResinImport extends ResinControl implements FlowBean
         // config.setResinInclude(true);
 
         config.configureBean(object, path, schema);
+      } catch (ConnectException e) {
+        if (! _isOptional)
+          throw e;
+        
+        if (log.isLoggable(Level.FINEST))
+          log.log(Level.FINEST, e.toString(), e);
+        else
+          log.fine(path + ": " + e);
       } catch (RuntimeException e) {
         if (! _isRecover)
           throw e;

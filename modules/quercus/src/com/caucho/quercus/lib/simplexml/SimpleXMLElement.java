@@ -30,6 +30,7 @@
 package com.caucho.quercus.lib.simplexml;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -65,6 +66,7 @@ import com.caucho.quercus.annotation.ReturnNullAsFalse;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.BooleanValue;
+import com.caucho.quercus.env.DefaultValue;
 import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.JavaValue;
 import com.caucho.quercus.env.JsonEncodeContext;
@@ -74,6 +76,7 @@ import com.caucho.quercus.env.ObjectExtJavaValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
+import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
@@ -737,27 +740,57 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
    *
    * @return xml string
    */
-  @ReturnNullAsFalse
-  public StringValue asXML(Env env)
+  public final Value asXML(Env env, @Optional Value filename)
   {
-    if (_parent == null) {
-      StringValue sb = env.createBinaryBuilder();
+    Value value = toXML(env);
 
-      sb.append("<?xml version=\"1.0\"?>\n");
-      toXMLImpl(sb);
-      sb.append("\n");
-
-      return sb;
+    if (! value.isString()) {
+      return value;
     }
-    else
-      return toXML(env);
+
+    StringValue str = value.toStringValue(env);
+
+    if (filename.isDefault()) {
+      return str;
+    }
+    else {
+      Path path = env.lookupPwd(filename);
+
+      OutputStream os = null;
+
+      try {
+        os = path.openWrite();
+
+        str.writeTo(os);
+
+        return BooleanValue.TRUE;
+      }
+      catch (IOException e) {
+        env.warning(e);
+
+        return BooleanValue.FALSE;
+      }
+      finally {
+        if (os != null) {
+          IoUtil.close(os);
+        }
+      }
+    }
   }
 
-  public StringValue toXML(Env env)
+  protected Value toXML(Env env)
   {
     StringValue sb = env.createBinaryBuilder();
 
+    if (_parent == null) {
+      sb.append("<?xml version=\"1.0\"?>\n");
+    }
+
     toXMLImpl(sb);
+
+    if (_parent == null) {
+      sb.append("\n");
+    }
 
     return sb;
   }
@@ -915,7 +948,7 @@ public class SimpleXMLElement implements Map.Entry<String,Object>
     try {
       XPath xpath = XPathFactory.newInstance().newXPath();
 
-      InputSource is = new InputSource(asXML(env).toInputStream());
+      InputSource is = new InputSource(asXML(env, DefaultValue.DEFAULT).toInputStream());
       NodeList nodes = (NodeList) xpath.evaluate(expression, is,
                                                  XPathConstants.NODESET);
 

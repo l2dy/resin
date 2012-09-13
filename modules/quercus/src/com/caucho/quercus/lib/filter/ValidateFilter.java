@@ -29,36 +29,6 @@
 
 package com.caucho.quercus.lib.filter;
 
-import com.caucho.quercus.env.ArrayValue;
-import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.Value;
-
-import java.util.Map;
-
-public abstract class ValidateFilter implements Filter
+public interface ValidateFilter extends Filter
 {
-  public Value filter(Env env, Value value, Value flagsV)
-  {
-    int flags = 0;
-
-    if (flagsV.isNull()) {
-    }
-    else if (flagsV.isArray()) {
-      ArrayValue array = flagsV.toArrayValue(env);
-
-      for (Map.Entry<Value,Value> entry : array.entrySet()) {
-        flags |= entry.getValue().toInt();
-      }
-    }
-    else {
-      flags = flagsV.toInt();
-    }
-
-    return filterImpl(env, value, flags);
-  }
-
-  protected Value filterImpl(Env env, Value value, int flags)
-  {
-    throw new UnsupportedOperationException();
-  }
 }

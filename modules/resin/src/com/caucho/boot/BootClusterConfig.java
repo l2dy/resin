@@ -158,6 +158,11 @@ public class BootClusterConfig {
     _serverList.add(client);
   }
   
+  public ArrayList<WatchdogClient> getServerList()
+  {
+    return _serverList;
+  }
+  
   public void addServerMulti(BootServerMultiConfig multiServer)
   {
     int index = 0;

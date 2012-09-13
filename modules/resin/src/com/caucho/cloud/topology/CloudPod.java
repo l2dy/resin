@@ -183,6 +183,27 @@ public class CloudPod
   }
   
   /**
+   * Finds the first server with the given server-id.
+   */
+  public CloudServer findServerByDisplayId(String id)
+  {
+    for (int i = 0; i <= _maxIndex; i++) {
+      CloudServer server = _servers[i];
+      
+      if (server == null)
+        continue;
+      
+      if (server.getId().equals(id))
+        return server;
+      
+      if (server.getDisplayId().equals(id))
+        return server;
+    }
+
+    return null;
+  }
+  
+  /**
    * Finds the first server with the given cluster id, the
    * three-digit base-64 identifier.
    */
@@ -296,7 +317,7 @@ public class CloudPod
   {
     boolean isAllowExternal = false;
     
-    return createServer(id, address, port, isSecure, 
+    return createServer(id, id, address, port, isSecure, 
                         ServerType.STATIC, isAllowExternal);
   }
   /**
@@ -308,7 +329,7 @@ public class CloudPod
                                         boolean isSecure,
                                         boolean isAllowExternal)
   {
-    return createServer(id, address, port, isSecure, 
+    return createServer(id, id, address, port, isSecure, 
                         ServerType.STATIC, isAllowExternal);
   }
   
@@ -322,7 +343,7 @@ public class CloudPod
   {
     boolean isAllowExternal = true;
     
-    return createServer(id, address, port, isSecure, 
+    return createServer(id, id, address, port, isSecure, 
                         ServerType.EXTERNAL, isAllowExternal);
   }
   
@@ -331,14 +352,30 @@ public class CloudPod
    */
   public CloudServer createDynamicServer(int index,
                                          String id,
+                                         String displayId,
                                          String address,
                                          int port,
                                          boolean isSecure)
   {
     boolean isAllowExternal = false;
     
-    return createServer(index, id, address, port, isSecure, 
+    return createServer(index, id, displayId, address, port, isSecure, 
                         ServerType.DYNAMIC, isAllowExternal);
+  }
+  
+  /**
+   * Creates a new dynamic server
+   */
+  public CloudServer createDynamicServer(String id,
+                                         String displayId,
+                                         String address,
+                                         int port,
+                                         boolean isSecure)
+  {
+    boolean isAllowExternal = false;
+    
+    return createServer(id, displayId, address, port, isSecure, 
+                        CloudServer.ServerType.DYNAMIC, isAllowExternal);
   }
   
   /**
@@ -349,16 +386,14 @@ public class CloudPod
                                          int port,
                                          boolean isSecure)
   {
-    boolean isAllowExternal = false;
-    
-    return createServer(id, address, port, isSecure, 
-                        CloudServer.ServerType.DYNAMIC, isAllowExternal);
+    return createDynamicServer(id, id, address, port, isSecure);
   }
   
   /**
    * Creates a new server
    */
   private CloudServer createServer(String id,
+                                   String displayId,
                                    String address,
                                    int port,
                                    boolean isSecure,
@@ -381,7 +416,7 @@ public class CloudPod
       
       index = findFirstFreeIndex();
    
-      server = createServer(index, id, address, port, isSecure, 
+      server = createServer(index, id, displayId, address, port, isSecure, 
                             isStatic, isAllowExternal);
     }
     
@@ -393,6 +428,7 @@ public class CloudPod
    */
   private CloudServer createServer(int index,
                                    String id,
+                                   String displayId,
                                    String address,
                                    int port,
                                    boolean isSecure,
@@ -404,10 +440,10 @@ public class CloudPod
     
     synchronized (_serverList) {
       if (index <= 2)
-        server = new TriadServer(id, this, index, address, port, isSSL, 
+        server = new TriadServer(id, displayId, this, index, address, port, isSSL, 
                                  isStatic, isAllowExternal);
       else
-        server = new CloudServer(id, this, index, address, port, isSSL, 
+        server = new CloudServer(id, displayId, this, index, address, port, isSSL, 
                                  isStatic, isAllowExternal);
       
       if (index < _serverList.size() && _serverList.get(index) != null)
