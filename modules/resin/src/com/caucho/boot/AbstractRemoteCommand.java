@@ -59,7 +59,7 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   }
   
   protected RemoteActorSender createBamClient(WatchdogArgs args,
-                                        WatchdogClient client)
+                                              WatchdogClient client)
   {
     String address = args.getArg("-address");
 
@@ -88,10 +88,10 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   }
   
   private RemoteActorSender createBamClient(WatchdogClient client,
-                                      String address,
-                                      int port,
-                                      String userName,
-                                      String password)
+                                            String address,
+                                            int port,
+                                            String userName,
+                                            String password)
   {
     WatchdogClient liveClient = client;
     
@@ -136,21 +136,21 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
       throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote administration.\n  Ensure the local server has started, or include --server and --port parameters to connect to a remote server.\n  {1}",
                                                     url, e.getMessage()), e);
     } catch (RemoteListenerUnavailableException e) {
-      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_cli_enable' is set true in resin.properties.\n  {1}",
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_admin_enable' is set true in resin.properties.\n  {1}",
                                                        url, e.getMessage()), e);
     }
   }
   
   
   private RemoteActorSender createHmuxClient(WatchdogClient client,
-                                       String address, int port,
-                                       String userName,
-                                       String password)
+                                             String address, int port,
+                                             String userName,
+                                             String password)
   {
     WatchdogClient triad;
     
     if (address != null && ! "".equals(address) && port > 0)
-      triad = findTriad(client, address, port);
+      triad = findServer(client, address, port);
     else
       triad = findLiveTriad(client);
     
@@ -169,7 +169,7 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
       throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote administration.\n  Ensure the local server has started, or include --server and --port parameters to connect to a remote server.\n  {1}",
                                                     triad, e.getMessage()), e);
     } catch (RemoteListenerUnavailableException e) {
-      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_cli_enable' is set true in resin.properties.\n  {1}",
+      throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_admin_enable' is set true in resin.properties.\n  {1}",
                                                        triad, e.getMessage()), e);
     }
   }
@@ -190,9 +190,9 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
     return null;
   }
   
-  private WatchdogClient findTriad(WatchdogClient client,
-                                   String address,
-                                   int port)
+  private WatchdogClient findServer(WatchdogClient client,
+                                    String address,
+                                    int port)
   {
     for (WatchdogClient server : client.getConfig().getCluster().getClients()) {
       if (! isEqual(address, server.getConfig().getAddress()))

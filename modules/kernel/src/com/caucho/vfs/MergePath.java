@@ -72,22 +72,23 @@ public class MergePath extends FilesystemPath {
    */
   public MergePath()
   {
-    super(null, "/", "/");
+    this(null, "/", null, "/");
+  }
 
-    _root = this;
-    _pathList = new ArrayList<Path>();
+  public MergePath(String userPath, String path, Path ... paths)
+  {
+    this(null, userPath, null, path);
+
+    if (paths != null) {
+      for (Path p : paths) {
+        addMergePath(p);
+      }
+    }
   }
 
   public MergePath(Path ... paths)
   {
-    this();
-
-    if (paths != null) {
-      for (Path path : paths) {
-        addMergePath(path);
-      }
-    }
-
+    this(paths[0].getUserPath(), paths[0].getFullPath(), paths);
   }
 
   /**
@@ -101,6 +102,8 @@ public class MergePath extends FilesystemPath {
 
     if (root == null) {
       _root = this;
+
+      _pathList = new ArrayList<Path>();
     }
   }
 

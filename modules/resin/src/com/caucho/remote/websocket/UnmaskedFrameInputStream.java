@@ -31,6 +31,9 @@ package com.caucho.remote.websocket;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.caucho.websocket.WebSocketContext;
 
@@ -51,6 +54,9 @@ import com.caucho.websocket.WebSocketContext;
  */
 public class UnmaskedFrameInputStream extends FrameInputStream
 {
+  private static final Logger log
+    = Logger.getLogger(UnmaskedFrameInputStream.class.getName());
+  
   private InputStream _is;
   
   private boolean _isFinal = true;
@@ -147,14 +153,15 @@ public class UnmaskedFrameInputStream extends FrameInputStream
     
     int frame1 = is.read();
     int frame2 = is.read();
-    
+
     /*
     System.out.println("WS: 0x" + Integer.toHexString(frame1)
                        + " 0x" + Integer.toHexString(frame2));
                        */
 
-    if (frame2 < 0)
+    if (frame2 < 0) {
       return false;
+    }
 
     boolean isFinal = (frame1 & FLAG_FIN) == FLAG_FIN;
     _op = frame1 & 0xf;
@@ -162,8 +169,15 @@ public class UnmaskedFrameInputStream extends FrameInputStream
     int rsv = frame1 & 0x70;
     
     if (rsv != 0) {
-      if (getContext() != null)
+      if (getContext() != null) {
         getContext().close(CLOSE_ERROR, "illegal request");
+      }
+      
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(this + " WebSocket BAD_REQ:"+ Integer.toHexString(frame1)
+                 + " " + Integer.toHexString(frame2));
+      }
+
       return false;
     }
 
@@ -191,5 +205,11 @@ public class UnmaskedFrameInputStream extends FrameInputStream
     _length = length;
 
     return true;
+  }
+  
+  @Override
+  public String toString()
+  {
+    return getClass().getSimpleName() + "[" + _is + "]";
   }
 }

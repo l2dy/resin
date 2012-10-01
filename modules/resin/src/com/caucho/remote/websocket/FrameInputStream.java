@@ -94,8 +94,9 @@ abstract public class FrameInputStream extends InputStream
     }
 
     while (true) {
-      if (! readFrameHeaderImpl())
+      if (! readFrameHeaderImpl()) {
         return false;
+      }
       
       if (handleFrame()) {
         return true;

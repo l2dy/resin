@@ -182,6 +182,9 @@ public interface ClusterServerMXBean extends ManagedObjectMXBean {
   @Description("True if the heartbeat is active")
   public boolean isHeartbeatActive();
   
+  @Description("Returns the heartbeat state")
+  public String getHeartbeatState();
+  
   @Description("The time of the last received heartbeat from this server")
   public Date getLastHeartbeatTime();
 
@@ -257,6 +260,16 @@ public interface ClusterServerMXBean extends ManagedObjectMXBean {
    */
   @Description("The latency factor of the backend server")
   public double getLatencyFactor();
+  
+  //
+  // hmux data
+  //
+  
+  @Description("The number of messages in the outgoing message queue")
+  public int getMessageQueueSize();
+  
+  @Description("The number of messages in the outgoing large message queue")
+  public int getMessageQueueLargeSize();
 
   //
   // operations

@@ -1122,9 +1122,11 @@ class WatchdogArgs
     addCommand(new ConfigUndeployCommand());
 
     addCommand(new ConsoleCommand());
+    addCommand(new DeployCatCommand());
     addCommand(new DeployCopyCommand());
     addCommand(new DeployCommand());
     addCommand(new DeployListCommand());
+    addCommand(new DeployLsCommand());
     addCommand(new DisableCommand());
     addCommand(new DisableSoftCommand());
     addCommand(new EnableCommand());
@@ -1149,6 +1151,7 @@ class WatchdogArgs
 
     addCommand(new RestartCommand());
 
+    addCommand(new ScoreboardCommand());
     addCommand(new ShutdownCommand());
     // addCommand(new StartCloudCommand());
     addCommand(new StartCommand());

@@ -29,29 +29,14 @@
 
 package com.caucho.boot;
 
-import com.caucho.config.ConfigException;
 import com.caucho.env.repository.CommitBuilder;
-import com.caucho.server.admin.WebAppDeployClient;
-import com.caucho.server.deploy.DeployClient;
-import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
 
-public class ConfigDeployCommand extends AbstractRepositoryCommand {
-  private static final L10N L = new L10N(ConfigDeployCommand.class);
-
-  public ConfigDeployCommand()
+public class ConfigDeployCommand extends AbstractDeployCommand {
+  ConfigDeployCommand()
   {
     addValueOption("stage", "stage", "stage to deploy application to, defaults to production");
-    addValueOption("version", "version", "version of application formatted as <major.minor.micro.qualifier>");
-    //addValueOption("name", "name", "name of application");
-    addValueOption("m", "message", "commit message");
-  }
-
-  @Override
-  public boolean isDefaultArgsAccepted()
-  {
-    return true;
+    addValueOption("name", "name", "name of application");
   }
   
   @Override
@@ -59,29 +44,17 @@ public class ConfigDeployCommand extends AbstractRepositoryCommand {
   {
     return "deploys a configuration directory or jar file";
   }
-  
-  @Override
-  public int doCommand(WatchdogArgs args,
-                       WatchdogClient client,
-                       WebAppDeployClient deployClient)
-  {
-    String jar = args.getDefaultArg();
-    
-    if (jar == null) {
-      throw new ConfigException(L.l("Cannot find .jar argument in command line"));
-    }
-    
-    Path jarPath = Vfs.lookup(jar);
-    
-    
-    if (! jar.endsWith(".jar") && ! jarPath.isDirectory()) {
-      throw new ConfigException(L.l("Deploy expects to be used with a *.jar file or directory at {0}",
-                                    jar));
-    }
 
-    String name = args.getArg("-name");
-    
+  @Override
+  protected CommitBuilder createCommitBuilder(WatchdogArgs args, Path path)
+  {
+    return createConfigCommitBuilder(args);
+  }
+  
+  static CommitBuilder createConfigCommitBuilder(WatchdogArgs args)
+  {
     CommitBuilder commit = new CommitBuilder();
+    
     commit.type("config");
     
     String stage = args.getArg("-stage");
@@ -89,36 +62,14 @@ public class ConfigDeployCommand extends AbstractRepositoryCommand {
     if (stage != null)
       commit.stage(stage);
     
+    String name = args.getArg("-name");
+    
     if (name == null) {
       name = "resin";
     }
     
     commit.tagKey(name);
     
-    String message = args.getArg("-m");
-    
-    if (message == null)
-      message = args.getArg("-message");
-    
-    if (message == null)
-      message = "deploy " + jar + " from command line";
-    
-    commit.message(message);
-    
-    commit.attribute("user", System.getProperty("user.name"));
-
-    String version = args.getArg("-version");
-    if (version != null)
-      DeployClient.fillInVersion(commit, version);
-
-    if (jarPath.isFile())
-      deployClient.commitArchive(commit, jarPath);
-    else
-      deployClient.commitPath(commit, jarPath);
-
-    System.out.println("Deployed " + commit.getId() + " from " + jar + " to "
-                       + deployClient.getUrl());
-
-    return 0;
+    return commit;
   }
 }

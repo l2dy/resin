@@ -30,6 +30,7 @@
 
 package com.caucho.cloud.network;
 
+import com.caucho.bam.mailbox.DualSizeMailbox;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ClusterMXBean;
 import com.caucho.management.server.ClusterServerMXBean;
@@ -241,6 +242,12 @@ public class ClusterServerAdmin extends AbstractManagedObject
   }
   
   @Override
+  public String getHeartbeatState()
+  {
+    return _server.getHeartbeatState();
+  }
+  
+  @Override
   public Date getLastHeartbeatTime()
   {
     long lastHeartbeatTime = _server.getLastHeartbeatTime();
@@ -370,6 +377,34 @@ public class ClusterServerAdmin extends AbstractManagedObject
     else
       return 0;
   }
+  
+  //
+  // hmux
+  //
+  
+
+  @Override
+  public int getMessageQueueSize()
+  {
+    DualSizeMailbox mbox = _server.getCloudServer().getData(DualSizeMailbox.class);
+    
+    if (mbox != null)
+      return mbox.getSmallQueueSize();
+    else
+      return -1;
+  }
+
+  @Override
+  public int getMessageQueueLargeSize()
+  {
+    DualSizeMailbox mbox = _server.getCloudServer().getData(DualSizeMailbox.class);
+    
+    if (mbox != null)
+      return mbox.getLargeQueueSize();
+    else
+      return -1;
+  }
+  
 
   @Override
   public void start()

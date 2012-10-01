@@ -62,6 +62,7 @@ import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.FreeRing;
+import com.caucho.util.FreeRingDual;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JsseSSLFactory;
@@ -70,6 +71,7 @@ import com.caucho.vfs.QServerSocket;
 import com.caucho.vfs.QSocket;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.SSLFactory;
+import com.caucho.vfs.net.NetworkSystem;
 
 /**
  * Represents a protocol connection.
@@ -106,8 +108,8 @@ public class TcpPort
 
   // started at 128, but that seems wasteful since the active threads
   // themselves are buffering the free connections
-  private FreeRing<TcpSocketLink> _idleConn
-    = new FreeRing<TcpSocketLink>(32);
+  private FreeRingDual<TcpSocketLink> _idleConn
+    = new FreeRingDual<TcpSocketLink>(256, 2 * 1024);
   
   // The owning server
   // private ProtocolDispatchServer _server;
@@ -1093,6 +1095,8 @@ public class TcpPort
     // server 1e07
     if (_port < 0)
       return;
+    
+    NetworkSystem system = NetworkSystem.getCurrent();
 
     if (_throttle == null)
       _throttle = new Throttle();
@@ -1122,20 +1126,20 @@ public class TcpPort
       }
     }
     else if (_socketAddress != null) {
-      _serverSocket = QJniServerSocket.create(_socketAddress, _port,
+      _serverSocket = system.openServerSocket(_socketAddress, _port,
                                               _acceptListenBacklog,
                                               _isEnableJni);
 
       log.info(_protocol.getProtocolName() + " listening to " + _socketAddress.getHostName() + ":" + _serverSocket.getLocalPort());
     }
     else {
-      _serverSocket = QJniServerSocket.create(null, _port, _acceptListenBacklog,
+      _serverSocket = system.openServerSocket(null, _port, _acceptListenBacklog,
                                               _isEnableJni);
 
       log.info(_protocol.getProtocolName() + " listening to *:"
                + _serverSocket.getLocalPort());
     }
-
+    
     assert(_serverSocket != null);
 
     postBind();

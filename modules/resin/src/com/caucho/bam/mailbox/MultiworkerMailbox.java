@@ -132,6 +132,17 @@ public class MultiworkerMailbox implements Mailbox, Closeable
   {
     return _queues.length;
   }
+  
+  public int getSize()
+  {
+    int size = 0;
+    
+    for (MailboxQueue2 mailbox : _queues) {
+      size += mailbox.getSize();
+    }
+    
+    return size;
+  }
 
   /**
    * Returns the actor's address
@@ -291,19 +302,16 @@ public class MultiworkerMailbox implements Mailbox, Closeable
       log.finest(this + " enqueue(" + size + ") " + packet);
     }
     
-    long timeout = 1;
     if (! workerQueue.offer(packet, false)) {
-      if (! _isFull) {
-        _isFull = true;
-        ThreadDump.create().dumpThreads();
-      }
-      throw new QueueFullException(this + " size=" + workerQueue.getSize() + " " + packet);
+      workerQueue.wake();
+      
+      throw new QueueFullException("BAM queue is full size=" + workerQueue.getSize() + "\n  " + this + " " + packet);
     }
+    
     workerQueue.wake();
   }
   
-  private boolean _isFull;
-  
+
   private MailboxQueue2 findWorker()
   {
     for (MailboxQueue2 queue : _queues) {

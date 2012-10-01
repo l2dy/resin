@@ -31,6 +31,8 @@ package com.caucho.cloud.hmtp;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.caucho.bam.broker.Broker;
 import com.caucho.bam.broker.ManagedBroker;
@@ -57,6 +59,8 @@ import com.caucho.vfs.WriteStream;
  */
 public class HmtpRequest extends AbstractProtocolConnection
 {
+  private static final Logger log = Logger.getLogger(HmtpRequest.class.getName());
+  
   private static final L10N L = new L10N(HmtpRequest.class);
 
   public static final int HMUX_TO_UNIDIR_HMTP = '7';
@@ -134,7 +138,7 @@ public class HmtpRequest extends AbstractProtocolConnection
     ReadStream is = _rawRead;
     
     int ch = is.read();
-    
+
     if (ch < 0)
       return false;
     

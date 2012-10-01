@@ -50,6 +50,7 @@ import com.caucho.network.listen.TcpPort;
 import com.caucho.server.hmux.HmuxProtocol;
 import com.caucho.util.HostUtil;
 import com.caucho.util.L10N;
+import com.caucho.vfs.net.NetworkSystem;
 
 /**
  * NetworkClusterService manages the cluster network code, the communication
@@ -64,7 +65,7 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     Logger.getLogger(NetworkClusterSystem.class.getName());
   
   private static final long CLUSTER_IDLE_TIME_MAX = Long.MAX_VALUE / 2;
-  private static final long CLUSTER_IDLE_PADDING = 2 * 60 * 1000;
+  private static final long CLUSTER_IDLE_PADDING = 5 * 60000;
   
   private final CloudServer _selfServer;
   
@@ -84,6 +85,8 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     _selfServer.getSystem().addClusterListener(new NetworkClusterListener());
     
     ClusterServer clusterServer = selfServer.getData(ClusterServer.class);
+    
+    NetworkSystem.createSubSystem(selfServer.getId());
     
     if (clusterServer.getPort() >= 0) {
       _clusterListener = new ClusterTcpPort(clusterServer);

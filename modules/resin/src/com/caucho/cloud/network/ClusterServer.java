@@ -32,8 +32,6 @@ package com.caucho.cloud.network;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -123,9 +121,7 @@ public final class ClusterServer {
   private AtomicReference<SocketPool> _loadBalanceSocketPool
     = new AtomicReference<SocketPool>();
 
-  private AtomicBoolean _isHeartbeatActive = new AtomicBoolean();
-  private AtomicLong _stateTimestamp = new AtomicLong();
-  private AtomicLong _lastHeartbeatTime = new AtomicLong();
+  private final ServerHeartbeatState _heartbeatState;
 
   // admin
 
@@ -152,7 +148,7 @@ public final class ClusterServer {
       // _isHeartbeatActive.set(true);
     }
     
-    _stateTimestamp.set(CurrentTime.getCurrentTime());
+    _heartbeatState = new ServerHeartbeatState(this);
 
     _serverClusterId = getServerAddress(getIndex(), getCloudPod().getIndex());
 
@@ -1048,7 +1044,7 @@ public final class ClusterServer {
    */
   public boolean isHeartbeatActive()
   {
-    return _isHeartbeatActive.get();
+    return _heartbeatState.isHeartbeatActive();
   }
 
   /**
@@ -1056,12 +1052,17 @@ public final class ClusterServer {
    */
   public long getStateTimestamp()
   {
-    return _stateTimestamp.get();
+    return _heartbeatState.getStateTimestamp();
   }
   
   public long getLastHeartbeatTime()
   {
-    return _lastHeartbeatTime.get();
+    return _heartbeatState.getLastHeartbeatTime();
+  }
+  
+  public String getHeartbeatState()
+  {
+    return _heartbeatState.getHeartbeatState();
   }
 
   /**
@@ -1069,30 +1070,15 @@ public final class ClusterServer {
    */
   public boolean notifyHeartbeatStart()
   {
-    long now = CurrentTime.getCurrentTime();
-    
-    long oldHeartbeatTime = _lastHeartbeatTime.getAndSet(now);
-
-    boolean isActive = _isHeartbeatActive.getAndSet(true);
-    
-    if (isActive)
+    if (! _heartbeatState.notifyHeartbeatStart()) {
       return false;
-    
-    _stateTimestamp.set(now);
+    }
     
     _cloudServer.onHeartbeatStart();
 
     ClientSocketFactory clusterSocketPool = getClusterSocketPool();
     if (clusterSocketPool != null) {
       clusterSocketPool.notifyHeartbeatStart();
-    }
-
-    if (oldHeartbeatTime > 0) {
-      // #5173
-      log.warning(this + " notify-heartbeat-start");
-    }
-    else if (log.isLoggable(Level.FINER)) {
-      log.finer(this + " notify-heartbeat-start");
     }
 
     _clusterSystem.notifyHeartbeatStart(this);
@@ -1105,10 +1091,6 @@ public final class ClusterServer {
    */
   public boolean notifyHeartbeatStop()
   {
-    _lastHeartbeatTime.set(0);
-    
-    boolean isActive = _isHeartbeatActive.getAndSet(false);
-    
     SocketPool clusterSocketPool;
     
     if (isExternal())
@@ -1119,11 +1101,10 @@ public final class ClusterServer {
     if (clusterSocketPool != null)
       clusterSocketPool.getFactory().notifyHeartbeatStop();
 
-    if (! isActive)
+    if (! _heartbeatState.notifyHeartbeatStop()) {
       return false;
+    }
     
-    _stateTimestamp.set(CurrentTime.getCurrentTime());
-
     if (_clusterSystem.isActive())
       log.warning(this + " notify-heartbeat-stop");
     else
@@ -1135,14 +1116,29 @@ public final class ClusterServer {
 
     return true;
   }
+  
+  public void updateHeartbeatTimeout(long timeout)
+  {
+    _heartbeatState.updateTimeout(timeout);
+  }
+  
+  public void onHeartbeatTimeout()
+  {
+    if (_clusterSystem.isActive())
+      log.warning(this + " notify-heartbeat-timeout (check peer for possible freeze)");
+    else
+      log.fine(this + " notify-heartbeat-timeout (check peer for possible freeze)");
+    
+    _cloudServer.onHeartbeatStop();
+    _clusterSystem.notifyHeartbeatStop(this);
+  }
 
   /**
    * Starts the server.
    */
   public void stopServer()
   {
-    _isHeartbeatActive.set(false);
-    _stateTimestamp.set(CurrentTime.getCurrentTime());
+    _heartbeatState.notifyHeartbeatStop();
 
     SocketPool pool = _clusterSocketPool.get();
     
