@@ -33,18 +33,13 @@ import java.io.IOException;
 import java.util.Map;
 
 import com.caucho.amqp.AmqpException;
-import com.caucho.amqp.io.AmqpStreamWriter;
-import com.caucho.amqp.io.AmqpWriter;
-import com.caucho.amqp.io.MessageProperties;
-import com.caucho.amqp.marshal.AmqpMessageEncoder;
+import com.caucho.message.MessageEncoder;
 import com.caucho.message.MessagePropertiesFactory;
 import com.caucho.message.broker.BrokerSender;
 import com.caucho.message.broker.EnvironmentMessageBroker;
 import com.caucho.message.common.AbstractMessageSender;
 import com.caucho.util.L10N;
 import com.caucho.vfs.TempOutputStream;
-import com.caucho.vfs.Vfs;
-import com.caucho.vfs.VfsStream;
 import com.caucho.vfs.WriteStream;
 
 /**
@@ -54,7 +49,7 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
   private static final L10N L = new L10N(LocalSender.class);
   
   private String _address;
-  private AmqpMessageEncoder<T> _encoder;
+  private MessageEncoder<T> _encoder;
   
   private BrokerSender _publisher;
   private long _lastMessageId;
@@ -66,7 +61,8 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
     super(factory);
     
     _address = factory.getAddress();
-    _encoder = (AmqpMessageEncoder) factory.getEncoder();
+    
+    _encoder = (MessageEncoder) factory.getMessageEncoder();
     
     EnvironmentMessageBroker broker = EnvironmentMessageBroker.getCurrent();
         
@@ -94,17 +90,9 @@ public class LocalSender<T> extends AbstractMessageSender<T> {
   {
     try {
       TempOutputStream tOut = new TempOutputStream();
-      WriteStream os = _os;
-      os.init(new VfsStream(null, tOut));
-      AmqpStreamWriter sout = new AmqpStreamWriter(os);
-      AmqpWriter aout = new AmqpWriter();
-      aout.initBase(sout);
-    
-      _encoder.encode(aout, factory, value);
-      
-      sout.flush();
-      os.flush();
-      
+     
+      _encoder.encode(tOut, value);
+
       tOut.flush();
       tOut.close();
 

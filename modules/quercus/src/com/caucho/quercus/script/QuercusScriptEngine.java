@@ -54,9 +54,10 @@ public class QuercusScriptEngine
   private QuercusScriptEngineFactory _factory;
   private final QuercusContext _quercus;
 
-  QuercusScriptEngine(QuercusScriptEngineFactory factory)
+  public QuercusScriptEngine(QuercusScriptEngineFactory factory)
   {
-    this(factory, createQuercus());
+    _factory = factory;
+    _quercus = createQuercus();
   }
 
   public QuercusScriptEngine(QuercusScriptEngineFactory factory,
@@ -65,14 +66,14 @@ public class QuercusScriptEngine
     _factory = factory;
     _quercus = quercus;
   }
-  
+
   private static QuercusContext createQuercus()
   {
     QuercusContext quercus = new QuercusContext();
-    
+
     quercus.init();
     quercus.start();
-    
+
     return quercus;
   }
 
@@ -95,22 +96,31 @@ public class QuercusScriptEngine
 
     try {
       ReadStream reader = ReaderStream.open(script);
-      
+
+      String scriptEncoding = _quercus.getScriptEncoding();
+      reader.setEncoding(scriptEncoding);
+
       QuercusProgram program = QuercusParser.parse(_quercus, null, reader);
 
       Writer writer = cxt.getWriter();
-      
+
       WriteStream out;
 
       if (writer != null) {
         WriterStreamImpl s = new WriterStreamImpl();
         s.setWriter(writer);
         WriteStream os = new WriteStream(s);
-        
+
         os.setNewlineString("\n");
 
+        String outputEncoding = _quercus.getOutputEncoding();
+
+        if (outputEncoding == null) {
+          outputEncoding = "iso-8859-1";
+        }
+
         try {
-          os.setEncoding("iso-8859-1");
+          os.setEncoding(outputEncoding);
         } catch (Exception e) {
         }
 
@@ -127,19 +137,19 @@ public class QuercusScriptEngine
 
       // php/214c
       env.start();
-      
+
       Object result = null;
-      
+
       try {
         Value value = program.execute(env);
-        
+
         if (value != null)
           result = value.toJavaObject();
       }
       catch (QuercusExitException e) {
         //php/2148
       }
-      
+
       out.flushBuffer();
       out.free();
 
@@ -151,9 +161,9 @@ public class QuercusScriptEngine
       //
       // http://bugs.caucho.com/view.php?id=1914
       writer.flush();
-      
+
       return result;
-      
+
       /*
     } catch (ScriptException e) {
       throw e;
@@ -187,7 +197,7 @@ public class QuercusScriptEngine
   {
     try {
       ReadStream reader = ReaderStream.open(script);
-      
+
       QuercusProgram program = QuercusParser.parse(_quercus, null, reader);
 
       return new QuercusCompiledScript(this, program);
@@ -225,6 +235,15 @@ public class QuercusScriptEngine
     return new SimpleBindings();
   }
 
+  /**
+   * Shuts down Quercus and free resources.
+   */
+  public void close()
+  {
+    _quercus.close();
+  }
+
+  @Override
   public String toString()
   {
     return "QuercusScriptEngine[]";

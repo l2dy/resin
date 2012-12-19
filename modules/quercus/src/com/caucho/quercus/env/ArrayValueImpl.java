@@ -36,8 +36,6 @@ import java.io.PrintWriter;
 import java.io.Serializable;
 import java.util.IdentityHashMap;
 import java.util.Map;
-import java.util.logging.Logger;
-
 import com.caucho.util.RandomUtil;
 
 /**
@@ -233,7 +231,6 @@ public class ArrayValueImpl extends ArrayValue
     return _nextAvailableIndex;
   }
 
-
   private void copyOnWrite()
   {
     if (! _isDirty)
@@ -323,6 +320,7 @@ public class ArrayValueImpl extends ArrayValue
   /**
    * Copy the value.
    */
+  @Override
   public Value copy()
   {
     // php/1704

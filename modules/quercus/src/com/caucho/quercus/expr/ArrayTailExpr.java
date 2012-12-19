@@ -33,7 +33,6 @@ import com.caucho.quercus.Location;
 import com.caucho.quercus.env.ArrayValue;
 import com.caucho.quercus.env.ArrayValueImpl;
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.Var;
 
@@ -121,9 +120,9 @@ public class ArrayTailExpr extends AbstractVarExpr {
     Value obj = _expr.evalArray(env);
 
     ArrayValue array = new ArrayValueImpl();
-    
+
     obj.put(array);
-    
+
     return array;
   }
 
@@ -139,9 +138,9 @@ public class ArrayTailExpr extends AbstractVarExpr {
     Value array = _expr.evalArray(env);
 
     Value value = env.createObject();
-    
+
     array.put(value);
-    
+
     return value;
   }
 
@@ -155,13 +154,20 @@ public class ArrayTailExpr extends AbstractVarExpr {
   @Override
   public Value evalAssignValue(Env env, Value value)
   {
+    /*
     Value array = _expr.evalVar(env);
 
     array = array.toAutoArray();
-    
+
     array.put(value);
-    
+
     return value;
+    */
+
+    // php/048b
+    Value array = _expr.evalArrayAssignTail(env, value);
+
+    return array;
   }
 
   /**
@@ -177,7 +183,7 @@ public class ArrayTailExpr extends AbstractVarExpr {
     Value array = _expr.evalArray(env);
 
     array.put(value);
-    
+
     return value;
   }
 

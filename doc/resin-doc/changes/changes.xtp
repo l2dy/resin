@@ -10,7 +10,57 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0.32 - snapshot">
+<s2 title="4.0.33 - Dec 18, 2012">
+<ul>
+<li>http-proxy: header must end with /r/n(#5265, rep by mnsh)</li>
+<li>servlet: file servlet content-length issues with > 2G files (#5265, rep by Amir Langer)</li>
+<li>cdi: memory held by CDI as negative caching across web-app restarts (rep by Mattais Jiderhamn)</li>
+<li>cli: remote management was not properly using -server in some cases (#5226)</li>
+<li>cache: add jdbc cache as backing</li>
+<li>cache: add tiered cache</li>
+<li>jsp: add jsp-property-group default-content-type (#4232, rep by mattp)</li>
+<li>jsp: let BeanELResolver auto-convert to Enum (#5230, rep by mate)</li>
+<li>loader: added setDisableURLs to DynamicClassLoader to work around RMI bug (#5186)</li>
+<li>jmx: needs to support @MXBean (#5212, rep by kay)</li>
+<li>jamm/health: event firing needs to work from null classloader context (#4254, rep by Luke Bigum)</li>
+<li>servlet: access-log of %u wasn't properly grabbing user (#5250, rep by W. Tao)</li>
+<li>cli: -verbose needs to enable finer logging and display exceptions (#5237, rep by Steve Francis)</li>
+<li>servlet: jersey compatibility (related to @HandlesTypes issue) (#5228, rep by Ryan T)</li>
+<li>servlet: getCookies timing/NPE (#5252, rep by harsha)</li>
+<li>ioc: check for Enum using isAssignableFrom to work around IBM JDK (#5240, rep by S Francis)</li>
+<li>servlet: @HandlesTypes scanning for ServletContainerInitializer</li>
+<li>hessian: IdentityIntMap needs Math.abs for System.identityHashCode (#5239, rep by S Francis)</li>
+<li>jsp-el: improve serialization for JSF (#5231, rep by Mattias Jiderhamn)</li>
+<li>quercus: cannot reference nested java classes (#5245, rep by ismak)</li>
+<li>quercus: strtotime returns null value on DST when given an ISO-8601 timestamp as an argument (#5259, rep by gbruins)</li>
+<li>quercus: session_set_cookie_params() does not support HttpOnly (#5249, rep by ottomatico)</li>
+<li>quercus: drupal facebook activity stream doesn't work (#5264, rep by jordi)</li>
+<li>quercus: Serialize() not supportes using curl in GAE (#5199, rep by ismak)</li>
+<li>quercus: array_merge_recursive() modifies input array arguments (#5269, rep by jordi)</li>
+<li>quercus: javax.script cannot call PHP library functions (#5270, rep by udvs)</li>
+<li>quercus: eval() does work with large code with utf8 data (#5280, rep by tobias)</li>
+<li>quercus: QuercusDataSource needs to implement getParentLogger() for JDK 1.7 (#5281, rep by ottomatico)</li>
+<li>quercus: postgresql - pdo parameters need to be casted to actual column types (#5285, rep by tobias)</li>
+<li>quercus: clone() doesn't work with DateTime (#5287, rep by jordi)</li>
+<li>quercus: date_modify($date, "+37 month") does nothing (#5288, rep by jordi)</li>
+<li>quercus: servlet should not close ServletOutputStream, for ServletFilters downstream (#5293, rep by jornvl90)</li>
+<li>quercus: need to implement DateTime::diff() for PHP 5.3 (#5292, rep by LostInCloud)</li>
+<li>quercus: postgres PDO prepare does not work with "::interval" (#5297, rep by tobias)</li>
+<li>quercus: add Cloud Storage and Cloud SQL support for Google App Engine</li>
+<li>quercus: ' ' is an unknown regexp flag (#5304, rep by K. Patel)</li>
+<li>quercus: isset() complains about undefined variables in compiled mode (#5305, rep by K. Patel)</li>
+<li>quercus: /index.php/about returns a 404</li>
+<li>quercus: QuercusScriptEngine throws OOM if instantiated repeatedly (#5307, rep by woddle)</li>
+<li>quercus: QuercusScriptEngine needs to output unicode correctly (#5308, rep by woddle)</li>
+<li>quercus: php.ini disable_functions does not work (#4005, rep by hm2k)</li>
+<li>quercus: Floating point formatting in locales that use comma as decimal separator (#5312)</li>
+<li>cli: comand usage output reformatted to improve usability</li>
+<li>install: --with-resin-init.d does not create directory (#5244, rep by K. Fetterman)</li>
+<li>pdf: generated PDFs are corrupt in locales that use comma as decial separator (#5298, rep by F. Degen)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.32 - Oct 1, 2012">
 <ul>
 <li>cli: unify deploy and config-deploy commands</li>
 <li>deploy: with --host and host-deploy, use proper directory (#5215, rep by Gerrit Janssen)</li>

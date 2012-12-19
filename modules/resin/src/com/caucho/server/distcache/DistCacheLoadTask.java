@@ -27,57 +27,39 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.env.thread;
+package com.caucho.server.distcache;
 
-import com.caucho.env.thread.ValueActorQueue.ValueProcessor;
+import com.caucho.util.CurrentTime;
 
 /**
- * Ring-based memory queue processed by a single worker.
+ * callback listener for a load complete
  */
-abstract public class AbstractWorkerQueue<T> implements ValueProcessor<T> 
-{
-  private final ValueActorQueue<T> _queueConsumer;
+class DistCacheLoadTask implements Runnable {
+  private final DistCacheEntry _entry;
+  private final DistCacheLoadListener _listener;
   
-  public AbstractWorkerQueue(int size)
+  DistCacheLoadTask(DistCacheEntry entry,
+                    DistCacheLoadListener listener)
   {
-    _queueConsumer = new ValueActorQueue<T>(size, this);
-  }
-  
-  public final boolean isEmpty()
-  {
-    return _queueConsumer.isEmpty();
-  }
-  
-  public final int getSize()
-  {
-    return _queueConsumer.getSize();
-  }
-  
-  public final boolean offer(T value)
-  {
-    _queueConsumer.offer(value);
+    if (entry == null)
+      throw new NullPointerException();
     
-    return true;
-  }
-  
-  public final void wake()
-  {
-    _queueConsumer.wake();
-  }
-  
-  @Override
-  public String getThreadName()
-  {
-    long id = Thread.currentThread().getId();
+    if (listener == null)
+      throw new NullPointerException();
     
-    return _queueConsumer.toString() + "-" + id;
+    _entry = entry;
+    _listener = listener;
   }
   
-  @Override
-  abstract public void process(T value);
-  
-  @Override
-  public void onProcessComplete()
+  public void run()
   {
+    try {
+      long now = CurrentTime.getCurrentTime();
+      
+      _entry.reloadValue(now, true);
+    } finally {
+      _listener.onLoad(_entry);
+    }
   }
+
 }

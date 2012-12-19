@@ -31,10 +31,14 @@ package com.caucho.boot;
 
 import com.caucho.env.repository.CommitBuilder;
 
-public class DeployLsCommand extends AbstractDeployCatCommand {
-  public DeployLsCommand()
+public class DeployLsCommand extends AbstractDeployCatCommand 
+{
+  @Override
+  protected void initBootOptions()
   {
     addValueOption("host", "host", "virtual host to make application available on");
+    
+    super.initBootOptions();
   }
   
   @Override

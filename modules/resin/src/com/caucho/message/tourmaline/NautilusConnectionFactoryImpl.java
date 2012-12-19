@@ -27,12 +27,17 @@
  * @author Scott Ferguson
  */
 
-package com.caucho.env.thread;
+package com.caucho.message.tourmaline;
+
+import com.caucho.message.MessageConnectionFactory;
 
 /**
- * index for the disruptor.
+ * Message facade for creating a connection
  */
-abstract class ActorQueueIndex
-{
-  abstract int get();
+public class NautilusConnectionFactoryImpl implements MessageConnectionFactory {
+  @Override
+  public NautilusClientConnection connect()
+  {
+    return new NautilusClientConnection();
+  }
 }

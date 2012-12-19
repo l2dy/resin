@@ -47,10 +47,10 @@ import com.caucho.bam.packet.Query;
 import com.caucho.bam.packet.QueryError;
 import com.caucho.bam.packet.QueryResult;
 import com.caucho.bam.stream.MessageStream;
-import com.caucho.env.thread.ValueActorQueue.ValueProcessor;
+import com.caucho.env.actor.AbstractActorProcessor;
+import com.caucho.env.actor.ActorProcessor;
 import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.L10N;
-import com.caucho.util.ThreadDump;
 
 /**
  * mailbox for BAM messages waiting to be sent to the Actor.
@@ -123,7 +123,7 @@ public class MultiworkerMailbox implements Mailbox, Closeable
     return new MailboxQueue2(_queueSize, createProcessor());
   }
   
-  protected ValueProcessor<Packet> createProcessor()
+  protected ActorProcessor<Packet> createProcessor()
   {
     return new PacketProcessor();
   }
@@ -382,7 +382,7 @@ public class MultiworkerMailbox implements Mailbox, Closeable
     return getClass().getSimpleName() + "[" + _name + "]";
   }
   
-  private class PacketProcessor implements ValueProcessor<Packet> {
+  private class PacketProcessor extends AbstractActorProcessor<Packet> {
     PacketProcessor()
     {
     }

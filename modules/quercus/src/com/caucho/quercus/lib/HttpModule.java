@@ -29,18 +29,20 @@
 
 package com.caucho.quercus.lib;
 
-import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.Reference;
-import com.caucho.quercus.env.*;
+import com.caucho.quercus.env.ArrayValue;
+import com.caucho.quercus.env.ArrayValueImpl;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.NullValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.Value;
 import com.caucho.quercus.module.AbstractQuercusModule;
-import com.caucho.util.Alarm;
 import com.caucho.util.L10N;
 import com.caucho.util.QDate;
 
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
 import java.util.ArrayList;
 
 /**
@@ -114,7 +116,7 @@ public class HttpModule extends AbstractQuercusModule {
         // replaces the previous one
         //res.sendRedirect(value);
         //return NullValue.NULL;
-        
+
         res.setStatus(302, "Found");
       }
 
@@ -197,7 +199,7 @@ public class HttpModule extends AbstractQuercusModule {
                                      @Optional @Reference Value line)
   {
     HttpServletResponse res = env.getResponse();
-    
+
     // php/1b0n
     return res != null && res.isCommitted();
   }
@@ -215,11 +217,11 @@ public class HttpModule extends AbstractQuercusModule {
                                   @Optional boolean httpOnly)
   {
     HttpServletResponse response = env.getResponse();
-    
+
     if (response == null) {
       return false;
     }
-    
+
     long now = env.getCurrentTime();
 
     if (value == null || value.equals(""))
@@ -265,21 +267,33 @@ public class HttpModule extends AbstractQuercusModule {
 
     if (expire > 0) {
       maxAge = (int) (expire - now / 1000);
-      
+
       if (maxAge > 0)
         cookie.setMaxAge(maxAge);
       else
         cookie.setMaxAge(0); //php/1b0i
     }
 
-    if (path != null && ! path.equals(""))
+    if (path != null && ! path.equals("")) {
       cookie.setPath(path);
+    }
 
-    if (domain != null && ! domain.equals(""))
+    if (domain != null && ! domain.equals("")) {
       cookie.setDomain(domain);
+    }
 
-    if (secure)
+    if (secure) {
       cookie.setSecure(true);
+    }
+
+    if (httpOnly) {
+      try {
+        cookie.setHttpOnly(true);
+      }
+      catch (Throwable e) {
+        env.warning(L.l("HttpOnly requires Servlet 3.0"), e);
+      }
+    }
 
     response.addCookie(cookie);
 
@@ -298,7 +312,7 @@ public class HttpModule extends AbstractQuercusModule {
     }
     else {
       QDate date = env.getGmtDate();
-      
+
       date.setGMTTime(now + 1000L * (long) maxAge);
       cookieHeader.append("; expires=");
       cookieHeader.append(date.format("%a, %d-%b-%Y %H:%M:%S GMT"));
@@ -314,8 +328,13 @@ public class HttpModule extends AbstractQuercusModule {
       cookieHeader.append(domain);
     }
 
-    if (secure)
+    if (secure) {
       cookieHeader.append("; secure");
+    }
+
+    if (httpOnly) {
+      cookieHeader.append("; HttpOnly");
+    }
 
     getHeaders(env).add(cookieHeader.toString());
 

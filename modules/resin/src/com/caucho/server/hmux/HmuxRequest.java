@@ -44,6 +44,7 @@ import java.util.logging.Logger;
 
 import com.caucho.cloud.bam.BamSystem;
 import com.caucho.cloud.hmtp.HmtpRequest;
+import com.caucho.network.listen.Protocol;
 import com.caucho.network.listen.ProtocolConnection;
 import com.caucho.network.listen.SocketLink;
 import com.caucho.server.cluster.ServletService;
@@ -528,7 +529,7 @@ public class HmuxRequest extends AbstractHttpRequest
 
       request.setAttribute("javax.servlet.request.X509Certificate",
                            new X509Certificate[]{cert});
-      request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_USER_NAME,
+      request.setAttribute(com.caucho.security.AbstractLogin.LOGIN_USER,
                            ((X509Certificate) cert).getSubjectDN());
     } catch (Exception e) {
       log.log(Level.FINE, e.toString(), e);
@@ -940,14 +941,17 @@ public class HmuxRequest extends AbstractHttpRequest
         result = HMUX_EXIT;
     }
     else {
-      HmuxExtension ext = _hmuxProtocol.getExtension(value);
+      Protocol ext = _hmuxProtocol.getExtension(value);
 
       if (ext != null) {
         if (log.isLoggable(Level.FINE))
           log.fine(dbgId() + (char) code + "-r: extension " + ext);
         _filter.setClientClosed(true);
+        
+        _subProtocol = ext.createConnection(getTcpSocketLink());
 
-        result = ext.handleRequest(this, is, _rawWrite);
+        _subProtocol.handleRequest();
+        return;
       }
       else {
         log.fine(dbgId() + (char) code + "-r: unknown protocol (" + value + ")");

@@ -27,9 +27,42 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.event;
+package com.caucho.env.actor;
 
-public interface Filter
+/**
+ * Processes an actor item.
+ */
+abstract public class AbstractActorProcessor<T> implements ActorProcessor<T>
 {
-  public boolean evaluate(CacheEntryEvent event);
+  /**
+   * Returns the current thread name.
+   */
+  @Override
+  public String getThreadName()
+  {
+    return getClass().getSimpleName() + "-" + Thread.currentThread().getId();
+  }
+
+  /**
+   * Called when all items in the queue are processed. This can be
+   * used to flush buffers.
+   */
+  @Override
+  public void onProcessStart() throws Exception
+  {
+  }
+
+  /**
+   * Process a single item.
+   */
+  abstract public void process(T item) throws Exception;
+
+  /**
+   * Called when all items in the queue are processed. This can be
+   * used to flush buffers.
+   */
+  @Override
+  public void onProcessComplete() throws Exception
+  {
+  }
 }

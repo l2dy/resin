@@ -904,14 +904,16 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   @Override
   public Cookie []getCookies()
   {
+    Cookie []cookiesIn = _cookiesIn;
+    
     if (_cookiesIn == null) {
-      _cookiesIn = _request.getCookies();
+      cookiesIn = _request.getCookies();
 
       SessionManager sessionManager = getSessionManager();
       String sessionCookieName = getSessionCookie(sessionManager);
 
-      for (int i = 0; i < _cookiesIn.length; i++) {
-        Cookie cookie = _cookiesIn[i];
+      for (int i = 0; i < cookiesIn.length; i++) {
+        Cookie cookie = cookiesIn[i];
 
         if (cookie.getName().equals(sessionCookieName)
           && sessionManager.isSecure()) {
@@ -919,6 +921,8 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
           break;
         }
       }
+      
+      _cookiesIn = cookiesIn;
 
       /*
       // The page varies depending on the presense of any cookies
@@ -930,10 +934,12 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       */
     }
 
-    if (_cookiesIn == null || _cookiesIn.length == 0)
+    if (cookiesIn != null && cookiesIn.length > 0) {
+      return cookiesIn;
+    }
+    else {
       return null;
-    else
-      return _cookiesIn;
+    }
   }
 
   /**
@@ -1170,6 +1176,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   /**
    * Gets the remote user from the authorization type
    */
+  @Override
   public String getRemoteUser()
   {
     Principal principal = getUserPrincipal();
@@ -1191,7 +1198,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       return null;
     */
 
-    Principal user = (Principal) getAttribute(AbstractLogin.LOGIN_USER_NAME);
+    Principal user = (Principal) getAttribute(AbstractLogin.LOGIN_USER);
 
     if (user == null && create)
       user = getUserPrincipal();

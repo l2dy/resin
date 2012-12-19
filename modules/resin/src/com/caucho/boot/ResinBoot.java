@@ -80,6 +80,10 @@ public class ResinBoot
     throws Exception
   {
     _args = new WatchdogArgs(argv);
+    
+    if (_args.isVerbose()) {
+      setLoggingLevel(Level.FINER);
+    }
 
     Path resinHome = _args.getResinHome();
 
@@ -195,6 +199,11 @@ public class ResinBoot
     return serverId;
   }
   
+  private WatchdogArgs getArgs()
+  {
+    return _args;
+  }
+  
   private void initClient()
   {
     if (! _resinConfig.isElasticServer(_args)) {
@@ -269,7 +278,7 @@ public class ResinBoot
     BootCommand command = getCommand();
 
     if (command != null && _args.isHelp()) {
-      command.usage();
+      command.usage(_args.isVerbose());
 
       return false;
     }
@@ -318,28 +327,23 @@ public class ResinBoot
                                       jvmVersion));
     }
 
-    if (System.getProperty("log.level") != null) {
-      Logger.getLogger("").setLevel(Level.FINER);
-      
-      for (Handler handler : Logger.getLogger("").getHandlers()) {
-        if (handler instanceof ConsoleHandler) {
-          handler.setLevel(Level.FINER);
-        }
-      }
-    }
-    else {
-      for (Handler handler : Logger.getLogger("").getHandlers()) {
-        if (handler instanceof ConsoleHandler) {
-          handler.setLevel(Level.FINER);
-          Logger.getLogger("").removeHandler(handler);
-        }
-      }
-    }
-
     ResinBoot boot = null;
     BootCommand command = null;
     try {
       boot = new ResinBoot(argv);
+
+      if (System.getProperty("log.level") != null
+          || boot.getArgs().isVerbose()) {
+      }
+      else {
+        for (Handler handler : Logger.getLogger("").getHandlers()) {
+          if (handler instanceof ConsoleHandler) {
+            handler.setLevel(Level.FINER);
+            Logger.getLogger("").removeHandler(handler);
+          }
+        }
+      }
+
       command = boot.getCommand();
 
       while (boot.start()) {
@@ -353,32 +357,42 @@ public class ResinBoot
       
       System.exit(ExitCode.OK.ordinal());
     } catch (BootArgumentException e) {
-      System.err.println(e.getMessage());
-      
-      if (e.getMessage() == null || log.isLoggable(Level.FINER)) {
-        e.printStackTrace();
-      }
+      printException(e, boot);
 
       if (command != null)
-        command.usage();
+        command.usage(false);
 
       System.exit(ExitCode.UNKNOWN_ARGUMENT.ordinal());
     } catch (ConfigException e) {
-      System.err.println(e.getMessage());
-      
-      if (e.getMessage() == null || log.isLoggable(Level.FINER)) {
-        e.printStackTrace();
-      }
+      printException(e, boot);
 
       System.exit(ExitCode.BAD_CONFIG.ordinal());
     } catch (Exception e) {
-      System.err.println(e.getMessage());
-      
-      if (e.getMessage() == null || log.isLoggable(Level.FINE)) {
-        e.printStackTrace();
-      }
+      printException(e, boot);
 
       System.exit(ExitCode.UNKNOWN.ordinal());
+    }
+  }
+  
+  private static void setLoggingLevel(Level level)
+  {
+    Logger.getLogger("").setLevel(level);
+  
+    for (Handler handler : Logger.getLogger("").getHandlers()) {
+      if (handler instanceof ConsoleHandler) {
+        handler.setLevel(level);
+      }
+    }
+  }
+  
+  private static void printException(Throwable e, ResinBoot boot)
+  {
+    System.err.println(e.getMessage());
+  
+    if (e.getMessage() == null
+        || boot != null && boot.getArgs().isVerbose()
+        || log.isLoggable(Level.FINER)) {
+      e.printStackTrace();
     }
   }
 

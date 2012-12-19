@@ -48,14 +48,21 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   private static final Logger log
     = Logger.getLogger(AbstractRemoteCommand.class.getName());
   
-  protected AbstractRemoteCommand()
+  @Override
+  protected void initBootOptions()
   {
+    addSubsectionHeaderOption("remote connection options:");
+
     addValueOption("server", "id", "id of a server in the config file");
     addValueOption("address", "ip", "IP address or host name of (triad) server");
     addIntValueOption("port", "port", "IP port of (triad) server");
     
+    addSpacerOption();
+    
     addValueOption("user", "user", "admin user name for authentication");
     addValueOption("password", "password", "admin password for authentication");
+    
+    super.initBootOptions();
   }
   
   protected RemoteActorSender createBamClient(WatchdogArgs args,
@@ -98,8 +105,9 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
     RemoteActorSender hmuxClient
       = createHmuxClient(client, address, port, userName, password);
     
-    if (hmuxClient != null)
+    if (hmuxClient != null) {
       return hmuxClient;
+    }
 
     if (address == null || address.isEmpty()) {
       liveClient = findLiveClient(client, port);
@@ -147,18 +155,24 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
                                              String userName,
                                              String password)
   {
-    WatchdogClient triad;
+    WatchdogClient server;
     
-    if (address != null && ! "".equals(address) && port > 0)
-      triad = findServer(client, address, port);
-    else
-      triad = findLiveTriad(client);
+    if (address != null && ! "".equals(address) && port > 0) {
+      server = findServer(client, address, port);
+    }
+    else if (clientCanConnect(client)) {
+      server = client;
+    }
+    else {
+      server = findLiveTriad(client);
+    }
     
-    if (triad == null)
+    if (server == null) {
       return null;
+    }
     
-    address = triad.getConfig().getAddress();
-    port = triad.getConfig().getPort();
+    address = server.getConfig().getAddress();
+    port = server.getConfig().getPort();
 
     HmuxClientFactory hmuxFactory
       = new HmuxClientFactory(address, port, userName, password);
@@ -167,10 +181,10 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
       return hmuxFactory.create();
     } catch (RemoteConnectionFailedException e) {
       throw new RemoteConnectionFailedException(L.l("Connection to '{0}' failed for remote administration.\n  Ensure the local server has started, or include --server and --port parameters to connect to a remote server.\n  {1}",
-                                                    triad, e.getMessage()), e);
+                                                    server, e.getMessage()), e);
     } catch (RemoteListenerUnavailableException e) {
       throw new RemoteListenerUnavailableException(L.l("Connection to '{0}' failed for remote administration because RemoteAdminService (HMTP) is not enabled.\n  Ensure 'remote_admin_enable' is set true in resin.properties.\n  {1}",
-                                                       triad, e.getMessage()), e);
+                                                       server, e.getMessage()), e);
     }
   }
   
@@ -242,6 +256,11 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   }
   
   private boolean clientCanConnect(WatchdogClient client, int port)
+  {
+    return clientCanConnect(client);
+  }
+  
+  private boolean clientCanConnect(WatchdogClient client)
   {
     String address = client.getConfig().getAddress();
     int clusterPort = client.getConfig().getPort();

@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.32)
+AC_INIT([resin],4.0.33)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -117,15 +117,19 @@ elif test -d "/etc/rc.d"; then
   initd_dir="/etc/"
 fi
 
-AC_SUBST(initd_dir)
-
 AC_ARG_WITH(resin-init-d,
 [AS_HELP_STRING([--with-resin-init-d=PATH],
                 [resin startup (init.d) script path])],
 [
 case "${withval}" in
-  no)  resin_init_d= ;;
-  *)   resin_init_d=${withval};;
+  no)  
+    resin_init_d=
+    initd_dir= 
+    ;;
+  *)
+    resin_init_d=${withval}
+    initd_dir=`dirname $resin_init_d`
+    ;;
 esac
 ])
 
@@ -177,9 +181,9 @@ else
 
     # we're in $JAVA_HOME/jre
     if test -f "$JAVA_BIN/include/jni.h"; then
-      JAVA_HOME=$JAVA_BIN
-    elif test -f "$JAVA_BIN/../include/jni.h"; then
       JAVA_HOME="$JAVA_BIN"
+    elif test -f "$JAVA_BIN/../include/jni.h"; then
+      JAVA_HOME="$JAVA_BIN/.."
     elif test -f "$JAVA_BIN/../../include/jni.h"; then
       JAVA_HOME="$JAVA_BIN/../.."
     elif test -f "/System/Library/Frameworks/JavaVM.framework"; then

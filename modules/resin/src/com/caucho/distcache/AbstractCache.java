@@ -37,9 +37,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 
 import javax.annotation.PostConstruct;
@@ -47,30 +45,28 @@ import javax.cache.Cache;
 import javax.cache.CacheConfiguration;
 import javax.cache.CacheException;
 import javax.cache.CacheLoader;
-import javax.cache.CacheManager;
 import javax.cache.CacheStatistics;
+import javax.cache.CacheWriter;
 import javax.cache.Status;
 import javax.cache.event.CacheEntryListener;
-import javax.cache.event.Filter;
 import javax.cache.mbeans.CacheMXBean;
 
 import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.jcache.CacheManagerFacade;
-import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.loader.Environment;
+import com.caucho.server.distcache.CacheBacking;
 import com.caucho.server.distcache.CacheConfig;
+import com.caucho.server.distcache.CacheEngine;
 import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.CacheManagerImpl;
 import com.caucho.server.distcache.DataStore;
 import com.caucho.server.distcache.DistCacheSystem;
-import com.caucho.server.distcache.CacheEngine;
 import com.caucho.server.distcache.MnodeStore;
 import com.caucho.server.distcache.MnodeUpdate;
 import com.caucho.util.HashKey;
 import com.caucho.util.L10N;
-import com.caucho.util.LruCache;
 import com.caucho.vfs.StreamSource;
 import com.caucho.vfs.WriteStream;
 
@@ -98,6 +94,14 @@ public class AbstractCache
 
   public AbstractCache()
   {
+    
+    DistCacheSystem cacheService = DistCacheSystem.getCurrent();
+
+    if (cacheService == null)
+      throw new ConfigException(L.l("'{0}' cannot be initialized because it is not in a Resin environment",
+                                    getClass().getSimpleName()));
+    
+    _config.setEngine(cacheService.getDistCacheManager().getCacheEngine());
   }
 
   /**
@@ -143,6 +147,46 @@ public class AbstractCache
   public void setCacheLoader(CacheLoader loader)
   {
     _config.setCacheLoader(loader);
+  }
+  
+  @Configurable
+  public void setReadThrough(boolean isReadThrough)
+  {
+    _config.setReadThrough(isReadThrough);
+  }
+  
+  /**
+   * Sets the CacheWrite that the Cache can then use to save
+   * cache misses from a reference store (database).
+   */
+  @Configurable
+  public void setCacheWriter(CacheWriter writer)
+  {
+    _config.setCacheWriter(writer);
+  }
+  
+  @Configurable
+  public void setWriteThrough(boolean isWriteThrough)
+  {
+    _config.setWriteThrough(isWriteThrough);
+  }
+  
+  /**
+   * Sets the CacheLoader and CacheWriter which the Cache can then use 
+   * to populate cache misses from a reference store (database).
+   */
+  @Configurable
+  public void setCacheReaderWriter(CacheLoader loader)
+  {
+    if (! (loader instanceof CacheWriter)) {
+      throw new ConfigException(L.l("cache-reader-writer '{0}' must implements both CacheLoader and CacheWriter.",
+                                    loader));
+    }
+    
+    _config.setCacheLoader(loader);
+    _config.setReadThrough(true);
+    _config.setCacheWriter((CacheWriter) loader);
+    _config.setWriteThrough(true);
   }
 
   /**
@@ -376,6 +420,17 @@ public class AbstractCache
   public boolean isTriplicate()
   {
     return _config.isTriplicate();
+  }
+
+  /**
+   * @param backing
+   */
+  public void setBacking(CacheBacking<?, ?> backing)
+  {
+    _config.setCacheLoader(backing);
+    _config.setReadThrough(true);
+    _config.setCacheWriter(backing);
+    _config.setWriteThrough(true);
   }
   
   public void setPersistenceMode(Persistence persistence)
@@ -847,10 +902,9 @@ public class AbstractCache
    * Adds a listener to the cache.
    */
   @Override
-  public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            Filter filter)
+  public boolean registerCacheEntryListener(CacheEntryListener listener)
   {
-    return _delegate.registerCacheEntryListener(listener, filter);
+    return _delegate.registerCacheEntryListener(listener);
   }
 
   /**
@@ -1079,6 +1133,10 @@ public class AbstractCache
       manager = cacheService.getCacheManager(managerName);
     else
       manager = cacheService.getCacheManager();
+    
+    if (_config.getEngine() == null) {
+      _config.setEngine(cacheService.getDistCacheManager().getCacheEngine());
+    }
     
     _delegate = manager.createIfAbsent(_name, _config);
   }

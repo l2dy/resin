@@ -1150,15 +1150,18 @@ public class ArrayModule
    */
   public static Value array_merge_recursive(Env env, Value []args)
   {
-    // quercus/173a
+    // php/173a
 
     ArrayValue result = new ArrayValueImpl();
 
     for (Value arg : args) {
-      if (! (arg.toValue() instanceof ArrayValue))
-        continue;
+      Value value = arg.toValue();
 
-      arrayMergeRecursiveImpl(env, result, (ArrayValue) arg.toValue());
+      if (! (value instanceof ArrayValue)) {
+        continue;
+      }
+
+      arrayMergeRecursiveImpl(env, result, (ArrayValue) value);
     }
 
     return result;
@@ -1177,13 +1180,15 @@ public class ArrayModule
     ArrayValue result = new ArrayValueImpl();
 
     for (Value arg : args) {
-      if (arg.isNull())
+      if (arg.isNull()) {
         return NullValue.NULL;
+      }
 
       Value argValue = arg.toValue();
 
-      if (! argValue.isArray())
+      if (! argValue.isArray()) {
         continue;
+      }
 
       ArrayValue array = argValue.toArrayValue(env);
 
@@ -1199,22 +1204,39 @@ public class ArrayModule
           // php/173z, php/1747
           value = ((ArrayValue.Entry) entry).getRawValue();
         }
-        else
+        else {
           value = entry.getValue();
+        }
 
-        if (! (value instanceof Var))
+        if (! (value instanceof Var)) {
           value = value.copy();
+        }
 
         // php/1745
-        if (key.isNumberConvertible())
+        if (key.isNumberConvertible()) {
           result.put(value);
-        else
+        }
+        else {
           result.append(key, value);
+        }
       }
     }
 
     return result;
   }
+
+  /*
+  private static void arrayMergeRecursiveImpl(Env env,
+                                              ArrayValue result,
+                                              Value value)
+  {
+    if (value.isArray()) {
+      ArrayValueImpl array = new ArrayValueImpl();
+
+      arrayMergeRecursiveImpl(env, array, value.toArrayValue(env));
+    }
+  }
+  */
 
   private static void arrayMergeRecursiveImpl(Env env,
                                               ArrayValue result,
@@ -1232,16 +1254,22 @@ public class ArrayModule
         // php/1744, php/1746
         value = ((ArrayValue.Entry) entry).getRawValue();
       }
-      else
-        value = entry.getValue();
-
-      if (! (value instanceof Var))
-        value = value.copy();
-
-      if (key.isNumberConvertible())
-        result.put(value);
       else {
-        Value oldValue = result.get(key).toValue();
+        value = entry.getValue();
+      }
+
+      // php/1746
+      if (! (value instanceof Var)) {
+        // php/174b
+        value = value.copy();
+      }
+
+      if (key.isNumberConvertible()) {
+        // php/1744
+        result.put(value);
+      }
+      else {
+        Value oldValue = result.getDirty(key).toValue();
 
         if (oldValue != null && oldValue.isset()) {
           if (oldValue.isArray() && value.isArray()) {
@@ -1253,10 +1281,15 @@ public class ArrayModule
             oldValue.put(value);
           }
           else if (value.isArray()) {
-            value.put(oldValue);
+            ArrayValueImpl newArray = new ArrayValueImpl();
+
+            newArray.put(oldValue);
+            newArray.putAll(value.toArrayValue(env));
+
+            result.put(key, newArray);
           }
           else {
-            ArrayValue newArray = new ArrayValueImpl();
+            ArrayValueImpl newArray = new ArrayValueImpl();
 
             newArray.put(oldValue);
             newArray.put(value);
@@ -1264,8 +1297,9 @@ public class ArrayModule
             result.put(key, newArray);
           }
         }
-        else
+        else {
           result.put(key, value);
+        }
       }
     }
   }

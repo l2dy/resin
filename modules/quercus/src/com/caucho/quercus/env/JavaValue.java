@@ -36,6 +36,8 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -155,8 +157,9 @@ public class JavaValue extends ObjectValue
   {
     StringValue value = _classDef.toString(env, this);
 
-    if (value == null)
+    if (value == null) {
       value = env.createString(toString());
+    }
 
     return value;
   }
@@ -168,8 +171,9 @@ public class JavaValue extends ObjectValue
                             IdentityHashMap<Value, String> valueSet)
     throws IOException
   {
-    if (_classDef.printRImpl(env, _object, out, depth, valueSet))
+    if (_classDef.printRImpl(env, _object, out, depth, valueSet)) {
       return;
+    }
 
     Set<? extends Map.Entry<Value,Value>> entrySet = entrySet();
 
@@ -461,6 +465,39 @@ public class JavaValue extends ObjectValue
                                 a1, a2, a3, a4, a5);
   }
 
+  @Override
+  public Value clone(Env env)
+  {
+    Object obj = null;
+
+    if (_object != null) {
+      if (! (_object instanceof Cloneable)) {
+        return env.error(L.l("Java class {0} does not implement Cloneable",
+                             _object.getClass().getName()));
+      }
+
+      Class<?> cls = _classDef.getType();
+
+      try {
+        Method method = cls.getMethod("clone", new Class[0]);
+        method.setAccessible(true);
+
+        obj = method.invoke(_object);
+      }
+      catch (NoSuchMethodException e) {
+        throw new QuercusException(e);
+      }
+      catch (InvocationTargetException e) {
+        throw new QuercusException(e.getCause());
+      }
+      catch (IllegalAccessException e) {
+        throw new QuercusException(e);
+      }
+    }
+
+    return new JavaValue(obj, _classDef, getQuercusClass());
+  }
+
   /**
    * Serializes the value.
    */
@@ -510,9 +547,12 @@ public class JavaValue extends ObjectValue
    */
   public String toString()
   {
-    //return toString(Env.getInstance()).toString();
-
-    return String.valueOf(_object);
+    if (_object != null) {
+      return String.valueOf(_object);
+    }
+    else {
+      return String.valueOf(_classDef.getName());
+    }
   }
 
 

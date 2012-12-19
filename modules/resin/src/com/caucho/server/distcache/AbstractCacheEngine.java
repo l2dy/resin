@@ -74,27 +74,31 @@ public class AbstractCacheEngine implements CacheEngine
   */
 
   @Override
-  public MnodeValue get(DistCacheEntry entry, CacheConfig config)
+  public MnodeValue get(DistCacheEntry entry)
   {
     return null;
   }
 
   @Override
   public void put(HashKey key, 
+                  HashKey cacheKey,
                   MnodeUpdate mnodeUpdate,
                   long valueDataId)
   {
   }
 
   @Override
-  public void remove(HashKey key, MnodeUpdate mnodeUpdate)
+  public void remove(HashKey key, HashKey cacheKey, MnodeUpdate mnodeUpdate)
   {
   }
 
   @Override
-  public void updateTime(HashKey key, MnodeEntry mnodeValue)
+  public void updateTime(HashKey key,
+                         HashKey cacheKey,
+                         MnodeEntry mnodeValue)
   {
   }
+  
   @Override
   public boolean compareAndPut(DistCacheEntry entry,
                                long testValue,
@@ -113,7 +117,9 @@ public class AbstractCacheEngine implements CacheEngine
   }
 
   @Override
-  public void notifyLease(HashKey key, int leaseOwner)
+  public void notifyLease(HashKey key,
+                          HashKey cacheKey,
+                          int leaseOwner)
   {
   }
 }

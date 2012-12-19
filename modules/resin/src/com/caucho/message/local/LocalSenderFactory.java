@@ -29,8 +29,6 @@
 
 package com.caucho.message.local;
 
-import com.caucho.amqp.marshal.AmqpMessageEncoder;
-import com.caucho.amqp.marshal.AmqpStringEncoder;
 import com.caucho.message.MessageSender;
 import com.caucho.message.common.AbstractMessageSenderFactory;
 
@@ -38,13 +36,6 @@ import com.caucho.message.common.AbstractMessageSenderFactory;
  * local connection to the message store
  */
 public class LocalSenderFactory extends AbstractMessageSenderFactory {
-  private AmqpMessageEncoder<?> _encoder = new AmqpStringEncoder();
-  
-  public AmqpMessageEncoder<?> getEncoder()
-  {
-    return (AmqpMessageEncoder) _encoder;
-  }
-
   @Override
   public MessageSender<?> build()
   {

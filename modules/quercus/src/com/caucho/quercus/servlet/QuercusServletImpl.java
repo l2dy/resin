@@ -158,6 +158,11 @@ public class QuercusServletImpl extends HttpServlet
 
       ws = openWrite(response);
 
+      // php/2002
+      // for non-Resin containers
+      // for servlet filters that do post-request work after Quercus
+      ws.setDisableCloseSource(true);
+
       // php/6006
       ws.setNewlineString("\n");
 
@@ -289,15 +294,22 @@ public class QuercusServletImpl extends HttpServlet
     // php/8173
     Path pwd = getQuercus().getPwd().copy();
 
-    StringBuilder sb = new StringBuilder();
     String servletPath = QuercusRequestAdapter.getPageServletPath(req);
 
     if (servletPath.startsWith("/")) {
-      sb.append(servletPath, 1, servletPath.length());
+      servletPath = servletPath.substring(1);
     }
-    else {
-      sb.append(servletPath);
+
+    Path path = pwd.lookupChild(servletPath);
+
+    // php/2010, php/2011, php/2012
+    if (path.isFile()) {
+      return path;
     }
+
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(servletPath);
 
     String pathInfo = QuercusRequestAdapter.getPagePathInfo(req);
 
@@ -307,7 +319,7 @@ public class QuercusServletImpl extends HttpServlet
 
     String scriptPath = sb.toString();
 
-    Path path = pwd.lookupChild(scriptPath);
+    path = pwd.lookupChild(scriptPath);
 
     return path;
 

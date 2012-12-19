@@ -783,6 +783,9 @@ public class TcpSocketLink extends AbstractSocketLink
         destroy();
       }
     }
+    else {
+      closeConnection();
+    }
   }
   
   private void destroy()
@@ -924,10 +927,11 @@ public class TcpSocketLink extends AbstractSocketLink
       // network/0272
       close();
     }
-    else {
-      System.out.println(this + " Internal error unable to free: "
-                         + " result=" + resultState
-                         + " requestState=" + reqState + " " + _requestStateRef.get());
+    else if (_port.isActive()) {
+      String msg = (this + " Internal error unable to free: "
+                    + " result=" + resultState
+                    + " requestState=" + reqState + " " + _requestStateRef.get());
+      log.warning(msg);
     }
   }
   
@@ -957,13 +961,13 @@ public class TcpSocketLink extends AbstractSocketLink
     RequestState result = RequestState.REQUEST_COMPLETE;
 
     while (result.isAcceptAllowed()
-           && ! listener.isClosed()
+           && listener.isActive()
            && ! getState().isDestroyed()) {
       
       setStatState("accept");
       _state = _state.toAccept();
 
-      if (! accept()) {
+      if (! accept() || ! listener.isActive()) {
         setStatState("close");
         close();
 

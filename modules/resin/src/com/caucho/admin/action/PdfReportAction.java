@@ -295,11 +295,16 @@ public class PdfReportAction implements AdminAction
     }
   }
 
-  public String getReportFileName() {
+  public String getReportFileName()
+  {
     if (_fileName == null) {
       String date = QDate.formatLocal(CurrentTime.getCurrentTime(), "%Y%m%dT%H%M");
 
-      String serverId = Resin.getCurrent().getServerIdFilePart();
+      String serverId = "default";
+
+      Resin resin = Resin.getCurrent();
+      if (resin != null)
+        serverId = resin.getServerIdFilePart();
 
       _fileName = String.format("%s-%s-%s.pdf",
                                 serverId,
@@ -316,6 +321,16 @@ public class PdfReportAction implements AdminAction
     Env env = null;
     WriteStream ws = null;
     TempOutputStream pdfOut = null;
+    
+    if (_phpPath == null) {
+      Resin resin = Resin.getCurrent();
+
+      Path path = resin.getRootDirectory().lookup("doc/admin/pdf-gen.php");
+      
+      throw new ConfigException(L.l("{0} report generation failed because the PHP file cannot be found.\n  Expected {1}", 
+                                     calculateReport(),
+                                     path.getNativePath()));
+    }
 
     try {
       QuercusPage page = getQuercusContext().parse(_phpPath);

@@ -63,7 +63,8 @@ public class CacheConfig implements CacheConfiguration
 
   private String _guid;
   private int _guidHash;
-  private HashKey _cacheKey;
+  
+  private CacheHandle _cache;
 
   private int _flags = (FLAG_BACKUP | FLAG_TRIPLICATE);
 
@@ -81,10 +82,10 @@ public class CacheConfig implements CacheConfiguration
   private AbstractCache.Scope _scope = Scope.CLUSTER;
 
   private boolean _isReadThrough;
-  private CacheLoader _cacheLoader;
+  private CacheLoaderExt _cacheLoader;
   
   private boolean _isWriteThrough;
-  private CacheWriter _cacheWriter;
+  private CacheWriterExt _cacheWriter;
   
   private boolean _isStoreByValue = true;
   private boolean _isStatisticsEnabled;
@@ -93,7 +94,7 @@ public class CacheConfig implements CacheConfiguration
   private CacheSerializer _keySerializer;
   private CacheSerializer _valueSerializer;
 
-  private CacheEngine _engine;
+  private CacheEngine _engine = new AbstractCacheEngine();
 
   /**
    * The Cache will use a CacheLoader to populate cache misses.
@@ -105,12 +106,28 @@ public class CacheConfig implements CacheConfiguration
   }
 
   /**
+   * The Cache will use a CacheLoader to populate cache misses.
+   */
+  public CacheLoaderExt getCacheLoaderExt()
+  {
+    return _cacheLoader;
+  }
+
+  /**
    * Sets the CacheLoader that the Cache can then use to
    * populate cache misses for a reference store (database)
    */
   public void setCacheLoader(CacheLoader cacheLoader)
   {
-    _cacheLoader = cacheLoader;
+    if (cacheLoader == null) {
+      _cacheLoader = null;
+    }
+    else if (cacheLoader instanceof CacheLoaderExt) {
+      _cacheLoader = (CacheLoaderExt) cacheLoader;
+    }
+    else {
+      _cacheLoader = new CacheLoaderAdapter(cacheLoader);
+    }
   }
 
   @Override
@@ -132,7 +149,23 @@ public class CacheConfig implements CacheConfiguration
   
   public void setCacheWriter(CacheWriter cacheWriter)
   {
-    _cacheWriter = cacheWriter;
+    if (cacheWriter == null) {
+      _cacheWriter = null;
+    }
+    else if (cacheWriter instanceof CacheWriterExt) {
+      _cacheWriter = (CacheWriterExt) cacheWriter;
+    }
+    else {
+      _cacheWriter = new CacheWriterAdapter(cacheWriter);
+    }
+  }
+
+  /**
+   * The Cache will use a CacheWriter to write-through on puts
+   */
+  public CacheWriterExt getCacheWriterExt()
+  {
+    return _cacheWriter;
   }
 
   @Override
@@ -173,15 +206,20 @@ public class CacheConfig implements CacheConfiguration
    */
   public HashKey getCacheKey()
   {
-    return _cacheKey;
+    return _cache.getCacheKey();
   }
 
   /**
    * Sets the globally-unique id for the cache
    */
-  public void setCacheKey(HashKey cacheKey)
+  public void setCache(CacheHandle cache)
   {
-    _cacheKey = cacheKey;
+    _cache = cache;
+  }
+  
+  public CacheHandle getCache()
+  {
+    return _cache;
   }
 
   /**
@@ -498,32 +536,48 @@ public class CacheConfig implements CacheConfiguration
   {
     return _engine;
   }
+  
+  public int getServerIndex()
+  {
+    return getEngine().getServerIndex();
+  }
 
   /**
    * Initializes the CacheConfig.
    */
   public void init()
   {
-    if (_keySerializer == null)
+    if (_keySerializer == null) {
       _keySerializer = new HessianSerializer();
+    }
 
-    if (_valueSerializer == null)
+    if (_valueSerializer == null) {
       _valueSerializer = new HessianSerializer();
-
+    }
+    
     switch (_scope) {
     case TRANSIENT:
       setTransient(true);
       setTriplicate(false);
       setBackup(false);
-      if (getEngine() == null)
+      /*
+      if (getEngine() == null) {
         setEngine(new AbstractCacheEngine());
+      }
+      */
+      setEngine(new AbstractCacheEngine());
       break;
       
     case LOCAL:
       setTriplicate(false);
       setBackup(false);
-      if (getEngine() == null)
+      // cloud/6d00
+      /*
+      if (getEngine() == null) {
         setEngine(new AbstractCacheEngine());
+      }
+      */
+      setEngine(new AbstractCacheEngine());
       break;
       
     case CLUSTER:
@@ -544,13 +598,14 @@ public class CacheConfig implements CacheConfiguration
       */
     }
     // _accuracy = CacheStatistics.STATISTICS_ACCURACY_BEST_EFFORT;
+    
   }
 
   public void setExpiry(ExpiryType type, Duration duration)
   {
     TimeUnit unit = duration.getTimeUnit();
     
-    long timeout = unit.toMillis(duration.getTimeToLive());
+    long timeout = unit.toMillis(duration.getDurationAmount());
     
     switch (type) {
     case ACCESSED:

@@ -57,7 +57,6 @@ public class WebSocketInputStream extends InputStream
   private boolean _isFinal = true;
 
   public WebSocketInputStream(FrameInputStream is)
-    throws IOException
   {
     _is = is;
   }
@@ -90,6 +89,20 @@ public class WebSocketInputStream extends InputStream
   public long getLength()
   {
     return _is.getLength();
+  }
+  
+  @Override
+  public int available()
+  {
+    if (_length > 0) {
+      return (int) Math.max(Integer.MAX_VALUE, _length);
+    }
+    else if (_isFinal) {
+      return -1;
+    }
+    else {
+      return 1;
+    }
   }
 
   @Override

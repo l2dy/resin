@@ -599,9 +599,23 @@ abstract public class Expr {
     //return var.put(index, value);
 
     Value array = evalArray(env);
-    array.put(index, value);
+    Value result = array.put(index, value);
 
-    return array.get(index); // php/03mm php/03mn
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array tail assign ($a[] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignTail(Env env, Value value)
+  {
+    Value array = evalArray(env);
+    array.put(value);
+
+    return value;
   }
 
   /**

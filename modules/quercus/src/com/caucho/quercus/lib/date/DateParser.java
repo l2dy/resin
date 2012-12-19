@@ -401,7 +401,6 @@ public class DateParser
   {
     int hour = _value;
     _value = NULL_VALUE;
-
     if (hour < 0)
       hour = - hour;
 
@@ -440,9 +439,13 @@ public class DateParser
       if (token == '.') { // milliseconds
         token = nextToken();
 
-        _value = NULL_VALUE;
-        if (token != INT) {
+        if (token == INT) {
+          token = nextToken();
+        }
+        else {
           _peekToken = token;
+          //_value = NULL_VALUE;
+
           return;
         }
       }
@@ -487,20 +490,21 @@ public class DateParser
     else {
       _peekToken = token;
 
-      if (hasUTC)
+      if (hasUTC) {
         _date.setGMTTime(_date.getGMTTime() + _date.getZoneOffset());
+      }
 
       return;
     }
 
-    //int offset = 0;
-
     token = nextToken();
+
     if (token != INT) {
       _peekToken = token;
 
-      if (hasUTC)
+      if (hasUTC) {
         _date.setGMTTime(_date.getGMTTime() + _date.getZoneOffset());
+      }
 
       return;
     }
@@ -513,11 +517,13 @@ public class DateParser
 
       // php/191g - php ignores any explicit
       // offset if the date specifies UTC/z/GMT
-      if (hasUTC)
+      if (hasUTC) {
         _date.setGMTTime(_date.getGMTTime() + _date.getZoneOffset());
-      else
-        _date.setGMTTime(
-            _date.getGMTTime() - value * 60000L + _date.getZoneOffset());
+      }
+      else {
+        _date.setGMTTime(_date.getGMTTime() - value * 60000L + _date.getZoneOffset());
+      }
+
       return;
     }
     else if (_digits == 2) {
@@ -529,23 +535,31 @@ public class DateParser
         _value = sign * _value;
         _peekToken = token;
 
-        if (hasUTC)
+        if (hasUTC) {
           _date.setGMTTime(_date.getGMTTime() + _date.getZoneOffset());
+        }
+
         return;
       }
 
-      value = sign * (100 * value + _value);
+      token = nextToken();
 
-      _date.setGMTTime(
-          _date.getGMTTime() - value * 60000L + _date.getZoneOffset());
+      if (token != INT) {
+        return;
+      }
+
+      value = sign * (60 * value + _value);
+
+      _date.setGMTTime(_date.getGMTTime() - value * 60000L + _date.getZoneOffset());
       return;
     }
     else {
       _value = sign * _value;
       _peekToken = token;
 
-      if (hasUTC)
+      if (hasUTC) {
         _date.setGMTTime(_date.getGMTTime() + _date.getZoneOffset());
+      }
 
       return;
     }
@@ -562,26 +576,36 @@ public class DateParser
       case UNIT_YEAR:
         _date.setYear(_date.getYear() + value);
         break;
-      case UNIT_MONTH:
-        _date.setMonth(_date.getMonth() + value);
+      case UNIT_MONTH: {
+        int month = _date.getMonth() + value;
+        int year = _date.getYear();
+
+        if (month < 0 || month >= 12) {
+          year = year + month / 12;
+
+          month = month % 12;
+        }
+
+        _date.setDate(year, month, _date.getDayOfMonth());
         break;
+      }
       case UNIT_FORTNIGHT:
-        _date.setGMTTime(_date.getGMTTime() + 14 * DAY * value);
+        _date.setDayOfMonth(_date.getDayOfMonth() + 14 * value);
         break;
       case UNIT_WEEK:
-        _date.setGMTTime(_date.getGMTTime() + 7 * DAY * value);
+        _date.setDayOfMonth(_date.getDayOfMonth() + 7 * value);
         break;
       case UNIT_DAY:
-        _date.setGMTTime(_date.getGMTTime() + DAY * value);
+        _date.setDayOfMonth(_date.getDayOfMonth() + value);
         break;
       case UNIT_HOUR:
-        _date.setGMTTime(_date.getGMTTime() + HOUR * value);
+        _date.setHour(_date.getHour() + value);
         break;
       case UNIT_MINUTE:
-        _date.setGMTTime(_date.getGMTTime() + MINUTE * value);
+        _date.setMinute(_date.getMinute() + value);
         break;
       case UNIT_SECOND:
-        _date.setGMTTime(_date.getGMTTime() + 1000L * value);
+        _date.setSecond(_date.getSecond() + value);
         break;
     }
   }

@@ -30,7 +30,8 @@
 package com.caucho.bam.mailbox;
 
 import com.caucho.bam.packet.Packet;
-import com.caucho.env.thread.ValueActorQueue;
+import com.caucho.env.actor.ActorProcessor;
+import com.caucho.env.actor.ValueActorQueue;
 
 /**
  * Queue/worker for a mailbox. 
@@ -41,7 +42,7 @@ public class MailboxQueue2 extends ValueActorQueue<Packet>
    * @param capacity
    * @param processor
    */
-  public MailboxQueue2(int capacity, ValueProcessor<Packet> processor)
+  public MailboxQueue2(int capacity, ActorProcessor<Packet> processor)
   {
     super(capacity, processor);
   }

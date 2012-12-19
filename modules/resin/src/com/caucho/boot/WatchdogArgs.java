@@ -52,6 +52,7 @@ import javax.management.ObjectName;
 import com.caucho.VersionFactory;
 import com.caucho.config.ConfigException;
 import com.caucho.license.LicenseCheck;
+import com.caucho.loader.Environment;
 import com.caucho.server.resin.ResinELContext;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.CurrentTime;
@@ -489,12 +490,13 @@ class WatchdogArgs
       else if ("--join-cluster".equals(resinArg)) {
         setElasticServer(true);
         _clusterId = argv[i + 1];
-
         i++;
       }
-      else if ("--cluster".equals(arg)) {
+      else if ("--elastic-server".equals(resinArg)) {
+        setElasticServer(true);
+      }
+      else if ("--cluster".equals(resinArg)) {
         _clusterId = argv[i + 1];
-
         i++;
       }
       else if ("--fine".equals(resinArg)) {
@@ -505,17 +507,10 @@ class WatchdogArgs
         _isVerbose = true;
         Logger.getLogger("").setLevel(Level.FINER);
       }
-      else if ("--cluster".equals(resinArg)) {
-        _clusterId = argv[i + 1];
-        i++;
-      }
       else if ("--data-directory".equals(resinArg)) {
         _dataDirectory = Vfs.lookup(argv[i + 1]);
         argv[i + 1] = _dataDirectory.getFullPath();
         i++;
-      }
-      else if ("--elastic-server".equals(resinArg)) {
-        setElasticServer(true);
       }
       else if ("--log-directory".equals(resinArg)) {
         _logDirectory = _rootDirectory.lookup(argv[i + 1]);
@@ -581,10 +576,12 @@ class WatchdogArgs
         _isVerbose = true;
         Logger.getLogger("").setLevel(Level.CONFIG);
       }
-      else if ("help".equals(arg)) {
+      else if ("help".equals(resinArg) 
+               || "--help".equals(resinArg)) {
         _isHelp = true;
       }
-      else if ("version".equals(arg)) {
+      else if ("version".equals(resinArg)
+               || "--version".equals(resinArg)) {
         System.out.println(VersionFactory.getFullVersion());
         System.exit(0);
       }
@@ -617,8 +614,11 @@ class WatchdogArgs
       usage();
 
       System.exit(1);
-    }
-    else if (_command == null) {
+    } else if (_isHelp && _command != null) {
+      _command.usage(isVerbose());
+
+      System.exit(0);
+    } else if (_command == null) {
       System.out.println(L().l("Resin requires a command:{0}",
                                getCommandList()));
       System.exit(1);
@@ -636,7 +636,7 @@ class WatchdogArgs
         
         System.err.println();
 
-        _command.usage();
+        _command.usage(isVerbose());
 
         System.exit(14);
       }
@@ -811,6 +811,7 @@ class WatchdogArgs
     ArrayList<String> args = new ArrayList<String>();
 
     try {
+      Environment.init();
       MBeanServer mbeanServer = ManagementFactory.getPlatformMBeanServer();
       ObjectName name = new ObjectName("java.lang:type=Runtime");
 

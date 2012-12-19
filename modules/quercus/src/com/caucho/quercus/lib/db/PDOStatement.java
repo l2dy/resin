@@ -163,6 +163,18 @@ public class PDOStatement
         sb.append((char) ch);
       }
       else if (ch == ':') {
+        if (i + 1 < len && query.charAt(i + 1) == ':') {
+          int j = i + 1;
+
+          for (; j < len && query.charAt(j) == ':'; j++) {
+          }
+
+          sb.append(query, i, j + 1);
+          i = j;
+
+          continue;
+        }
+
         int start = i + 1;
 
         while (true) {

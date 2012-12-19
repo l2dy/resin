@@ -33,11 +33,11 @@ import java.io.IOException;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.caucho.cloud.network.NetworkClusterSystem;
-import com.caucho.cloud.topology.CloudServer;
 import com.caucho.cloud.topology.TriadOwner;
+import com.caucho.distcache.CacheSerializer;
 import com.caucho.env.distcache.CacheDataBacking;
 import com.caucho.env.service.ResinSystem;
+import com.caucho.env.thread.ThreadPool;
 import com.caucho.inject.Module;
 import com.caucho.util.HashKey;
 import com.caucho.vfs.StreamSource;
@@ -53,14 +53,19 @@ public final class CacheStoreManager implements CacheEntryFactory
   private final CacheEntryManager _cacheEntryManager;
   private final CacheKeyManager _keyManager;
   
+  private final CacheRegionManager _regionManager
+    = new CacheRegionManager();
+  
   private CacheDataBackingImpl _dataBacking;
   
   private final LocalMnodeManager _localMnodeManager;
   private final LocalDataManager _localDataManager;
   private final LocalStoreManager _localStoreManager;
   
-  private ConcurrentHashMap<HashKey,CacheMnodeListener> _cacheListenMap
+  private final ConcurrentHashMap<HashKey,CacheMnodeListener> _cacheListenMap
     = new ConcurrentHashMap<HashKey,CacheMnodeListener>();
+  
+  private final CacheConfig _defaultCacheConfig = new CacheConfig();
   
   private boolean _isCacheListen;
   
@@ -127,6 +132,11 @@ public final class CacheStoreManager implements CacheEntryFactory
     return _keyManager;
   }
   
+  public final CacheConfig getDefaultCacheConfig()
+  {
+    return _defaultCacheConfig;
+  }
+  
   public void addCacheListener(HashKey cacheKey, CacheMnodeListener listener)
   {
     _cacheListenMap.put(cacheKey, listener);
@@ -141,7 +151,7 @@ public final class CacheStoreManager implements CacheEntryFactory
     HashKey hashKey = _keyManager.createHashKey(key, config);
 
     DistCacheEntry entry
-      = _cacheEntryManager.createCacheEntry(hashKey, config);
+      = _cacheEntryManager.createCacheEntry(hashKey, config.getCache());
     
     if (key != null) {
       entry.setKey(key);
@@ -158,29 +168,83 @@ public final class CacheStoreManager implements CacheEntryFactory
     if (key == null)
       throw new NullPointerException();
     
-    return _cacheEntryManager.createCacheEntry(key, null);
+    return _cacheEntryManager.getCacheEntry(key);
   }
 
   /**
    * Returns the key entry.
    */
-  final public DistCacheEntry getCacheEntry(HashKey key, CacheConfig config)
+  public final DistCacheEntry getCacheEntry(HashKey hashKey,
+                                            HashKey cacheKey,
+                                            Object oKey)
+  {
+    DistCacheEntry entry = getCacheEntry(hashKey, cacheKey);
+    
+    if (oKey != null) {
+      entry.setKey(oKey);
+    }
+    
+    return entry;
+  }
+
+  /**
+   * Returns the key entry.
+   */
+  final public DistCacheEntry getCacheEntry(HashKey key,
+                                            HashKey cacheKey)
   {
     if (key == null)
       throw new NullPointerException();
     
-    return _cacheEntryManager.createCacheEntry(key, config);
+    DistCacheEntry entry = _cacheEntryManager.getCacheEntry(key);
+    
+    if (entry != null) {
+      return entry;
+    }
+    
+    CacheConfig defaultConfig = getDefaultCacheConfig();
+    
+    CacheHandle cache = _regionManager.createCache(cacheKey, defaultConfig);
+    
+    return _cacheEntryManager.createCacheEntry(key, cache);
+  }
+
+  /**
+   * Returns the key entry.
+   */
+  final public DistCacheEntry getCacheEntry(HashKey key, CacheHandle cache)
+  {
+    if (key == null)
+      throw new NullPointerException();
+    
+    return _cacheEntryManager.createCacheEntry(key, cache);
   }
 
   /**
    * Returns the key entry.
    */
   @Override
-  public DistCacheEntry createCacheEntry(HashKey hashKey, CacheConfig config)
+  public DistCacheEntry createCacheEntry(HashKey hashKey,
+                                         CacheHandle cache)
   {
     TriadOwner owner = TriadOwner.getHashOwner(hashKey.getHash());
 
-    return new DistCacheEntry(this, hashKey, owner, config);
+    return new DistCacheEntry(this, hashKey, cache, owner);
+  }
+
+  /**
+   * Returns the CacheHandle.
+   */
+  public final CacheHandle getCache(String guid, CacheSerializer keySerializer)
+  {
+    HashKey cacheHash = getKeyManager().createSelfHashKey(guid, keySerializer);
+
+    return getCache(cacheHash);
+  }
+  
+  public final CacheHandle getCache(HashKey cacheHash)
+  {
+    return _regionManager.createCache(cacheHash, getDefaultCacheConfig());
   }
 
   public final DistCacheEntry loadLocalEntry(HashKey key, CacheConfig config)
@@ -189,6 +253,18 @@ public final class CacheStoreManager implements CacheEntryFactory
       throw new NullPointerException();
 
     DistCacheEntry entry = getCacheEntry(key, config);
+
+    entry.loadLocalEntry();
+
+    return entry;
+  }
+
+  public final DistCacheEntry loadLocalEntry(HashKey key, HashKey cacheKey)
+  {
+    if (key == null)
+      throw new NullPointerException();
+
+    DistCacheEntry entry = getCacheEntry(key, cacheKey);
 
     entry.loadLocalEntry();
 
@@ -242,19 +318,17 @@ public final class CacheStoreManager implements CacheEntryFactory
   }
 
   void notifyPutListeners(HashKey key,
+                          HashKey cacheKey,
                           MnodeUpdate update,
                           MnodeValue mnodeValue)
   {
     if (mnodeValue != null
         && mnodeValue.getValueHash() == update.getValueHash()
-        && mnodeValue.getCacheHash() != null
         && _isCacheListen) {
-      HashKey cacheKey = HashKey.create(mnodeValue.getCacheHash());
-      
       CacheMnodeListener listener = _cacheListenMap.get(cacheKey);
 
       if (listener != null) {
-        listener.onPut(key, mnodeValue);
+        listener.onPut(key, cacheKey, mnodeValue);
       }
     }
   }
@@ -309,6 +383,12 @@ public final class CacheStoreManager implements CacheEntryFactory
    */
   public void initCache(CacheImpl cache)
   {
+    CacheConfig config = cache.getConfig();
+    
+    CacheHandle cacheHandle = config.getCache();
+    
+    cacheHandle.setConfig(config);
+    // _regionManager.putCacheConfig(config.getCacheKey(), config);
     // XXX: engine.initCache
   }
 
@@ -317,7 +397,39 @@ public final class CacheStoreManager implements CacheEntryFactory
    */
   public void destroyCache(CacheImpl cache)
   {
+    // clear config?
+  }
+  
+  public void addCacheConfig(byte []cacheHash, CacheConfig config)
+  {
+    HashKey cacheKey = HashKey.create(cacheHash);
     
+    CacheHandle cacheHandle = _regionManager.createCache(cacheKey, config);
+  }
+
+  /**
+   * @param cacheHash
+   * @return
+   */
+  public CacheConfig getCacheConfig(byte[] cacheHash)
+  {
+    if (cacheHash == null) {
+      return null;
+    }
+    
+    HashKey cacheKey = HashKey.create(cacheHash);
+    
+    CacheConfig defaultConfig = getDefaultCacheConfig();
+   
+    return _regionManager.createCache(cacheKey, defaultConfig).getConfig();
+  }
+
+  /**
+   * @param task
+   */
+  void schedule(Runnable task)
+  {
+    ThreadPool.getCurrent().schedule(task);
   }
 
   /**

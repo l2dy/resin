@@ -180,8 +180,8 @@ public class QuercusContext
 
   private AbstractFunction []_functionMap = new AbstractFunction[256];
 
-  private LruCache<String, QuercusProgram> _evalCache
-    = new LruCache<String, QuercusProgram>(4096);
+  private LruCache<StringValue, QuercusProgram> _evalCache
+    = new LruCache<StringValue, QuercusProgram>(4096);
 
   private int _includeCacheMax = 8192;
   private long _includeCacheTimeout = 10000L;
@@ -560,6 +560,26 @@ public class QuercusContext
   {
     _scriptEncoding = encoding;
   }
+
+  /**
+   * Returns the encoding used for output, null if unicode.semantics is off.
+   */
+  public String getOutputEncoding()
+  {
+    if (! _isUnicodeSemantics)
+      return null;
+
+    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING.getAsString(this);
+
+    if (encoding == null)
+      encoding = QuercusContext.INI_UNICODE_FALLBACK_ENCODING.getAsString(this);
+
+    if (encoding == null)
+      encoding = "utf-8";
+
+    return encoding;
+  }
+
 
   /**
    * Returns the mysql version to report to to PHP applications.
@@ -1241,7 +1261,7 @@ public class QuercusContext
    * @return the parsed program
    * @throws IOException
    */
-  public QuercusProgram parseCode(String code)
+  public QuercusProgram parseCode(StringValue code)
     throws IOException
   {
     QuercusProgram program = _evalCache.get(code);
@@ -1261,7 +1281,7 @@ public class QuercusContext
    * @return the parsed program
    * @throws IOException
    */
-  public QuercusProgram parseEvalExpr(String code)
+  public QuercusProgram parseEvalExpr(StringValue code)
     throws IOException
   {
     // XXX: possible conflict with parse eval because of the
@@ -1845,16 +1865,30 @@ public class QuercusContext
    */
   private void initModules()
   {
+    HashSet<String> disableSet = null;
+
+    String value = getIniString("disable_functions");
+    if (value != null) {
+      disableSet = new HashSet<String>();
+
+      String[] values = value.split(",");
+
+      for (String name : values) {
+        disableSet.add(name.trim());
+      }
+    }
+
+
     for (ModuleInfo info : _moduleInitList) {
-      initModuleInfo(info);
+      initModuleInfo(info, disableSet);
     }
 
     for (ModuleInfo info : _moduleContext.getModules()) {
-      initModuleInfo(info);
+      initModuleInfo(info, disableSet);
     }
   }
 
-  private void initModuleInfo(ModuleInfo info)
+  private void initModuleInfo(ModuleInfo info, HashSet<String> disableSet)
   {
     _modules.put(info.getName(), info);
 
@@ -1887,6 +1921,10 @@ public class QuercusContext
            : info.getFunctions().entrySet()) {
       String funName = entry.getKey();
       Method[] methods = entry.getValue();
+
+      if (disableSet != null && disableSet.contains(funName)) {
+        continue;
+      }
 
       AbstractJavaMethod fun
         = _moduleContext.createStaticFunction(info.getModule(), methods[0]);
@@ -2133,17 +2171,42 @@ public class QuercusContext
 
   public void close()
   {
-    _isClosed = true;
+    synchronized (this) {
+      if (_isClosed) {
+        return;
+      }
+
+      _isClosed = true;
+    }
 
     _sessionManager.close();
     _pageManager.close();
 
-    if (_envTimeoutThread != null)
-      _envTimeoutThread.shutdown();
+    EnvTimeoutThread envTimeoutThread = _envTimeoutThread;
+    _envTimeoutThread = null;
 
-    if (_quercusTimer != null) {
-      _quercusTimer.shutdown();
+    if (envTimeoutThread != null) {
+      envTimeoutThread.shutdown();
     }
+
+    QuercusTimer quercusTimer = _quercusTimer;
+    _quercusTimer = null;
+
+    if (quercusTimer != null) {
+      quercusTimer.shutdown();
+    }
+  }
+
+  /**
+   * Calls close().
+   */
+  @Override
+  protected void finalize()
+    throws Throwable
+  {
+    super.finalize();
+
+    close();
   }
 
   static class IncludeKey {

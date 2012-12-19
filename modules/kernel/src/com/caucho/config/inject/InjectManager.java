@@ -205,7 +205,7 @@ public final class InjectManager
 
   private String _id;
 
-  private InjectManager _parent;
+  private final InjectManager _parent;
 
   private EnvironmentClassLoader _classLoader;
   private ClassLoader _jndiClassLoader;
@@ -248,8 +248,8 @@ public final class InjectManager
   // combined visibility configuration
   //
 
-  private HashMap<Class<?>,WebComponent> _beanMap
-    = new HashMap<Class<?>,WebComponent>();
+  private HashMap<String,WebComponent> _beanMap
+    = new HashMap<String,WebComponent>();
 
   private ConcurrentHashMap<String,ArrayList<Bean<?>>> _namedBeanMap
     = new ConcurrentHashMap<String,ArrayList<Bean<?>>>();
@@ -376,8 +376,9 @@ public final class InjectManager
         }
       }
 
-      if (_classLoader != null)
+      if (_classLoader != null) {
         _classLoader.getNewTempClassLoader();
+      }
     } finally {
       thread.setContextClassLoader(oldLoader);
     }
@@ -582,6 +583,7 @@ public final class InjectManager
   /**
    * Returns the current active container.
    */
+  /*
   public InjectManager createParent(String prefix)
   {
     _parent = new InjectManager(prefix + _id,
@@ -592,6 +594,7 @@ public final class InjectManager
 
     return _parent;
   }
+  */
 
   public ClassLoader getClassLoader()
   {
@@ -627,10 +630,12 @@ public final class InjectManager
     return _applicationScope;
   }
 
+  /*
   public void setParent(InjectManager parent)
   {
     _parent = parent;
   }
+  */
 
   public void addXmlPath(Path path)
   {
@@ -1394,6 +1399,9 @@ public final class InjectManager
       if (pass.getId() != null)
         _selfPassivationBeanMap.put(pass.getId(), bean);
     }
+    
+    // server/1aj1
+    clearBeanCache();
 
     registerJmx(bean);
   }
@@ -1420,11 +1428,12 @@ public final class InjectManager
     }
   }
   
-  public void addGlobalProgram(ConfigProgram program)
+  void addGlobalProgram(ConfigProgram program)
   {
     if (program != null) {
-      if (_isChildManager)
+      if (_isChildManager) {
         _parent.addGlobalProgram(program);
+      }
       else { 
         _globalProgram.add(program);
       }
@@ -1710,7 +1719,10 @@ public final class InjectManager
     if (_beanMap == null)
       return null;
 
-    WebComponent beanSet = _beanMap.get(baseType.getRawClass());
+    Class<?> rawClass = baseType.getRawClass();
+    String className = rawClass.getName();
+    
+    WebComponent beanSet = _beanMap.get(className);
 
     if (beanSet == null) {
       HashSet<TypedBean> typedBeans = new HashSet<TypedBean>();
@@ -1721,10 +1733,9 @@ public final class InjectManager
         _classLoader.applyVisibleModules(fillByType);
       }
       
-      Class<?> rawClass = baseType.getRawClass();
       
-      beanSet = new WebComponent(this, rawClass);
-      _beanMap.put(rawClass, beanSet);
+      beanSet = new WebComponent(this, className);
+      _beanMap.put(className, beanSet);
       
       for (TypedBean typedBean : typedBeans) {
         if (getDeploymentPriority(typedBean.getBean()) < 0) {
@@ -1740,6 +1751,12 @@ public final class InjectManager
     }
 
     return beanSet;
+  }
+  
+  private void clearBeanCache()
+  {
+    _namedRefFactoryMap.clear();
+    _beanMap.clear();
   }
 
   private void fillByType(BaseType baseType,
@@ -2166,8 +2183,9 @@ public final class InjectManager
       if (absBean.getBeanManager() == this)
         priority += 1000000;
     }
-    else
+    else {
       priority += 1000000;
+    }
 
     return priority;
   }
@@ -4071,7 +4089,7 @@ public final class InjectManager
   {
     _singletonScope.closeContext();
     
-    _parent = null;
+    // _parent = null;
     _classLoader = null;
     _deploymentMap = null;
 

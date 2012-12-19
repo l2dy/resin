@@ -802,18 +802,7 @@ public class Env
    */
   public String getOutputEncoding()
   {
-    if (! _isUnicodeSemantics)
-      return null;
-
-    String encoding = QuercusContext.INI_UNICODE_OUTPUT_ENCODING.getAsString(this);
-
-    if (encoding == null)
-      encoding = QuercusContext.INI_UNICODE_FALLBACK_ENCODING.getAsString(this);
-
-    if (encoding == null)
-      encoding = "utf-8";
-
-    return encoding;
+    return _quercus.getOutputEncoding();
   }
 
   /**
@@ -4157,11 +4146,12 @@ public class Env
    * @param code the code to evalute
    * @return the result
    */
-  public Value evalCode(String code)
+  public Value evalCode(StringValue code)
     throws IOException
   {
-    if (log.isLoggable(Level.FINER))
-      log.finer(code);
+    if (log.isLoggable(Level.FINER)) {
+      log.finer(code.toString());
+    }
 
     QuercusContext quercus = getQuercus();
 

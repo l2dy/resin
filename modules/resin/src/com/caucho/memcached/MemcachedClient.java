@@ -47,7 +47,6 @@ import javax.cache.CacheManager;
 import javax.cache.CacheStatistics;
 import javax.cache.Status;
 import javax.cache.event.CacheEntryListener;
-import javax.cache.event.Filter;
 import javax.cache.mbeans.CacheMXBean;
 
 import com.caucho.cloud.loadbalance.LoadBalanceBuilder;
@@ -268,18 +267,17 @@ public class MemcachedClient implements Cache
   
   MnodeUpdate getResinIfModified(String key, 
                                  long oldValue,
-                                 DistCacheEntry entry,
-                                 CacheConfig config)
+                                 DistCacheEntry entry)
     throws CacheException
   {
     try {
-      return resinGetIfModifiedImpl(key, oldValue, entry, config);
+      return resinGetIfModifiedImpl(key, oldValue, entry);
     } catch (IOException e) {
       log.log(Level.FINER, e.toString(), e);
     }
 
     try {
-      return resinGetIfModifiedImpl(key, oldValue, entry, config);
+      return resinGetIfModifiedImpl(key, oldValue, entry);
     } catch (IOException e) {
       log.log(Level.FINER, e.toString(), e);
     }
@@ -289,8 +287,7 @@ public class MemcachedClient implements Cache
   
   private MnodeUpdate resinGetIfModifiedImpl(String key,
                                              long oldValueHash,
-                                             DistCacheEntry entry,
-                                             CacheConfig config)
+                                             DistCacheEntry entry)
     throws IOException
   {
     CacheImpl cache = getLocalCache();
@@ -336,6 +333,8 @@ public class MemcachedClient implements Cache
       if (_cb.matches("END")) {
         skipToEndOfLine(is);
         isValid = true;
+        
+        CacheConfig config = entry.getConfig();
 
         MnodeUpdate update = new MnodeUpdate(0, 0, version, config);
 
@@ -927,8 +926,7 @@ public class MemcachedClient implements Cache
    * @see javax.cache.Cache#registerCacheEntryListener(javax.cache.event.CacheEntryListener, javax.cache.event.NotificationScope, boolean)
    */
   @Override
-  public boolean registerCacheEntryListener(CacheEntryListener listener,
-                                            Filter filter)
+  public boolean registerCacheEntryListener(CacheEntryListener listener)
   {
     // TODO Auto-generated method stub
     return false;

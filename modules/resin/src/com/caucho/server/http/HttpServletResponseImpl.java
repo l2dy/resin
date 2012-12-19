@@ -314,8 +314,21 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   @Override
   public void setContentLength(int len)
   {
-    if (_outputStream == null && _writer == null)
+    if (_outputStream == null && _writer == null) {
       _response.setContentLength(len);
+    }
+  }
+
+  /**
+   * Explicitly sets the length of the result value.  Normally, the servlet
+   * engine will handle this.
+   */
+  @Override
+  public void setContentLength(long length)
+  {
+    if (_outputStream == null && _writer == null) {
+      _response.setContentLength(length);
+    }
   }
 
   /**
