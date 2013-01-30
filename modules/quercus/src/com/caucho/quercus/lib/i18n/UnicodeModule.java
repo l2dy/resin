@@ -95,8 +95,9 @@ public class UnicodeModule extends AbstractQuercusModule {
     try {
       Decoder decoder = Decoder.create(encoding);
 
-      return decoder.decodeUnicode(env, str);
-    } catch (UnsupportedCharsetException e) {
+      return decoder.decodeUnicode(str);
+    }
+    catch (UnsupportedCharsetException e) {
       log.log(Level.FINE, e.getMessage(), e);
       env.warning(L.l("unsupported charset {0}", encoding));
 
@@ -112,8 +113,10 @@ public class UnicodeModule extends AbstractQuercusModule {
     try {
       Encoder encoder = Encoder.create(encoding);
 
-      return encoder.encode(env, str);
-    } catch (UnsupportedCharsetException e) {
+      StringValue sb = env.createBinaryBuilder();
+      return encoder.encode(sb, str);
+    }
+    catch (UnsupportedCharsetException e) {
       log.log(Level.FINE, e.getMessage(), e);
       env.warning(L.l("unsupported charset {0}", encoding));
 
@@ -139,10 +142,10 @@ public class UnicodeModule extends AbstractQuercusModule {
     try {
       Decoder decoder = Decoder.create(charset);
 
-      StringValue haystackUnicode = decoder.decodeUnicode(env, haystack);
+      StringValue haystackUnicode = decoder.decodeUnicode(haystack);
 
       decoder.reset();
-      StringValue needleUnicode = decoder.decodeUnicode(env, needle);
+      StringValue needleUnicode = decoder.decodeUnicode(needle);
 
       int index = haystackUnicode.indexOf(needleUnicode, offset);
 
@@ -177,10 +180,10 @@ public class UnicodeModule extends AbstractQuercusModule {
     try {
       Decoder decoder = Decoder.create(charset);
 
-      StringValue haystackUnicode = decoder.decodeUnicode(env, haystack);
+      StringValue haystackUnicode = decoder.decodeUnicode(haystack);
 
       decoder.reset();
-      StringValue needleUnicode = decoder.decodeUnicode(env, needle);
+      StringValue needleUnicode = decoder.decodeUnicode(needle);
 
       int index = haystackUnicode.lastIndexOf(needleUnicode);
 
@@ -253,7 +256,9 @@ public class UnicodeModule extends AbstractQuercusModule {
       unicodeStr = unicodeStr.subSequence(newOffset, tail);
 
       Encoder encoder = Encoder.create(charset);
-      StringValue encodedStr = encoder.encode(env, unicodeStr);
+
+      StringValue sb = env.createBinaryBuilder();
+      StringValue encodedStr = encoder.encode(sb, unicodeStr);
 
       return encodedStr;
     } catch (UnsupportedCharsetException e) {
@@ -340,7 +345,8 @@ public class UnicodeModule extends AbstractQuercusModule {
 
       encoder.setIgnoreErrors(isIgnoreErrors);
 
-      return encoder.encode(env, unicodeStr);
+      StringValue sb = env.createBinaryBuilder();
+      return encoder.encode(sb, unicodeStr);
     } catch (UnsupportedCharsetException e) {
       log.log(Level.FINE, e.getMessage(), e);
       env.warning(L.l("unsupported output charset {0}", outCharset));

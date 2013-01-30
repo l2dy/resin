@@ -30,7 +30,6 @@
 package com.caucho.quercus.function;
 
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.MethodIntern;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Value;
 
@@ -39,9 +38,7 @@ import com.caucho.quercus.env.Value;
  */
 @SuppressWarnings("serial")
 abstract public class CompiledFunction extends AbstractFunction {
-  private static final StringValue INVOKE
-    = MethodIntern.intern("__invoke");
-  
+
   @Override
   public abstract String getName();
 
@@ -87,21 +84,23 @@ abstract public class CompiledFunction extends AbstractFunction {
   {
     return call(env, a1, a2, a3, a4, a5).copyReturn();
   }
-  
-  
+
+
   //
   // special methods
   //
-  
+
   @Override
-  public Value callMethod(Env env, 
-                          StringValue methodName, int hash, 
+  public Value callMethod(Env env,
+                          StringValue methodName, int hash,
                           Value []args)
   {
-    if (methodName == INVOKE || INVOKE.equals(methodName))
+    if (methodName.equalsString("__invoke")) {
       return call(env, args);
-    else
+    }
+    else {
       return super.callMethod(env, methodName, hash, args);
-  }  
+    }
+  }
 }
 

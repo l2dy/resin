@@ -34,7 +34,6 @@ import com.caucho.quercus.env.Env;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
-import com.caucho.util.L10N;
 
 import java.util.ArrayList;
 
@@ -42,7 +41,6 @@ import java.util.ArrayList;
  * Represents a PHP function expression of the form "new ClassName()".
  */
 public class ObjectNewExpr extends Expr {
-  private static final L10N L = new L10N(ObjectNewExpr.class);
   protected final String _name;
   protected final Expr []_args;
 
@@ -71,7 +69,7 @@ public class ObjectNewExpr extends Expr {
   {
     this(Location.UNKNOWN, name, args);
   }
-  
+
   /**
    * Evaluates the expression.
    *
@@ -86,9 +84,9 @@ public class ObjectNewExpr extends Expr {
     for (int i = 0; i < args.length; i++) {
       args[i] = _args[i].evalArg(env, true);
     }
-    
+
     env.pushCall(this, NullValue.NULL, args);
-    
+
     try {
       QuercusClass cl = env.findAbstractClass(_name);
 
@@ -99,7 +97,8 @@ public class ObjectNewExpr extends Expr {
       env.popCall();
     }
   }
-  
+
+  @Override
   public String toString()
   {
     return _name + "()";

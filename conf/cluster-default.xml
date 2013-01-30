@@ -60,6 +60,7 @@
     <!-- defaults for each server, i.e. JVM -->
     <server-default>
       <jvm-arg-line>${jvm_args}</jvm-arg-line>
+      <jvm-mode>${jvm_mode}</jvm-mode>
 
       <!--
          - If starting Resin as root on Unix, specify the user name
@@ -77,6 +78,8 @@
       </port-default>
 
       <sendfile-enable>${sendfile}</sendfile-enable>
+
+      <keepalive-select-enable>${keepalive_select_enable}</keepalive-select-enable>
 
       <!-- The http port -->
       <http address="${http_address?:'*'}" port="${http}"/>
@@ -145,6 +148,12 @@
           <enable-url-rewriting>false</enable-url-rewriting>
         </session-config>
       </web-app-default>
+    </host-default>
+
+    <!--
+    <host id="${web_admin_host}" root-directory="${web_admin_host}">
+      -->
+    <host-default>
       
       <!--
          - Administration application /resin-admin

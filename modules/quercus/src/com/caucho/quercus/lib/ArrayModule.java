@@ -430,8 +430,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -492,8 +492,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -650,7 +650,7 @@ public class ArrayModule
     ArrayValue filteredArray = new ArrayValueImpl();
 
     if (! callbackName.isDefault()) {
-      Callable callback = callbackName.toCallable(env);
+      Callable callback = callbackName.toCallable(env, false);
 
       if (callback == null || ! callback.isValid(env)) {
         return NullValue.NULL;
@@ -857,8 +857,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -924,8 +924,8 @@ public class ArrayModule
       return NullValue.NULL;
     }
 
-    AbstractFunction func =
-      env.findFunction(arrays[arrays.length - 1].toString().intern());
+    StringValue funName = arrays[arrays.length - 1].toStringValue(env);
+    AbstractFunction func = env.findFunction(funName);
 
     if (func == null) {
       env.warning("Invalid comparison function");
@@ -1854,7 +1854,7 @@ public class ArrayModule
     }
 
     return spliceImpl(env, arrayVar, array, startIndex, endIndex,
-                      (ArrayValue) replace.toArray());
+                      replace.toArray());
   }
 
   public static Value spliceImpl(Env env,
@@ -1957,7 +1957,7 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
+    Callable cmp = callbackValue.toCallable(env, false);
 
     if (! cmp.isValid(env))
       return NullValue.NULL;
@@ -2041,14 +2041,14 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callable cmpValue = callbackValue.toCallable(env);
+    Callable cmpValue = callbackValue.toCallable(env, false);
 
     if (! cmpValue.isValid(env))
       return NullValue.NULL;
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callable cmpKey = callbackKey.toCallable(env);
+    Callable cmpKey = callbackKey.toCallable(env, false);
 
     if (! cmpKey.isValid(env))
       return NullValue.NULL;
@@ -2132,7 +2132,7 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
+    Callable cmp = callbackValue.toCallable(env, false);
 
     if (! cmp.isValid(env))
       return NullValue.NULL;
@@ -2208,7 +2208,7 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
+    Callable cmp = callbackValue.toCallable(env, false);
 
     if (! cmp.isValid(env))
       return NullValue.NULL;
@@ -2290,14 +2290,14 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 2];
 
-    Callable cmpValue = callbackValue.toCallable(env);
+    Callable cmpValue = callbackValue.toCallable(env, false);
 
     if (! cmpValue.isValid(env))
       return NullValue.NULL;
 
     Value callbackKey = arrays[arrays.length - 1];
 
-    Callable cmpKey = callbackKey.toCallable(env);
+    Callable cmpKey = callbackKey.toCallable(env, false);
 
     if (! cmpKey.isValid(env))
       return NullValue.NULL;
@@ -2379,7 +2379,7 @@ public class ArrayModule
 
     Value callbackValue = arrays[arrays.length - 1];
 
-    Callable cmp = callbackValue.toCallable(env);
+    Callable cmp = callbackValue.toCallable(env, false);
 
     if (! cmp.isValid(env))
       return NullValue.NULL;
@@ -3170,36 +3170,33 @@ public class ArrayModule
    * @return the new array
    */
   public static Value range(Env env,
-                            @ReadOnly Value start,
-                            @ReadOnly Value end,
+                            @ReadOnly Value startV,
+                            @ReadOnly Value endV,
                             @Optional("1") long step)
   {
-    if (step < 1)
-      step = 1;
-
-    if (!start.getType().equals(end.getType())) {
-      start = LongValue.create(start.toLong());
-      end = LongValue.create(end.toLong());
+    if (step < 1) {
+      step *= -1;
     }
-    else if (Character.isDigit(start.toChar())) {
-      start = LongValue.create(start.toLong());
-      end = LongValue.create(end.toLong());
+
+    long start;
+    long end;
+
+    boolean isAppendChars = false;
+
+    if (startV.isLongConvertible() && endV.isLongConvertible()) {
+      start = startV.toLong();
+      end = endV.toLong();
     }
     else {
-      start = rangeIncrement(start, 0);
-      end = rangeIncrement(end, 0);
+      start = startV.toChar();
+      end = endV.toChar();
+
+      isAppendChars = true;
     }
 
-    if (start.eq(end)) {
+    if (start == end) {
     }
-    else if (start instanceof StringValue
-             && (Math.abs(end.toChar() - start.toChar()) < step)) {
-      env.warning("steps exceeds the specified range");
-
-      return BooleanValue.FALSE;
-    }
-    else if (start instanceof LongValue
-        && (Math.abs(end.toLong() - start.toLong()) < step)) {
+    else if (Math.abs(end - start) < step) {
       env.warning("steps exceeds the specified range");
 
       return BooleanValue.FALSE;
@@ -3207,7 +3204,7 @@ public class ArrayModule
 
     boolean increment = true;
 
-    if (! end.geq(start)) {
+    if (end < start) {
       step *= -1;
       increment = false;
     }
@@ -3215,21 +3212,17 @@ public class ArrayModule
     ArrayValue array = new ArrayValueImpl();
 
     do {
-      array.put(start);
+      if (isAppendChars) {
+        array.put(env.createString((char) start));
+      }
+      else {
+        array.put(start);
+      }
 
-      start = rangeIncrement(start, step);
-    } while ((increment && start.leq(end))
-        || (!increment && start.geq(end)));
+      start += step;
+    } while (increment && start <= end || ! increment && start >= end);
 
     return array;
-  }
-
-  private static Value rangeIncrement(Value value, long step)
-  {
-    if (value.isString())
-      return StringValue.create((char) (value.toChar() + step));
-
-    return LongValue.create(value.toLong() + step);
   }
 
   /**

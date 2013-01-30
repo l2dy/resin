@@ -89,15 +89,14 @@ public class OutputModule extends AbstractQuercusModule
   public void startup(Env env)
   {
     boolean isOutputBuffering = INI_OUTPUT_BUFFERING.getAsBoolean(env);
-    String handlerName = INI_OUTPUT_HANDLER.getAsString(env);
+    StringValue handlerName = INI_OUTPUT_HANDLER.getAsStringValue(env);
 
-    if (handlerName != null
-        && ! "".equals(handlerName)
-        && env.getFunction(handlerName) != null) {
-      Callable callback = env.createString(handlerName).toCallable(env);
+    if (handlerName.length() > 0 && env.getFunction(handlerName) != null) {
+      Callable callback = handlerName.toCallable(env, false);
 
       ob_start(env, callback, 0, true);
-    } else if (isOutputBuffering) {
+    }
+    else if (isOutputBuffering) {
       ob_start(env, null, 0, true);
     }
 
@@ -427,16 +426,18 @@ public class OutputModule extends AbstractQuercusModule
                                  @Optional int chunkSize,
                                  @Optional("true") boolean erase)
   {
-    if (callback != null
-        && callback.getCallbackName().equals("ob_gzhandler")) {
+    if (callback != null && ! callback.isValid(env)) {
+      return false;
+    }
+
+    if (callback != null && callback.getCallbackName().equals("ob_gzhandler")) {
       OutputBuffer ob = env.getOutputBuffer();
 
       for (; ob != null; ob = ob.getNext()) {
         Callable cb = ob.getCallback();
 
         if (cb.getCallbackName().equals("ob_gzhandler")) {
-          env.warning(
-              L.l("output handler 'ob_gzhandler' cannot be used twice"));
+          env.warning(L.l("output handler 'ob_gzhandler' cannot be used twice"));
           return false;
         }
       }

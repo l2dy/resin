@@ -85,7 +85,7 @@ public class ExprFactory {
   /**
    * Creates a string (php5) literal expression.
    */
-  public Expr createString(String lexeme)
+  public Expr createString(StringValue lexeme)
   {
     return new LiteralStringExpr(lexeme);
   }
@@ -93,7 +93,7 @@ public class ExprFactory {
   /**
    * Creates a string literal expression.
    */
-  public Expr createUnicode(String lexeme)
+  public Expr createUnicode(UnicodeValue lexeme)
   {
     return new LiteralUnicodeExpr(lexeme);
   }
@@ -101,9 +101,9 @@ public class ExprFactory {
   /**
    * Creates a binary literal expression.
    */
-  public Expr createBinary(byte []bytes)
+  public Expr createBinary(BinaryValue value)
   {
-    return new LiteralBinaryStringExpr(bytes);
+    return new LiteralBinaryStringExpr(value);
   }
 
   /**
@@ -156,6 +156,14 @@ public class ExprFactory {
   public ConstDirExpr createDirExpr(String dirName)
   {
     return new ConstDirExpr(dirName);
+  }
+
+  /**
+   * Creates a __CLASS__ expression (for traits).
+   */
+  public ConstClassExpr createClassExpr(Location location, StringValue funName)
+  {
+    return new ConstClassExpr(location, funName);
   }
 
   /**
@@ -235,18 +243,23 @@ public class ExprFactory {
   /**
    * Creates a "$this->foo" expression.
    */
-  public ThisFieldExpr createThisField(ThisExpr qThis,
-                                       StringValue name)
+  public ThisFieldExpr createThisField(Location location,
+                                       ThisExpr qThis,
+                                       StringValue name,
+                                       boolean isInStaticClassScope)
   {
-    return new ThisFieldExpr(qThis, name);
+    return new ThisFieldExpr(location, qThis, name, isInStaticClassScope);
   }
 
   /**
    * Creates a "$this->$foo" expression.
    */
-  public ThisFieldVarExpr createThisField(ThisExpr qThis, Expr name)
+  public ThisFieldVarExpr createThisField(Location location,
+                                          ThisExpr qThis,
+                                          Expr name,
+                                          boolean isInStaticClassScope)
   {
-    return new ThisFieldVarExpr(qThis, name);
+    return new ThisFieldVarExpr(location, qThis, name, isInStaticClassScope);
   }
 
   /**
@@ -255,9 +268,11 @@ public class ExprFactory {
   public Expr createThisMethod(Location loc,
                                ThisExpr qThis,
                                StringValue methodName,
-                               ArrayList<Expr> args)
+                               ArrayList<Expr> args,
+                               boolean isInStaticClassScope)
   {
-    return new ThisMethodExpr(loc, qThis, methodName, args);
+    return new ThisMethodExpr(loc, qThis, methodName, args,
+                              isInStaticClassScope);
   }
 
   /**
@@ -266,9 +281,11 @@ public class ExprFactory {
   public Expr createThisMethod(Location loc,
                                ThisExpr qThis,
                                Expr methodName,
-                               ArrayList<Expr> args)
+                               ArrayList<Expr> args,
+                               boolean isInStaticClassScope)
   {
-    return new ThisMethodVarExpr(loc, qThis, methodName, args);
+    return new ThisMethodVarExpr(loc, qThis, methodName, args,
+                                 isInStaticClassScope);
   }
 
   //
@@ -284,6 +301,14 @@ public class ExprFactory {
   }
 
   /**
+   * Creates a class const expression.
+   */
+  public ClassVarNameConstExpr createClassConst(String className, Expr name)
+  {
+    return new ClassVarNameConstExpr(className, name);
+  }
+
+  /**
    * Creates an expression class const expression ($class::FOO).
    */
   public Expr createClassConst(Expr className, StringValue name)
@@ -292,11 +317,27 @@ public class ExprFactory {
   }
 
   /**
+   * Creates an expression class const expression ($class::{$foo}).
+   */
+  public Expr createClassConst(Expr className, Expr name)
+  {
+    return new ClassVarVarConstExpr(className, name);
+  }
+
+  /**
    * Creates a class const expression (static::FOO).
    */
   public ClassVirtualConstExpr createClassVirtualConst(StringValue name)
   {
     return new ClassVirtualConstExpr(name);
+  }
+
+  /**
+   * Creates a class const expression (static::{$foo}).
+   */
+  public ClassVarNameVirtualConstExpr createClassVirtualConst(Expr name)
+  {
+    return new ClassVarNameVirtualConstExpr(name);
   }
 
   //
@@ -693,16 +734,14 @@ public class ExprFactory {
       LiteralBinaryStringExpr rightString
         = (LiteralBinaryStringExpr) tail.getValue();
 
-      try {
-        byte []bytes = (leftString.evalConstant().toString()
-            + rightString.evalConstant().toString()).getBytes("ISO-8859-1");
+      StringValue l = (StringValue) leftString.evalConstant();
+      StringValue r = (StringValue) rightString.evalConstant();
 
-        Expr value = createBinary(bytes);
+      StringValue result = l.createStringBuilder().append(l).append(r);
 
-        return createAppendImpl(value, tail.getNext());
-      } catch (java.io.UnsupportedEncodingException e) {
-        throw new RuntimeException(e);
-      }
+      Expr value = createBinary((BinaryValue) result);
+
+      return createAppendImpl(value, tail.getNext());
     }
     else if (left.getValue() instanceof LiteralBinaryStringExpr
              || tail.getValue() instanceof LiteralBinaryStringExpr) {
@@ -715,8 +754,12 @@ public class ExprFactory {
       LiteralStringExpr leftString = (LiteralStringExpr) left.getValue();
       LiteralStringExpr rightString = (LiteralStringExpr) tail.getValue();
 
-      Expr value = createString(leftString.evalConstant().toString()
-                                + rightString.evalConstant().toString());
+      StringValue l = (StringValue) leftString.evalConstant();
+      StringValue r = (StringValue) rightString.evalConstant();
+
+      StringValue sb = l.createStringBuilder().append(l).append(r);
+
+      Expr value = createString(sb);
 
       return createAppendImpl(value, tail.getNext());
     }
@@ -725,8 +768,12 @@ public class ExprFactory {
       LiteralUnicodeExpr leftString = (LiteralUnicodeExpr) left.getValue();
       LiteralUnicodeExpr rightString = (LiteralUnicodeExpr) tail.getValue();
 
-      Expr value = createUnicode(leftString.evalConstant().toString()
-                                 + rightString.evalConstant().toString());
+      UnicodeValue l = (UnicodeValue) leftString.evalConstant();
+      UnicodeValue r = (UnicodeValue) rightString.evalConstant();
+
+      UnicodeValue sb = (UnicodeValue) l.createStringBuilder().append(l).append(r);
+
+      Expr value = createUnicode(sb);
 
       return createAppendImpl(value, tail.getNext());
     }
@@ -960,18 +1007,18 @@ public class ExprFactory {
    * Creates a new function call.
    */
   public Expr createCall(QuercusParser parser,
-                         String name,
+                         StringValue name,
                          ArrayList<Expr> args)
   {
     Location loc = parser.getLocation();
 
-    if ("isset".equals(name) && args.size() == 1)
+    if (name.equalsString("isset") && args.size() == 1)
       return new FunIssetExpr(args.get(0));
-    else if ("get_called_class".equals(name) && args.size() == 0)
+    else if (name.equalsString("get_called_class") && args.size() == 0)
       return new FunGetCalledClassExpr(loc);
-    else if ("get_class".equals(name) && args.size() == 0)
+    else if (name.equalsString("get_class") && args.size() == 0)
       return new FunGetClassExpr(parser);
-    else if ("each".equals(name) && args.size() == 1) {
+    else if (name.equalsString("each") && args.size() == 1) {
       Expr arg = args.get(0);
 
       if (! arg.isVar()) {
@@ -999,9 +1046,10 @@ public class ExprFactory {
    */
   public ClosureExpr createClosure(Location loc,
                                    Function fun,
-                                   ArrayList<VarExpr> useArgs)
+                                   ArrayList<VarExpr> useArgs,
+                                   boolean isInClassScope)
   {
-    return new ClosureExpr(loc, fun);
+    return new ClosureExpr(loc, fun, useArgs, isInClassScope);
   }
 
   //
@@ -1307,7 +1355,7 @@ public class ExprFactory {
   /**
    * Creates a text statement
    */
-  public Statement createText(Location loc, String text)
+  public Statement createText(Location loc, StringValue text)
   {
     return new TextStatement(loc, text);
   }
@@ -1554,7 +1602,7 @@ public class ExprFactory {
   public InterpretedClassDef createClassDef(Location location,
                                             String name,
                                             String parentName,
-                                            String[] ifaceList,
+                                            String []ifaceList,
                                             int index)
   {
     return new InterpretedClassDef(location,

@@ -3030,6 +3030,23 @@ public class Env
   /**
    * Gets a value.
    */
+  public Var getVar(StringValue name,
+                    boolean isAutoCreate,
+                    boolean isOutputNotice)
+  {
+    EnvVar envVar = getEnvVar(name, isAutoCreate, isOutputNotice);
+
+    if (envVar != null) {
+      return envVar.getVar();
+    }
+    else {
+      return null;
+    }
+  }
+
+  /**
+   * Gets a value.
+   */
   public Var getVar(StringValue name)
   {
     EnvVar envVar = getEnvVar(name, true, false);
@@ -3391,7 +3408,7 @@ public class Env
 
   public String getStackTraceAsString(Location loc)
   {
-    ArrayValue value = ErrorModule.debug_backtrace(this, 0);
+    ArrayValue value = ErrorModule.debug_backtrace(this, 0, 0);
 
     return getStackTraceAsString(value, loc);
   }
@@ -3911,7 +3928,7 @@ public class Env
    * Compiled mode normally uses the _fun array directly, so this call
    * is rare.
    */
-  public int findFunctionId(String name)
+  public int findFunctionId(StringValue name)
   {
     return _quercus.findFunctionId(name);
   }
@@ -3922,7 +3939,7 @@ public class Env
    * Compiled mode normally uses the _fun array directly, so this call
    * is rare.
    */
-  public AbstractFunction findFunction(String name)
+  public AbstractFunction findFunction(StringValue name)
   {
     int id = _quercus.findFunctionId(name);
 
@@ -3987,7 +4004,7 @@ public class Env
     return null;
   }
 
-  public AbstractFunction getFunction(String name)
+  public AbstractFunction getFunction(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4046,10 +4063,11 @@ public class Env
   {
     name = name.toValue();
 
-    if (name instanceof CallbackFunction)
+    if (name instanceof CallbackFunction) {
       return ((CallbackFunction) name).getFunction(this);
+    }
 
-    return getFunction(name.toString());
+    return getFunction(name.toStringValue());
   }
 
   /*
@@ -4060,6 +4078,11 @@ public class Env
   */
 
   public Value addFunction(String name, AbstractFunction fun)
+  {
+    return addFunction(createString(name), fun);
+  }
+
+  public Value addFunction(StringValue name, AbstractFunction fun)
   {
     AbstractFunction staticFun
       = _quercus.findLowerFunctionImpl(name.toLowerCase(Locale.ENGLISH));
@@ -4276,7 +4299,7 @@ public class Env
    * @param name the function name
    * @return the function value
    */
-  public Value call(String name)
+  public Value call(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4297,7 +4320,7 @@ public class Env
    * @param a0 the first argument
    * @return the function value
    */
-  public Value call(String name, Value a0)
+  public Value call(StringValue name, Value a0)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4315,7 +4338,7 @@ public class Env
    * @param a1 the second argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1)
+  public Value call(StringValue name, Value a0, Value a1)
   {
     return getFunction(name).call(this, a0, a1);
   }
@@ -4329,7 +4352,7 @@ public class Env
    * @param a2 the third argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1, Value a2)
+  public Value call(StringValue name, Value a0, Value a1, Value a2)
   {
     return getFunction(name).call(this, a0, a1, a2);
   }
@@ -4344,7 +4367,7 @@ public class Env
    * @param a3 the fourth argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1, Value a2, Value a3)
+  public Value call(StringValue name, Value a0, Value a1, Value a2, Value a3)
   {
     return getFunction(name).call(this, a0, a1, a2, a3);
   }
@@ -4360,7 +4383,7 @@ public class Env
    * @param a4 the fifth argument
    * @return the function value
    */
-  public Value call(String name, Value a0, Value a1,
+  public Value call(StringValue name, Value a0, Value a1,
                     Value a2, Value a3, Value a4)
   {
     return getFunction(name).call(this, a0, a1, a2, a3, a4);
@@ -4373,7 +4396,7 @@ public class Env
    * @param args the arguments
    * @return the function value
    */
-  public Value call(String name, Value []args)
+  public Value call(StringValue name, Value []args)
   {
     return getFunction(name).call(this, args);
   }
@@ -4384,7 +4407,7 @@ public class Env
    * @param name the function name
    * @return the function value
    */
-  public Value callRef(String name)
+  public Value callRef(StringValue name)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4401,7 +4424,7 @@ public class Env
    * @param a0 the first argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0)
+  public Value callRef(StringValue name, Value a0)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4419,7 +4442,7 @@ public class Env
    * @param a1 the second argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1)
+  public Value callRef(StringValue name, Value a0, Value a1)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4438,7 +4461,7 @@ public class Env
    * @param a2 the third argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1, Value a2)
+  public Value callRef(StringValue name, Value a0, Value a1, Value a2)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4458,7 +4481,7 @@ public class Env
    * @param a3 the fourth argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1, Value a2, Value a3)
+  public Value callRef(StringValue name, Value a0, Value a1, Value a2, Value a3)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4479,7 +4502,7 @@ public class Env
    * @param a4 the fifth argument
    * @return the function value
    */
-  public Value callRef(String name, Value a0, Value a1,
+  public Value callRef(StringValue name, Value a0, Value a1,
                        Value a2, Value a3, Value a4)
   {
     AbstractFunction fun = findFunction(name);
@@ -4497,7 +4520,7 @@ public class Env
    * @param args the arguments
    * @return the function value
    */
-  public Value callRef(String name, Value []args)
+  public Value callRef(StringValue name, Value []args)
   {
     AbstractFunction fun = findFunction(name);
 
@@ -4816,7 +4839,7 @@ public class Env
 
     value.putField(this, "file", createString(location.getFileName()));
     value.putField(this, "line", LongValue.create(location.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0));
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
 
     return value;
   }
@@ -4837,7 +4860,7 @@ public class Env
 
     value.putField(this, "file", createString(location.getFileName()));
     value.putField(this, "line", LongValue.create(location.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0));
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
 
     return value;
   }
@@ -4858,7 +4881,7 @@ public class Env
 
     value.putField(this, "file", createString(elt.getFileName()));
     value.putField(this, "line", LongValue.create(elt.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0));
+    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
 
     if ((e instanceof QuercusException) && e.getCause() != null)
       e = e.getCause();
@@ -5163,7 +5186,7 @@ public class Env
 
           if (size == 0) {
             if (_autoload == null)
-              _autoload = findFunction("__autoload");
+              _autoload = findFunction(createString("__autoload"));
 
             if (_autoload != null) {
               _autoload.call(this, nameString);
@@ -6218,6 +6241,14 @@ public class Env
   /**
    * Returns the first value
    */
+  public static long first(long value, long a1)
+  {
+    return value;
+  }
+
+  /**
+   * Returns the first value
+   */
   public static double first(double value, double a1)
   {
     return value;
@@ -6326,6 +6357,23 @@ public class Env
         functionName,
         type));
     }
+  }
+
+  /**
+   * Error when using $this not inside an object context.
+   */
+  public Value thisError(Location location)
+  {
+    return error(location,
+                 L.l("Cannot use '$this' when not in object context."));
+  }
+
+  /**
+   * Error when using $this not inside an object context.
+   */
+  public Value thisError()
+  {
+    return thisError(getLocation());
   }
 
   /**
@@ -6551,6 +6599,16 @@ public class Env
   }
 
   /**
+   * A warning with an exception.
+   */
+  public Value notice(Throwable e)
+  {
+    log.log(Level.FINE, e.toString(), e);
+
+    return notice(e.toString());
+  }
+
+  /**
    * A notice with an exception.
    */
   public Value notice(String msg, Throwable e)
@@ -6565,8 +6623,9 @@ public class Env
    */
   public Value stub(String msg)
   {
-    if (log.isLoggable(Level.FINE))
+    if (log.isLoggable(Level.FINE)) {
       log.fine(getLocation().getMessagePrefix() + msg);
+    }
 
     return NullValue.NULL;
   }
@@ -7602,27 +7661,26 @@ public class Env
   }
 
   static {
-    SPECIAL_VARS.put(MethodIntern.intern("GLOBALS"), _GLOBAL);
-    SPECIAL_VARS.put(MethodIntern.intern("_SERVER"), _SERVER);
-    SPECIAL_VARS.put(MethodIntern.intern("_GET"), _GET);
-    SPECIAL_VARS.put(MethodIntern.intern("_POST"), _POST);
-    SPECIAL_VARS.put(MethodIntern.intern("_FILES"), _FILES);
-    SPECIAL_VARS.put(MethodIntern.intern("_REQUEST"), _REQUEST);
-    SPECIAL_VARS.put(MethodIntern.intern("_COOKIE"), _COOKIE);
-    SPECIAL_VARS.put(MethodIntern.intern("_SESSION"), _SESSION);
-    SPECIAL_VARS.put(MethodIntern.intern("_ENV"), _ENV);
+    SPECIAL_VARS.put(new ConstStringValue("GLOBALS"), _GLOBAL);
+    SPECIAL_VARS.put(new ConstStringValue("_SERVER"), _SERVER);
+    SPECIAL_VARS.put(new ConstStringValue("_GET"), _GET);
+    SPECIAL_VARS.put(new ConstStringValue("_POST"), _POST);
+    SPECIAL_VARS.put(new ConstStringValue("_FILES"), _FILES);
+    SPECIAL_VARS.put(new ConstStringValue("_REQUEST"), _REQUEST);
+    SPECIAL_VARS.put(new ConstStringValue("_COOKIE"), _COOKIE);
+    SPECIAL_VARS.put(new ConstStringValue("_SESSION"), _SESSION);
+    SPECIAL_VARS.put(new ConstStringValue("_ENV"), _ENV);
 
-    SPECIAL_VARS.put(MethodIntern.intern("argc"), ARGC);
-    SPECIAL_VARS.put(MethodIntern.intern("argv"), ARGV);
+    SPECIAL_VARS.put(new ConstStringValue("argc"), ARGC);
+    SPECIAL_VARS.put(new ConstStringValue("argv"), ARGV);
 
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_GET_VARS"), HTTP_GET_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_POST_VARS"), HTTP_POST_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_POST_FILES"), HTTP_POST_FILES);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
-    SPECIAL_VARS.put(MethodIntern.intern("PHP_SELF"), PHP_SELF);
-    SPECIAL_VARS.put(MethodIntern.intern("HTTP_RAW_POST_DATA"),
-                     HTTP_RAW_POST_DATA);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_GET_VARS"), HTTP_GET_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_POST_VARS"), HTTP_POST_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_POST_FILES"), HTTP_POST_FILES);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
+    SPECIAL_VARS.put(new ConstStringValue("PHP_SELF"), PHP_SELF);
+    SPECIAL_VARS.put(new ConstStringValue("HTTP_RAW_POST_DATA"), HTTP_RAW_POST_DATA);
 
     SPECIAL_VARS_U.put(new UnicodeBuilderValue("GLOBALS"), _GLOBAL);
     SPECIAL_VARS_U.put(new UnicodeBuilderValue("_SERVER"), _SERVER);
@@ -7643,8 +7701,7 @@ public class Env
     SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_COOKIE_VARS"), HTTP_COOKIE_VARS);
     SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_SERVER_VARS"), HTTP_SERVER_VARS);
     SPECIAL_VARS_U.put(new UnicodeBuilderValue("PHP_SELF"), PHP_SELF);
-    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_RAW_POST_DATA"),
-                       HTTP_RAW_POST_DATA);
+    SPECIAL_VARS_U.put(new UnicodeBuilderValue("HTTP_RAW_POST_DATA"), HTTP_RAW_POST_DATA);
 
     DEFAULT_QUERY_SEPARATOR_MAP = new int[128];
     DEFAULT_QUERY_SEPARATOR_MAP['&'] = 1;

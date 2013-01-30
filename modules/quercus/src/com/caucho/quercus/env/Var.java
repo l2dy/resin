@@ -490,7 +490,7 @@ public class Var extends Value
    * Converts to an array
    */
   @Override
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return _value.toArray();
   }
@@ -874,9 +874,9 @@ public class Var extends Value
   }
 
   @Override
-  public Callable toCallable(Env env)
+  public Callable toCallable(Env env, boolean isOptional)
   {
-    return _value.toCallable(env);
+    return _value.toCallable(env, isOptional);
   }
 
   //

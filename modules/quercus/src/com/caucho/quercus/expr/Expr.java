@@ -41,14 +41,12 @@ import com.caucho.util.L10N;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.logging.Logger;
 
 /**
  * Represents a PHP expression.
  */
 abstract public class Expr {
   private static final L10N L = new L10N(Expr.class);
-  private static final Logger log = Logger.getLogger(Expr.class.getName());
 
   public static final int COMPILE_ARG_MAX = 5;
   public static final Expr[] NULL_ARGS = new Expr[0];
@@ -318,7 +316,9 @@ abstract public class Expr {
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
-                             StringValue name)
+                             Location location,
+                             StringValue name,
+                             boolean isInClassScope)
   {
     return factory.createFieldGet(this, name);
   }
@@ -327,7 +327,9 @@ abstract public class Expr {
    * Creates a field ref
    */
   public Expr createFieldGet(ExprFactory factory,
-                             Expr name)
+                             Location location,
+                             Expr name,
+                             boolean isInClassScope)
   {
     return factory.createFieldVarGet(this, name);
   }
@@ -340,6 +342,16 @@ abstract public class Expr {
    * Creates a class field $class::foo
    */
   public Expr createClassConst(QuercusParser parser, StringValue name)
+  {
+    ExprFactory factory = parser.getExprFactory();
+
+    return factory.createClassConst(this, name);
+  }
+
+  /**
+   * Creates a class field $class::foo
+   */
+  public Expr createClassConst(QuercusParser parser, Expr name)
   {
     ExprFactory factory = parser.getExprFactory();
 
@@ -568,11 +580,32 @@ abstract public class Expr {
   /**
    * Evaluates an assignment. The value must not be a Var.
    */
+  public Value evalAssignValue(Env env, Expr valueExpr)
+  {
+    Value value = valueExpr.evalCopy(env);
+
+    return evalAssignValue(env, value);
+  }
+
+  /**
+   * Evaluates an assignment. The value must not be a Var.
+   */
   public Value evalAssignValue(Env env, Value value)
   {
     throw new RuntimeException(L.l(
       "{0} is an invalid left-hand side of an assignment.",
       this));
+  }
+
+  /**
+   * Evaluates an assignment. If the value is a Var, it replaces the
+   * current Var.
+   */
+  public Value evalAssignRef(Env env, Expr valueExpr)
+  {
+    Value value = valueExpr.evalRef(env);
+
+    return evalAssignRef(env, value);
   }
 
   /**
@@ -590,7 +623,7 @@ abstract public class Expr {
    * Evaluates as an array index assign ($a[index] = value).
    * @return what was assigned
    */
-  public Value evalArrayAssign(Env env, Value index, Value value)
+  public Value evalArrayAssign(Env env, Expr indexExpr, Expr valueExpr)
   {
     // php/03mk, php/03mm, php/03mn, php/04b3
     // overrided in ThisFieldExpr and ThisFieldVarExpr
@@ -599,6 +632,56 @@ abstract public class Expr {
     //return var.put(index, value);
 
     Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalCopy(env);
+
+    Value result = array.put(index, value);
+
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Expr valueExpr)
+  {
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // overrided in ThisFieldExpr and ThisFieldVarExpr
+    //Value var = eval(env);
+    //
+    //return var.put(index, value);
+
+    Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
+    Value value = valueExpr.evalRef(env);
+
+    Value result = array.put(index, value);
+
+    //return array.get(index); // php/03mm php/03mn
+
+    return result;
+  }
+
+  /**
+   * Evaluates as an array index assign ($a[index] = value).
+   * @return what was assigned
+   */
+  public Value evalArrayAssignRef(Env env, Expr indexExpr, Value value)
+  {
+    // php/03mk, php/03mm, php/03mn, php/04b3
+    // overrided in ThisFieldExpr and ThisFieldVarExpr
+    //Value var = eval(env);
+    //
+    //return var.put(index, value);
+
+    Value array = evalArray(env);
+    Value index = indexExpr.eval(env);
+
     Value result = array.put(index, value);
 
     //return array.get(index); // php/03mm php/03mn
@@ -734,9 +817,10 @@ abstract public class Expr {
   /**
    * Evaluates the expression as an array index unset
    */
-  public void evalUnsetArray(Env env, Value index)
+  public void evalUnsetArray(Env env, Expr indexExpr)
   {
     Value array = evalDirty(env);
+    Value index = indexExpr.eval(env);
 
     array.remove(index);
   }
@@ -772,6 +856,25 @@ abstract public class Expr {
     throws IOException
   {
     eval(env).print(env);
+  }
+
+  @Override
+  public boolean equals(Object obj)
+  {
+    if (this == obj) {
+      return true;
+    }
+    else if (! (obj instanceof Expr)) {
+      return false;
+    }
+
+    Expr expr = (Expr) obj;
+
+    if (! isLiteral() || ! expr.isLiteral()) {
+      return false;
+    }
+
+    return evalConstant().equals(expr.evalConstant());
   }
 
   public String toString()

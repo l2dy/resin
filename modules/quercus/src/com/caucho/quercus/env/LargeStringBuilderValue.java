@@ -37,6 +37,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Reader;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 
 /**
  * Represents a 8-bit PHP 5 style binary builder (unicode.semantics = off),
@@ -311,7 +312,9 @@ public class LargeStringBuilderValue
     }
   }
 
-  public final void setLength(int len) {
+  @Override
+  public final void setLength(int len)
+  {
     _length = len;
   }
 
@@ -390,7 +393,7 @@ public class LargeStringBuilderValue
    * Convert to lower case.
    */
   @Override
-  public StringValue toLowerCase()
+  public StringValue toLowerCase(Locale locale)
   {
     int length = _length;
 

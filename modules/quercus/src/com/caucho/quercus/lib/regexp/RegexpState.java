@@ -46,7 +46,7 @@ public class RegexpState {
   public static final int FAIL = -1;
   public static final int SUCCESS = 0;
 
-  private Regexp _regexp;
+  public Regexp _regexp;
 
   private StringValue _subject;
   private int _subjectLength;
@@ -98,12 +98,25 @@ public class RegexpState {
 
       _isGroupFinalized = new boolean[nGroup];
     }
+    else {
+      for (int i = 0; i < nGroup; i++) {
+        _groupBegin[i] = 0;
+        _groupEnd[i] = 0;
+        _isGroupFinalized[i] = false;
+      }
+    }
 
     int nLoop = regexp._nLoop;
 
     if (_loopCount.length < nLoop) {
       _loopCount = new int[nLoop];
       _loopOffset = new int[nLoop];
+    }
+    else {
+      for (int i = 0; i < nLoop; i++) {
+        _loopCount[i] = 0;
+        _loopOffset[i] = 0;
+      }
     }
 
     _subject = null;
@@ -217,7 +230,8 @@ public class RegexpState {
       _first = length + 1;
 
       return false;
-    } catch (StackOverflowError e) {
+    }
+    catch (StackOverflowError e) {
       log.warning(L.l("regexp '{0}' produces a StackOverflowError for\n{1}",
                       _regexp, _subject));
 
@@ -363,14 +377,14 @@ public class RegexpState {
     _groupBegin[i] = v;
   }
 
-  public void setFinalized(int i, boolean isFinalized)
-  {
-    _isGroupFinalized[i] = isFinalized;
-  }
-
   public boolean isFinalized(int i)
   {
     return _isGroupFinalized[i];
+  }
+
+  public void setFinalized(int i, boolean isFinalized)
+  {
+    _isGroupFinalized[i] = isFinalized;
   }
 
   public void setEnd(int i, int v)

@@ -33,6 +33,7 @@ import com.caucho.quercus.QuercusModuleException;
 import com.caucho.vfs.*;
 
 import java.io.*;
+import java.util.Locale;
 
 /**
  * Represents a PHP string value.
@@ -633,8 +634,9 @@ public class UnicodeBuilderValue
   }
 
   /**
-   * Sets the offset.
+   * Sets the length.
    */
+  @Override
   public final void setLength(int length)
   {
     _length = length;
@@ -808,7 +810,7 @@ public class UnicodeBuilderValue
    * Convert to lower case.
    */
   @Override
-  public StringValue toLowerCase()
+  public StringValue toLowerCase(Locale locale)
   {
     int length = _length;
 

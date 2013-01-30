@@ -162,8 +162,9 @@ public class EnvironmentLevelELResolver extends ELResolver {
 
     Object value = EL.getLevelVar(var, _loader);
 
-    if (value == null)
+    if (value == null) {
       return null;
+    }
 
     env.setPropertyResolved(true);
 

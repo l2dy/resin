@@ -56,6 +56,7 @@ import com.caucho.vfs.WriteStream;
 /**
  * Represents a PHP expression value.
  */
+@SuppressWarnings("serial")
 abstract public class Value implements java.io.Serializable
 {
   protected static final L10N L = new L10N(Value.class);
@@ -552,6 +553,46 @@ abstract public class Value implements java.io.Serializable
   // Conversions
   //
 
+  public static long toLong(boolean b)
+  {
+    return b ? 1 : 0;
+  }
+
+  public static long toLong(double d)
+  {
+    return (long) d;
+  }
+
+  public static long toLong(long l)
+  {
+    return l;
+  }
+
+  public static long toLong(CharSequence s)
+  {
+    return StringValue.parseLong(s);
+  }
+
+  public static double toDouble(boolean b)
+  {
+    return b ? 1.0 : 0.0;
+  }
+
+  public static double toDouble(double d)
+  {
+    return d;
+  }
+
+  public static double toDouble(long l)
+  {
+    return l;
+  }
+
+  public static double toDouble(CharSequence s)
+  {
+    return StringValue.toDouble(s.toString());
+  }
+
   /**
    * Converts to a boolean.
    */
@@ -610,7 +651,7 @@ abstract public class Value implements java.io.Serializable
   /**
    * Converts to an array.
    */
-  public Value toArray()
+  public ArrayValue toArray()
   {
     return new ArrayValueImpl().append(this);
   }
@@ -1164,12 +1205,18 @@ abstract public class Value implements java.io.Serializable
   /**
    * Converts to a callable
    */
-  public Callable toCallable(Env env)
+  public Callable toCallable(Env env, boolean isOptional)
   {
-    env.warning(L.l("Callable: '{0}' is not a valid callable argument",
-                    toString()));
+    if (! isOptional) {
+      env.warning(L.l("Callable: '{0}' is not a valid callable argument",
+                      toString()));
 
-    return new CallbackError(toString());
+      return new CallbackError(toString());
+    }
+    else {
+      return null;
+    }
+
   }
 
   //
@@ -1373,7 +1420,7 @@ abstract public class Value implements java.io.Serializable
    */
   public Value call(Env env, Value []args)
   {
-    Callable call = toCallable(env);
+    Callable call = toCallable(env, false);
 
     if (call != null)
       return call.call(env, args);
@@ -2677,6 +2724,14 @@ abstract public class Value implements java.io.Serializable
     put(value);
 
     return value;
+  }
+
+  /**
+   * Sets the array tail, returning a reference to the tail.
+   */
+  public Value getArgTail(Env env, boolean isTop)
+  {
+    return putVar();
   }
 
   /**

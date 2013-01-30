@@ -59,6 +59,8 @@ abstract public class AbstractFunction extends Callback {
   protected boolean _isConstructor = false;
   protected boolean _isClosure = false;
 
+  protected boolean _isTraitMethod = false;
+
   protected Visibility _visibility = Visibility.PUBLIC;
   protected String _declaringClassName;
 
@@ -193,7 +195,7 @@ abstract public class AbstractFunction extends Callback {
     return _isStatic;
   }
 
-  /*
+  /**
    * Returns true for a final function.
    */
   public boolean isFinal()
@@ -222,17 +224,39 @@ abstract public class AbstractFunction extends Callback {
     return _isClosure;
   }
 
+  /**
+   * Returns true for a constructor.
+   */
   public boolean isConstructor()
   {
     return _isConstructor;
   }
 
+  /**
+   * True for a constructor.
+   */
   public final void setConstructor(boolean isConstructor)
   {
     _isConstructor = isConstructor;
   }
 
-  /*
+  /**
+   * Returns true for a trait method.
+   */
+  public boolean isTraitMethod()
+  {
+    return _isTraitMethod;
+  }
+
+  /**
+   * True for a trait method.
+   */
+  public void setTraitMethod(boolean isTraitMethod)
+  {
+    _isTraitMethod = isTraitMethod;
+  }
+
+  /**
    * Returns true for a protected function.
    */
   public boolean isPublic()
@@ -240,7 +264,7 @@ abstract public class AbstractFunction extends Callback {
     return _visibility == Visibility.PUBLIC;
   }
 
-  /*
+  /**
    * Returns true for a protected function.
    */
   public boolean isProtected()
@@ -248,7 +272,7 @@ abstract public class AbstractFunction extends Callback {
     return _visibility == Visibility.PROTECTED;
   }
 
-  /*
+  /**
    * Returns true for a private function.
    */
   public boolean isPrivate()

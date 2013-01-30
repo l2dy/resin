@@ -79,10 +79,12 @@ public class FunctionModule extends AbstractQuercusModule {
 
     ArrayValue argArray;
 
-    if (arg.isArray())
-      argArray = (ArrayValue) arg.toArray();
-    else
+    if (arg.isArray()) {
+      argArray = arg.toArray();
+    }
+    else {
       argArray = new ArrayValueImpl().append(arg);
+    }
 
     Value []args;
 
@@ -125,7 +127,7 @@ public class FunctionModule extends AbstractQuercusModule {
     try {
       AbstractFunction fun = env.createAnonymousFunction(args, code);
 
-      return new CallbackFunction(fun, fun.getName());
+      return new CallbackFunction(fun, env.createString(fun.getName()));
     } catch (IOException e) {
       env.warning(e.getMessage());
 
@@ -186,9 +188,9 @@ public class FunctionModule extends AbstractQuercusModule {
    * @param env the PHP environment
    * @param name the function name
    */
-  public static boolean function_exists(Env env, String name)
+  public static boolean function_exists(Env env, StringValue name)
   {
-    return name != null && env.findFunction(name) != null;
+    return env.findFunction(name) != null;
   }
 
   /**

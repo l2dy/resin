@@ -10,6 +10,69 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.34 - snapshot">
+<ul>
+<li>health: named predicates don't match HttpStatusHealthCheck properly(#5283)</li>
+<li>db: NPE in BlockManager on Raspberry Pi (#5338)</li>
+<li>watchdog: hangle missing java.lang:type=Runtime arguments on startup (#5299)</li>
+<li>servlet: content-type encoding updates for .gif files (#5271, rep by Mathias Lagerwell)</li>
+<li>watchdog: watchdog must read system-property (#5294, rep by chinaliwee)</li>
+<li>jsp: validate ResponseStream on PageContextImpl (#5273, rep by B. Loy)</li>
+<li>config: allow EL expressions in host-alias (#5300, rep by Andrew Foong)</li>
+<li>config: static regexps can be deployed on start (#5275, rep by R. Mann)</li>
+<li>load-balance: re-encoding of HTTP url requests (#5317, rep by Ethan Larson)</li>
+<li>load-balance: add session-cookie to LoadBalance (#5332, rep by D. Shearer)</li>
+<li>servlet: utf-8 buffer boundary writing (#5323)</li>
+<li>jsp: static text splitting needs to be smaller for utf-8 characters (#5320)</li>
+<li>install: Makefile add space after error-suppressing '-' for BSD compatibility (#5322, rep by jigzat)</li>
+<li>cache: global-cache ping needs to by async (#5336, rep by D. Shearer)</li>
+<li>config: added jvm-mode for -server, default none (#5331)</li>
+<li>class-loader: synchronize on package creation (#5277, rep by S. Nobuaki)</li>
+<li>health: C SEGV possible in JNI heap_dump (#5330)</li>
+<li>websocket: websocket timeout too short (#5253, rep by hmz820)</li>
+<li>log: for pro database logging, do not throw exception when name insert fails (#5302, rep by Andrew Foong)</li>
+<li>cdi: init timing issue with xmlExtension/log-formatting (#5274, rep by R Mann)</li>
+<li>jsp: .tld lookup needs to look for WEB-INF classloader context (#5243, rep by S. Nobuaki)</li>
+<li>ssl: add honor-cipher-order to match Apache's SSLHonorCipherOrder (#5282)</li>
+<li>servlet: gzip content-length was not properly filtered (#5326, rep by Keith Fetterman)</li>
+<li>load-balance: update active-wait-time for better slow-initialization (#5321, rep by Ethan Larson)</li>
+<li>servlet: add a default='true' attribute to servlet-mapping to allow programmatic overriding of default (#5314, rep by Rick Mann)</li>
+<li>quercus: oci_execute() always returns true (#5311, rep by EricESCP)</li>
+<li>quercus: Event endlessly repeated under Drupal Commons 6.x (#5290, rep by jordi)</li>
+<li>quercus: wordpress-3.5.0 tested and runs on Quercus</li>
+<li>quercus: drupal-commons-6.x-2.11 tested and runs on Quercus</li>
+<li>quercus: mediawiki-1.20.2 tested and runs on Quercus</li>
+<li>quercus: phpBB3-3.0.11 tested and runs on Quercus</li>
+<li>quercus: dokuwiki-2012-10-13 tested and runs on Quercus</li>
+<li>quercus: complete support for PHP 5.4 core language features</li>
+<li>quercus: support for traits (PHP 5.4)</li>
+<li>quercus: support for short array syntax (PHP 5.4)</li>
+<li>quercus: support for function array dereferencing (PHP 5.4)</li>
+<li>quercus: support for $this use in closures (PHP 5.4)</li>
+<li>quercus: &lt;?= short open tag is now always on (PHP 5.4)</li>
+<li>quercus: support for class member access on instantiation (PHP 5.4)</li>
+<li>quercus: support for Class::{expr}() syntax (PHP 5.4)</li>
+<li>quercus: support for binary number format: 0b001001101 (PHP 5.4)</li>
+<li>quercus: $_SERVER['REQUEST_TIME_FLOAT'] is populated (PHP 5.4)</li>
+<li>quercus: can not save permission in drupal6.26 (#5278, rep by kevinw8801)</li>
+<li>quercus: Not able to use PDO with postgres (#5325, rep by publicocean0)</li>
+<li>quercus: Regexp Failure - group-level recursion (#3829, rep by alexander_hristov)</li>
+<li>quercus: dokuwiki regexp illegal syntax - utf-16 surrogate pairs (#3955, rep by M. Pezzoli)</li>
+<li>quercus: vBulletin 4.0.1 - invalid conditional regexp (#3879, rep by derickso)</li>
+<li>quercus: sqlite PDO support (#3997, rep by Janos)</li>
+<li>quercus: Regex PCRE recursion (balancing groups) isn't working as expected in Quercus (#4974, rep by nemostein)</li>
+<li>quercus: object field foreach ordering does not match PHP (#5327, rep by K. Patel)</li>
+<li>quercus: $a instanceof self/parent does not work (#5329)</li>
+<li>quercus: QuercusScriptEngine now returns Quercus Value types</li>
+<li>quercus: QuercusScriptEngine now defaults to unicode.semantics=on and utf-8 script encoding</li>
+<li>quercus: Scripting utf-8 output vietnamese incorrect (#5328, rep by ngoc)</li>
+<li>quercus: assignment to arrays is not evaluated in the correct order (#5333)</li>
+<li>pdf: availability report was inaccurate for quick restarts (#5220)</li>
+<li>pdf: added graph shading to highlight period of downtime</li>
+
+</ul>
+</s2>
+
 <s2 title="4.0.33 - Dec 18, 2012">
 <ul>
 <li>http-proxy: header must end with /r/n(#5265, rep by mnsh)</li>

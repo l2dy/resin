@@ -34,9 +34,9 @@ heap.o	: resin.h Makefile
 stat.o	: resin.h Makefile
 
 clean	:
-	-rm *.o *.lo *.la *.so *.jnilib *.dylib *.$(SO)
+	- rm *.o *.lo *.la *.so *.jnilib *.dylib *.$(SO)
 
 install	: libresin.$(SO)
 	@ echo "Installing pro plugin resin"
-	@ -mkdir -p $(resin_home)/$(LIBEXEC)
+	@ - mkdir -p $(resin_home)/$(LIBEXEC)
 	cp libresin.$(SO) $(resin_home)/$(LIBEXEC)

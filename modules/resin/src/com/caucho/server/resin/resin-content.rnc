@@ -233,6 +233,12 @@ r_host-Group = r_host-Flow
 
 r_host-default = element host-default {
   r_host-Group
+
+  & (attribute host-alias { string }
+     | element host-alias { string })*
+
+  & (attribute host-alias-regexp { string }
+     | element host-alias-regexp { string })*
 }
 
 r_host-deploy = element host-deploy {
@@ -286,6 +292,9 @@ r_jsse-ssl = element jsse-ssl {
 
   & (attribute cipher-suites-forbidden { string }
      | element cipher-suites-forbidden { r_string-Group })?
+
+  & (attribute honor-cipher-order { r_boolean-Type }
+     | element honor-cipher-order { r_boolean-Type })?
 
   & (attribute key-store-file { string }
      | element key-store-file { r_string-Group })?
@@ -409,6 +418,9 @@ r_openssl = element openssl {
 
   & (attribute crypto-device { string }
      | element crypto-device { r_string-Group })?
+
+  & (attribute honor-cipher-order { r_boolean-Type }
+     | element honor-cipher-order { r_boolean-Type })?
 
   & (attribute password { string }
      | element password { r_string-Group })
@@ -732,6 +744,9 @@ r_server-Content =
 
   & (attribute jvm-classpath { string }
      | element jvm-classpath { string })*
+
+  & (attribute jvm-mode { string }
+     | element jvm-mode { string })*
 
   & (attribute java-exe { string }
      | element java-exe { string })?
