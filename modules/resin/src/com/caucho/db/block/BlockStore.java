@@ -1867,6 +1867,14 @@ public class BlockStore {
   }
 
   /**
+   * True if active
+   */
+  public boolean isActive()
+  {
+    return _lifecycle.isActive();
+  }
+
+  /**
    * Closes the store.
    */
   public void close()
@@ -1880,11 +1888,14 @@ public class BlockStore {
     if (blockManager != null) {
       blockManager.freeStore(this);
     }
-    
-    _writer.close();
-    
-    _writer.waitForComplete(60000);
 
+    try {
+      _writer.wake();
+      _writer.waitForComplete(60000);
+    } finally {
+      _writer.close();
+    }
+    
     int id = _id;
     _id = 0;
 

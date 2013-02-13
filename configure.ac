@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.34)
+AC_INIT([resin],4.0.35)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -805,6 +805,15 @@ if test -z "${jni_ld_shlib}"; then
       else
         plugin_cflags="$jni_cflags -m32"
         plugin_ldflags_shlib="$jni_ldflags_shlib -m32"
+      fi
+      
+      if test "$target_cpu" = "armv6l"; then
+        jni_cflags_shlib="-fPIC"
+        plugin_cflags_shlib=$jni_cflags_shlib
+        jni_ldflags_shlib="-shared -fPIC"
+        plugin_ldflags_shlib=$jni_ldflags_shlib
+        jni_cflags="-fPIC"
+        plugin_cflags=$jni_cflags
       fi
       ;;
 

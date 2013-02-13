@@ -355,10 +355,12 @@ public class HttpResponse extends AbstractHttpResponse
 
         CharBuffer cb = _cb;
         // XXX:
+        cb.clear();
         fillCookie(cb, cookie, now, cookieVersion, false);
         os.printLatin1("\r\nSet-Cookie: ");
         os.printLatin1(cb.getBuffer(), 0, cb.getLength());
         if (cookieVersion > 0) {
+          cb.clear();
           fillCookie(cb, cookie, now, cookieVersion, true);
           os.printLatin1("\r\nSet-Cookie2: ");
           os.printLatin1(cb.getBuffer(), 0, cb.getLength());
