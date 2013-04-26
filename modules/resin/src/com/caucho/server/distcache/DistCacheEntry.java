@@ -70,6 +70,8 @@ public class DistCacheEntry {
   
   private final AtomicInteger _loadCount = new AtomicInteger();
 
+  private long _lastLoaderTime;
+
   DistCacheEntry(CacheStoreManager cacheService,
                  HashKey keyHash,
                  CacheHandle cache,
@@ -470,7 +472,7 @@ public class DistCacheEntry {
     CacheWriterExt writer = config.getCacheWriterExt();
 
     if (! isLocal && writer != null && config.isWriteThrough()) {
-      loadValue(config);
+      // loadValue(config);
       
       writer.write(this);
     }
@@ -915,9 +917,16 @@ public class DistCacheEntry {
       remove();
     }
 
-    mnodeEntry.setObjectValue(value);
+    if (! config.isStoreByValue() || isImmutable(value)) {
+      mnodeEntry.setObjectValue(value);
+    }
 
     return value;
+  }
+  
+  private boolean isImmutable(Object value)
+  {
+    return value instanceof String;
   }
   
   private Object loadValue(CacheConfig config)
@@ -953,7 +962,9 @@ public class DistCacheEntry {
       remove();
     }
 
-    mnodeEntry.setObjectValue(value);
+    if (! config.isStoreByValue() || isImmutable(value)) {
+      mnodeEntry.setObjectValue(value);
+    }
 
     return value;
   }
@@ -1030,7 +1041,9 @@ public class DistCacheEntry {
     CacheConfig config = getConfig();
     int server = config.getServerIndex();
     
-    if (mnodeEntry == null || mnodeEntry.isLocalExpired(server, now, config)) {
+    if (mnodeEntry == null 
+        || mnodeEntry.isLocalExpired(server, now, config)
+        || ! isReadThroughLocalValid(now)) {
       reloadValue(now, isUpdateAccessTime);
     }
     
@@ -1104,12 +1117,13 @@ public class DistCacheEntry {
     
     mnodeEntry = getMnodeEntry();
 
-    if (! mnodeEntry.isExpired(now)) {
+    if (! mnodeEntry.isExpired(now) && isReadThroughLocalValid(now)) {
       if (isUpdateAccessTime) {
         mnodeEntry.setLastAccessTime(now);
       }
     }
     else if (loadFromCacheLoader(now)) {
+      _lastLoaderTime = now; 
       mnodeEntry.setLastAccessTime(now);
     }
     else {
@@ -1124,6 +1138,18 @@ public class DistCacheEntry {
                                                  true, true);
 
       compareAndSetEntry(mnodeEntry, nullMnodeValue);
+    }
+  }
+  
+  private boolean isReadThroughLocalValid(long now)
+  {
+    CacheConfig config = getConfig();
+    
+    if (! config.isReadThrough()) {
+      return true;
+    }
+    else  {
+      return (now - _lastLoaderTime < config.getReadThroughExpireTimeout());
     }
   }
   
@@ -1147,7 +1173,7 @@ public class DistCacheEntry {
   {
     long now = CurrentTime.getCurrentTime();
 
-    if (getMnodeEntry().isExpired(now)) {
+    if (getMnodeEntry().isExpired(now) || ! isReadThroughLocalValid(now)) {
       forceLoadMnodeValue();
     }
   }
@@ -1360,10 +1386,16 @@ public class DistCacheEntry {
       else
         leaseOwner = oldLeaseOwner;
         */
+      
+      Object saveValue = null;
+      if (! getConfig().isStoreByValue() || isImmutable(value)) {
+        saveValue = value;
+      }
+
 
       mnodeValue = new MnodeEntry(mnodeUpdate,
                                   valueDataId,
-                                  value,
+                                  saveValue,
                                   accessTime,
                                   updateTime,
                                   true,

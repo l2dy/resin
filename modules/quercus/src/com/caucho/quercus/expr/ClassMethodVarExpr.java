@@ -128,7 +128,7 @@ public class ClassMethodVarExpr extends AbstractMethodExpr
     QuercusClass cl = env.findClass(_className);
 
     if (cl == null) {
-      env.error(getLocation(), L.l("no matching class {0}", _className));
+      env.error(L.l("no matching class {0}", _className), getLocation());
     }
 
     // qa/0954 - static calls pass the current $this
@@ -139,7 +139,7 @@ public class ClassMethodVarExpr extends AbstractMethodExpr
     Value []args = evalArgs(env, _args);
     int hash = methodName.hashCodeCaseInsensitive();
 
-    return cl.callMethod(env, qThis, methodName, hash, args);
+    return cl.callStaticMethod(env, qThis, methodName, hash, args);
   }
 
   public String toString()

@@ -115,8 +115,6 @@ r_cluster-Content =
 
   & r_session-cookie?
 
-  & r_session-sticky-disable?
-
   & r_session-url-prefix?
 
   & r_ssl-session-cookie?
@@ -779,6 +777,9 @@ r_server-Content =
   & (attribute load-balance-recover-time { r_period-Type }
      | element load-balance-recover-time { r_period-Type })?
 
+  & (attribute load-balance-busy-recover-time { r_period-Type }
+     | element load-balance-busy-recover-time { r_period-Type })?
+
   & (attribute load-balance-socket-timeout { r_period-Type }
      | element load-balance-socket-timeout { r_period-Type })?
 
@@ -859,10 +860,6 @@ r_server-Content =
 r_session-cookie = 
   attribute session-cookie { string }
   | element session-cookie { string }
-
-r_session-sticky-disable = 
-  attribute session-sticky-disable { string }
-  | element session-sticky-disable { string }
 
 r_session-url-prefix =
   attribute alternate-session-url-prefix { string }

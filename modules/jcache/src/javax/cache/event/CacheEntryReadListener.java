@@ -32,6 +32,6 @@ package javax.cache.event;
 
 public interface CacheEntryReadListener<K,V> extends CacheEntryListener<K,V>
 {
-  public void entryRead(CacheEntryEvent<? extends K,? extends V> entry)
+  void onRead(Iterable<CacheEntryEvent<? extends K,? extends V>> events)
     throws CacheEntryListenerException;
 }

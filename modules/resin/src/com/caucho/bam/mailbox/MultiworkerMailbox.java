@@ -66,7 +66,7 @@ public class MultiworkerMailbox implements Mailbox, Closeable
   private final Broker _broker;
   private final MessageStream _actorStream;
   
-  private final int _queueSize = 1024;
+  private final int _queueSize = 16 * 1024;
 
   private final MailboxQueue2 []_queues;
   
@@ -306,6 +306,8 @@ public class MultiworkerMailbox implements Mailbox, Closeable
       workerQueue.wake();
 
       if (! workerQueue.offer(packet, true)) {
+        workerQueue.wake();
+        
         throw new QueueFullException("BAM queue is full size=" + workerQueue.getSize() + "\n  " + this + " " + packet);
       }
     }

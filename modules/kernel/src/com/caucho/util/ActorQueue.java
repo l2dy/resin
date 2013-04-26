@@ -27,12 +27,32 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.mbeans;
+package com.caucho.util;
 
-import javax.cache.CacheStatistics;
-import javax.management.MXBean;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 
-@MXBean
-public interface CacheStatisticsMXBean extends CacheStatistics
+import com.caucho.env.thread.TaskWorker;
+
+
+/**
+ * Blocking queue with a processor.
+ */
+public interface ActorQueue<M> extends BlockingQueue<M>
 {
+  int getOfferReserve();
+
+  TaskWorker getOfferTask();
+
+  boolean offer(M value,
+                long timeout,
+                TimeUnit unit,
+                int reservedSpace);
+
+  /*
+  void deliver(Actor<M> actor,
+               MessageContext<M> messageContext,
+               M chainItem)
+    throws Exception;
+    */
 }

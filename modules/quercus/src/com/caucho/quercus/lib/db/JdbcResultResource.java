@@ -639,10 +639,42 @@ public class JdbcResultResource
 
       case Types.VARCHAR:
       case Types.LONGVARCHAR:
-        if (env.isUnicodeSemantics())
+        if (env.isUnicodeSemantics()) {
           return getUnicodeColumnString(env, rs, getMetaData(), column);
-        else
-          return getColumnString(env, rs, getMetaData(), column);
+        }
+        else if (this instanceof MysqliResult) {
+          // for mysql, need to read raw bytes from the wire, assuming that we
+          // already called "SET character_set_results latin1", thereby
+          // requesting the server do all the encoding work for the client
+
+          StringValue bb = env.createBinaryBuilder();
+
+          InputStream is = rs.getBinaryStream(column);
+
+          if (is == null) {
+            return NullValue.NULL;
+          }
+
+          try {
+            bb.appendReadAll(is, Long.MAX_VALUE / 2);
+          } catch (RuntimeException e) {
+            log.log(Level.WARNING, e.toString(), e);
+
+            return NullValue.NULL;
+          }
+
+          return bb;
+        }
+        else {
+          String strValue = rs.getString(column);
+
+          if (strValue == null) {
+            return NullValue.NULL;
+          }
+          else {
+            return env.createString(strValue);
+          }
+        }
 
       case Types.TIME:
         return getColumnTime(env, rs, column);

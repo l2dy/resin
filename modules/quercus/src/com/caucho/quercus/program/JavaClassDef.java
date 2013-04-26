@@ -119,6 +119,8 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
   private ArrayDelegate _arrayDelegate;
 
   private JavaMethod __call;
+  private JavaMethod __callStatic;
+
   private JavaMethod __toString;
 
   private Method _printRImpl;
@@ -445,7 +447,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
           return resultCmp;
       }
       catch (IllegalAccessException e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE,  e.getMessage(), e);
         return 0;
       }
     }
@@ -469,7 +471,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
       try {
         return get.callMethod(env, getQuercusClass(), qThis);
       } catch (Exception e) {
-        log.log(Level.FINE, L.l(e.getMessage()), e);
+        log.log(Level.FINE, e.getMessage(), e);
 
         return null;
       }
@@ -481,7 +483,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
         Object result = fieldPair._field.get(qThis.toJavaObject());
         return fieldPair._marshal.unmarshal(env, result);
       } catch (Exception e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE,  e.getMessage(), e);
 
         return null;
       }
@@ -497,7 +499,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
       try {
         return __fieldGet.callMethod(env, getQuercusClass(), qThis, nameV);
       } catch (Exception e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE,  e.getMessage(), e);
 
         return null;
       }
@@ -518,7 +520,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
       try {
         return setter.callMethod(env, getQuercusClass(), qThis, value);
       } catch (Exception e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE, e.getMessage(), e);
 
         return NullValue.NULL;
       }
@@ -535,7 +537,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
         return value;
 
       } catch (Exception e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE, e.getMessage(), e);
         return NullValue.NULL;
       }
     }
@@ -564,7 +566,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
                                      nameV,
                                      value);
       } catch (Exception e) {
-        log.log(Level.FINE,  L.l(e.getMessage()), e);
+        log.log(Level.FINE, e.getMessage(), e);
 
         return NullValue.NULL;
       }
@@ -628,18 +630,16 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
       return NullValue.NULL;
   }
 
-  /**
-   * Returns the __call.
-   */
-  public AbstractFunction getCallMethod()
+  @Override
+  public AbstractFunction getCall()
   {
     return __call;
   }
 
   @Override
-  public AbstractFunction getCall()
+  public AbstractFunction getCallStatic()
   {
-    return __call;
+    return __callStatic;
   }
 
   /**
@@ -784,6 +784,10 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
     if (__call != null)
       cl.setCall(__call);
 
+    if (__callStatic != null) {
+      cl.setCallStatic(__callStatic);
+    }
+
     if (__toString != null) {
       cl.addMethod(_moduleContext.createString("__toString"), __toString);
     }
@@ -915,6 +919,8 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
   private void introspect()
   {
     introspectConstants(_type);
+    introspectEnums(_type);
+
     introspectMethods(_moduleContext, _type);
     introspectFields(_moduleContext, _type);
 
@@ -1247,9 +1253,6 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
     }
   }
 
-  /**
-   * Introspects the Java class.
-   */
   private void introspectConstants(Class<?> type)
   {
     if (type == null)
@@ -1257,14 +1260,6 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
 
     if (! Modifier.isPublic(type.getModifiers()))
       return;
-
-    /* not needed because Class.getFields() is recursive
-    Class []ifcs = type.getInterfaces();
-
-    for (Class ifc : ifcs) {
-      introspectConstants(ifc);
-    }
-    */
 
     Field []fields = type.getFields();
 
@@ -1295,8 +1290,56 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
         log.log(Level.FINEST, e.toString(), e);
       }
     }
+  }
 
-    //introspectConstants(type.getSuperclass());
+  private void introspectEnums(Class<?> type)
+  {
+    if (type == null) {
+      return;
+    }
+
+    if (! Modifier.isPublic(type.getModifiers())) {
+      return;
+    }
+
+    Class<?>[] classes = type.getClasses();
+
+    for (Class<?> cls : classes) {
+      if (! cls.isEnum()) {
+        continue;
+      }
+
+      String name = cls.getSimpleName();
+
+      if (_constMap.get(name) != null)
+        continue;
+      else if (_constJavaMap.get(name) != null)
+        continue;
+      else if (cls.isAnnotationPresent(Hide.class))
+        continue;
+
+
+      Object[] constants = cls.getEnumConstants();
+      if (constants.length == 0) {
+        continue;
+      }
+
+      // php/0cs3
+      // use one of the enums as a handle for other enum siblings
+      Object obj = constants[0];
+
+      try {
+        Value value = QuercusContext.objectToValue(obj);
+
+        if (value != null)
+          _constMap.put(name.intern(), value);
+        else
+          _constJavaMap.put(name.intern(), obj);
+      }
+      catch (Throwable e) {
+        log.log(Level.FINEST, e.toString(), e);
+      }
+    }
   }
 
   /**
@@ -1336,6 +1379,8 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
         _entrySet = method;
       } else if ("__call".equals(method.getName())) {
         __call = new JavaMethod(moduleContext, this, method);
+      } else if ("__callStatic".equals(method.getName())) {
+        __callStatic = new JavaMethod(moduleContext, this, method);
       } else if ("__toString".equals(method.getName())) {
         __toString = new JavaMethod(moduleContext, this, method);
         _functionMap.put(_moduleContext.createString(method.getName()), __toString);
@@ -1630,7 +1675,7 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
         else {
           Value k = _env.wrapJava(key);
 
-          return new JavaEntry(k, (Value) value);
+          return new JavaEntry(k, _env.wrapJava(value));
         }
       }
       else {

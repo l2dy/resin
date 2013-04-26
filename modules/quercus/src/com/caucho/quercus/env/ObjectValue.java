@@ -72,6 +72,12 @@ abstract public class ObjectValue extends Value {
     return _quercusClass;
   }
 
+  @Override
+  public QuercusClass findQuercusClass(Env env)
+  {
+    return _quercusClass;
+  }
+
   public boolean isIncompleteObject()
   {
     return _incompleteObjectName != null;
@@ -222,6 +228,22 @@ abstract public class ObjectValue extends Value {
   public double toDouble()
   {
     return toLong();
+  }
+
+  /**
+   * Converts to a Java Enum.
+   */
+  @Override
+  public Enum toJavaEnum(Env env, Class cls)
+  {
+    Object obj = toJavaObject();
+
+    if (cls.isAssignableFrom(obj.getClass())) {
+      return (Enum) obj;
+    }
+    else {
+      return super.toJavaEnum(env, cls);
+    }
   }
 
   //
@@ -520,6 +542,33 @@ abstract public class ObjectValue extends Value {
     Env env = Env.getInstance();
 
     return putThisField(env, env.createString(key), DoubleValue.create(value));
+  }
+
+  /**
+   * Returns the static field.
+   */
+  @Override
+  public Value getStaticFieldValue(Env env, StringValue name)
+  {
+    return getQuercusClass().getStaticFieldValue(env, name);
+  }
+
+  /**
+  * Returns the static field reference.
+  */
+  @Override
+  public Var getStaticFieldVar(Env env, StringValue name)
+  {
+    return getQuercusClass().getStaticFieldVar(env, name);
+  }
+
+  /**
+   * Sets the static field.
+   */
+  @Override
+  public Value setStaticFieldRef(Env env, StringValue name, Value value)
+  {
+    return getQuercusClass().setStaticFieldRef(env, name, value);
   }
 
   /**

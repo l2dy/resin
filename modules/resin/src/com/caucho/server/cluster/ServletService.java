@@ -88,6 +88,7 @@ import com.caucho.server.host.HostController;
 import com.caucho.server.host.HostExpandDeployGenerator;
 import com.caucho.server.http.HttpBufferStore;
 import com.caucho.server.httpcache.AbstractProxyCache;
+import com.caucho.server.log.AbstractAccessLog;
 import com.caucho.server.log.AccessLog;
 import com.caucho.server.resin.Resin;
 import com.caucho.server.rewrite.RewriteDispatch;
@@ -190,6 +191,7 @@ public class ServletService
   private long _startTime;
 
   private final Lifecycle _lifecycle;
+  private AccessLog _accessLog;
 
   /**
    * Creates a new servlet server.
@@ -218,8 +220,9 @@ public class ServletService
 
     String id = _selfServer.getId();
     
-    if ("".equals(id))
+    if ("".equals(id)) {
       throw new IllegalStateException();
+    }
     
     // cannot set the based on server-id because of distributed cache
     // _classLoader.setId("server:" + id);
@@ -838,7 +841,17 @@ public class ServletService
    */
   public void setAccessLog(AccessLog log)
   {
+    _accessLog = log;
+    
     Environment.setAttribute("caucho.server.access-log", log);
+  }
+
+  /**
+   * @return
+   */
+  public AbstractAccessLog getAccessLog()
+  {
+    return _accessLog;
   }
 
   /**
@@ -1239,6 +1252,11 @@ public class ServletService
     
     // _classLoader.init();
     
+    if (_proxyCache != null
+        && _invocationServer.getInvocationCacheSize() < _proxyCache.getEntries()) {
+      _invocationServer.setInvocationCacheSize(_proxyCache.getEntries());
+    }
+    
     _invocationServer.init();
 
     _admin = createAdmin();
@@ -1551,8 +1569,9 @@ public class ServletService
     // soon-to-be-invalid entries
     getInvocationServer().clearCache();
 
-    if (_proxyCache != null)
+    if (_proxyCache != null) {
       _proxyCache.clear();
+    }
   }
 
   /**

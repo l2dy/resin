@@ -41,16 +41,17 @@ import com.caucho.util.CurrentTime;
 import com.caucho.util.HashKey;
 
 import javax.cache.CacheBuilder;
-import javax.cache.CacheConfiguration;
+import javax.cache.Configuration;
 import javax.cache.CacheLoader;
 import javax.cache.CacheWriter;
+import javax.cache.ExpiryPolicy;
 import javax.cache.transaction.IsolationLevel;
 import javax.cache.transaction.Mode;
 
 /**
  * Manages the distributed cache
  */
-public class CacheConfig implements CacheConfiguration
+public class CacheConfig implements Configuration
 {
   public static final long TIME_INFINITY  = Long.MAX_VALUE / 2;
   public static final long TIME_HOUR  = 3600 * 1000L;
@@ -83,6 +84,7 @@ public class CacheConfig implements CacheConfiguration
 
   private boolean _isReadThrough;
   private CacheLoaderExt _cacheLoader;
+  private long _readThroughExpireTimeout = TIME_INFINITY;
   
   private boolean _isWriteThrough;
   private CacheWriterExt _cacheWriter;
@@ -95,6 +97,26 @@ public class CacheConfig implements CacheConfiguration
   private CacheSerializer _valueSerializer;
 
   private CacheEngine _engine = new AbstractCacheEngine();
+  private ExpiryPolicy _expiryPolicy;
+  
+  public CacheConfig()
+  {
+    _expiryPolicy = new ExpiryPolicy.Default();
+  }
+  
+  public CacheConfig(Configuration cfg)
+  {
+    setStoreByValue(cfg.isStoreByValue());
+    _expiryPolicy = cfg.getExpiryPolicy();
+    
+    setWriteThrough(cfg.isWriteThrough());
+    setCacheWriter(cfg.getCacheWriter());
+    
+    setReadThrough(cfg.isReadThrough());
+    setCacheLoader(cfg.getCacheLoader());
+    
+    setStatisticsEnabled(cfg.isStatisticsEnabled());
+  }
 
   /**
    * The Cache will use a CacheLoader to populate cache misses.
@@ -139,6 +161,16 @@ public class CacheConfig implements CacheConfiguration
   public void setReadThrough(boolean isReadThrough)
   {
     _isReadThrough = isReadThrough;
+  }
+
+  public long getReadThroughExpireTimeout()
+  {
+    return _readThroughExpireTimeout;
+  }
+
+  public void setReadThroughExpireTimeout(long timeout)
+  {
+    _readThroughExpireTimeout = timeout;
   }
 
   @Override
@@ -621,6 +653,7 @@ public class CacheConfig implements CacheConfiguration
     }
   }
 
+  /*
   @Override
   public Duration getExpiry(ExpiryType type)
   {
@@ -641,6 +674,7 @@ public class CacheConfig implements CacheConfiguration
 
     return new Duration(TimeUnit.MILLISECONDS, timeout);
   }
+  */
 
   @Override
   public boolean isStatisticsEnabled()
@@ -665,7 +699,7 @@ public class CacheConfig implements CacheConfiguration
   }
 
   @Override
-  public boolean isTransactionEnabled()
+  public boolean isTransactionsEnabled()
   {
     return _isTransactionEnabled;
   }
@@ -686,5 +720,21 @@ public class CacheConfig implements CacheConfiguration
   public String toString()
   {
     return getClass().getSimpleName() + "[]";
+  }
+
+  /* (non-Javadoc)
+   * @see javax.cache.Configuration#getCacheEntryListenerRegistrations()
+   */
+  @Override
+  public Iterable getCacheEntryListenerRegistrations()
+  {
+    // TODO Auto-generated method stub
+    return null;
+  }
+
+  @Override
+  public ExpiryPolicy getExpiryPolicy()
+  {
+    return _expiryPolicy ;
   }
 }

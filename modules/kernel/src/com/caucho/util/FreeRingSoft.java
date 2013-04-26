@@ -50,7 +50,7 @@ public final class FreeRingSoft<T> {
 
   public int getSize()
   {
-    return _ringQueue.getSize();
+    return _ringQueue.size();
   }
   
   public long getHead()
@@ -70,7 +70,7 @@ public final class FreeRingSoft<T> {
   
   public long getTailAlloc()
   {
-    return _ringQueue.getTailAlloc();
+    return _ringQueue.getTail();
   }
   
   /**

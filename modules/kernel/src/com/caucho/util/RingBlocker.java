@@ -27,15 +27,32 @@
  * @author Scott Ferguson
  */
 
-package javax.cache.mbeans;
+package com.caucho.util;
 
-import javax.cache.Status;
-import javax.management.MXBean;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
-@MXBean
-public interface CacheMXBean extends CacheStatisticsMXBean
-{
-  public String getName();
-  
-  public Status getStatus();
+import com.caucho.env.thread.TaskWorker;
+
+/**
+ * Ring blocking algorithm.
+ */
+public interface RingBlocker extends TaskWorker {
+  boolean offerWait(long tail,
+                    AtomicLong tailRef,
+                    int reservedSpace,
+                    long timeout,
+                    TimeUnit unit);
+
+  boolean isOfferWait();
+
+  void offerWake();
+
+  boolean pollWait(long timeout, TimeUnit unit);
+
+  boolean isPollWait();
+
+  void pollWake();
+
+  void close();
 }

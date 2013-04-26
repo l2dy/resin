@@ -48,7 +48,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
 
+import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -58,6 +61,7 @@ import java.util.Map;
 /**
  * Servlet to call PHP through javax.script.
  */
+@SuppressWarnings("serial")
 public class QuercusServlet
   extends HttpServlet
 {
@@ -85,6 +89,8 @@ public class QuercusServlet
   private String _scriptEncoding;
   private String _mysqlVersion;
   private String _phpVersion;
+
+  private File _licenseDirectory;
 
   private Long _dependencyCheckInterval;
 
@@ -115,22 +121,24 @@ public class QuercusServlet
     if (isResin) {
       try {
         Class<?> cls = Class.forName("com.caucho.quercus.servlet.ProResinQuercusServlet");
+        Constructor<?> cons = cls.getConstructor(File.class);
 
-        impl = (QuercusServletImpl) cls.newInstance();
+        impl = (QuercusServletImpl) cons.newInstance(_licenseDirectory);
       }
       catch (Exception e) {
-        log.finest(e.getMessage());
+        log.log(Level.FINEST, e.getMessage(), e);
       }
     }
 
     if (impl == null) {
       try {
         Class<?> cls = Class.forName("com.caucho.quercus.servlet.ProQuercusServlet");
+        Constructor<?> cons = cls.getConstructor(File.class);
 
-        impl = (QuercusServletImpl) cls.newInstance();
+        impl = (QuercusServletImpl) cons.newInstance(_licenseDirectory);
       }
       catch (Exception e) {
-        log.finest(e.getMessage());
+        log.log(Level.FINEST, e.getMessage(), e);
       }
     }
 
@@ -364,6 +372,20 @@ public class QuercusServlet
   }
 
   /**
+   * Sets the directory for Resin/Quercus licenses.
+   */
+  public void setLicenseDirectory(String relPath)
+  {
+    if (relPath.startsWith("/") || relPath.contains(":")) {
+    }
+    else {
+      relPath = getServletContext().getRealPath(relPath);
+    }
+
+    _licenseDirectory = new File(relPath);
+  }
+
+  /**
    * Initializes the servlet.
    */
   @Override
@@ -432,9 +454,12 @@ public class QuercusServlet
     else if ("dependency-check-interval".equals(paramName)) {
       setDependencyCheckInterval(Long.parseLong(paramValue));
     }
-    else
-      throw new ServletException(
-          L.l("'{0}' is not a recognized init-param", paramName));
+    else if ("license-directory".equals(paramName)) {
+      setLicenseDirectory(paramValue);
+    }
+    else {
+      throw new ServletException(L.l("'{0}' is not a recognized init-param", paramName));
+    }
   }
 
   private void setJndiDatabase(String value)

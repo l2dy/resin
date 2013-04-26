@@ -87,6 +87,22 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
+   * Returns the Quercus class for this obj/name.
+   */
+  public QuercusClass findQuercusClass(Env env)
+  {
+    QuercusClass cls = getQuercusClass();
+
+    if (cls != null) {
+      return cls;
+    }
+
+    String name = toString();
+
+    return env.getClass(name);
+  }
+
+  /**
    * Returns the called class
    */
   public Value getCalledClass(Env env)
@@ -862,7 +878,28 @@ abstract public class Value implements java.io.Serializable
       return new URL(toString());
     }
     catch (MalformedURLException e) {
-      env.warning(L.l(e.getMessage()));
+      env.warning(e.getMessage());
+      return null;
+    }
+  }
+
+  /**
+   * Converts to a Java Enum.
+   */
+  public Enum toJavaEnum(Env env, Class cls)
+  {
+    String s = toString();
+
+    if (s == null) {
+      return null;
+    }
+
+    try {
+      return Enum.valueOf(cls, s);
+    }
+    catch (IllegalArgumentException e) {
+      env.warning(e);
+
       return null;
     }
   }
@@ -2531,6 +2568,36 @@ abstract public class Value implements java.io.Serializable
   public void unsetThisField(StringValue name)
   {
     unsetField(name);
+  }
+
+  /**
+   * Returns the static field.
+   */
+  public Value getStaticFieldValue(Env env, StringValue name)
+  {
+    env.error(L.l("No calling class found for '{0}'", this));
+
+    return NullValue.NULL;
+  }
+
+  /**
+  * Returns the static field reference.
+  */
+  public Var getStaticFieldVar(Env env, StringValue name)
+  {
+    env.error(L.l("No calling class found for '{0}'", this));
+
+    throw new IllegalStateException();
+  }
+
+  /**
+   * Sets the static field.
+   */
+  public Value setStaticFieldRef(Env env, StringValue name, Value value)
+  {
+    env.error(L.l("No calling class found for '{0}'", this));
+
+    throw new IllegalStateException();
   }
 
   //
