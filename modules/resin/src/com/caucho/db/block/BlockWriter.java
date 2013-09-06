@@ -94,14 +94,22 @@ public class BlockWriter extends AbstractTaskWorker {
     }
     */
 
-    if (! _blockWriteRing.isEmpty()) {
-      wake();
+    if (_blockWriteRing.offer(block, 0, TimeUnit.SECONDS)) {
+      return;
+    }
+
+    wake();
+    
+    if (isClosed()) {
+      return;
     }
 
     // if (findBlock(block.getBlockId()) != block) {
     //System.err.println(" OFFER: " + Long.toHexString(block.getBlockId()));
     if (! _blockWriteRing.offer(block, 60, TimeUnit.SECONDS)) {
-      System.err.println("OFFER_FAILED: " + block);
+      System.err.println("OFFER_FAILED: " + block
+          + " head:" + _blockWriteRing.getHead()
+          + " tail:" + _blockWriteRing.getTail());
     }
 
     // }

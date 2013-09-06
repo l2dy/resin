@@ -29,6 +29,17 @@
 
 package com.caucho.server.resin;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.caucho.bam.actor.ActorSender;
 import com.caucho.bam.actor.LocalActorSender;
 import com.caucho.bam.actor.RemoteActorSender;
@@ -39,6 +50,7 @@ import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.types.Period;
 import com.caucho.env.repository.CommitBuilder;
+import com.caucho.env.service.ResinSystem;
 import com.caucho.jmx.MXParam;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ManagementMXBean;
@@ -57,8 +69,8 @@ import com.caucho.server.admin.RemoveUserQueryReply;
 import com.caucho.server.admin.StatServiceValuesQueryReply;
 import com.caucho.server.admin.StringQueryReply;
 import com.caucho.server.admin.WebAppDeployClient;
-import com.caucho.server.deploy.DeployControllerState;
 import com.caucho.server.deploy.DeployClient;
+import com.caucho.server.deploy.DeployControllerState;
 import com.caucho.server.deploy.DeployTagResult;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CurrentTime;
@@ -67,16 +79,6 @@ import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.TempOutputStream;
 import com.caucho.vfs.Vfs;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 public class ManagementAdmin extends AbstractManagedObject
   implements ManagementMXBean
 {
@@ -84,6 +86,9 @@ public class ManagementAdmin extends AbstractManagedObject
   private static Logger log = Logger.getLogger(ManagementAdmin.class.getName());
 
   private final Resin _resin;
+  
+  private final ConcurrentHashMap<String,ActorSender> _senderCache
+    = new ConcurrentHashMap<String,ActorSender>();
 
   /**
    * Creates the admin object and registers with JMX.
@@ -864,54 +869,14 @@ public class ManagementAdmin extends AbstractManagedObject
 
   private ManagerClient getManagerClient(String serverId)
   {
-    final ActorSender sender;
-
-    CloudServer server = getServer(serverId);
-
-    if (server == null)
-      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
-
-    if (server.isSelf()) {
-      sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
-    }
-    else {
-      String authKey = Resin.getCurrent().getClusterSystemKey();
-
-      HmuxClientFactory hmuxFactory
-        = new HmuxClientFactory(server.getAddress(),
-                                server.getPort(),
-                                "",
-                                authKey);
-
-      sender = hmuxFactory.create();
-    }
+    final ActorSender sender = getSender(serverId);
 
     return new ManagerClient(sender);
   }
 
   private WebAppDeployClient getWebappDeployClient(String serverId)
   {
-    final ActorSender sender;
-
-    CloudServer server = getServer(serverId);
-
-    if (server == null)
-      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
-
-    if (server.isSelf()) {
-      sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
-    }
-    else {
-      String authKey = Resin.getCurrent().getClusterSystemKey();
-
-      HmuxClientFactory hmuxFactory
-        = new HmuxClientFactory(server.getAddress(),
-                                server.getPort(),
-                                "",
-                                authKey);
-
-      sender = hmuxFactory.create();
-    }
+    final ActorSender sender = getSender(serverId);
 
     String url;
     if (sender instanceof RemoteActorSender)
@@ -922,6 +887,54 @@ public class ManagementAdmin extends AbstractManagedObject
     return new WebAppDeployClient(url, sender);
   }
 
+  
+  private ActorSender getSender(String serverId)
+  {
+    if (serverId == null) {
+      serverId = ResinSystem.getCurrentId();
+    }
+    
+    ActorSender sender = _senderCache.get(serverId);
+  
+    if (sender == null) {
+      sender = getSenderImpl(serverId);
+      
+      _senderCache.putIfAbsent(serverId, sender);
+      
+      sender = _senderCache.get(serverId);
+    }
+    
+    return sender;
+  }
+  
+  private ActorSender getSenderImpl(String serverId)
+  {
+    final ActorSender sender;
+
+    CloudServer server = getServer(serverId);
+
+    if (server != null && server.isSelf()
+        || server == null && serverId.equals(ResinSystem.getCurrentId())) {
+      sender = new LocalActorSender(BamSystem.getCurrentBroker(), "");
+    }
+    else if (server == null) {
+      throw ConfigException.create(new IllegalArgumentException(L.l("unknown server '{0}'", serverId)));
+    }
+    else {
+      String authKey = Resin.getCurrent().getClusterSystemKey();
+
+      HmuxClientFactory hmuxFactory
+        = new HmuxClientFactory(server.getAddress(),
+                                server.getPort(),
+                                "",
+                                authKey);
+
+      sender = hmuxFactory.create();
+    }
+
+    return sender;
+  }
+  
   public InputStream test(String value, InputStream is)
     throws IOException
   {

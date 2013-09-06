@@ -55,6 +55,8 @@ r_cluster-Content =
   r_env-Basis
 
   & r_access-log?
+  
+  & r_access-log-buffer-size?
 
   & (attribute connection-error-page { string }
      | element connection-error-page { string })?
@@ -413,6 +415,9 @@ r_openssl = element openssl {
 
   & (attribute cipher-suite { string }
      | element cipher-suite { r_string-Group })?
+
+  & (attribute compression { boolean }
+     | element compression { r_boolean-Type })?
 
   & (attribute crypto-device { string }
      | element crypto-device { r_string-Group })?

@@ -20,14 +20,6 @@
       <tree-loader path="cloud:/${cluster.id}-inf"/>
     </class-loader>
 
-    <!-- include resources config files in resources/ -->
-    <resin:import fileset="${resin.root}/${cluster.id}-inf/**/*.xml"/>
-    <resin:import fileset="cloud:/${cluster.id}-inf/**/*.xml"
-                  recover="true"/>
-
-    <!-- standard servlet behavior, including .jsp, .php, and WEB-INF -->
-    <resin:import path="classpath:META-INF/caucho/app-default.xml"/>
-
     <!-- enables development error pages -->
     <resin:if test="${dev_mode}">
       <development-mode-error-page/>
@@ -73,6 +65,7 @@
         <port-thread-max>${port_thread_max}</port-thread-max>
         <accept-thread-min>${accept_thread_min}</accept-thread-min>
         <accept-thread-max>${accept_thread_max}</accept-thread-max>
+        <keepalive-max>${keepalive_max?:-1}</keepalive-max>
 
         <tcp-cork>${tcp_cork}</tcp-cork>
       </port-default>
@@ -190,6 +183,14 @@
       </resin:if>
 
     </host-default>
+
+    <!-- include resources config files in resources/ -->
+    <resin:import fileset="${resin.root}/${cluster.id}-inf/**/*.xml"/>
+    <resin:import fileset="cloud:/${cluster.id}-inf/**/*.xml"
+                  recover="true"/>
+
+    <!-- standard servlet behavior, including .jsp, .php, and WEB-INF -->
+    <resin:import path="classpath:META-INF/caucho/app-default.xml"/>
   </cluster-default>
 </resin>
 

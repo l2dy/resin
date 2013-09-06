@@ -461,6 +461,11 @@ public class QuercusParser {
     return _quercus != null && _quercus.isUnicodeSemantics();
   }
 
+  public boolean isShortOpenTag()
+  {
+    return _quercus != null && _quercus.getIniBoolean("short_open_tag");
+  }
+
   public static Expr parse(QuercusContext quercus, String str)
     throws IOException
   {
@@ -1159,15 +1164,27 @@ public class QuercusParser {
 
       // var.getVarInfo().setReference();
 
-      if (_classDef != null) {
-        statementList.add(_factory.createClassStatic(location,
-                                                     _classDef.getName(),
-                                                     var,
-                                                     init));
+      Statement statement;
+
+      if (_function.isClosure()) {
+        statement = _factory.createClosureStatic(location, var, init);
       }
       else {
-        statementList.add(_factory.createStatic(location, var, init));
+        StringValue sb = createStringBuilder();
+
+        if (_classDef != null) {
+          sb.append(_classDef.getName());
+          sb.append("::");
+        }
+
+        sb.append(_function.getName());
+        sb.append("::");
+        sb.append(name);
+
+        statement = _factory.createStatic(location, sb, var, init);
       }
+
+      statementList.add(statement);
 
       if (token != ',') {
         _peekToken = token;
@@ -4954,6 +4971,14 @@ public class QuercusParser {
           _lexeme = sb;
 
           return TEXT_ECHO;
+        }
+        else if (ch != 'p' && ch != 'P' && ! isShortOpenTag()) {
+          sb.append('<');
+          sb.append('?');
+
+          sb.append((char) ch);
+
+          ch = read();
         }
         else {
           _lexeme = sb;

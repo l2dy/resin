@@ -1830,6 +1830,11 @@ public class QuercusContext
    */
   public void init()
   {
+    initLocal();
+
+    initModules();
+    initClasses();
+
     if (_iniFile != null) {
       Env env = new Env(this);
 
@@ -1858,17 +1863,12 @@ public class QuercusContext
                         createString(entry.getValue()));
     }
 
-    initModules();
-    initClasses();
-
     _workDir = getWorkDir();
 
     _iniDefinitions.addAll(_ini);
 
     _includeCache = new TimedCache<IncludeKey, Path>(getIncludeCacheMax(),
                                                      getIncludeCacheTimeout());
-
-    initLocal();
   }
 
   public void addInitModule(QuercusModule module)

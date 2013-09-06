@@ -35,7 +35,11 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,7 +65,6 @@ import com.caucho.server.util.CauchoSystem;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
-import com.caucho.util.FreeRing;
 import com.caucho.util.FreeRingDual;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
@@ -1494,10 +1497,7 @@ public class TcpPort
       return available;
     }
 
-    long timeout = getKeepaliveTimeout();
-
-    if (getSocketTimeout() < timeout)
-      timeout = getSocketTimeout();
+    long timeout = Math.min(getKeepaliveTimeout(), getSocketTimeout());
 
     // server/2l02
     int keepaliveThreadCount = _keepaliveThreadCount.incrementAndGet();
@@ -1508,11 +1508,7 @@ public class TcpPort
       int result;
 
       if (isKeepaliveAsyncEnabled() && _selectManager != null) {
-        long selectTimeout = getBlockingTimeoutForSelect();
-
-        if (selectTimeout < timeout) {
-          timeout = selectTimeout;
-        }
+        timeout = Math.min(timeout, getBlockingTimeoutForSelect());
 
         if (keepaliveThreadCount > 32) {
           // throttle the thread keepalive when heavily loaded to save threads
@@ -1521,8 +1517,8 @@ public class TcpPort
             // immediately
             return 0;
           }
-          else if (timeout >= 100) {
-            timeout = 100;
+          else {
+            timeout = Math.min(timeout, 100);
           }
         }
       }

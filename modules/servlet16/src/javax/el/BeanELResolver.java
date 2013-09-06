@@ -168,14 +168,16 @@ public class BeanELResolver extends ELResolver {
                          Object base,
                          Object property)
   {
-    if (base == null || property == null)
+    if (base == null || property == null) {
       return null;
+    }
 
     String fieldName = String.valueOf(property);
 
-    if (fieldName.length() == 0)
+    if (fieldName.length() == 0) {
       return null;
-
+    }
+    
     Class<?> cl = base.getClass();
     BeanProperties props = getProps(cl);
 
@@ -194,8 +196,9 @@ public class BeanELResolver extends ELResolver {
 
     context.setPropertyResolved(true);
 
-    if (prop == null || prop.getReadMethod() == null)
+    if (prop == null || prop.getReadMethod() == null) {
       throw new PropertyNotFoundException("'" + property + "' is an unknown bean property of '" + base.getClass().getName() + "'");
+    }
 
     try {
       return prop.getReadMethod().invoke(base);
@@ -268,7 +271,9 @@ public class BeanELResolver extends ELResolver {
     else if (_isReadOnly || prop.getWriteMethod() == null)
       throw new PropertyNotWritableException(fieldName);
     
-    Class<?> type = prop.getWriteMethod().getParameterTypes()[0];
+    Method writeMethod = prop.getWriteMethod();
+    
+    Class<?> type = writeMethod.getParameterTypes()[0];
     
     if (value != null
         && type.isEnum()
@@ -277,7 +282,7 @@ public class BeanELResolver extends ELResolver {
     }
 
     try {
-      prop.getWriteMethod().invoke(base, value);
+      writeMethod.invoke(base, value);
     } catch (IllegalAccessException e) {
       throw new ELException(e);
     } catch (InvocationTargetException e) {
@@ -455,6 +460,7 @@ public class BeanELResolver extends ELResolver {
     private PropertyDescriptor _descriptor;
     private Method _readMethod;
     private Method _writeMethod;
+    private boolean _isInit;
     
     public BeanProperty(Class<?> baseClass,
                         PropertyDescriptor descriptor)
@@ -472,12 +478,15 @@ public class BeanELResolver extends ELResolver {
       } catch (NoSuchMethodException e) {
       }
 
-      if (_readMethod != null)
+      if (_readMethod != null) {
         _readMethod.setAccessible(true);
+      }
       
       _writeMethod = descriptor.getWriteMethod();
 
-      initDescriptor();
+      if (_writeMethod != null) {
+        _writeMethod.setAccessible(true);
+      }
     }
     
     private BeanProperty(Class<?> baseClass,
@@ -508,16 +517,21 @@ public class BeanELResolver extends ELResolver {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-
-      initDescriptor();
     }
 
-    private void initDescriptor()
+    void initDescriptor()
     {
+      if (_isInit) {
+        return;
+      }
+      
+      _isInit = true;
+      
       Method readMethod = _readMethod;
 
-      if (readMethod != null)
+      if (readMethod != null) {
         _descriptor.setValue(ELResolver.TYPE, readMethod.getReturnType());
+      }
 
       _descriptor.setValue(ELResolver.RESOLVABLE_AT_DESIGN_TIME,
                            Boolean.TRUE);
@@ -525,10 +539,12 @@ public class BeanELResolver extends ELResolver {
 
     private PropertyDescriptor getDescriptor()
     {
+      initDescriptor();
+      
       return _descriptor;
     }
 
-    public Class getPropertyType()
+    public Class<?> getPropertyType()
     {
       return _descriptor.getPropertyType();
     }

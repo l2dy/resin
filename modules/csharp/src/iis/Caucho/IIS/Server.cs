@@ -165,6 +165,7 @@ namespace Caucho.IIS
       }
 
       Trace.TraceInformation("OpenRecyle return 'null'");
+
       return null;
     }
 
@@ -178,28 +179,29 @@ namespace Caucho.IIS
       }
 
       HmuxConnection connection = null;
-
-      Object connectLock = new Object();
-      Monitor.Enter(connectLock);
       try {
         Socket socket = new Socket(_address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+        IAsyncResult asyncResult = socket.BeginConnect(_address, _port, null, socket);
+        asyncResult.AsyncWaitHandle.WaitOne(_loadBalanceConnectTimeout);
 
-        AsyncCallback connectListener = delegate(IAsyncResult result)
+        if (!socket.Connected)
         {
-          Monitor.Enter(connectLock);
-          try {
-            Monitor.Pulse(connectLock);
-          } catch (Exception) {
-          } finally {
-            Monitor.Exit(connectLock);
+          try
+          {
+            socket.Close();
           }
-        };
-
-        socket.BeginConnect(_address, _port, connectListener, socket);
-        Monitor.Wait(connectLock, _loadBalanceConnectTimeout);
-
-        if (!socket.Connected) {
-          throw new SocketException(10053);
+          catch (Exception e)
+          {            
+            if (_log.IsLoggable(EventLogEntryType.Error))
+            {
+              String message = String.Format("Closing of Socket {0}:{1} failed due to: {2}", _address, _port, e.Message);
+              _log.Error(message);
+            }
+          }
+          finally
+          {
+            throw new SocketException(10060);
+          }
         }
 
         socket.SendTimeout = _socketTimeout;
@@ -226,15 +228,18 @@ namespace Caucho.IIS
 
         return connection;
       } catch (SocketException e) {
-        String message = String.Format("Socket connection to {0}:{1} timed out on load-balance-connect-timeout {2}", _address, _port, _loadBalanceConnectTimeout);
-        if (_log.IsLoggable(EventLogEntryType.Information))
-          _log.Info(message);
+        String message = String.Format("Socket connection to {0}:{1} timed out on load-balance-connect-timeout {2} due to: {3}({4})", _address, _port, _loadBalanceConnectTimeout, e.Message, e.ErrorCode);
+        if (_log.IsLoggable(EventLogEntryType.Error))
+        {
+          _log.Error(message);
+        }
+        
 
         Trace.TraceInformation(message);
       } catch (Exception e) {
         String message = String.Format("Can't create HmuxChannel to '{0}:{1}' due to: {2} \t {3}", _address, _port, e.Message, e.StackTrace);
-        if (_log.IsLoggable(EventLogEntryType.Information))
-          _log.Info(message);
+        if (_log.IsLoggable(EventLogEntryType.Error))
+          _log.Error(message);
 
         Trace.TraceError(message);
       } finally {
@@ -244,8 +249,6 @@ namespace Caucho.IIS
 
         if (connection == null)
           FailConnect();
-
-        Monitor.Exit(connectLock);
       }
 
       return null;
@@ -384,7 +387,7 @@ namespace Caucho.IIS
 
     internal string GetDebugId()
     {
-      return _address + _port.ToString();
+      return _address + ":" +_port.ToString();
     }
 
     public String GetName()

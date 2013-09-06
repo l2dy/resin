@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.36)
+AC_INIT([resin],4.0.37)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -536,6 +536,8 @@ if test -z "${apache_conf}" -a -n "${apxs}"; then
     apache_conf=${apache_confdir}/httpd.conf
   elif test -r "${apache_confdir}"/apache.conf; then
     apache_conf=${apache_confdir}/apache.conf
+  elif test -r "${apache_confdir}"/apache2.conf; then
+    apache_conf=${apache_confdir}/apache2.conf
   elif test -r "${apache_confdir}"/httpsd.conf; then
     apache_conf=${apache_confdir}/httpsd.conf
   fi
@@ -795,6 +797,10 @@ else
    echo "no"
 fi
 
+if test -n "$b64_jni" -a -z "$b64"; then
+  b64=$b64_jni
+fi
+
 #
 # --enable-64bit
 #
@@ -961,7 +967,7 @@ if test -z "${jni_ld_shlib}"; then
 
       if test -n "$b64"; then
         CFLAGS="$CFLAGS -arch x86_64"
-        jni_ldflags_shlib="$-arch x86_64 $jni_ldflags_shlib"
+        jni_ldflags_shlib="-arch x86_64 $jni_ldflags_shlib"
         plugin_ldflags_shlib="-arch x86_64 $jni_ldflags_shlib"
       fi
       

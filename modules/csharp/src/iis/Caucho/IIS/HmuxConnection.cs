@@ -95,14 +95,18 @@ namespace Caucho.IIS
     private long _idleStartTime;
     private bool _isIdle = false;
 
+    private String _remoteEndPoint;
+
     public HmuxConnection(Socket socket, Server pool, char serverInternalId, String traceId)
     {
       _socket = socket;
-      _stream = new BufferedStream(new NetworkStream(_socket));
+      _stream = new BufferedStream(new NetworkStream(_socket, true));
       _pool = pool;
       _serverInternalId = serverInternalId;
       
       _traceId = traceId;
+      _remoteEndPoint = socket.RemoteEndPoint.ToString();
+
       _log = Logger.GetLogger();
     }
 
@@ -181,7 +185,7 @@ namespace Caucho.IIS
 
     public override string ToString()
     {
-      return String.Format(this.GetType().Name + " [{0}->{1}, {2}]", _serverInternalId, _socket.RemoteEndPoint, _traceId);
+      return String.Format(this.GetType().Name + " [{0}->{1}, {2}]", _serverInternalId, _remoteEndPoint, _traceId);
     }
   }
 }

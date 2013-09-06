@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2013 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,8 +30,8 @@
 package com.caucho.quercus.statement;
 
 import com.caucho.quercus.Location;
+import com.caucho.quercus.env.Closure;
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.Value;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.Var;
@@ -41,53 +41,37 @@ import com.caucho.quercus.expr.VarExpr;
 /**
  * Represents a static statement in a PHP program.
  */
-public class ClassStaticStatement
+public class ClosureStaticStatement
   extends Statement
 {
-  protected final String _className;
-  protected final VarExpr _var;
-  protected final Expr _initValue;
-  protected StringValue _staticName;
+  protected VarExpr _var;
+  protected Expr _initValue;
 
   /**
    * Creates the echo statement.
    */
-  public ClassStaticStatement(Location location,
-                              String className,
-                              VarExpr var,
-                              Expr initValue)
+  public ClosureStaticStatement(Location location,
+                                VarExpr var,
+                                Expr initValue)
   {
     super(location);
 
-    _className = className;
     _var = var;
     _initValue = initValue;
   }
 
   public Value execute(Env env)
   {
+    Closure closure = env.getClosure();
+
     try {
-      // XXX: this isn't reliable, needs to be Quercus-based
-      if (_staticName == null)
-        _staticName = env.createStaticName();
+      Var var = closure.getStaticVar(_var.getName());
 
-      // String className = _className;
-      StringValue staticName = _staticName;
+      env.setRef(_var.getName(), var);
 
-      Value qThis = env.getThis();
-
-      QuercusClass qClass = qThis.getQuercusClass();
-      String className = qClass.getName();
-
-      // Var var = qClass.getStaticFieldVar(env, env.createString(staticName));
-      // Var var = qClass.getStaticFieldVar(env, staticName);
-      Var var = env.getStaticVar(env.createString(className
-                                                  + "::" + staticName));
-
-      env.setVar(_var.getName(), var);
-
-      if (! var.isset() && _initValue != null)
+      if (! var.isset() && _initValue != null) {
         var.set(_initValue.eval(env));
+      }
 
     }
     catch (RuntimeException e) {

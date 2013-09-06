@@ -407,7 +407,7 @@ public class WebApp extends ServletContextImpl
   private boolean _isStatisticsEnabled;
 
   private long _shutdownWaitTime = 15000L;
-  private long _activeWaitTime = 15000L;
+  private long _activeWaitTime = 60000L;
 
   private long _idleTime = 2 * 3600 * 1000L;
   
@@ -2717,16 +2717,18 @@ public class WebApp extends ServletContextImpl
   public void init()
     throws Exception
   {
-    if (! _lifecycle.toInitializing())
+    if (! _lifecycle.toInitializing()) {
       return;
+    }
 
     try {
       _classLoader.setId("web-app:" + getId());
 
       _invocationDependency.setCheckInterval(getEnvironmentClassLoader().getDependencyCheckInterval());
 
-      if (_tempDir == null)
+      if (_tempDir == null) {
         _tempDir = (Path) Environment.getLevelAttribute("caucho.temp-dir");
+      }
 
       try {
         if (_tempDir == null) {
@@ -2736,8 +2738,9 @@ public class WebApp extends ServletContextImpl
             _tempDir.mkdirs();
           }
         }
-        else
+        else {
           _tempDir.mkdirs();
+        }
       } catch (IOException e) {
         log.warning(e.toString());
         
@@ -2759,13 +2762,16 @@ public class WebApp extends ServletContextImpl
         _proxyCache = _server.getProxyCache();
       }
 
-      for (int i = 0; i < _appGenerators.size(); i++)
+      for (int i = 0; i < _appGenerators.size(); i++) {
         _parent.addDeploy(_appGenerators.get(i));
+      }
 
       _classLoader.setId("web-app:" + getId());
 
       _cdiManager = InjectManager.getCurrent();
-      _cdiManager.update();
+      
+      // env/0e3a
+      // _cdiManager.update();
       
       // server/1al4 vs server/1ak1, server/1la5
       /*
@@ -2795,8 +2801,9 @@ public class WebApp extends ServletContextImpl
                             new AnnotationLiteral<Initialized>() {});
       */
 
-      if (! _isMetadataComplete)
+      if (! _isMetadataComplete) {
         initWebFragments();
+      }
 
       WebAppController parent = null;
       if (_controller != null)
@@ -2806,8 +2813,9 @@ public class WebApp extends ServletContextImpl
         SessionManager sessionManager = _sessionManager;
         _sessionManager = parent.getWebApp().getSessionManager();
 
-        if (sessionManager != null)
+        if (sessionManager != null) {
           sessionManager.close();
+        }
       }
 
       if (_server != null) {
@@ -2862,7 +2870,7 @@ public class WebApp extends ServletContextImpl
                                                      "META-INF/services/com.sun.faces.spi.injectionprovider.in");
       }
     } catch (Throwable e) {
-      log.log(Level.FINE, e.toString(), e);
+      log.log(Level.FINEST, e.toString(), e);
     }
   }
 
@@ -3584,6 +3592,10 @@ public class WebApp extends ServletContextImpl
     if (! _lifecycle.isAfterInit()) {
       throw new IllegalStateException(L.l("webApp must be initialized before starting.  Currently in state {0}.", _lifecycle.getStateName()));
     }
+    
+    if (! _lifecycle.toStarting()) {
+      return;
+    }
 
     StartupTask task = new StartupTask();
     
@@ -3593,7 +3605,7 @@ public class WebApp extends ServletContextImpl
     // asdf: wait
   }
   
-  public void startImpl(StartupTask ask)
+  private void startImpl(StartupTask task)
   {
     if (! _lifecycle.isAfterInit()) {
       throw new IllegalStateException(L.l("webApp must be initialized before starting.  Currently in state {0}.", _lifecycle.getStateName()));
@@ -3606,19 +3618,18 @@ public class WebApp extends ServletContextImpl
     try {
       thread.setContextClassLoader(_classLoader);
 
-      if (! _lifecycle.toStarting())
-        return;
-
       isOkay = false;
       
-      if (_accessLog == null)
+      if (_accessLog == null) {
         _accessLog = _accessLogLocal.get();
+      }
 
       long interval = _classLoader.getDependencyCheckInterval();
       _invocationDependency.setCheckInterval(interval);
 
-      if (_parent != null)
+      if (_parent != null) {
         _invocationDependency.add(_parent.getWebAppGenerator());
+      }
 
       // Sets the last modified time so the app won't immediately restart
       _invocationDependency.clearModified();

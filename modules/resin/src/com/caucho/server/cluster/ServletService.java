@@ -51,6 +51,7 @@ import com.caucho.cloud.topology.CloudPod;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
+import com.caucho.config.types.Bytes;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.ClusterCache;
 import com.caucho.env.service.ResinSystem;
@@ -192,6 +193,7 @@ public class ServletService
 
   private final Lifecycle _lifecycle;
   private AccessLog _accessLog;
+  private int _accessLogBufferSize;
 
   /**
    * Creates a new servlet server.
@@ -853,6 +855,24 @@ public class ServletService
   {
     return _accessLog;
   }
+  
+  public void setAccessLogBufferSize(Bytes bytes)
+  {
+    _accessLogBufferSize = (int) bytes.getBytes();
+  }
+  
+  public int getAccessLogBufferSize()
+  {
+    if (_accessLogBufferSize > 0) {
+      return _accessLogBufferSize;
+    }
+    else if (_accessLog != null) {
+      return _accessLog.getBufferSize();
+    }
+    else {
+      return 1024;
+    }
+  }
 
   /**
    * Returns the dependency check interval.
@@ -1349,8 +1369,9 @@ public class ServletService
       _lifecycle.toStarting();
 
       // initialize the system distributed store
-      if (isResinServer())
+      if (isResinServer()) {
         getSystemStore();
+      }
       
       _hostContainer.start();
 
