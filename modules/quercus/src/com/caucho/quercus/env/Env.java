@@ -5168,8 +5168,9 @@ public class Env
                                 boolean useAutoload,
                                 boolean useImport)
   {
-    if (id < _qClass.length && _qClass[id] != null)
+    if (id < _qClass.length && _qClass[id] != null) {
       return _qClass[id];
+    }
 
     QuercusClass cl = createClassFromCache(id, useAutoload, useImport);
 
@@ -5860,7 +5861,7 @@ public class Env
     }
   }
 
-  /*
+  /**
    * Returns true if this path is likely to be a URL.
    */
   private boolean isUrl(Path path)
@@ -6801,6 +6802,9 @@ public class Env
    */
   public Value error(int code, String msg, Location location)
   {
+    //System.err.println("Env.error0: " + code + " . " + msg + " . " + location);
+    //Thread.dumpStack();
+
     if (location == null || location.isUnknown()) {
       location = getLocation();
     }

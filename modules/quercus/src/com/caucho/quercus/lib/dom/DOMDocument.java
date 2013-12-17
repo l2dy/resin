@@ -46,6 +46,8 @@ import com.caucho.xml.XmlPrinter;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
@@ -668,19 +670,28 @@ public class DOMDocument
     return saveToString(env, this, false);
   }
 
-  public boolean schemaValidate(String schemaFilename)
+  public boolean schemaValidate(Env env, String schemaFilename)
   {
-    throw new UnimplementedException();
+    File file = new File(schemaFilename);
+
+    Source source = new StreamSource(file);
+
+    return validate(env, source);
   }
 
   public boolean schemaValidateSource(Env env, String schemaSource)
+  {
+    Source source = new StreamSource(new StringReader(schemaSource));
+
+    return validate(env, source);
+  }
+
+  private boolean validate(Env env, Source source)
   {
     String language = XMLConstants.W3C_XML_SCHEMA_NS_URI;
     SchemaFactory factory = SchemaFactory.newInstance(language);
 
     try {
-      Source source = new StreamSource(new StringReader(schemaSource));
-
       Schema schema = factory.newSchema(source);
 
       Validator validator = schema.newValidator();
@@ -765,9 +776,13 @@ public class DOMDocument
 
   public int xinclude(Env env, @Optional Value options)
   {
-    if (options != null)
+    if (options != null) {
       env.stub(L.l("`{0}' is ignored", "options"));
+    }
 
-    throw new UnimplementedException();
+    // nam: 2013-10-02 stubbed to return 0
+    return 0;
+
+    //throw new UnimplementedException();
   }
 }

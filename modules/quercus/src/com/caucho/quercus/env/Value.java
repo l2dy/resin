@@ -435,6 +435,14 @@ abstract public class Value implements java.io.Serializable
   }
 
   /**
+   * Returns true if the value is empty
+   */
+  public boolean isEmpty(Env env, Value index)
+  {
+    return true;
+  }
+
+  /**
    * Returns true if there are more elements.
    */
   public boolean hasCurrent()

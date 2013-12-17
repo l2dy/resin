@@ -370,6 +370,14 @@ public class WebAppContainer
   {
     return _lifecycle.isDestroyed() || _classLoader.isModified();
   }
+  
+  /**
+   * For QA, returns true if the deployment is marked as modified.
+   */
+  public boolean isDeployModified()
+  {
+    return _appDeploy.isModified();
+  }
 
   /**
    * Adds an webApp.
@@ -1101,8 +1109,12 @@ public class WebAppContainer
    */
   public WebAppUriMap findEntryByURI(String uri)
   {
-    if (_appDeploy.isModified())
+    if (_appDeploy.isModified()) {
+      _appDeploy.logModified(log);
+      System.out.println("DEP_MODE: " + _appDeploy);
+      
       _uriToAppCache.clear();
+    }
 
     WebAppUriMap entry = _uriToAppCache.get(uri);
 

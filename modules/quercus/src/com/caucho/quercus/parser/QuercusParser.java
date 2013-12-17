@@ -182,6 +182,7 @@ public class QuercusParser {
   private final static int NAMESPACE = 577;
   private final static int USE = 578;
   private final static int INSTEADOF = 579;
+  private final static int EMPTY = 580;
 
   private final static int LAST_IDENTIFIER_LEXEME = 1024;
 
@@ -368,7 +369,11 @@ public class QuercusParser {
         parser.setLocation(fileName, line);
 
       return parser.parse();
-    } finally {
+    }
+    catch (RuntimeException e) {
+      throw e;
+    }
+    finally {
       is.close();
     }
   }
@@ -2459,31 +2464,50 @@ public class QuercusParser {
   {
    int token;
 
+   ArrayList<StringValue> traitList = new ArrayList<StringValue>();
+
     do {
-      _classDef.addTrait(parseNamespaceIdentifier().toString());
+      traitList.add(parseNamespaceIdentifier());
 
       token = parseToken();
     } while (token == ',');
+
+    for (StringValue traitName : traitList) {
+      _classDef.addTrait(traitName.toString());
+    }
 
     if (token == '{') {
       while ((token = parseToken()) >= 0 && token != '}') {
         _peekToken = token;
 
-        String traitName = parseNamespaceIdentifier().toString();
-        expect(SCOPE);
-        StringValue funName = parseIdentifier();
+        StringValue traitNameV = parseNamespaceIdentifier();
+        StringValue funName;
 
         token = parseToken();
+
+        if (token == SCOPE) {
+          funName = parseIdentifier();
+
+          token = parseToken();
+        }
+        else if (traitList.size() == 1) {
+          funName = traitNameV;
+
+          traitNameV = traitList.get(0);
+        }
+        else {
+          throw error(L.l("cannot resolve method because multiple traits are defined"));
+        }
 
         if (token == INSTEADOF) {
           String insteadofTraitName = parseNamespaceIdentifier().toString();
 
-          _classDef.addTraitInsteadOf(funName, traitName, insteadofTraitName);
+          _classDef.addTraitInsteadOf(funName, traitNameV.toString(), insteadofTraitName);
         }
         else if (token == AS) {
           StringValue funNameAlias = parseIdentifier();
 
-          _classDef.addTraitAlias(funName, funNameAlias, traitName);
+          _classDef.addTraitAlias(funName, funNameAlias, traitNameV.toString());
         }
         else {
           throw error(L.l("expected 'insteadof' or 'as' at {0}",
@@ -2497,10 +2521,13 @@ public class QuercusParser {
         }
       }
 
+      _peekToken = token;
+
       expect('}');
     }
-
-    _peekToken = token;
+    else {
+      _peekToken = token;
+    }
   }
 
   private int parseModifiers()
@@ -3681,6 +3708,9 @@ public class QuercusParser {
     case DIE:
       return parseDie();
 
+    case EMPTY:
+      return parseEmpty();
+
     case IDENTIFIER:
     case NAMESPACE:
       {
@@ -3998,6 +4028,10 @@ public class QuercusParser {
     else if (name.equalsString("__NAMESPACE__")) {
       return createStringExpr(_namespace);
     }
+    else if (name.equalsString("self") && _classDef != null) {
+      // php/0m28
+      return _factory.createConst(_classDef.getName());
+    }
 
     name = resolveIdentifier(name);
 
@@ -4093,10 +4127,12 @@ public class QuercusParser {
       name = nameExpr.evalConstant().toString();
 
       // php/0957
-      if ("self".equals(name) && _classDef != null)
+      if ("self".equals(name) && _classDef != null) {
         name = _classDef.getName();
-      else if ("parent".equals(name) && getParentClassName() != null)
+      }
+      else if ("parent".equals(name) && getParentClassName() != null) {
         name = getParentClassName().toString();
+      }
       else {
         // name = resolveIdentifier(name);
       }
@@ -4253,6 +4289,28 @@ public class QuercusParser {
     }
     else {
       return _factory.createDie(null);
+    }
+  }
+
+  /**
+   * Parses the empty() expression.
+   */
+  private Expr parseEmpty()
+    throws IOException
+  {
+    int token = parseToken();
+    _peekToken = token;
+
+    if (token == '(') {
+      ArrayList<Expr> args = parseArgs();
+
+      if (args.size() > 0)
+        return _factory.createEmpty(getLocation(), args.get(0));
+      else
+        throw error(L.l("empty must have one arg"));
+    }
+    else {
+      throw error(L.l("expected '('"));
     }
   }
 
@@ -5917,10 +5975,11 @@ public class QuercusParser {
   {
     int token = parseToken();
 
-    if (token != expect)
+    if (token != expect) {
       throw error(L.l("expected {0} at {1}",
                       tokenName(expect),
                       tokenName(token)));
+    }
   }
 
   /**
@@ -6381,6 +6440,7 @@ public class QuercusParser {
     _insensitiveReserved.put("include_once", INCLUDE_ONCE);
     _insensitiveReserved.put("require_once", REQUIRE_ONCE);
     _insensitiveReserved.put("unset", UNSET);
+    _insensitiveReserved.put("empty", EMPTY);
     _insensitiveReserved.put("foreach", FOREACH);
     _insensitiveReserved.put("as", AS);
     _insensitiveReserved.put("switch", SWITCH);

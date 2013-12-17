@@ -32,7 +32,6 @@ package com.caucho.jsp;
 import com.caucho.config.*;
 import com.caucho.config.program.ConfigProgram;
 import com.caucho.config.program.ContainerProgram;
-import com.caucho.config.types.*;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.java.*;
 import com.caucho.jsp.cfg.JspConfig;
@@ -42,15 +41,11 @@ import com.caucho.loader.CompilingLoader;
 import com.caucho.loader.DirectoryLoader;
 import com.caucho.loader.DynamicClassLoader;
 import com.caucho.loader.EnvironmentBean;
-import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.loader.SimpleLoader;
 import com.caucho.resin.ResinEmbed;
 import com.caucho.resin.WebAppEmbed;
-import com.caucho.server.cluster.ServletService;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webapp.WebApp;
-import com.caucho.server.webapp.WebAppContainer;
-import com.caucho.server.webapp.WebAppController;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -70,10 +65,12 @@ import java.util.logging.Logger;
  * Compilation interface for JSP pages.
  *
  * <pre>
- * com.caucho.jsp.JspCompiler [flags] jsp1 jsp2 ...");
- *     -app-dir  : The directory root of the web-app.");
- *     -class-dir: The working directory to use as output.");
- *     -conf: A configuration file for the compiler.");
+ * com.caucho.jsp.JspCompiler [flags] jsp1 jsp2 ...
+ *     -app-dir  : The directory root of the web-app.
+ *     -class-dir: The working directory to use as output.
+ *     -conf: A configuration file for the compiler.
+ *     -extensions: A comma-separated list of file extensions to compile (default: jsp, jspx, jsfx).
+ *     -verbose: enable compilation logging.
  * </pre>
  */
 public class JspCompiler implements EnvironmentBean {
@@ -104,19 +101,37 @@ public class JspCompiler implements EnvironmentBean {
 
   private ArrayList<JspCompilerInstance> _pending =
     new ArrayList<JspCompilerInstance>();
-  
+
   private ResinEmbed _resin;
+
+  private HashSet<String> _fileExtensionSet = new HashSet<String>();
+
+  private boolean _isVerbose;
 
   public JspCompiler()
   {
     _system = ResinSystem.getCurrent();
-    
+
     if (_system == null)
       _system = new ResinSystem("jsp-compiler");
-    
+
     _loader = _system.getClassLoader();
 
     _tagFileManager = new TagFileManager(this);
+  }
+
+  /**
+   * Adds a file extension to compile.
+   */
+  public void addExtension(String extension)
+  {
+    extension = extension.trim();
+
+    if (! extension.startsWith(".")) {
+      extension = "." + extension;
+    }
+
+    _fileExtensionSet.add(extension);
   }
 
   /**
@@ -126,7 +141,7 @@ public class JspCompiler implements EnvironmentBean {
   {
     return _loader;
   }
-  
+
   public void setClassLoader(ClassLoader loader)
   {
     _loader = loader;
@@ -210,6 +225,14 @@ public class JspCompiler implements EnvironmentBean {
   public boolean isXml()
   {
     return _isXml;
+  }
+
+  /**
+   * Set true to enable compilation logging.
+   */
+  public void setVerbose(boolean isVerbose)
+  {
+    _isVerbose = isVerbose;
   }
 
   /**
@@ -323,15 +346,15 @@ public class JspCompiler implements EnvironmentBean {
 
       _resin = new ResinEmbed();
       _resin.setRootDirectory(rootDirectory.getURL());
-      
+
       WebAppEmbed webAppEmbed = new WebAppEmbed();
       webAppEmbed.setRootDirectory(rootDirectory.getURL());
       webAppEmbed.setDisableStart(true);
-      
+
       _resin.addWebApp(webAppEmbed);
       // jsp/193h, #4397
       _resin.start();
-      
+
       _webApp = webAppEmbed.getWebApp();
     }
 
@@ -456,7 +479,7 @@ public class JspCompiler implements EnvironmentBean {
   {
     getTaglibManager();
   }
-  
+
   /**
    * Returns the compilation instance.
    */
@@ -475,7 +498,7 @@ public class JspCompiler implements EnvironmentBean {
 
     return instance;
   }
-  
+
   /**
    * Loads an already-compiled JSP class.
    *
@@ -569,11 +592,11 @@ public class JspCompiler implements EnvironmentBean {
       }
     }
   }
-  
+
   public void close()
   {
     ResinEmbed resin = _resin;
-    
+
     if (resin != null)
       resin.destroy();
   }
@@ -587,6 +610,8 @@ public class JspCompiler implements EnvironmentBean {
       System.out.println(" -class-dir: The working directory to use as output.");
       System.out.println(" -compiler: sets the javac.");
       System.out.println(" -conf: A configuration file for the compiler.");
+      System.out.println(" -extensions: A comma-separated list of file extensions to compile (default: jsp, jspx, jsfx).");
+      System.out.println(" -verbose: enable compilation logging.");
       System.exit(1);
     }
 
@@ -597,11 +622,11 @@ public class JspCompiler implements EnvironmentBean {
       JspCompiler compiler = new JspCompiler();
 
       int i = compiler.configureFromArgs(args);
-    
+
       ClassLoader loader = compiler.getClassLoader();
 
       thread.setContextClassLoader(loader);
-        
+
       ArrayList<String> pendingClasses = new ArrayList<String>();
 
       if (i == args.length) {
@@ -628,24 +653,17 @@ public class JspCompiler implements EnvironmentBean {
    * will configure the JspCompiler, but not start any compilations.
    *
    * <pre>
-   * com.caucho.jsp.JspCompiler [flags] jsp1 jsp2 ...");
-   *     -app-dir  : The directory root of the web-app.");
-   *     -class-dir: The working directory to use as output.");
-   *     -conf: A configuration file for the compiler.");
+   * com.caucho.jsp.JspCompiler [flags] jsp1 jsp2 ...
+   *     -app-dir  : The directory root of the web-app.
+   *     -class-dir: The working directory to use as output.
+   *     -conf: A configuration file for the compiler.
+   *     -extensions: A comma-separated list of file extensions to compile (default: jsp, jspx, jsfx).
+   *     -verbose: enable compilation logging
    * </pre>
    */
   public int configureFromArgs(String []args)
     throws Exception
   {
-    if (args.length == 0) {
-      System.out.println("usage: com.caucho.jsp.JspCompiler [flags] jsp1 jsp2 ...");
-      System.out.println(" -app-dir  : The directory root of the web-app.");
-      System.out.println(" -class-dir: The working directory to use as output.");
-      System.out.println(" -conf: A configuration file for the compiler.");
-      System.out.println(" -compiler: javac|internal|eclipse|groovyc.");
-      System.exit(1);
-    }
-
     // needed at minimum to handle the qa jsp/1933
     Thread thread = Thread.currentThread();
     ClassLoader oldLoader = thread.getContextClassLoader();
@@ -690,10 +708,26 @@ public class JspCompiler implements EnvironmentBean {
 
           i += 2;
         }
+        else if (args[i].equals("-extensions")) {
+          String extensions = args[i + 1];
+          String[] split = extensions.split(",");
+
+          for (String ext : split) {
+            addExtension(ext);
+          }
+
+          i += 2;
+        }
         else
           break;
       }
-      
+
+      if (_fileExtensionSet.size() == 0) {
+        addExtension(".jsp");
+        addExtension(".jspx");
+        addExtension(".jsfx");
+      }
+
       WebApp webApp = getWebApp();
       if (webApp != null && ! hasConf) {
         Path appDir = webApp.getRootDirectory();
@@ -725,7 +759,7 @@ public class JspCompiler implements EnvironmentBean {
 
       if (webApp != null) {
         webApp.setCompileContext(true);
-        
+
         webApp.init();
 
         appDir = getWebApp().getRootDirectory();
@@ -757,7 +791,7 @@ public class JspCompiler implements EnvironmentBean {
 
     try {
       thread.setContextClassLoader(getClassLoader());
-    
+
       Path path = Vfs.lookup(uri);
 
       if (path.isDirectory())
@@ -777,7 +811,7 @@ public class JspCompiler implements EnvironmentBean {
 
     try {
       thread.setContextClassLoader(getClassLoader());
-    
+
       JavaCompilerUtil javaCompiler = JavaCompilerUtil.create(getClassLoader());
       javaCompiler.setClassDir(getClassDir());
 
@@ -787,10 +821,10 @@ public class JspCompiler implements EnvironmentBean {
     }
   }
 
-  private static void compileDirectory(Path path,
-                                       Path appDir,
-                                       JspCompiler compiler,
-                                       ArrayList<String> pendingClasses)
+  private void compileDirectory(Path path,
+                                Path appDir,
+                                JspCompiler compiler,
+                                ArrayList<String> pendingClasses)
     throws Exception
   {
     if (path.isDirectory()) {
@@ -802,18 +836,25 @@ public class JspCompiler implements EnvironmentBean {
         compileDirectory(subpath, appDir, compiler, pendingClasses);
       }
     }
-    else if (path.getPath().endsWith(".jsp")
-             || path.getPath().endsWith(".jsfx")
-             || path.getPath().endsWith(".jspx") ||
-             path.getPath().endsWith(".jsfx")) {
-      compileJsp(path, appDir, compiler, pendingClasses);
+    else {
+      String name = path.getPath();
+
+      int i = name.lastIndexOf('.');
+
+      if (i >= 0) {
+        String extension = name.substring(i);
+
+        if (_fileExtensionSet.contains(extension)) {
+          compileJsp(path, appDir, compiler, pendingClasses);
+        }
+      }
     }
   }
 
-  private static void compileJsp(Path path,
-                                 Path appDir,
-                                 JspCompiler compiler,
-                                 ArrayList<String> pendingClasses)
+  private void compileJsp(Path path,
+                          Path appDir,
+                          JspCompiler compiler,
+                          ArrayList<String> pendingClasses)
     throws Exception
   {
     String uri;
@@ -824,11 +865,15 @@ public class JspCompiler implements EnvironmentBean {
       compiler.setXml(true);
     else
       compiler.setXml(false);
-    
+
+    if (_isVerbose) {
+      System.out.println("Compiling " + path.getNativePath());
+    }
+
     String className = JspCompiler.urlToClassName(uri);
     JspCompilerInstance compInst;
     compInst = compiler.getCompilerInstance(path, uri, className);
-    
+
     JspGenerator gen = compInst.generate();
 
     if (! gen.isStatic())
@@ -869,10 +914,10 @@ public class JspCompiler implements EnvironmentBean {
       throws Exception
     {
       WebApp webApp = createWebApp(_rootDir);
-      
+
       if (webApp == null)
         throw new NullPointerException();
-      
+
       _program.configure(webApp);
       Config.init(webApp);
 

@@ -723,7 +723,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   protected void removeExpandDirectory(Path path, String prefix)
   {
     try {
-      if (path.isDirectory()) {
+      if (path.isDirectory() && ! path.isLink()) {
         String []list = path.list();
         for (int i = 0; list != null && i < list.length; i++) {
           removeExpandDirectory(path.lookup(list[i]), prefix);
@@ -797,7 +797,11 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     String tag = getId();
     
     // server/6b0e, server/1h03
-    String treeHash = _repositorySpi.getTagContentHash(tag);
+    String treeHash = null;
+    
+    if (_repositorySpi != null) {
+      treeHash = _repositorySpi.getTagContentHash(tag);
+    }
     String rootHash = _rootHash;
     
     if (treeHash == null && rootHash != null) {

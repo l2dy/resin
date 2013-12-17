@@ -301,6 +301,14 @@ public class ExprFactory {
   }
 
   /**
+   * Creates a parent const expression.
+   */
+  public ParentClassConstExpr createParentClassConst(StringValue name)
+  {
+    return new ParentClassConstExpr(name);
+  }
+
+  /**
    * Creates a class const expression.
    */
   public ClassVarNameConstExpr createClassConst(String className, Expr name)
@@ -566,6 +574,14 @@ public class ExprFactory {
   public Expr createExit(Expr expr)
   {
     return new FunExitExpr(expr);
+  }
+
+  /**
+   * Creates an empty() expression.
+   */
+  public Expr createEmpty(Location location, Expr expr)
+  {
+    return new FunEmptyExpr(location, expr);
   }
 
   /**
@@ -1092,6 +1108,16 @@ public class ExprFactory {
     else {
       return new ClassMethodExpr(loc, className, methodName, args);
     }
+  }
+
+  /**
+   * Creates a parent class method call parent::foo(...)
+   */
+  public Expr createParentClassMethodCall(Location loc,
+                                          StringValue methodName,
+                                          ArrayList<Expr> args)
+  {
+    return new ParentClassMethodExpr(loc, methodName, args);
   }
 
   /**

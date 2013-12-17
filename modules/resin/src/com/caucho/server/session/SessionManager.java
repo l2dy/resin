@@ -37,12 +37,15 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.servlet.SessionCookieConfig;
+import javax.servlet.SessionTrackingMode;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSessionActivationListener;
 import javax.servlet.http.HttpSessionAttributeListener;
@@ -52,6 +55,7 @@ import javax.servlet.http.HttpSessionListener;
 import com.caucho.cloud.network.ClusterServer;
 import com.caucho.cloud.topology.CloudServer;
 import com.caucho.config.ConfigException;
+import com.caucho.config.Configurable;
 import com.caucho.config.types.Period;
 import com.caucho.distcache.AbstractCache;
 import com.caucho.distcache.ByteStreamCache;
@@ -157,6 +161,10 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   private String _cookiePort;
   private int _reuseSessionId = COOKIE;
   private int _cookieLength = 21;
+  
+  private AtomicLong _sessionIdSequence = new AtomicLong();
+  
+  private HashSet<SessionTrackingMode> _trackingModes;
   //Servlet 3.0 plain | ssl session tracking cookies become secure when set to true
   private boolean _isSecure;
 
@@ -241,6 +249,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     _cookieName = _servletContainer.getSessionCookie();
     _sslCookieName = _servletContainer.getSSLSessionCookie();
       
+    long initSequence = CurrentTime.getCurrentTime();
+    
+    if (CurrentTime.isTest()) {
+      initSequence -= initSequence % 1000;
+    }
+    
+    _sessionIdSequence.set(initSequence);
     /*
     if (_sslCookieName != null && ! _sslCookieName.equals(_cookieName))
       _isSecure = true;
@@ -951,10 +966,37 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   {
     return (int) (_cookieMaxAge / 1000);
   }
+  
+  
+  @Configurable
+  public SessionCookieConfig createCookieConfig()
+  {
+    return this;
+  }
 
   public void setCookieName(String cookieName)
   {
     _cookieName = cookieName;
+  }
+  
+  public void setTrackingMode(SessionTrackingMode mode)
+  {
+    if (_trackingModes == null) {
+      _trackingModes = new HashSet<SessionTrackingMode>();
+      
+      setEnableCookies(false);
+      setEnableUrlRewriting(false);
+    }
+
+    switch (mode) {
+    case COOKIE:
+      setEnableCookies(true);
+      break;
+      
+    case URL:
+      setEnableUrlRewriting(true);
+      break;
+    }
   }
   /**
    * Returns the default cookie name.
@@ -1308,17 +1350,19 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     }
 
     if (length > 0) {
-      long time = CurrentTime.getCurrentTime();
+      long seq = _sessionIdSequence.incrementAndGet();
 
+      /*
       // The QA needs to add a millisecond for each server start so the
       // clustering test will work, but all the session ids are generated
       // based on the timestamp.  So QA sessions don't have milliseconds
       if (CurrentTime.isTest())
         time -= time % 1000;
+        */
 
       for (int i = 0; i < 7 && length-- > 0; i++) {
-        sb.append(convert(time));
-        time = time >> 6;
+        sb.append(convert(seq));
+        seq = seq >> 6;
       }
     }
 
@@ -1526,10 +1570,14 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
   public SessionImpl getSession(String key)
   {
-    if (_sessions == null)
+    LruCache<String, SessionImpl> sessions = _sessions;
+    
+    if (sessions != null) {
+      return sessions.get(key);
+    }
+    else {
       return null;
-
-    return _sessions.get(key);
+    }
   }
 
   /**
@@ -1613,11 +1661,13 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
   private void handleCreateListeners(SessionImpl session)
   {
-    if (_listeners != null) {
+    ArrayList<HttpSessionListener> listeners = _listeners;
+    
+    if (listeners != null) {
       HttpSessionEvent event = new HttpSessionEvent(session);
 
-      for (int i = 0; i < _listeners.size(); i++) {
-        HttpSessionListener listener = _listeners.get(i);
+      for (int i = 0; i < listeners.size(); i++) {
+        HttpSessionListener listener = listeners.get(i);
 
         listener.sessionCreated(event);
       }

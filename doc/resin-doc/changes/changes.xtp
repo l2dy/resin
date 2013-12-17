@@ -10,8 +10,45 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
-<s2 title="4.0 snapshot">
+<s2 title="4.0.38 (Dec 13, 2013)">
 <ul>
+<li>win32: windows returns incorrect mtime for stat() for DST (#5578, rep by Jason Barr)</li>
+<li>deploy: NPE on undeploy (#5596)</li>
+<li>session: update to session id generation to reduce reliance on SecureRandom to avoid duplication (#5602)</li>
+<li>memcached: MemcachedClient in independent Resin's was improperly caching (rep by Scott Weatbrook)</li>
+<li>jpa: EntityManager proxy needs to check isOpen before freeing EntityManager for reuse (#5541, rep by Riccardo Cohen)</li>
+<li>ear: dependency-check could get stuck in the modified state (#5525, rep by Ryan Edwards)</li>
+<li>rpm: %config updates for /etc/resin, and file mode on /usr/bin (#5562, rep by Christopher Powell, #5539, rep by Khalid Hosein)</li>
+<li>cache: add memory-size-min to ClusterCache to configure minimum memory cache size (#5558, rep by J Tschida)</li>
+<li>cluster: dynamic server must heartbeat address to recover from triad restarts (#5561, rep by T Pohl)</li>
+<li>health: sort message times so PDF report of health dump will be most recent (#5358)</li>
+<li>watchdog: increate idle thread on startup to avoid dependency on swap (#5500, rep by K. Hosein)</li>
+<li>jms: transaction/ack issues with file and message driven bean (#5535, rep by Scott Weatbrook)</li>
+<li>hessian: InetAddress serialization (#5540, rep by Michael Charnoky)</li>
+<li>servlet: on shutdown, check facade._request for null (#5537)</li>
+<li>deploy: redeploy delete issues with symlinks (#5536, rep by ssmax)</li>
+<li>health: OpenFileDescriptorCount is not available on some JMVs (#5515, rep by Y. Zhao)</li>
+<li>servlet: missing cookie-config in web.xml (#5521, rep by Arjan Tijms)</li>
+<li>ioc: remove validatio of generic type on produces method (#5522, rep by A Tijms)</li>
+<li>ioc: extends observers now auto-convert ProcessManagedBean&lt;Foo> to ProcessManagedBean&lt;? extends Foo> (#5531, rep by A Tijms)</li>
+<li>quercus: empty() needs to call ArrayAccess->offsetExists() (#5612, rep by G. Krall)</li>
+<li>quercus: session_status() not implemented (#5609, rep by G. Krall)</li>
+<li>quercus: self doesn't work inside a namespace (#5608, G. Krall)</li>
+<li>quercus: ReflectionParameter->getClass() not implemented (#5607, rep by G. Krall)</li>
+<li>quercus: IllegalArgumentException vfs: not found on JBoss (#5606, rep by G. Krall)</li>
+<li>quercus: ReflectionFunction does not work for closures (#5605, rep by G. Krall)</li>
+<li>quercus: Xml reader is not working (#5603, rep by qumo)</li>
+<li>quercus: call_user_func() needs to call __invoke (#5601, rep by G. Krall)</li>
+<li>quercus: instanceof Closure returns false for closures (#5600, rep by G. Krall)</li>
+<li>quercus: QuercusCompiledScript.eval() needs to return the Value object (#5589, rep by S. Guo)</li>
+<li>quercus: ScriptEngineManager.getEngineByName("php") returns Quercus with unicode.semantics=off (#5588, rep by S. Guo)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.37 - Sept 7, 2013">
+<ul>
+<li>ejb: avoid double EJB timer call when timer is slow (#5518, rep by K. Hosein)</li>
+<li>admin/rest: missing close on resource</li>
 <li>windows: Added a global mutex to windows service wrapper to avoid starting multiple instances of Resin Watchdog</li>
 <li>cloud: elastic server issues with dynamic remove/timeout (#5510, rep by T Pohl)</li>
 <li>log: check for null logger name in LogRecord (#5499)</li>
