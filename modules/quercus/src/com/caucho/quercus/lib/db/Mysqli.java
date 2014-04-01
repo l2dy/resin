@@ -122,7 +122,7 @@ public class Mysqli extends JdbcConnectionResource
 
     connectInternal(env, host.toString(), user.toString(), password.toString(),
                     db, port, socket.toString(),
-                    0, null, null, true);
+                    0, null, null, true, false);
   }
 
   /**
@@ -133,7 +133,8 @@ public class Mysqli extends JdbcConnectionResource
    */
 
   Mysqli(Env env, String host, String user, String pass, String db, int port,
-         String socket, int flags, String driver, String url, boolean isNewLink)
+         String socket, int flags, String driver, String url,
+         boolean isNewLink, boolean isEmulatePrepares)
   {
     super(env);
 
@@ -141,7 +142,7 @@ public class Mysqli extends JdbcConnectionResource
       host = "localhost";
 
     connectInternal(env, host, user, pass, db, port, socket,
-                    flags, driver, url, isNewLink);
+                    flags, driver, url, isNewLink, isEmulatePrepares);
   }
 
   protected Mysqli(Env env)
@@ -168,7 +169,8 @@ public class Mysqli extends JdbcConnectionResource
                                         int flags,
                                         String driver,
                                         String url,
-                                        boolean isNewLink)
+                                        boolean isNewLink,
+                                        boolean isEmulatePrepares)
   {
     if (isConnected()) {
       env.warning(L.l("Connection is already opened to '{0}'", this));
@@ -219,7 +221,8 @@ public class Mysqli extends JdbcConnectionResource
         url = getUrl(env, host, port, dbname, encoding,
                      (flags & MysqliModule.MYSQL_CLIENT_INTERACTIVE) != 0,
                      (flags & MysqliModule.MYSQL_CLIENT_COMPRESS) != 0,
-                     (flags & MysqliModule.MYSQL_CLIENT_SSL) != 0);
+                     (flags & MysqliModule.MYSQL_CLIENT_SSL) != 0,
+                     isEmulatePrepares);
       }
 
       ConnectionEntry jConn
@@ -254,7 +257,8 @@ public class Mysqli extends JdbcConnectionResource
                                  String encoding,
                                  boolean useInteractive,
                                  boolean useCompression,
-                                 boolean useSsl)
+                                 boolean useSsl,
+                                 boolean isEmulatePrepares)
   {
     StringBuilder urlBuilder = new StringBuilder();
 
@@ -325,6 +329,13 @@ public class Mysqli extends JdbcConnectionResource
         urlBuilder.append('&');
         urlBuilder.append("characterEncoding=ISO8859_1");
       }
+    }
+
+    if (! isEmulatePrepares) {
+      char sep = (urlBuilder.indexOf("?") < 0) ? '?' : '&';
+
+      urlBuilder.append(sep);
+      urlBuilder.append("useServerPrepStmts=true");
     }
 
     //urlBuilder.append("&useInformationSchema=true");
@@ -411,7 +422,7 @@ public class Mysqli extends JdbcConnectionResource
     close();
 
     return connectInternal(env, _host, user, password,
-                           db, _port, _socket, _flags, _driver, _url, false);
+                           db, _port, _socket, _flags, _driver, _url, false, _isEmulatePrepares);
   }
 
   /**
@@ -476,6 +487,11 @@ public class Mysqli extends JdbcConnectionResource
     String version = getClientInfo(env);
 
     return version;
+  }
+
+  public String get_client_info(Env env)
+  {
+    return getclient_info(env);
   }
 
   protected static String getClientInfoStatic(Env env)
@@ -1138,7 +1154,8 @@ public class Mysqli extends JdbcConnectionResource
                            flags,
                            null,
                            null,
-                           false);
+                           false,
+                           _isEmulatePrepares);
   }
 
   /**

@@ -527,14 +527,16 @@ public class MiscModule extends AbstractQuercusModule {
    */
   public Value unpack(Env env, String format, StringValue s)
   {
-    if (format == null)
+    if (format == null) {
       return NullValue.NULL;
+    }
 
     try {
       ArrayList<PackSegment> segments = parsePackFormat(env, format, true);
 
-      if (segments == null)
+      if (segments == null) {
         return BooleanValue.FALSE;
+      }
 
       ArrayValue array = new ArrayValueImpl();
 
@@ -1233,7 +1235,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1316,7 +1318,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1359,7 +1361,7 @@ public class MiscModule extends AbstractQuercusModule {
   }
 
   static class HexPackSegment extends PackSegment {
-    private final StringValue _name;
+    private final Value _name;
     private final int _length;
 
     HexPackSegment(Env env, int length)
@@ -1369,7 +1371,13 @@ public class MiscModule extends AbstractQuercusModule {
 
     HexPackSegment(Env env, String name, int length)
     {
-      _name = env.createString(name);
+      if (name.length() != 0) {
+        _name = env.createString(name);
+      }
+      else {
+        _name = LongValue.ONE;
+      }
+
       _length = length;
     }
 
@@ -1384,7 +1392,7 @@ public class MiscModule extends AbstractQuercusModule {
         i++;
       }
       else {
-        env.warning("a: not enough arguments");
+        env.warning(L.l("a: not enough arguments"));
 
         return i;
       }
@@ -1396,7 +1404,7 @@ public class MiscModule extends AbstractQuercusModule {
       if (_length == Integer.MAX_VALUE) {
       }
       else if (strlen < _length) {
-        env.warning("not enough characters in hex string");
+        env.warning(L.l("not enough characters in hex string"));
 
         return i;
       }
@@ -1431,15 +1439,30 @@ public class MiscModule extends AbstractQuercusModule {
     public int unpack(Env env, ArrayValue result,
                       StringValue s, int offset, int strLen)
     {
-      if (offset + (long) (_length / 2 - 1) >= strLen)
+      int len = _length;
+      int maxLen = (strLen - offset) * 2;
+
+      len = Math.min(len, maxLen);
+
+      if (len == 0) {
         return offset;
+      }
 
       StringValue sb = env.createStringBuilder();
-      for (int i = _length / 2 - 1; i >= 0; i--) {
+      while (offset < strLen) {
         char ch = s.charAt(offset++);
 
         sb.append(digitToHex(ch >> 4));
+
+        if (--len <= 0) {
+          break;
+        }
+
         sb.append(digitToHex(ch));
+
+        if (--len <= 0) {
+          break;
+        }
       }
 
       result.put(_name, sb);

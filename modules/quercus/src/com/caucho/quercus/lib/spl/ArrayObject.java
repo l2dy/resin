@@ -62,8 +62,9 @@ public class ArrayObject
                      @Optional int flags,
                      @Optional("ArrayIterator") String iteratorClassName)
   {
-    if (value.isNull())
+    if (value.isNull()) {
       value = new ArrayValueImpl();
+    }
 
     _env = env;
     _value = value.toValue();
@@ -71,9 +72,9 @@ public class ArrayObject
 
     QuercusClass iteratorClass = _env.findClass(iteratorClassName);
 
-    if (iteratorClass == null || ! iteratorClass.isA("Iterator"))
-      throw new IllegalArgumentException(
-          L.l("A class that implements Iterator must be specified"));
+    if (iteratorClass == null || ! iteratorClass.isA(env, "Iterator")) {
+      throw new IllegalArgumentException(L.l("A class that implements Iterator must be specified"));
+    }
 
     _iteratorClass = iteratorClass;
   }
@@ -91,9 +92,10 @@ public class ArrayObject
       ArrayModule.asort(_env, (ArrayValue) _value, sortFlag);
   }
 
-  public int count()
+  @Override
+  public int count(Env env)
   {
-    return _value.getCount(_env);
+    return _value.getCount(env);
   }
 
   public Value exchangeArray(ArrayValue array)
@@ -145,22 +147,26 @@ public class ArrayObject
       ArrayModule.natsort(_env, _value);
   }
 
-  public boolean offsetExists(Value offset)
+  @Override
+  public boolean offsetExists(Env env, Value offset)
   {
     return _value.get(offset).isset();
   }
 
-  public Value offsetGet(Value offset)
+  @Override
+  public Value offsetGet(Env env, Value offset)
   {
     return _value.get(offset);
   }
 
-  public Value offsetSet(Value offset, Value value)
+  @Override
+  public Value offsetSet(Env env, Value offset, Value value)
   {
     return _value.put(offset, value);
   }
 
-  public Value offsetUnset(Value offset)
+  @Override
+  public Value offsetUnset(Env env, Value offset)
   {
     return _value.remove(offset);
   }
@@ -261,7 +267,7 @@ public class ArrayObject
     throws IOException
   {
     String name = object.getClassName();
-    
+
     if ((_flags & STD_PROP_LIST) != 0) {
       // XXX:
       out.println("object(" + name + ") (0) {");

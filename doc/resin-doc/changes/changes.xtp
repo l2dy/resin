@@ -10,6 +10,41 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.39 (Mar 28, 2014)">
+<ul>
+<li>session: session-mode=before-header was disabling reloading on secondary servers (#5639, rep by Thomas Rogan)</li>
+<li>resin: disable-soft command timeout error fix (#5656, rep by Sarah Gillespie)</li>
+<li>resin: shutdown-wait-max not propagating to ShutdownSystem fix (#5660, rep by Shinomiya Nobuaki)</li>
+<li>resin-admin: cross-site scripting vulnerability in /resin-admin (#5669, rep by G. Krstic)</li>
+<li>jsp: taglib defined listeners should be called before Filter's init() (#5659, rep by Mattias Jiderhamn)</li>
+<li>quercus: SimpleXMLElement->xpath() does not work for relative queries (#5622, rep by G. Krall)</li>
+<li>quercus: SimpleXMLElement->children() returns null values (#5432, rep by ckir)</li>
+<li>quercus: DOMDocument->schemaValidate() not implemented (#5613, rep by G. Krall)</li>
+<li>quercus: empty() needs to call ArrayAccess->offsetExists() (#5620, rep by tssets)</li>
+<li>quercus: spl_object_hash() not implemented (#5623, rep by G. Krall)</li>
+<li>quercus: cannot execute multiple PDO statements on the same connection (#5625, rep by remaus)</li>
+<li>quercus: nowdoc does not work (#5626, rep by remaus)</li>
+<li>quercus: parent classes needs to call its version of private methods within its scope (#5631, rep by G. Krall)</li>
+<li>quercus: ReflectionParameter::getClass() returns null (#4863, rep by ds82)</li>
+<li>quercus: Parent keyword does not work inside a Trait (#5581, rep by tobia)</li>
+<li>quercus: class_alias() is not implemented (#5443, rep by jsnoriegam)</li>
+<li>quercus: quercus namespace issue in compiled mode (#5640, rep by R. Emaus)</li>
+<li>quercus: simplexml children()->foo does not work for nodes with only text (#5655, rep by G. Krall)</li>
+<li>quercus: rename META-INF/services/* so JBoss doesn't parse them (#5654, rep by G. Krall)</li>
+<li>quercus: JsonSerializable class not implemented (#5504)</li>
+<li>quercus: add FILTER_SANITIZE_STRIPPED as an alias of FILTER_SANITIZE_STRING (#5663, rep by M. McHugh)</li>
+<li>quercus: implement filter_input(FILTER_UNSAFE_RAW) for phpMyFaq (#5661, rep by M. McHugh)</li>
+<li>quercus: implement FILTER_SANITIZE_SPECIAL_CHARS (#5665, rep by M. McHugh)</li>
+<li>quercus: force the java Mysql driver to use prepared statements (#5671, rep by R. Emaus)</li>
+<li>quercus: quercus cannot start on Wildfly (#5674, rep by G. Krall)</li>
+<li>quercus: unpack("H*") returns nothing (#5676, rep by M. Dykman)</li>
+<li>quercus: clearstatcache() has 2 optional arguments (#5687, rep by G. Krall)</li>
+<li>quercus: stream_is_local() is not implemented (#5685, rep by G. Krall)</li>
+<li>quercus: curl_multi_init() suite of functions not implemented (#3516, rep by koreth)</li>
+<li>quercus: SplObjectStorage class not implemented (#5696, rep by G. Krall)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.38 (Dec 13, 2013)">
 <ul>
 <li>win32: windows returns incorrect mtime for stat() for DST (#5578, rep by Jason Barr)</li>
@@ -29,7 +64,7 @@
 <li>deploy: redeploy delete issues with symlinks (#5536, rep by ssmax)</li>
 <li>health: OpenFileDescriptorCount is not available on some JMVs (#5515, rep by Y. Zhao)</li>
 <li>servlet: missing cookie-config in web.xml (#5521, rep by Arjan Tijms)</li>
-<li>ioc: remove validatio of generic type on produces method (#5522, rep by A Tijms)</li>
+<li>ioc: remove validation of generic type on produces method (#5522, rep by A Tijms)</li>
 <li>ioc: extends observers now auto-convert ProcessManagedBean&lt;Foo> to ProcessManagedBean&lt;? extends Foo> (#5531, rep by A Tijms)</li>
 <li>quercus: empty() needs to call ArrayAccess->offsetExists() (#5612, rep by G. Krall)</li>
 <li>quercus: session_status() not implemented (#5609, rep by G. Krall)</li>

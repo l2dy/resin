@@ -40,7 +40,6 @@ import com.caucho.quercus.program.QuercusProgram;
 import com.caucho.util.L10N;
 import com.caucho.vfs.NullWriteStream;
 import com.caucho.vfs.ReadStream;
-import com.caucho.vfs.ReaderStream;
 import com.caucho.vfs.VfsStream;
 import com.caucho.vfs.WriteStream;
 import com.caucho.vfs.WriterStreamImpl;
@@ -369,7 +368,7 @@ public class QuercusScriptEngine
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _isUnicodeSemantics + "]";
+    return getClass().getSimpleName() + "[isUnicodeSemantics=" + _isUnicodeSemantics + "]";
   }
 }
 

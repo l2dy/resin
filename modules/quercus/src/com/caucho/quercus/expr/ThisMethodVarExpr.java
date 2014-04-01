@@ -37,17 +37,12 @@ import java.util.ArrayList;
  * Represents a PHP method call expression from $this.
  */
 public class ThisMethodVarExpr extends ObjectMethodVarExpr {
-  protected boolean _isInStaticClassScope;
-
   public ThisMethodVarExpr(Location location,
                         ThisExpr qThis,
                         Expr methodName,
-                        ArrayList<Expr> args,
-                        boolean isInStaticClassScope)
+                        ArrayList<Expr> args)
   {
     super(location, qThis, methodName, args);
-
-    _isInStaticClassScope = isInStaticClassScope;
   }
 
   //

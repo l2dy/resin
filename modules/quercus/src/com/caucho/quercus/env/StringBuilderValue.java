@@ -39,6 +39,7 @@ import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.io.Reader;
 import java.util.IdentityHashMap;
 import java.util.Locale;
@@ -1874,14 +1875,14 @@ public class StringBuilderValue
     }
 
     ValueType typeA = getValueType();
+
     if (typeA.isNumberCmp() && typeB.isNumberCmp()) {
       double l = toDouble();
       double r = rValue.toDouble();
 
       return l == r;
     }
-
-    if (rValue instanceof StringBuilderValue) {
+    else if (rValue instanceof StringBuilderValue) {
       StringBuilderValue value = (StringBuilderValue) rValue;
 
       int length = _length;
@@ -1899,6 +1900,25 @@ public class StringBuilderValue
 
       return true;
     }
+    else if (rValue instanceof StringValue) {
+      StringValue value = (StringValue) rValue;
+
+      int length = _length;
+
+      if (length != value.length()) {
+        return false;
+      }
+
+      byte []buffer = _buffer;
+
+      for (int i = length - 1; i >= 0; i--) {
+        if ((buffer[i] & 0xff) != value.charAt(i)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
     else if (rValue.isObject()) {
       return super.eq(rValue);
     }
@@ -1907,12 +1927,14 @@ public class StringBuilderValue
 
       int len = rString.length();
 
-      if (_length != len)
+      if (_length != len) {
         return false;
+      }
 
       for (int i = len - 1; i >= 0; i--) {
-        if ((_buffer[i] & 0xff) != rString.charAt(i))
+        if ((_buffer[i] & 0xff) != rString.charAt(i)) {
           return false;
+        }
       }
 
       return true;
@@ -1958,6 +1980,25 @@ public class StringBuilderValue
       for (int i = length - 1; i >= 0; i--) {
         if (bufferA[i] != value.charAt(i))
           return false;
+      }
+
+      return true;
+    }
+    else if (o instanceof StringValue) {
+      StringValue str = (StringValue) o;
+
+      int len = _length;
+
+      if (len != str.length()) {
+        return false;
+      }
+
+      byte []buffer = _buffer;
+
+      for (int i = len - 1; i >= 0; i--) {
+        if ((buffer[i] & 0xff) != str.charAt(i)) {
+          return false;
+        }
       }
 
       return true;
@@ -2038,6 +2079,17 @@ public class StringBuilderValue
     }
     else
       return false;
+  }
+
+  /**
+   * Generates code to recreate the expression.
+   *
+   * @param out the writer to the Java source code.
+   */
+  public void generate(PrintWriter out)
+    throws IOException
+  {
+    ConstStringValue.generateImpl(out, this);
   }
 
   //

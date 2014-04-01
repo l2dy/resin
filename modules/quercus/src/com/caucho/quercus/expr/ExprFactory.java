@@ -29,18 +29,51 @@
 
 package com.caucho.quercus.expr;
 
-import com.caucho.quercus.Location;
-import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.env.*;
-import com.caucho.quercus.parser.QuercusParser;
-import com.caucho.quercus.program.*;
-import com.caucho.quercus.statement.*;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-
 import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import com.caucho.quercus.Location;
+import com.caucho.quercus.QuercusContext;
+import com.caucho.quercus.env.BinaryValue;
+import com.caucho.quercus.env.StringValue;
+import com.caucho.quercus.env.UnicodeValue;
+import com.caucho.quercus.env.Value;
+import com.caucho.quercus.parser.QuercusParser;
+import com.caucho.quercus.program.Arg;
+import com.caucho.quercus.program.ClassDef;
+import com.caucho.quercus.program.Function;
+import com.caucho.quercus.program.FunctionInfo;
+import com.caucho.quercus.program.InterpretedClassDef;
+import com.caucho.quercus.program.MethodDeclaration;
+import com.caucho.quercus.program.ObjectMethod;
+import com.caucho.quercus.statement.BlockStatement;
+import com.caucho.quercus.statement.BreakStatement;
+import com.caucho.quercus.statement.ClassDefStatement;
+import com.caucho.quercus.statement.ClassStaticStatement;
+import com.caucho.quercus.statement.ClosureStaticStatement;
+import com.caucho.quercus.statement.ContinueStatement;
+import com.caucho.quercus.statement.DoStatement;
+import com.caucho.quercus.statement.EchoStatement;
+import com.caucho.quercus.statement.ExprStatement;
+import com.caucho.quercus.statement.ForStatement;
+import com.caucho.quercus.statement.ForeachStatement;
+import com.caucho.quercus.statement.FunctionDefStatement;
+import com.caucho.quercus.statement.GlobalStatement;
+import com.caucho.quercus.statement.IfStatement;
+import com.caucho.quercus.statement.NullStatement;
+import com.caucho.quercus.statement.ReturnRefStatement;
+import com.caucho.quercus.statement.ReturnStatement;
+import com.caucho.quercus.statement.Statement;
+import com.caucho.quercus.statement.StaticStatement;
+import com.caucho.quercus.statement.SwitchStatement;
+import com.caucho.quercus.statement.TextStatement;
+import com.caucho.quercus.statement.ThrowStatement;
+import com.caucho.quercus.statement.TryStatement;
+import com.caucho.quercus.statement.VarGlobalStatement;
+import com.caucho.quercus.statement.WhileStatement;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 
 /**
  * Factory for creating PHP expressions and statements
@@ -245,10 +278,9 @@ public class ExprFactory {
    */
   public ThisFieldExpr createThisField(Location location,
                                        ThisExpr qThis,
-                                       StringValue name,
-                                       boolean isInStaticClassScope)
+                                       StringValue name)
   {
-    return new ThisFieldExpr(location, qThis, name, isInStaticClassScope);
+    return new ThisFieldExpr(location, qThis, name);
   }
 
   /**
@@ -256,10 +288,9 @@ public class ExprFactory {
    */
   public ThisFieldVarExpr createThisField(Location location,
                                           ThisExpr qThis,
-                                          Expr name,
-                                          boolean isInStaticClassScope)
+                                          Expr name)
   {
-    return new ThisFieldVarExpr(location, qThis, name, isInStaticClassScope);
+    return new ThisFieldVarExpr(location, qThis, name);
   }
 
   /**
@@ -268,11 +299,9 @@ public class ExprFactory {
   public Expr createThisMethod(Location loc,
                                ThisExpr qThis,
                                StringValue methodName,
-                               ArrayList<Expr> args,
-                               boolean isInStaticClassScope)
+                               ArrayList<Expr> args)
   {
-    return new ThisMethodExpr(loc, qThis, methodName, args,
-                              isInStaticClassScope);
+    return new ThisMethodExpr(loc, qThis, methodName, args);
   }
 
   /**
@@ -281,11 +310,9 @@ public class ExprFactory {
   public Expr createThisMethod(Location loc,
                                ThisExpr qThis,
                                Expr methodName,
-                               ArrayList<Expr> args,
-                               boolean isInStaticClassScope)
+                               ArrayList<Expr> args)
   {
-    return new ThisMethodVarExpr(loc, qThis, methodName, args,
-                                 isInStaticClassScope);
+    return new ThisMethodVarExpr(loc, qThis, methodName, args);
   }
 
   //
@@ -303,9 +330,10 @@ public class ExprFactory {
   /**
    * Creates a parent const expression.
    */
-  public ParentClassConstExpr createParentClassConst(StringValue name)
+  public TraitParentClassConstExpr createTraitParentClassConst(String traitName,
+                                                               StringValue name)
   {
-    return new ParentClassConstExpr(name);
+    return new TraitParentClassConstExpr(traitName, name);
   }
 
   /**
@@ -1028,6 +1056,12 @@ public class ExprFactory {
   {
     Location loc = parser.getLocation();
 
+    StringValue systemName = parser.getSystemFunctionName(name);
+
+    if (systemName != null) {
+      name = systemName;
+    }
+
     if (name.equalsString("isset") && args.size() == 1)
       return new FunIssetExpr(args.get(0));
     else if (name.equalsString("get_called_class") && args.size() == 0)
@@ -1113,11 +1147,12 @@ public class ExprFactory {
   /**
    * Creates a parent class method call parent::foo(...)
    */
-  public Expr createParentClassMethodCall(Location loc,
-                                          StringValue methodName,
-                                          ArrayList<Expr> args)
+  public Expr createTraitParentClassMethodCall(Location loc,
+                                               String traitName,
+                                               StringValue methodName,
+                                               ArrayList<Expr> args)
   {
-    return new ParentClassMethodExpr(loc, methodName, args);
+    return new TraitParentClassMethodExpr(loc, traitName, methodName, args);
   }
 
   /**
@@ -1497,6 +1532,17 @@ public class ExprFactory {
                                    VarVarExpr var)
   {
     return new VarGlobalStatement(loc, var);
+  }
+
+  /**
+   * Creates a static statement
+   */
+  public Statement createClassStatic(Location loc,
+                                     StringValue staticName,
+                                     VarExpr var,
+                                     Expr value)
+  {
+    return new ClassStaticStatement(loc, staticName, var, value);
   }
 
   /**

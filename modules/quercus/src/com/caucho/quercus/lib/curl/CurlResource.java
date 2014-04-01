@@ -95,6 +95,8 @@ public class CurlResource extends ResourceValue
   private StringValue _body;
   private Value _postBody;
 
+  private StringValue _returnTransfer;
+
   private String _contentType;
   private int _contentLength;
 
@@ -104,7 +106,7 @@ public class CurlResource extends ResourceValue
   private BinaryOutput _outputFile;
   private BinaryOutput _outputHeaderFile;
   private BinaryInput _uploadFile;
-  private int _uploadFileSize;
+  private long _uploadFileSize = -1;
 
   private Callable _headerCallback;
   private Callable _passwordCallback;
@@ -661,7 +663,7 @@ public class CurlResource extends ResourceValue
   /**
    * Returns size of file to upload.
    */
-  public int getUploadFileSize()
+  public long getUploadFileSize()
   {
     return _uploadFileSize;
   }
@@ -669,7 +671,7 @@ public class CurlResource extends ResourceValue
   /**
    * Sets size of file to upload.
    */
-  public void setUploadFileSize(int size)
+  public void setUploadFileSize(long size)
   {
     _uploadFileSize = size;
   }
@@ -704,6 +706,11 @@ public class CurlResource extends ResourceValue
   public void setUsername(String user)
   {
     _username = user;
+  }
+
+  public Callable getWriteCallback()
+  {
+    return _writeCallback;
   }
 
   /**
@@ -759,14 +766,16 @@ public class CurlResource extends ResourceValue
 
     env.addCleanup(httpRequest);
 
-    if (! httpRequest.execute(env))
+    if (! httpRequest.execute(env)) {
       return BooleanValue.FALSE;
+    }
 
     //if (hasError())
       //return BooleanValue.FALSE;
 
-    if (_cookie != null && _cookieFilename != null)
+    if (_cookie != null && _cookieFilename != null) {
       saveCookie(env);
+    }
 
     return getReturnValue(env);
   }
@@ -814,6 +823,8 @@ public class CurlResource extends ResourceValue
     }
 
     if (_isReturningData) {
+      _returnTransfer = data;
+
       return data;
     }
     else {
@@ -821,6 +832,14 @@ public class CurlResource extends ResourceValue
 
       return BooleanValue.TRUE;
     }
+  }
+
+  /**
+   * Returns the value for the CURLOPT_RETURNTRANSFER option.
+   */
+  public StringValue getReturnTransfer()
+  {
+    return _returnTransfer;
   }
 
   /**
@@ -927,12 +946,13 @@ public class CurlResource extends ResourceValue
 
   public String toString()
   {
-    return "CurlResource[" + _requestMethod + "]";
+    return "CurlResource[" + _requestMethod + " " + _URL + "]";
   }
 
 
   @Override
-  public boolean isResource() {
-      return true;
+  public boolean isResource()
+  {
+    return true;
   }
 }

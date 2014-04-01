@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -31,7 +31,6 @@ package com.caucho.quercus.lib;
 
 import com.caucho.quercus.Location;
 import com.caucho.quercus.QuercusContext;
-import com.caucho.quercus.QuercusModuleException;
 import com.caucho.quercus.annotation.Optional;
 import com.caucho.quercus.annotation.ReadOnly;
 import com.caucho.quercus.annotation.UsesSymbolTable;
@@ -1053,7 +1052,7 @@ public class OptionsModule extends AbstractQuercusModule {
     else if (value.isObject()) {
       ObjectValue obj = (ObjectValue)value.toObject(env);
 
-      ObjectValue result = new ObjectExtValue(obj.getQuercusClass());
+      ObjectValue result = new ObjectExtValue(env, obj.getQuercusClass());
 
       for (Map.Entry<Value,Value> entry : obj.entrySet()) {
         Value key = escape(env, entry.getKey());

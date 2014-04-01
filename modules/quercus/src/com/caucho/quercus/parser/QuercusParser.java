@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -37,15 +37,12 @@ import com.caucho.quercus.expr.*;
 import com.caucho.quercus.function.*;
 import com.caucho.quercus.program.*;
 import com.caucho.quercus.statement.*;
-import com.caucho.util.CharBuffer;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
 import com.caucho.vfs.*;
 
 import java.io.CharConversionException;
-import java.io.InputStream;
 import java.io.Reader;
-import java.io.UnsupportedEncodingException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -1186,7 +1183,12 @@ public class QuercusParser {
         sb.append("::");
         sb.append(name);
 
-        statement = _factory.createStatic(location, sb, var, init);
+        if (_classDef != null) {
+          statement = _factory.createClassStatic(location, sb, var, init);
+        }
+        else {
+          statement = _factory.createStatic(location, sb, var, init);
+        }
       }
 
       statementList.add(statement);
@@ -2285,18 +2287,16 @@ public class QuercusParser {
         }
 
         case CLASS:
+        {
           parseClassDefinition(0);
           break;
-
-            /* quercus/0260
-        case VAR:
-              parseClassVarDefinition(false);
-              break;
-        */
+        }
 
         case CONST:
+        {
           parseClassConstDefinition();
           break;
+        }
 
         case PUBLIC:
         case PRIVATE:
@@ -2375,25 +2375,25 @@ public class QuercusParser {
       }
 
       if ((modifiers & M_STATIC) != 0) {
-        ((ClassScope) _scope).addStaticVar(name, expr, _comment);
+        ((ClassScope) _scope).addStaticClassField(name, expr, _comment);
       }
       else if ((modifiers & M_PRIVATE) != 0) {
-        ((ClassScope) _scope).addVar(name,
-                                     expr,
-                                     FieldVisibility.PRIVATE,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PRIVATE,
+                                            comment);
       }
       else if ((modifiers & M_PROTECTED) != 0) {
-        ((ClassScope) _scope).addVar(name,
-                                     expr,
-                                     FieldVisibility.PROTECTED,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PROTECTED,
+                                            comment);
       }
       else {
-        ((ClassScope) _scope).addVar(name,
-                                     expr,
-                                     FieldVisibility.PUBLIC,
-                                     comment);
+        ((ClassScope) _scope).addClassField(name,
+                                            expr,
+                                            FieldVisibility.PUBLIC,
+                                            comment);
       }
 
       token = parseToken();
@@ -3534,9 +3534,6 @@ public class QuercusParser {
 
     int token = parseToken();
 
-    boolean isInClassScope = _classDef != null
-                             && ! _function.isStaticClassMethod();
-
     if (token == '$') {
       // php/09e0
       _peekToken = token;
@@ -3544,22 +3541,19 @@ public class QuercusParser {
       //nameExpr = parseTerm(false);
       nameExpr = parseTermArray(); // php/098e, php/398e
 
-      return term.createFieldGet(_factory, getLocation(),
-                                 nameExpr, isInClassScope);
+      return term.createFieldGet(_factory, getLocation(), nameExpr);
     }
     else if (token == '{') {
       nameExpr = parseExpr();
       expect('}');
 
-      return term.createFieldGet(_factory, getLocation(),
-                                 nameExpr, isInClassScope);
+      return term.createFieldGet(_factory, getLocation(), nameExpr);
     }
     else {
       _peekToken = token;
       StringValue name = parseIdentifier();
 
-      return term.createFieldGet(_factory, getLocation(),
-                                 name, isInClassScope);
+      return term.createFieldGet(_factory, getLocation(), name);
     }
   }
 
@@ -3972,6 +3966,10 @@ public class QuercusParser {
     ArrayList<Expr> args = parseArgs();
 
     name = resolveIdentifier(name);
+
+    if (! _quercus.isStrict()) {
+      name = name.toLowerCase(Locale.ENGLISH);
+    }
 
     return _factory.createCall(this, name, args);
 
@@ -4652,10 +4650,22 @@ public class QuercusParser {
           if (ch == '=')
             return LSHIFT_ASSIGN;
           else if (ch == '<') {
-            return parseHeredocToken();
+            ch = read();
+
+            if (ch == '\'') {
+              return parseNowdoc();
+            }
+            else if (ch == '"') {
+              return parseHeredocToken(true);
+            }
+            else {
+              _peek = ch;
+              return parseHeredocToken(false);
+            }
           }
-          else
+          else {
             _peek = ch;
+          }
 
           return LSHIFT;
         }
@@ -5215,9 +5225,101 @@ public class QuercusParser {
   }
 
   /**
+   * Parses the nowdoc.
+   */
+  private int parseNowdoc()
+    throws IOException
+  {
+    _sb.setLength(0);
+    int ch;
+
+    while ((ch = read()) >= 0 && ch != '\'' && ! Character.isWhitespace(ch)) {
+      _sb.append((char) ch);
+    }
+
+    if (ch != '\'') {
+      throw expect("'", ch);
+    }
+
+    ch = read();
+
+    if (ch == '\r') {
+      ch = read();
+    }
+
+    if (ch != '\n') {
+      throw expect(L.l("nowdoc newline"), ch);
+    }
+
+    String nowdocName = _sb.toString();
+    _sb.setLength(0);
+
+    while ((ch = read()) >= 0) {
+      if (ch == '\r') {
+        if ((ch = read()) == '\n') {
+          if (parseNowdocEnd(nowdocName)) {
+            break;
+          }
+          else {
+            _sb.append('\r');
+            _sb.append((char) ch);
+          }
+        }
+        else {
+          _sb.append('\r');
+        }
+      }
+      else if (ch == '\n') {
+        if (parseNowdocEnd(nowdocName)) {
+          break;
+        }
+
+        _sb.append((char) ch);
+      }
+      else {
+        _sb.append((char) ch);
+      }
+    }
+
+    _lexeme = createStringValue(_sb.toString());
+
+    return STRING;
+  }
+
+  private boolean parseNowdocEnd(String nowdocName)
+    throws IOException
+  {
+    int i = 0;
+    int len = nowdocName.length();
+
+    int ch = read();
+    for (; i < len; i++) {
+      if (nowdocName.charAt(i) == ch) {
+        ch = read();
+
+        continue;
+      }
+      else {
+        break;
+      }
+    }
+
+    _peek = ch;
+
+    if (i == len) {
+      return true;
+    }
+    else {
+      _sb.append(nowdocName, 0, i);
+
+      return false;
+    }
+  }
+
+  /**
    * Parses the next heredoc token.
    */
-  private int parseHeredocToken()
+  private int parseHeredocToken(boolean isQuoted)
     throws IOException
   {
     _sb.setLength(0);
@@ -5229,21 +5331,35 @@ public class QuercusParser {
     }
     _peek = ch;
 
-    while ((ch = read()) >= 0 && ch != '\r' && ch != '\n') {
+    while ((ch = read()) >= 0
+           && ! Character.isWhitespace(ch)
+           && ! (isQuoted && ch == '"')) {
       _sb.append((char) ch);
     }
 
     _heredocEnd = _sb.toString();
 
-    if (ch == '\n') {
+    if (isQuoted && ch == '"') {
+      ch = read();
+
+      if (ch == '\r') {
+        ch = read();
+      }
+
+      if (ch != '\n') {
+        throw expect("\n", ch);
+      }
+    }
+    else if (ch == '\n') {
     }
     else if (ch == '\r') {
       ch = read();
       if (ch != '\n')
         _peek = ch;
     }
-    else
+    else {
       _peek = ch;
+    }
 
     return parseEscapedString('"');
   }
@@ -5322,12 +5438,8 @@ public class QuercusParser {
                 _sb.append((char) ch);
               }
 
-              boolean isInClassScope = _classDef != null
-                                       && ! _function.isStaticClassMethod();
-
               tail = tail.createFieldGet(_factory, getLocation(),
-                                         copyStringValue(_sb),
-                                         isInClassScope);
+                                         copyStringValue(_sb));
             }
             else {
               tail = _factory.createAppend(tail, createStringExpr("->"));

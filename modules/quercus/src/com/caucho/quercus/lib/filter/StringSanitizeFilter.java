@@ -105,14 +105,4 @@ public class StringSanitizeFilter
 
     return sb;
   }
-
-  private static void appendEncoded(StringValue sb, char ch)
-  {
-    sb.append('&');
-    sb.append('#');
-
-    sb.append((int) ch);
-
-    sb.append(';');
-  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -27,16 +27,34 @@
  * @author Nam Nguyen
  */
 
-package com.caucho.quercus.lib.filter;
+package com.caucho.quercus.function;
 
 import com.caucho.quercus.env.Env;
-import com.caucho.quercus.env.Value;
+import com.caucho.quercus.program.Arg;
 
-public class DefaultFilter implements Filter
+@SuppressWarnings("serial")
+public abstract class CompiledAbstractFunction extends AbstractFunction
 {
-  @Override
-  public Value filter(Env env, Value value, Value flagV)
+  protected final String _name;
+  protected final Arg []_args;
+
+  public CompiledAbstractFunction(String name,
+                                  Arg []args)
   {
-    return value;
+    _name = name;
+
+    _args = args;
+  }
+
+  @Override
+  public final String getName()
+  {
+    return _name;
+  }
+
+  @Override
+  public final Arg []getArgs(Env env)
+  {
+    return _args;
   }
 }

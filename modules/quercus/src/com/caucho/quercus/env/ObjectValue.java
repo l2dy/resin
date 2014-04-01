@@ -29,9 +29,11 @@
 
 package com.caucho.quercus.env;
 
+import com.caucho.quercus.expr.LiteralNullExpr;
 import com.caucho.quercus.function.AbstractFunction;
 import com.caucho.quercus.lib.ArrayModule;
 import com.caucho.quercus.program.Arg;
+import com.caucho.quercus.program.ClassField;
 import com.caucho.vfs.WriteStream;
 
 import java.io.IOException;
@@ -48,20 +50,24 @@ abstract public class ObjectValue extends Callback {
   transient protected QuercusClass _quercusClass;
 
   protected String _className;
-
   protected String _incompleteObjectName;
 
-  protected ObjectValue()
+  private final int _objectId;
+
+  protected ObjectValue(Env env)
   {
+    _objectId = env.generateObjectId();
   }
 
-  protected ObjectValue(QuercusClass quercusClass)
+  protected ObjectValue(Env env, QuercusClass quercusClass)
   {
+    this(env);
+
     _quercusClass = quercusClass;
     _className = quercusClass.getName();
   }
 
-  protected void setQuercusClass(QuercusClass cl)
+  public void setQuercusClass(QuercusClass cl)
   {
     _quercusClass = cl;
     _className = cl.getName();
@@ -132,6 +138,11 @@ abstract public class ObjectValue extends Callback {
     return _className;
   }
 
+  public void setClassName(String className)
+  {
+    _className = className;
+  }
+
   /**
    * Returns a Set of entries.
    */
@@ -170,6 +181,23 @@ abstract public class ObjectValue extends Callback {
   public String getType()
   {
     return "object";
+  }
+
+  /**
+   * Returns the unique object hash.
+   */
+  @Override
+  public StringValue getObjectHash(Env env)
+  {
+    StringValue sb = env.createStringBuilder();
+
+    sb.append(getClassName());
+    sb.append('-');
+    sb.append(_objectId);
+    sb.append('-');
+    sb.append(System.identityHashCode(this));
+
+    return sb;
   }
 
   /**
@@ -284,9 +312,9 @@ abstract public class ObjectValue extends Callback {
    * Returns true for an implementation of a class
    */
   @Override
-  public boolean isA(String name)
+  public boolean isA(Env env, String name)
   {
-    return _quercusClass.isA(name);
+    return _quercusClass.isA(env, name);
   }
 
   /**
@@ -619,11 +647,21 @@ abstract public class ObjectValue extends Callback {
    * Initializes a new field, does not call __set if it is defined.
    */
   @Override
-  public void initField(StringValue key,
-                        Value value,
-                        FieldVisibility visibility)
+  public void initField(Env env,
+                        StringValue name,
+                        StringValue canonicalName,
+                        Value value)
   {
-    putThisField(Env.getInstance(), key, value);
+    putThisField(env, canonicalName, value);
+  }
+
+  @Override
+  public void initIncompleteField(Env env,
+                                  StringValue name,
+                                  Value value,
+                                  FieldVisibility visibility)
+  {
+    initField(env, name, value);
   }
 
   /**
@@ -833,25 +871,48 @@ abstract public class ObjectValue extends Callback {
   @Override
   public void jsonEncode(Env env, JsonEncodeContext context, StringValue sb)
   {
-    sb.append('{');
+    if (isA(env, "JsonSerializable")) {
+      AbstractFunction fun = getMethod(env.createString("jsonSerialize"));
 
-    int length = 0;
+      if (fun == null) {
+        throw new IllegalStateException(L.l("must implement jsonSerialize()"));
+      }
 
-    Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
+      Value value = fun.callMethod(env, getQuercusClass(), this);
 
-    while (iter.hasNext()) {
-      Map.Entry<Value,Value> entry = iter.next();
+      value.jsonEncode(env, context, sb);
 
-      if (length > 0)
-        sb.append(',');
-
-      entry.getKey().toStringValue(env).jsonEncode(env, context, sb);
-      sb.append(':');
-      entry.getValue().jsonEncode(env, context, sb);
-      length++;
+      return;
     }
+    else {
+      sb.append('{');
 
-    sb.append('}');
+      int length = 0;
+
+      Iterator<Map.Entry<Value,Value>> iter = getIterator(env);
+
+      while (iter.hasNext()) {
+        Map.Entry<Value,Value> entry = iter.next();
+
+        StringValue key = entry.getKey().toStringValue(env);
+        Value value = entry.getValue();
+
+        if (! ClassField.isPublic(key)) {
+          continue;
+        }
+
+        if (length > 0) {
+          sb.append(',');
+        }
+
+        key.jsonEncode(env, context, sb);
+        sb.append(':');
+        value.jsonEncode(env, context, sb);
+        length++;
+      }
+
+      sb.append('}');
+    }
   }
 }
 

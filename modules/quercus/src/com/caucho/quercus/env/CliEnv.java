@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,6 +23,8 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Nam Nguyen
  */
 
 package com.caucho.quercus.env;
@@ -31,33 +33,29 @@ import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.page.QuercusPage;
 import com.caucho.vfs.WriteStream;
 
-/**
- * @author nnguyen
- *
- */
 public class CliEnv extends Env {
   private final String[] _argv;
-  
+
   public CliEnv(QuercusContext quercus,
                 QuercusPage page,
                 WriteStream out,
                 String[] argv)
   {
     super(quercus, page, out, null, null);
-    
+
     _argv = argv;
   }
-  
+
   @Override
   protected ArrayValue createArgv() {
     ArrayValue array = new ArrayValueImpl();
-    
+
     String[] argv = _argv;
-    
+
     for (int i = 0; i < argv.length; i++) {
       array.put(argv[i]);
     }
-    
+
     return array;
   }
 }

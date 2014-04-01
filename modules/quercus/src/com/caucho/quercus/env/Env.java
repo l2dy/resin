@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,11 +47,6 @@ import java.util.logging.Logger;
 
 import javax.script.Bindings;
 import javax.script.ScriptContext;
-import javax.servlet.ServletContext;
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 import javax.sql.DataSource;
 
 import com.caucho.java.WorkDir;
@@ -86,6 +81,11 @@ import com.caucho.quercus.program.JavaClassDef;
 import com.caucho.quercus.program.QuercusProgram;
 import com.caucho.quercus.program.UndefinedFunction;
 import com.caucho.quercus.resources.StreamContextResource;
+import com.caucho.quercus.servlet.api.QuercusCookie;
+import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
+import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
+import com.caucho.quercus.servlet.api.QuercusHttpSession;
+import com.caucho.quercus.servlet.api.QuercusServletContext;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.FreeList;
 import com.caucho.util.IntMap;
@@ -264,6 +264,8 @@ public class Env
   public ClassDef []_classDef;
   public QuercusClass []_qClass;
 
+  public HashMap<String,QuercusClass> _classAliasMap;
+
   // Constant map
   public Value []_const;
 
@@ -355,7 +357,6 @@ public class Env
 
   public enum OVERLOADING_TYPES {INVALID_FIRST, FIELDGET, FIELDSET, ISSET, UNSET, INVALID_LAST};
 
-
   private Path _selfPath;
   private Path _selfDirectory;
   private Path _pwd;
@@ -365,8 +366,8 @@ public class Env
 
   private final boolean _isStrict;
 
-  private HttpServletRequest _request;
-  private HttpServletResponse _response;
+  private QuercusHttpServletRequest _request;
+  private QuercusHttpServletResponse _response;
 
   private ArrayValue _inputGet;
   private ArrayValue _inputCookie;
@@ -379,7 +380,7 @@ public class Env
   private StringValue _inputData;
 
   private SessionArrayValue _session;
-  private HttpSession _javaSession;
+  private QuercusHttpSession _javaSession;
 
   private ScriptContext _scriptContext;
 
@@ -440,8 +441,8 @@ public class Env
   public Env(QuercusContext quercus,
              QuercusPage page,
              WriteStream out,
-             HttpServletRequest request,
-             HttpServletResponse response)
+             QuercusHttpServletRequest request,
+             QuercusHttpServletResponse response)
   {
     _quercus = quercus;
 
@@ -626,11 +627,11 @@ public class Env
   }
 
   private void fillCookies(ArrayValue array,
-                           Cookie []cookies,
+                           QuercusCookie []cookies,
                            boolean isMagicQuotes)
   {
     for (int i = 0; cookies != null && i < cookies.length; i++) {
-      Cookie cookie = cookies[i];
+      QuercusCookie cookie = cookies[i];
 
       String decodedValue = decodeValue(cookie.getValue());
 
@@ -645,7 +646,7 @@ public class Env
 
   protected void fillPost(ArrayValue postArray,
                           ArrayValue files,
-                          HttpServletRequest request,
+                          QuercusHttpServletRequest request,
                           boolean isMagicQuotes)
   {
     if (request != null && request.getMethod().equals("POST")) {
@@ -945,7 +946,7 @@ public class Env
   /**
    * Returns the ServletContext.
    */
-  public ServletContext getServletContext()
+  public QuercusServletContext getServletContext()
   {
     return _quercus.getServletContext();
   }
@@ -1653,16 +1654,19 @@ public class Env
     String realPath;
 
     if (_tmpPath == null) {
-      if (getRequest() != null)
+      if (getRequest() != null) {
         realPath = getRequest().getRealPath("/WEB-INF/tmp");
-      else
+      }
+      else {
         realPath = "file:/tmp";
+      }
 
       _tmpPath = getPwd().lookup(realPath);
 
       try {
-        if (! _tmpPath.isDirectory())
+        if (! _tmpPath.isDirectory()) {
           _tmpPath.mkdirs();
+        }
       }
       catch (IOException e) {
         log.log(Level.FINE, e.toString(), e);
@@ -1677,8 +1681,9 @@ public class Env
    */
   public void addRemovePath(Path path)
   {
-    if (_removePaths == null)
+    if (_removePaths == null) {
       _removePaths = new ArrayList<Path>();
+    }
 
     _removePaths.add(path);
   }
@@ -1686,7 +1691,7 @@ public class Env
   /**
    * Returns the request.
    */
-  public HttpServletRequest getRequest()
+  public QuercusHttpServletRequest getRequest()
   {
     return _request;
   }
@@ -1721,7 +1726,7 @@ public class Env
   /**
    * Returns the response.
    */
-  public HttpServletResponse getResponse()
+  public QuercusHttpServletResponse getResponse()
   {
     return _response;
   }
@@ -1753,7 +1758,7 @@ public class Env
   /**
    * Returns the Java Http session.
    */
-  public HttpSession getJavaSession()
+  public QuercusHttpSession getJavaSession()
   {
     return _javaSession;
   }
@@ -2916,10 +2921,10 @@ public class Env
 
     boolean isMagicQuotes = getIniBoolean("magic_quotes_gpc");
 
-    Cookie []cookies = _request.getCookies();
+    QuercusCookie []cookies = _request.getCookies();
     if (cookies != null) {
       for (int i = 0; i < cookies.length; i++) {
-        Cookie cookie = cookies[i];
+        QuercusCookie cookie = cookies[i];
 
         String value = decodeValue(cookie.getValue());
 
@@ -3333,31 +3338,33 @@ public class Env
   {
     FieldGetEntry entry = new FieldGetEntry(className, fieldName);
 
-      LinkedList<FieldGetEntry> list = null;
-      switch (type) {
-          case FIELDGET:
-              list = _fieldGetList;
-              break;
-          case FIELDSET:
-              list = _fieldSetList;
-              break;
-          case ISSET:
-              list = _issetList;
-              break;
-          case UNSET:
-              list = _unsetList;
-              break;
-          case INVALID_FIRST:
-          case INVALID_LAST:
-              // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
-              throw new IllegalStateException("IllegalState: pushFieldGet with FIRST/LAST Element");
-      }
+    LinkedList<FieldGetEntry> list = null;
+    switch (type) {
+    case FIELDGET:
+      list = _fieldGetList;
+      break;
+    case FIELDSET:
+      list = _fieldSetList;
+      break;
+    case ISSET:
+      list = _issetList;
+      break;
+    case UNSET:
+      list = _unsetList;
+      break;
+    case INVALID_FIRST:
+    case INVALID_LAST:
+      // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
+      throw new IllegalStateException("IllegalState: pushFieldGet with FIRST/LAST Element");
+    }
 
-      if(list == null)
-        return false;
-
-    if (list.contains(entry))
+    if (list == null) {
       return false;
+    }
+
+    if (list.contains(entry)) {
+      return false;
+    }
     else {
       list.push(entry);
 
@@ -3367,24 +3374,23 @@ public class Env
 
   public void popFieldGet(Env.OVERLOADING_TYPES type)
   {
-      switch (type) {
-          case FIELDGET:
-              _fieldGetList.pop();
-              break;
-          case FIELDSET:
-              _fieldSetList.pop();
-              break;
-          case ISSET:
-              _issetList.pop();
-              break;
-          case UNSET:
-              _unsetList.pop();
-              break;
-          case INVALID_FIRST:
-          case INVALID_LAST:
-              // defensive programming according to &quot;Code Complete 2nd Edition, MS Press&quot;
-              throw new IllegalStateException("IllegalState: popFieldGet with FIRST/LAST Element");
-      }
+    switch (type) {
+    case FIELDGET:
+      _fieldGetList.pop();
+      break;
+    case FIELDSET:
+      _fieldSetList.pop();
+      break;
+    case ISSET:
+      _issetList.pop();
+      break;
+    case UNSET:
+      _unsetList.pop();
+      break;
+    case INVALID_FIRST:
+    case INVALID_LAST:
+      throw new IllegalStateException("IllegalState: popFieldGet with FIRST/LAST Element");
+    }
   }
 
   public QuercusClass getCallingClass()
@@ -4013,24 +4019,9 @@ public class Env
       return null;
   }
 
-  /**
-   * Returns the function with a given name.
-   *
-   * Compiled mode normally uses the _fun array directly, so this call
-   * is rare.
-   */
-  public AbstractFunction findFunction(int id)
+  public AbstractFunction getFunction(int id)
   {
-    if (id >= 0) {
-      if (id < _fun.length && ! (_fun[id] instanceof UndefinedFunction)) {
-        return _fun[id];
-      }
-      else {
-        return null;
-      }
-    }
-
-    return null;
+    return _fun[id];
   }
 
   public AbstractFunction getFunction(StringValue name)
@@ -4054,8 +4045,9 @@ public class Env
       System.arraycopy(oldFun, 0, _fun, 0, oldFun.length);
     }
 
-    if (_fun[id] == null)
+    if (_fun[id] == null) {
       _fun[id] = fun;
+    }
   }
 
   /*
@@ -4932,7 +4924,7 @@ public class Env
   /**
    * Generate an object id.
    */
-  public int generateId()
+  public int generateObjectId()
   {
     return ++_objectId;
   }
@@ -5118,11 +5110,13 @@ public class Env
    */
   public Value wrapJava(Object obj, JavaClassDef def)
   {
-    if (obj == null)
+    if (obj == null) {
       return NullValue.NULL;
+    }
 
-    if (obj instanceof Value)
+    if (obj instanceof Value) {
       return (Value) obj;
+    }
 
     // XXX: why is this logic here?  The def should be correct on the call
     // logic is for JavaMarshal, where can avoid the lookup call
@@ -5138,6 +5132,30 @@ public class Env
   }
 
   /**
+   * Adds a class alias.
+   */
+  public void addClassAlias(String alias, QuercusClass cls)
+  {
+    if (_classAliasMap == null) {
+      _classAliasMap = new HashMap<String,QuercusClass>();
+    }
+
+    _classAliasMap.put(alias, cls);
+  }
+
+  /**
+   * Finds the class with the given alias name.
+   */
+  public QuercusClass findClassByAlias(String alias)
+  {
+    if (_classAliasMap == null) {
+      return null;
+    }
+
+    return _classAliasMap.get(alias);
+  }
+
+  /**
    * Finds the class with the given name.
    *
    * @param name the class name
@@ -5145,7 +5163,7 @@ public class Env
    */
   public QuercusClass findClass(String name)
   {
-    return findClass(name, true, true);
+    return findClass(name, -1, true, true, true);
   }
 
   /**
@@ -5157,22 +5175,60 @@ public class Env
    */
   public QuercusClass findClass(String name,
                                 boolean useAutoload,
-                                boolean useImport)
+                                boolean useImport,
+                                boolean useAliasMap)
   {
-    int id = _quercus.getClassId(name);
-
-    return findClass(id, useAutoload, useImport);
+    return findClass(name, -1, useAutoload, useImport, useAliasMap);
   }
 
+  /**
+   * Finds the class with the given name id.
+   *
+   * @param name the class name
+   * @return the found class or null if no class found.
+   */
+  public QuercusClass findClass(int id)
+  {
+    return findClass(null, id, true, true, true);
+  }
+
+  /**
+   * Finds the class with the given name.
+   *
+   * @param name the class name
+   * @param useAutoload use autoload to locate the class if necessary
+   * @return the found class or null if no class found.
+   */
   public QuercusClass findClass(int id,
                                 boolean useAutoload,
-                                boolean useImport)
+                                boolean useImport,
+                                boolean useAliasMap)
   {
+    return findClass(null, id, useAutoload, useImport, useAliasMap);
+  }
+
+  /**
+   * Finds the class with the given name.
+   *
+   * @param name the class name
+   * @param useAutoload use autoload to locate the class if necessary
+   * @return the found class or null if no class found.
+   */
+  public QuercusClass findClass(String name,
+                                int id,
+                                boolean useAutoload,
+                                boolean useImport,
+                                boolean useAliasMap)
+  {
+    if (id < 0) {
+      id = _quercus.getClassId(name);
+    }
+
     if (id < _qClass.length && _qClass[id] != null) {
       return _qClass[id];
     }
 
-    QuercusClass cl = createClassFromCache(id, useAutoload, useImport);
+    QuercusClass cl = createClassFromCache(id, useAutoload, useImport, useAliasMap);
 
     if (cl != null) {
       _qClass[id] = cl;
@@ -5183,24 +5239,40 @@ public class Env
       return cl;
     }
     else {
-      String name = _quercus.getClassName(id);
+      if (name == null) {
+        name = _quercus.getClassName(id);
+      }
 
-      QuercusClass qcl = findClassExt(name, useAutoload, useImport);
+      QuercusClass qcl = null;
 
-      if (qcl != null)
+      if (useAliasMap) {
+        qcl = findClassByAlias(name);
+      }
+
+      if (qcl == null) {
+        qcl = findClassExt(name, id, useAutoload, useImport, useAliasMap);
+      }
+
+      if (qcl != null) {
         _qClass[id] = qcl;
-      else
+      }
+      else {
         return null;
+      }
 
       return qcl;
     }
   }
 
   private QuercusClass findClassExt(String name,
+                                    int id,
                                     boolean useAutoload,
-                                    boolean useImport)
+                                    boolean useImport,
+                                    boolean useAliasMap)
   {
-    int id = _quercus.getClassId(name);
+    if (id < 0) {
+      id = _quercus.getClassId(name);
+    }
 
     if (useAutoload) {
       if (! _autoloadClasses.contains(name)) {
@@ -5217,7 +5289,7 @@ public class Env
             cb.call(this, nameString);
 
             // php/0977
-            QuercusClass cls = findClass(name, false, useImport);
+            QuercusClass cls = findClass(name, id, false, useImport, useAliasMap);
 
             if (cls != null)
               return cls;
@@ -5231,7 +5303,7 @@ public class Env
               _autoload.call(this, nameString);
 
               // php/0976
-              QuercusClass cls = findClass(name, false, useImport);
+              QuercusClass cls = findClass(name, id, false, useImport, useAliasMap);
 
               if (cls != null)
                 return cls;
@@ -5245,7 +5317,7 @@ public class Env
 
     if (useImport) {
       if (importPhpClass(name)) {
-        return findClass(name, false, false);
+        return findClass(name, id, false, false, useAliasMap);
       }
       else {
         try {
@@ -5301,7 +5373,7 @@ public class Env
     ClassDef def = _classDef[classId];
 
     if (def == null) {
-      QuercusClass cl = findClass(classId, true, true);
+      QuercusClass cl = findClass(null, classId, true, true, true);
 
       if (cl != null)
         return cl;
@@ -5394,7 +5466,8 @@ public class Env
    */
   private QuercusClass createClassFromCache(int id,
                                             boolean useAutoload,
-                                            boolean useImport)
+                                            boolean useImport,
+                                            boolean useAliasMap)
   {
     if (id < _classDef.length && _classDef[id] != null) {
       ClassDef classDef = _classDef[id];
@@ -5403,24 +5476,29 @@ public class Env
 
       QuercusClass parent = null;
 
-      if (parentName != null)
-        parent = findClass(parentName);
+      if (parentName != null) {
+        parent = findClass(parentName, -1, useAutoload, useImport, useAliasMap);
+      }
 
-      if (parentName == null || parent != null)
+      if (parentName == null || parent != null) {
         return createQuercusClass(id, classDef, parent);
-      else
+      }
+      else {
         return null; // php/
+      }
     }
 
     ClassDef staticClass = _quercus.getClassDef(id);
 
-    if (staticClass != null)
+    if (staticClass != null) {
       return createQuercusClass(id, staticClass, null); // XXX: cache
-    else
+    }
+    else {
       return null;
+    }
   }
 
-  /*
+  /**
    * Registers an SPL autoload function.
    */
   public void addAutoloadFunction(Callable fun, boolean isPrepend)
@@ -5439,7 +5517,7 @@ public class Env
     }
   }
 
-  /*
+  /**
    * Unregisters an SPL autoload function.
    */
   public void removeAutoloadFunction(Callable fun)
@@ -5453,7 +5531,7 @@ public class Env
     }
   }
 
-  /*
+  /**
    * Returns the registered SPL autoload functions.
    */
   public ArrayList<Callable> getAutoloadFunctions()
@@ -5492,7 +5570,7 @@ public class Env
     }
 
     if (url != null) {
-      includeOnce(new StringBuilderValue(url.toString()));
+      includeOnce(createString(url.toString()));
       return true;
     }
     else {
@@ -5540,10 +5618,11 @@ public class Env
    */
   public QuercusClass findAbstractClass(String name)
   {
-    QuercusClass cl = findClass(name, true, true);
+    QuercusClass cl = findClass(name, -1, true, true, true);
 
-    if (cl != null)
+    if (cl != null) {
       return cl;
+    }
 
     throw createErrorException(L.l("'{0}' is an unknown class name.", name));
     /*
@@ -6878,7 +6957,8 @@ public class Env
         else {
           fullMsg = location.getMessagePrefix()
               + getCodeName(mask)
-              + msg;
+              + msg
+              + getFunctionLocation();
         }
 
         if (getIniBoolean("track_errors")) {
