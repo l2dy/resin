@@ -19,7 +19,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
-*
+ *
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
@@ -27,19 +27,48 @@
  * @author Scott Ferguson
  */
 
-package com.caucho;
+package com.caucho.server.webapp;
 
-final public class Version {
-  public static final String COPYRIGHT =
-    "Copyright(c) 1998-2012 Caucho Technology.  All rights reserved.";
+import java.util.Hashtable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-  public static String FULL_VERSION = "Resin-4.0.40 (built Fri, 16 May 2014 11:11:38 PDT)";
-  public static String VERSION = "4.0.40";
-  public static String VERSION_DATE = "20140516T111138";
+import javax.naming.NamingException;
+import javax.validation.Validation;
 
-  public static void main(String []argv)
+import com.caucho.naming.Jndi;
+import com.caucho.naming.ObjectProxy;
+
+/**
+ * Initializes JNDI environment
+ */
+public class WebAppEnv
+{
+  private static final Logger log
+    = Logger.getLogger(WebAppEnv.class.getName());
+  
+  public void init()
   {
-    System.out.println(FULL_VERSION);
-    System.out.println(COPYRIGHT);
+    try {
+      initBeanValidation();
+    } catch (Throwable e) {
+      e.printStackTrace();
+      log.log(Level.FINEST, e.toString(), e);
+    }
+  }
+  
+  private void initBeanValidation()
+    throws NamingException
+  {
+    Jndi.bindDeep("java:comp/BeanValidation", new JndiFactoryBeanValidation());
+  }
+  
+  private static class JndiFactoryBeanValidation implements ObjectProxy
+  {
+    @Override
+    public Object createObject(Hashtable<?, ?> env) throws NamingException
+    {
+      return Validation.buildDefaultValidatorFactory();
+    }
   }
 }
