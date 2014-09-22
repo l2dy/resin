@@ -93,7 +93,7 @@ class TcpAsyncController extends AsyncController {
   @Override
   public final void complete()
   {
-    _isCompleteRequested = true;
+    setCompleteRequested();
 
     try {
       wake();
@@ -136,26 +136,32 @@ class TcpAsyncController extends AsyncController {
 
   /**
    * Sets the timeout.
+   * @return 
    */
   @Override
-  public final void timeout()
+  public final boolean timeout()
   {
-    _cometHandler.onTimeout();
-
-    _isTimeout = true;
-    _isCompleteRequested = true;
+    if (_cometHandler.onTimeout()) {
+      _isTimeout = true;
+      // server/1lda
+      // setCompleteRequested();
+      
+      return true;
+    }
 
     try {
       wake();
     } catch (Exception e) {
       log.log(Level.FINEST, e.toString(), e);
     }
+    
+    return false;
   }
 
   void setTimeout()
   {
     _isTimeout = true;
-    _isCompleteRequested = true;
+    // setCompleteRequested();
   }
   
   /**

@@ -10,6 +10,46 @@
 <li><a href="http://caucho.com/resin-3.1/changes/changes.xtp">Resin 3.1 changes</a></li>
 </ul>
 
+<s2 title="4.0.41 in progress">
+<ul>
+<li>health: update PdfReport on start to log warning messages for mail (#570, rep by D. Tapsell)</li>
+<li>servlet: ServletContextListener was called twice when registered from ServletContainerInitializer (#5611, rep by Gerrit Janssen)</li>
+<li>scheduled-task: check for early task call (#5709, rep by Daniel Jimenez)</li>
+<li>gzip: gzip response needs to filter out content-length (#5777, rep by wxiaoguang)</li>
+<li>jni: update EINTR processing for poll/nonblocking read (#5627, rep by bean)</li>
+<li>log: ensure rollover worker is called after flush (#5785, rep by mros2stf)</li>
+<li>log: missing timestamp due to buffer fill condition (#5794, rep by Daniel Jimenez)</li>
+<li>health: add "DISABLED" state to HealthStatus for disabled health checks (#5711, rep by Shinomiya Nobuaki)</li>
+<li>dbpool: reduce logging level for dbpool driver close, because exception are
+expected in Mysql (#5637, rep by Srikanth Pulikonda)</li>
+<li>cli: added -timeout to deploy command (#5598, #5597)</li>
+<li>openssl: add +tlsv1.1 and +tlsv1.2 (#5682, rep by Sarah Gillespie)</li>
+<li>servlet: welcome-file processing with query string creates duplicate for getParameterValues (#5642)</li>
+<li>servlet: content-type and application/json (#5565, rep by 54chen)</li>
+<li>health: add ping-port attribute to HttpStatusHealthCheck in health.xml (#5572)</li>
+<li>async: allow dispatch() in onTimeout() (#5779, rep by azuo_lee)</li>
+<li>ssl: jni ssl mmap support must go through OpenSSL API (#5790, rep by N. Kikhia)</li>
+<li>jni: calculate_poll_result could return invalid value (#5632, rep by bean)</li>
+<li>session: check for NPE on shutdown (#5633, #5681 rep by M. Jindal)</li> 
+<li>configure: change ln -sfT to ln -sf for Mac install (#5717, rep by wileysaw)</li>
+<li>io: null source check on read (#5731)</li>
+<li>config: jvm-arg not properly picking up dynamic server.id (#5793, rep by daniel)</li>
+<li>jni: use _filelengthi64 for windows JniRandomAccessFile.getLength (#5733, rep by Mattias Lagerwall)</li>
+<li>config: ResinEnv exception declaration in init() (#5737, rep by matthiasblaesing)</li>
+<li>server: add NPE check for generateController (#5744, rep by Shinomiya Nobuaki)</li>
+<li>file: added TransmitFile for windows (#5784)</li>
+<li>servlet: error-page for 400-bad request NPE (#5749)</li>
+<li>servlet: loadOnStartup was incorrectly enabled for @WebServlet even when unset (#5778, rep by Marko Asplund)</li>
+<li>load-balance: utf-8 encoding in urls (#5785, rep by R Cohen)</li>
+<li>access-log: rollover-count was not property matching files with .gz extension (#5789, rep by Uv Wildner)</li>
+<li>jdbc: UserStatement.getWarnings() needs to work even after close (rep by Ole Dalgaard)</li>
+<li>health: add critical/fatal messages to health shutdown message (#5762, rep by J. Meyer)</li>
+<li>resin.xml: moved default cluster-default.xml to classpath and defaulted app-default.xml to be dir-relative (#5762, rep by M. Lowe)</li>
+<li>@WebSocket: interference between @WebSocket and CDI/JSP EL (#5776, rep by marko_asplund)</li>
+<li>jsp-el: cookie.containsKey() fix: (#5683, rep. by Jason Wang)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.40 (May 13, 2014)">
 <ul>
 <li>classLoader: getResource() should skip broken jars (#5706, rep by Constantinos Karantzas)</li>

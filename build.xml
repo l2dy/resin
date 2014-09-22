@@ -333,6 +333,12 @@
           preservelastmodified="true"
           overwrite="true">
     </copy>
+    
+    <copy tofile="conf/cluster-default.xml"
+          file="modules/resin/src/META-INF/caucho/cluster-default.xml"
+          preservelastmodified="true"
+          overwrite="true">
+    </copy>
   </target>
 
   <target name="resin-xml" depends="init">
@@ -1046,6 +1052,7 @@
         <exclude name="*~"/>
         <exclude name="**/.svn/**"/>
         <include name="com/caucho/**"/>
+        <exclude name="com/caucho/config/core/**"/>
       </fileset>
       <fileset dir="${basedir}">
         <include name="LICENSE"/>
@@ -1200,6 +1207,7 @@
         <exclude name="*~"/>
         <exclude name="**/.svn/**"/>
         <include name="com/caucho/**"/>
+        <exclude name="com/caucho/config/core/**"/>
       </fileset>
     </jar>
 

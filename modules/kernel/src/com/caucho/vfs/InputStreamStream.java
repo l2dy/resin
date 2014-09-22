@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,13 +23,37 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Nam Nguyen
  */
 
-#ifndef CSE_VERSION_H
-#define CSE_VERSION_H
+package com.caucho.vfs;
 
-#define VERSION "Resin/4.0.41"
-#define FULL_VERSION "Resin-4.0.41 (built Mon, 22 Sep 2014 09:55:28 PDT)"
+import java.io.IOException;
+import java.io.InputStream;
 
-#endif /* CSE_VERSION_H */
+public class InputStreamStream extends StreamImpl
+{
+  private final InputStream _is;
 
+  public InputStreamStream(InputStream is)
+  {
+    _is = is;
+  }
+
+  /**
+   * Returns true if this is a read stream.
+   */
+  @Override
+  public boolean canRead()
+  {
+    return true;
+  }
+
+  @Override
+  public int read(byte []buffer, int offset, int length)
+    throws IOException
+  {
+    return _is.read(buffer, offset, length);
+  }
+}

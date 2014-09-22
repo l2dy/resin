@@ -59,6 +59,7 @@ typedef struct connection_ops_t {
   int (*write_nonblock) (connection_t *conn, char *buf, int len);
   int (*close) (connection_t *conn);
   int (*read_client_certificate) (connection_t *conn, char *buf, int len);
+  void (*free) (connection_t *conn);
 } connection_ops_t;
 
 struct connection_t {
@@ -181,6 +182,8 @@ struct server_socket_t {
 #define ALG_SSL2 0x01
 #define ALG_SSL3 0x02
 #define ALG_TLS1 0x04
+#define ALG_TLS1_1 0x08
+#define ALG_TLS1_2 0x10
 
 #define Q_VERIFY_NONE 0
 #define Q_VERIFY_OPTIONAL_NO_CA 1

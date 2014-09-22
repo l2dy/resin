@@ -1122,24 +1122,7 @@ public class WebApp extends ServletContextImpl
 
     mapping.setServletName(name);
 
-    if (webServlet.value().length > 0 && webServlet.urlPatterns().length == 0) {
-      for (String url : webServlet.value())
-        mapping.addURLPattern(url); // XXX: support addURLRegexp?
-    }
-    else if (webServlet.urlPatterns().length > 0 &&
-             webServlet.value().length == 0) {
-      for (String url : webServlet.urlPatterns()) {
-        mapping.addURLPattern(url); // XXX: support addURLRegexp?
-      }
-    } else {
-      throw new ConfigException(L.l("Annotation @WebServlet at '{0}' must specify either value or urlPatterns", servletClassName));
-    }
-
-    for (WebInitParam initParam : webServlet.initParams())
-      mapping.setInitParam(initParam.name(), initParam.value()); //omit description
-
-    mapping.setLoadOnStartup(webServlet.loadOnStartup());
-    mapping.setAsyncSupported(webServlet.asyncSupported());
+    mapping.create(webServlet);
 
     addServletMapping(mapping);
   }
@@ -2159,13 +2142,13 @@ public class WebApp extends ServletContextImpl
   /**
    * Adds the listener object.
    */
-  private void addListenerObject(Object listenerObj, boolean start)
+  private void addListenerObject(Object listenerObj, boolean isStart)
   {
     if (listenerObj instanceof ServletContextListener) {
       ServletContextListener scListener = (ServletContextListener) listenerObj;
       _webAppListeners.add(scListener);
-
-      if (start) {
+      
+      if (isStart) {
         ServletContextEvent event = new ServletContextEvent(this);
 
         scListener.contextInitialized(event);
@@ -3452,14 +3435,35 @@ public class WebApp extends ServletContextImpl
   private void callInitializers()
     throws Exception
   {
+    ArrayList<ListenerConfig> listeners = new ArrayList<ListenerConfig>(_listeners);
+    ArrayList<ServletContextListener> webAppListeners
+      = new ArrayList<ServletContextListener>(_webAppListeners);
+    
     for (ServletContainerInitializer init
           : _cdiManager.loadLocalServices(ServletContainerInitializer.class)) {
       callInitializer(init);
     }
     
     _classHierarchyScanListener = null;
+    
+    for (ListenerConfig listener : listeners) {
+      try {
+        // server/10g0
+        // addListenerObject(listener.createListenerObject(), false);
+        addListenerObject(listener.createListenerObject(), true);
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+    }
+
+    ServletContextEvent event = new ServletContextEvent(this);
+
+    for (ServletContextListener listener : webAppListeners) {
+      listener.contextInitialized(event);
+    }
   }
-  
+
+
   private void callInitializer(ServletContainerInitializer init)
     throws ServletException
   {
@@ -3684,8 +3688,6 @@ public class WebApp extends ServletContextImpl
 
       callInitializers();
 
-      fireContextInitializedEvent();
-
       //jsp/18n7
       _servletManager.initializeJspServlets();
 
@@ -3756,25 +3758,6 @@ public class WebApp extends ServletContextImpl
       setAttribute("caucho.login", _login);
     } catch (Exception e) {
       log.log(Level.FINEST, e.toString(), e);
-    }
-  }
-
-  private void fireContextInitializedEvent()
-  {
-    for (ListenerConfig listener : _listeners) {
-      try {
-        addListenerObject(listener.createListenerObject(), false);
-      } catch (Exception e) {
-        throw ConfigException.create(e);
-      }
-    }
-
-    ServletContextEvent event = new ServletContextEvent(this);
-
-    for (int i = 0; i < _webAppListeners.size(); i++) {
-      ServletContextListener listener = _webAppListeners.get(i);
-
-      listener.contextInitialized(event);
     }
   }
 

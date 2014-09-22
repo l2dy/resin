@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2010 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <MSWSock.h>
 #include <io.h>
 #else
 #define _GNU_SOURCE
@@ -209,7 +210,7 @@ Java_com_caucho_vfs_JniSocketImpl_readNative(JNIEnv *env,
   char buffer[STACK_BUFFER_SIZE];
   char *temp_buf;
 
-  if (! conn || conn->fd < 0 || ! buf) {
+  if (! conn || conn->fd <= 0 || ! buf) {
     return -1;
   }
 
@@ -248,8 +249,9 @@ Java_com_caucho_vfs_JniStream_readNonBlockNative(JNIEnv *env,
   int sublen;
   char buffer[STACK_BUFFER_SIZE];
 
-  if (! conn || conn->fd < 0 || ! buf)
+  if (! conn || conn->fd <= 0 || ! buf) {
     return -1;
+  }
 
   conn->jni_env = env;
 
@@ -284,7 +286,7 @@ Java_com_caucho_vfs_JniSocketImpl_writeNative(JNIEnv *env,
   int write_length = 0;
   int result;
     
-  if (! conn || conn->fd < 0 || ! j_buf) {
+  if (! conn || conn->fd <= 0 || ! j_buf) {
     return -1;
   }
 
@@ -340,6 +342,12 @@ write_splice(connection_t *conn,
 
   if (fd < 0) {
     return -1;
+  }
+
+  if (conn->ssl_sock) {
+    return conn->ops->write(conn, 
+                            (void*) (PTR) (mmap_address), 
+                            sublen);
   }
 
   io.iov_base = (void*) (mmap_address);
@@ -510,6 +518,24 @@ jni_open_file(JNIEnv *env,
   return fd;
 }
 
+static jint
+caucho_sendfile_ssl(connection_t *conn, int file_fd)
+{
+  int len;
+  char buf[8192];
+  int result;
+
+  while ((len = read(file_fd, buf, sizeof(buf))) > 0) {
+    result = conn->ops->write(conn, buf, len);
+
+    if (result < 0) {
+      return result;
+    }
+  }
+
+  return 1;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
                                                       jobject obj,
@@ -528,7 +554,7 @@ Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
   int fd;
   off_t sendfile_offset;
     
-  if (! conn || conn->fd < 0 || conn->ssl_bits) {
+  if (! conn || conn->fd <= 0 || conn->ssl_bits) {
     return -1;
   }
 
@@ -553,7 +579,13 @@ Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
   sendfile_offset = 0;
 
   if (conn->ssl_context) {
-    fprintf(stderr, "OpenSSL and sendfile are not allowed\n");
+    int result;
+
+    result = caucho_sendfile_ssl(conn, fd);
+
+    close(fd);
+
+    return result;
   }
 
   result = sendfile(conn->fd, fd, &sendfile_offset, file_length);
@@ -575,6 +607,84 @@ Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
 }
 
 #else
+#ifdef WIN32
+
+static HANDLE
+jni_open_file_win32(JNIEnv *env,
+                    jbyteArray name,
+                    jint length)
+{
+  char buffer[8192];
+  HANDLE fd;
+  OFSTRUCT openBuf;
+  int flags;
+  int offset = 0;
+
+  if (! env || ! name || length <= 0 || sizeof(buffer) <= length) {
+    return 0;
+  }
+
+  (*env)->GetByteArrayRegion(env, name, offset, length, (void*) buffer);
+
+  buffer[length] = 0;
+
+  fd = OpenFile(buffer, &openBuf, OF_READ);
+
+  return fd;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
+                                                      jobject obj,
+                                                      jlong conn_fd,
+                                                      jbyteArray j_buf,
+                                                      jint offset,
+                                                      jint length,
+                                                      jbyteArray name,
+                                                      jint name_length,
+                                                      jlong file_length)
+{
+  connection_t *conn = (connection_t *) (PTR) conn_fd;
+  HANDLE hFile;
+  int sublen;
+  int write_length = 0;
+  int result;
+  int fd;
+  off_t sendfile_offset;
+    
+  if (! conn || conn->fd <= 0 || conn->ssl_bits) {
+    return -1;
+  }
+
+  if (length > 0) {
+    Java_com_caucho_vfs_JniSocketImpl_writeNative(env, obj, conn_fd,
+                                                  j_buf, offset, length);
+  }
+
+  if (conn->ssl_context) {
+    fprintf(stderr, "OpenSSL and sendfile are not allowed\n");
+    return -1;
+  }
+
+  conn->jni_env = env;
+  hFile = jni_open_file_win32(env, name, name_length);
+  if (hFile == 0) {
+    /* file not found */
+    return -1;
+  }
+
+  sendfile_offset = 0;
+  result = TransmitFile(conn->fd, hFile, 0, 0, 0, 0, 0);
+  CloseHandle(hFile);
+ 
+  if (! result) {
+    fprintf(stderr, "sendfile ERR\n");
+  }
+
+  return 1;
+}
+
+#else
 
 JNIEXPORT jint JNICALL
 Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
@@ -591,7 +701,7 @@ Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
   off_t sendfile_offset;
   char buffer[16 * 1024];
     
-  if (! conn || conn->fd < 0) {
+  if (! conn || conn->fd <= 0) {
     return -1;
   }
   
@@ -630,6 +740,7 @@ Java_com_caucho_vfs_JniSocketImpl_writeSendfileNative(JNIEnv *env,
 }
 
 #endif
+#endif
 
 JNIEXPORT jobject JNICALL
 Java_com_caucho_vfs_JniSocketImpl_createByteBuffer(JNIEnv *env,
@@ -655,7 +766,7 @@ Java_com_caucho_vfs_JniSocketImpl_writeNativeNio(JNIEnv *env,
   int write_length = 0;
   int result;
 
-  if (! conn || conn->fd < 0 || ! byte_buffer) {
+  if (! conn || conn->fd <= 0 || ! byte_buffer) {
     return -1;
   }
   
@@ -838,7 +949,7 @@ Java_com_caucho_vfs_JniSocketImpl_nativeClose(JNIEnv *env,
 {
   connection_t *conn = (connection_t *) (PTR) conn_fd;
 
-  if (conn && conn->fd >= 0) {
+  if (conn && conn->fd > 0) {
     conn->jni_env = env;
 
     conn->ops->close(conn);
@@ -871,7 +982,7 @@ Java_com_caucho_vfs_JniSocketImpl_nativeFree(JNIEnv *env,
   connection_t *conn = (connection_t *) (PTR) conn_fd;
 
   if (conn) {
-    if (conn->fd >= 0) {
+    if (conn->fd > 0) {
       conn->jni_env = env;
 
       conn->ops->close(conn);
@@ -883,6 +994,8 @@ Java_com_caucho_vfs_JniSocketImpl_nativeFree(JNIEnv *env,
       WSACloseEvent(conn->event);
 	  */
 #endif
+
+    conn->ops->free(conn);
     
     free(conn);
   }
@@ -943,8 +1056,9 @@ Java_com_caucho_vfs_JniSocketImpl_nativeIsEof(JNIEnv *env,
 
   fd = conn->fd;
 
-  if (fd < 0)
+  if (fd <= 0) {
     return 1;
+  }
 
 #ifdef MSG_DONTWAIT
   result = recv(fd, buffer, 1, MSG_DONTWAIT|MSG_PEEK);
@@ -1138,6 +1252,10 @@ Java_com_caucho_vfs_JniServerSocketImpl_bindPort(JNIEnv *env,
   if (sock < 0) {
     return 0;
   }
+  else if (sock == 0) {
+    fprintf(stderr, "Unexpected socket %d\n", sock);
+    return 0;
+  }
   
   val = 1;
   if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR,
@@ -1250,8 +1368,9 @@ Java_com_caucho_vfs_JniServerSocketImpl_nativeOpenPort(JNIEnv *env,
   }
 #endif
 
-  if (sock < 0)
+  if (sock <= 0) {
     return 0;
+  }
 
   ss = (server_socket_t *) cse_malloc(sizeof(server_socket_t));
 
@@ -1395,8 +1514,9 @@ Java_com_caucho_vfs_JniServerSocketImpl_nativeListen(JNIEnv *env,
 {
   server_socket_t *ss = (server_socket_t *) (PTR) ss_fd;
 
-  if (! ss || ss->fd < 0)
+  if (! ss || ss->fd <= 0) {
     return;
+  }
 
   if (backlog < 0)
     backlog = 0;
@@ -1449,8 +1569,9 @@ Java_com_caucho_vfs_JniServerSocketImpl_nativeSetSaveOnExec(JNIEnv *env,
     int arg = 0;
     int result = 0;
 
-    if (fd < 0)
+    if (fd <= 0) {
       return 0;
+    }
 
     /* sets the close on exec flag */
     arg = fcntl(fd, F_GETFD, 0);
@@ -1603,7 +1724,7 @@ Java_com_caucho_vfs_JniSocketImpl_nativeAccept(JNIEnv *env,
     return 0;
   }
 
-  if (conn->fd >= 0) {
+  if (conn->fd > 0) {
     resin_throw_exception(env, "java/lang/IllegalStateException",
                           "unclosed socket in accept");
     return 0;
@@ -1716,7 +1837,7 @@ Java_com_caucho_vfs_JniSocketImpl_nativeConnect(JNIEnv *env,
     return 0;
 
   sock = socket(family, SOCK_STREAM, 0);
-  if (sock < 0) {
+  if (sock <= 0) {
     return 0;
   }
 
@@ -1790,11 +1911,24 @@ Java_com_caucho_vfs_JniSocketImpl_getNativeFd(JNIEnv *env,
 {
   connection_t *conn = (connection_t *) (PTR) conn_fd;
 
-  if (! conn)
+  if (! conn) {
     return -1;
-  else
+  }
+  else {
     return conn->fd;
+  }
 }
+
+#ifdef WIN32
+
+JNIEXPORT jboolean JNICALL
+Java_com_caucho_vfs_JniServerSocketImpl_nativeIsSendfileEnabled(JNIEnv *env,
+                                                                jobject obj)
+{
+  return 1;
+}
+
+#else
 
 JNIEXPORT jboolean JNICALL
 Java_com_caucho_vfs_JniServerSocketImpl_nativeIsSendfileEnabled(JNIEnv *env,
@@ -1806,6 +1940,8 @@ Java_com_caucho_vfs_JniServerSocketImpl_nativeIsSendfileEnabled(JNIEnv *env,
   return 0;
 #endif  
 }
+
+#endif
 
 JNIEXPORT jboolean JNICALL
 Java_com_caucho_vfs_JniServerSocketImpl_nativeIsCorkEnabled(JNIEnv *env,

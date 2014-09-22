@@ -676,7 +676,7 @@ class WatchdogChildProcess
         isEndorsed = true;
       }
     }
-    
+
     jvmArgs.add("-Dresin.server=" + _id);
 
     jvmArgs.add("-Djava.util.logging.manager=com.caucho.log.LogManagerImpl");
