@@ -31,9 +31,11 @@ package com.caucho.server.http;
 
 import java.io.IOException;
 
+import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletResponse;
 
 import com.caucho.util.FreeList;
+import com.caucho.util.Hex;
 
 public class ToCharResponseAdapter extends ResponseAdapter {
   private static final FreeList<ToCharResponseAdapter> _freeList
@@ -113,7 +115,16 @@ public class ToCharResponseAdapter extends ResponseAdapter {
     @Override
     public String getEncoding()
     {
-      return getResponse().getCharacterEncoding();
+      ServletResponse response = getResponse();
+      
+      if (response instanceof CauchoResponse) {
+        CauchoResponse cRes = (CauchoResponse) response;
+        
+        return cRes.getCharacterEncodingAssigned();
+      }
+      else {
+        return response.getCharacterEncoding();
+      }
     }
 
     /**

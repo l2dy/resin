@@ -50,7 +50,7 @@ abstract public class Column {
   private final String _name;
 
   protected final int _columnOffset;
-  protected final int _nullOffset;
+  private final int _nullOffset;
   protected final byte _nullMask;
 
   private Table _table;
@@ -243,7 +243,7 @@ abstract public class Column {
    * @param block the block's buffer
    * @param rowOffset the offset of the row in the block
    */
-  public final boolean isNull(byte []block, int rowOffset)
+  public boolean isNull(byte []block, int rowOffset)
   {
     return (block[rowOffset + _nullOffset] & _nullMask) == 0;
   }

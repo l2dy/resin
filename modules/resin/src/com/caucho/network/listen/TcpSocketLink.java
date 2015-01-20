@@ -880,7 +880,7 @@ public class TcpSocketLink extends AbstractSocketLink
         return;
       }
       
-      if (! reqState.toAsyncSuspend(_requestStateRef)) {
+      if (! reqState.toAsyncSuspendThread(_requestStateRef)) {
         if (! getLauncher().offerResumeTask(getResumeTask())) {
           log.severe(L.l("Schedule resume failed for {0}", this));
         }
@@ -1085,6 +1085,7 @@ public class TcpSocketLink extends AbstractSocketLink
       
         if (async.isTimeout()) {
           if (async.timeout()) {
+            _request.handleResume();
             close();
             return RequestState.EXIT;
           }
@@ -1634,6 +1635,25 @@ public class TcpSocketLink extends AbstractSocketLink
     
     return async;
   }
+  
+  /**
+   * Starts a comet connection.
+   * 
+   * Called by the socketLink thread only.
+   */
+  @Override
+  public AsyncController toCometRestart(SocketLinkCometListener cometHandler)
+  {
+    
+    TcpAsyncController async = _async;
+    
+    if (async != null && async.isCompleteRequested()) {
+      // #5684
+      return async;
+    }
+    
+    return toComet(cometHandler);
+  }
 
   private boolean toSuspend()
   {
@@ -1645,7 +1665,7 @@ public class TcpSocketLink extends AbstractSocketLink
     
     _state = _state.toCometSuspend(this);
     
-    return ! _requestStateRef.get().toAsyncResume(_requestStateRef);
+    return _requestStateRef.get().toAsyncSuspendRequest(_requestStateRef);
   }
   
   //

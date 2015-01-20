@@ -1518,8 +1518,9 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       if (_asyncTimeout > 0)
         _asyncContext.setTimeout(_asyncTimeout);
     }
-    else
+    else {
       _asyncContext.restart();
+    }
     
     _asyncContext.init(request, response, isOriginal);
 
@@ -1689,6 +1690,15 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     if (_request != null)
       return _request.getAvailable();
+    else
+      return -1;
+  }
+
+  int getBufferAvailable()
+    throws IOException
+  {
+    if (_request != null)
+      return _request.getBufferAvailable();
     else
       return -1;
   }

@@ -69,11 +69,14 @@ public class AsyncContextImpl
   private boolean _isOriginal;
 
   private ArrayList<AsyncListenerNode> _listeners;
+  
   private AtomicBoolean _isComplete = new AtomicBoolean();
+  private boolean _isTimeout;
 
   private String _dispatchDefault;
   private WebApp _dispatchWebApp;
   private String _dispatchPath;
+  private boolean _isDispatch;
   
   public AsyncContextImpl(AbstractHttpRequest httpConn)
   {
@@ -83,7 +86,12 @@ public class AsyncContextImpl
   
   public void restart()
   {
-    _cometController = _tcpConnection.toComet(this);
+    _cometController = _tcpConnection.toCometRestart(this);
+  }
+  
+  public void clearListeners()
+  {
+    _listeners = null;
   }
 
   public void init(ServletRequest request,
@@ -246,7 +254,19 @@ public class AsyncContextImpl
       _dispatchPath = _dispatchDefault;
     }
     
-    cometController.wake();
+    try {
+      cometController.wake();
+    } catch (RuntimeException e) {
+      if (isTimeout()) {
+        // server/1lda
+        log.log(Level.FINEST, e.toString(), e);
+      }
+      else {
+        throw e;
+      }
+    }
+    
+    _isDispatch = true;
   }
 
   @Override
@@ -320,6 +340,17 @@ public class AsyncContextImpl
         log.log(Level.FINE, e.toString(), e);
       }
     }
+    
+    if (_isDispatch) {
+      // server/1l9c
+      _isDispatch = false;
+      // _listeners = null;
+    }
+  }
+  
+  public boolean isTimeout()
+  {
+    return _isTimeout;
   }
   
   /**
@@ -328,6 +359,7 @@ public class AsyncContextImpl
   @Override
   public boolean onTimeout()
   {
+    _isTimeout = true;
     if (_listeners == null)
       return true;
     

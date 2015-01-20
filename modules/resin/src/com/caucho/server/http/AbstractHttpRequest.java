@@ -1310,6 +1310,12 @@ public abstract class AbstractHttpRequest extends AbstractProtocolConnection
     return _readStream.getAvailable();
   }
 
+  public int getBufferAvailable()
+    throws IOException
+  {
+    return _readStream.getBufferAvailable();
+  }
+
   protected void skip()
     throws IOException
   {
@@ -1623,7 +1629,7 @@ public abstract class AbstractHttpRequest extends AbstractProtocolConnection
       if (! request.isAsyncStarted())
         return false;
         */
-      
+
       if (request == null) {
         return false;
       }
@@ -1634,7 +1640,14 @@ public abstract class AbstractHttpRequest extends AbstractProtocolConnection
       String url = asyncContext.getDispatchPath();
       
       /* server/1lda */
-      if (_tcpConn != null && _tcpConn.isAsyncComplete()) {
+      if (_tcpConn == null) {
+      }
+      else if (_tcpConn.isAsyncComplete()) {
+        return false;
+      }
+      else if (asyncContext.isTimeout() && url == null) {
+        // server/1lda
+        getResponseFacade().sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         return false;
       }
 

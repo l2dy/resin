@@ -801,8 +801,14 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   @Override
   public void setContentType(String value)
   {
-    if (isCommitted())
+    if (isCommitted()) {
       return;
+    }
+    
+    // jsp/0511
+    if (_locale == null && _setCharEncoding == null) {
+      _charEncoding = null;
+    }
 
     if (value == null) {
       _contentType = null;
@@ -812,7 +818,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     ContentType item = AbstractHttpResponse.parseContentType(value);
 
     _contentType = item.getContentType();
-
+    
     String encoding = item.getEncoding();
 
     // server/172k
@@ -820,6 +826,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
     if (encoding != null) {
       setCharacterEncoding(encoding);
+    }
+    else if (_charEncoding != null || _setCharEncoding != null) {
+      return;
     }
 
     // XXX: conflict with servlet exception throwing order?
@@ -846,10 +855,11 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     }
     
     String charEncoding = getCharacterEncoding();
-    
+
     if (charEncoding != null
         && (_contentType.startsWith("text/")
-            || _contentType.equals("application/json"))) {
+            || _contentType.equals("application/json")
+            || _contentType.startsWith("multipart/"))) {
       return _contentType + "; charset=" + charEncoding;
     }
     else {
@@ -866,17 +876,36 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   }
 
   /**
+   * Gets the character encoding assigned by the developer. Used for JSP
+   * encoding.
+   */
+  @Override
+  public String getCharacterEncodingAssigned()
+  {
+    return _setCharEncoding;
+  }
+
+  /**
    * Gets the character encoding.
    */
   @Override
   public String getCharacterEncoding()
   {
     String charEncoding = _charEncoding;
-    
+
     if (charEncoding == null) {
       charEncoding = _setCharEncoding;
 
       if (charEncoding == null) {
+        /*
+        String contentType = getContentTypeImpl();
+
+        if (contentType == null
+            || ! contentType.startsWith("text/")) {
+          return null;
+        }
+        */
+        
         WebApp webApp = _request.getWebApp();
 
         if (webApp != null) {
@@ -931,8 +960,9 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   @Override
   public void setCharacterEncoding(String encoding)
   {
-    if (isCommitted())
+    if (isCommitted()) {
       return;
+    }
 
     if (_writer != null) {
       // server/172k
@@ -1575,7 +1605,11 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     throws IOException
   {
     // tck - jsp include
-    _response.close();
+    AbstractHttpResponse response = _response;
+    
+    if (response != null) {
+      response.close();
+    }
   }
 
   /**

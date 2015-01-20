@@ -36,6 +36,7 @@ import com.caucho.server.webapp.*;
 import java.io.*;
 import java.util.*;
 import java.util.logging.*;
+
 import javax.servlet.*;
 import javax.servlet.http.*;
 
@@ -98,6 +99,7 @@ public class CauchoResponseWrapper implements CauchoResponse {
     return _response.getCharacterEncoding();
   }
 
+  @Override
   public void setCharacterEncoding(String charset)
   {
     _response.setCharacterEncoding(charset);
@@ -529,5 +531,15 @@ public class CauchoResponseWrapper implements CauchoResponse {
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _response + "]";
+  }
+
+  /* (non-Javadoc)
+   * @see com.caucho.server.http.CauchoResponse#getCharacterEncodingAssigned()
+   */
+  @Override
+  public String getCharacterEncodingAssigned()
+  {
+    // TODO Auto-generated method stub
+    return null;
   }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2014 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,13 +23,27 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Nam Nguyen
  */
 
-#ifndef CSE_VERSION_H
-#define CSE_VERSION_H
+package com.caucho.quercus.lib.date;
 
-#define VERSION "Resin/4.0.42"
-#define FULL_VERSION "Resin-4.0.42 (built Tue, 20 Jan 2015 08:46:28 PST)"
+import com.caucho.quercus.annotation.Optional;
+import com.caucho.quercus.env.Env;
+import com.caucho.quercus.env.StringValue;
 
-#endif /* CSE_VERSION_H */
-
+public interface DateTimeInterface
+{
+  public DateInterval diff(Env env,
+                           DateTimeInterface dateTime,
+                           @Optional boolean isAbsolute);
+  
+  public StringValue format(Env env, StringValue format);
+  
+  public long getOffset();
+  
+  public long getTimestamp();
+  
+  public DateTimeZone getTimeZone();
+}

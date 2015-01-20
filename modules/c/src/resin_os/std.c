@@ -149,6 +149,11 @@ poll_read(int fd, int ms)
   int rd_hup = 0;
   int retry = 16;
 
+  if (ms < 0) {
+    errno = ECONNRESET;
+    return -1;
+  }
+
 #ifdef POLLRDHUP
   /* the other end has hung up */
   rd_hup = POLLRDHUP;
@@ -554,8 +559,8 @@ std_init(connection_t *conn)
 #endif
 
   conn->ssl_lock = &ss->ssl_lock;
-  conn->ssl_sock = 0;
   /*
+  conn->ssl_sock = 0;
   conn->ops = &std_ops;
   */
   

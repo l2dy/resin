@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,13 +23,46 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Scott Ferguson
  */
 
-#ifndef CSE_VERSION_H
-#define CSE_VERSION_H
+package com.caucho.server.webapp;
 
-#define VERSION "Resin/4.0.42"
-#define FULL_VERSION "Resin-4.0.42 (built Tue, 20 Jan 2015 08:46:28 PST)"
+import java.io.IOException;
 
-#endif /* CSE_VERSION_H */
+import javax.servlet.http.HttpServletResponse;
 
+import com.caucho.server.http.CauchoResponseWrapper;
+
+/**
+ * Internal response for an include() or forward()
+ */
+class ForwardNamedResponse extends CauchoResponseWrapper
+{
+  ForwardNamedResponse(ForwardNamedRequest request)
+  {
+    super(request);
+  }
+
+  ForwardNamedResponse(ForwardNamedRequest request, HttpServletResponse response)
+  {
+    super(request, response);
+  }
+
+  void startRequest()
+  {
+  }
+
+  void finishRequest()
+    throws IOException
+  {
+    // server/106f, server/12b2, ioc/0310
+    // XXX remove all on a good regression run
+    //AbstractResponseStream stream = getResponseStream();
+    /*
+    if (stream != null)
+      stream.close();
+    */
+  }
+}

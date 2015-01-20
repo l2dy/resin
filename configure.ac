@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.41)
+AC_INIT([resin],4.0.42)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -644,7 +644,7 @@ fi
 # request_rec->remote_addr became client_addr
 #
 
-if test -n "${apache_dir}"; then
+if test -n "${apache}"; then
 
 cat >conftest.$ac_ext <<_ACEOF
 #include "httpd.h"
