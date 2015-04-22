@@ -19,27 +19,43 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
-*
+ *
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Scott Ferguson
+ * @author Sam
  */
 
-package com.caucho;
+package com.caucho.server.rewrite;
 
-final public class Version {
-  public static final String COPYRIGHT =
-    "Copyright(c) 1998-2012 Caucho Technology.  All rights reserved.";
+import java.io.IOException;
 
-  public static String FULL_VERSION = "Resin-4.0.44 (built Wed, 22 Apr 2015 02:05:04 PDT)";
-  public static String VERSION = "4.0.44";
-  public static String VERSION_DATE = "20150422T020504";
+import javax.servlet.FilterChain;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
 
-  public static void main(String []argv)
+public class SetRequestCharacterEncodingFilterChain implements FilterChain
+{
+  private final String _value;
+  private final FilterChain _next;
+
+  public SetRequestCharacterEncodingFilterChain(FilterChain next,
+                              String value)
   {
-    System.out.println(FULL_VERSION);
-    System.out.println(COPYRIGHT);
+    _next = next;
+    _value = value;
+  }
+
+  public void doFilter(ServletRequest request, ServletResponse response)
+    throws ServletException, IOException
+  {
+    HttpServletRequest req = (HttpServletRequest) request;
+
+    req.setCharacterEncoding(_value);
+
+    _next.doFilter(request, response);
   }
 }

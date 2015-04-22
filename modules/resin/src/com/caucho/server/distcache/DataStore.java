@@ -164,8 +164,9 @@ public class DataStore {
     }
 
     _alarm = new Alarm(new DeleteAlarm());
-    _alarm.queue(_expireOrphanTimeout);
-
+    //_alarm.queue(_expireOrphanTimeout);
+    _alarm.queue(60000);
+    
     //_alarm.queue(0);
   }
 
@@ -620,7 +621,7 @@ public class DataStore {
   public void destroy()
   {
     _dataSource = null;
-    _freeConn = null;
+    // _freeConn = null;
 
     Alarm alarm = _alarm;
     _alarm = null;
@@ -650,14 +651,24 @@ public class DataStore {
 
   private class DeleteAlarm implements AlarmListener {
     private long _lastOid;
-    
+   
+    @Override
     public void handleAlarm(Alarm alarm)
     {
       if (_dataSource != null) {
         try {
           deleteOrphans();
         } finally {
-          _alarm.queue(_expireOrphanTimeout);
+          long timeout;
+          
+          if (_lastOid < 0) { 
+            timeout = _expireOrphanTimeout;
+          }
+          else {
+            timeout = 60000L;
+          }
+          
+          _alarm.queue(timeout);
         }
       }
     }
@@ -688,7 +699,7 @@ public class DataStore {
             long mid = rs.getLong(2);
 
             _lastOid = Math.max(_lastOid, did);
-
+            
             if (did != mid) {
               if (log.isLoggable(Level.FINER)) {
                 log.finer(this + " delete orphan " + Long.toHexString(did));
@@ -711,7 +722,7 @@ public class DataStore {
           pStmt.setLong(1, did);
           pStmt.execute();
         }
-
+        
         isValid = true;
       } catch (SQLException e) {
         e.printStackTrace();
