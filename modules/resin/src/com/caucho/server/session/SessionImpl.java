@@ -107,14 +107,9 @@ public class SessionImpl implements HttpSession, CacheListener {
   @Transient
   private boolean _isModified;
   // true if the session is still valid, i.e. not invalidated
+  
   @Json(name = "Valid")
-  private boolean _isValid = true;
-  // true if the session is closing
-  @Transient
-  private boolean _isClosing = false;
-  // true if the session is being closed from an invalidation
-  @Transient
-  private boolean _isInvalidating = false;
+  private State _state = State.active;
 
   // the cache entry saved in the session
   @Transient
@@ -126,7 +121,6 @@ public class SessionImpl implements HttpSession, CacheListener {
 
   @Json(name = "LastSaveLength")
   private int _lastSaveLength;
-
   /**
    * Create a new session object.
    *
@@ -161,6 +155,11 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     return new TreeMap<String,Object>();
   }
+  
+  private boolean isClosed()
+  {
+    return _state.isClosed();
+  }
 
   /**
    * Returns the time the session was created.
@@ -169,9 +168,10 @@ public class SessionImpl implements HttpSession, CacheListener {
   public long getCreationTime()
   {
     // this test forced by TCK
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: can't call getCreationTime() when session is no longer valid.",
                                           this));
+    }
 
     return _creationTime;
   }
@@ -192,9 +192,10 @@ public class SessionImpl implements HttpSession, CacheListener {
   public long getLastAccessedTime()
   {
     // this test forced by TCK
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: can't call getLastAccessedTime() when session is no longer valid.",
                                           this));
+    }
 
     return _accessTime;
   }
@@ -260,8 +261,9 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public boolean isNew()
   {
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0} can't call isNew() when session is no longer valid.", this));
+    }
 
     return _isNew;
   }
@@ -271,7 +273,7 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public boolean isValid()
   {
-    return _isValid;
+    return _state.isValid();
   }
   
   public boolean isTimeout()
@@ -314,7 +316,7 @@ public class SessionImpl implements HttpSession, CacheListener {
 
   boolean isClosing()
   {
-    return _isClosing;
+    return _state.isClosing();
   }
 
   /**
@@ -348,9 +350,10 @@ public class SessionImpl implements HttpSession, CacheListener {
   @Override
   public Object getAttribute(String name)
   {
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: can't call getAttribute() when session is no longer valid.",
                                           this));
+    }
 
     synchronized (_values) {
       Object value = _values.get(name);
@@ -376,8 +379,9 @@ public class SessionImpl implements HttpSession, CacheListener {
   @Override
   public void setAttribute(String name, Object value)
   {
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: can't call setAttribute(String, Object) when session is no longer valid.", this));
+    }
 
     Object oldValue;
     
@@ -445,8 +449,9 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public void removeAttribute(String name)
   {
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: can't call removeAttribute(String) when session is no longer valid.", this));
+    }
 
     Object oldValue;
 
@@ -468,8 +473,9 @@ public class SessionImpl implements HttpSession, CacheListener {
   public Enumeration getAttributeNames()
   {
     synchronized (_values) {
-      if (! _isValid)
+      if (isClosed()) {
         throw new IllegalStateException(L.l("{0} can't call getAttributeNames() when session is no longer valid.", this));
+      }
 
       return Collections.enumeration(_values.keySet());
     }
@@ -505,8 +511,9 @@ public class SessionImpl implements HttpSession, CacheListener {
   public String []getValueNames()
   {
     synchronized (_values) {
-      if (! _isValid)
+      if (isClosed()) {
         throw new IllegalStateException(L.l("{0} can't call getValueNames() when session is no longer valid.", this));
+      }
 
       if (_values == null)
         return new String[0];
@@ -536,14 +543,14 @@ public class SessionImpl implements HttpSession, CacheListener {
     }
 
     // e.g. server 'C' when 'A' and 'B' have no record of session
-    if (_isValid) {
+    if (! isClosed()) {
       unbind();
     }
     
     // TCK now cares about exact time
     now = CurrentTime.getExactTime();
 
-    _isValid = true;
+    // _isValid = true;
     _isNew = true;
     setAccessTime(now);
     _creationTime = now;
@@ -659,7 +666,7 @@ public class SessionImpl implements HttpSession, CacheListener {
   {
     long now = CurrentTime.getCurrentTime();
     
-    if (! _isValid) {
+    if (! _state.isValid()) {
       return false;
     }
     else if (_isIdleSet && _accessTime + _idleTimeout < now) {
@@ -724,21 +731,25 @@ public class SessionImpl implements HttpSession, CacheListener {
 
       if (cache.get(_id, os)) {
         InputStream is = os.getInputStream();
-        
-        HashChunkInputStream crcIs = new HashChunkInputStream(is);
+        boolean isValid = false;
 
-        SessionDeserializer in = _manager.createSessionDeserializer(crcIs);
+        try {
+          HashChunkInputStream crcIs = new HashChunkInputStream(is);
 
-        if (log.isLoggable(Level.FINE)) {
-          log.fine(this + " session load valueHash="
-              + (entry != null ? Long.toHexString(entry.getValueHash()) : null));
+          SessionDeserializer in = _manager.createSessionDeserializer(crcIs);
+
+          if (log.isLoggable(Level.FINE)) {
+            log.fine(this + " session load valueHash="
+                + (entry != null ? Long.toHexString(entry.getValueHash()) : null));
+          }
+
+          isValid = load(in);
+
+          in.close();
+          crcIs.close();
+        } finally {
+          is.close();
         }
-
-        boolean isValid = load(in);
-
-        in.close();
-        crcIs.close();
-        is.close();
         
         if (isValid) {
           _cacheEntry = entry;
@@ -861,7 +872,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     now = CurrentTime.getCurrentTime();
 
     unbind();
-    _isValid = true;
+    //_isValid = true;
     _isNew = true;
     setAccessTime(now);
     _creationTime = now;
@@ -1100,7 +1111,8 @@ public class SessionImpl implements HttpSession, CacheListener {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " invalidate");
 
-    _isInvalidating = true;
+    _state = _state.toInvalidating();
+
     invalidate(Logout.INVALIDATE);
   }
 
@@ -1139,11 +1151,12 @@ public class SessionImpl implements HttpSession, CacheListener {
   public void removeEvent()
   {
     synchronized (this) {
-      if (_isInvalidating || _useCount.get() <= 0)
-        _isClosing = true;
+      if (_state.isInvalidating() || _useCount.get() <= 0) {
+        _state = _state.toLru();
+      }
     }
 
-    if (! _isClosing) {
+    if (! _state.isClosing()) {
       log.warning(L.l("{0} LRU while in use (use-count={1}).  Consider increasing session-count.",
                       this,
                       _useCount));
@@ -1155,7 +1168,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     long now = CurrentTime.getCurrentTime();
 
     // server/015k, server/10g2
-    if (_isInvalidating
+    if (_state.isInvalidating()
         || _manager.isDestroyOnLru()
         || _accessTime + getMaxInactiveInterval() < now) {
       notifyDestroy();
@@ -1194,7 +1207,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " logout");
 
-    _isInvalidating = true;
+    _state = _state.toInvalidating();
     invalidate(Logout.INVALIDATE);
   }
 
@@ -1206,7 +1219,9 @@ public class SessionImpl implements HttpSession, CacheListener {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " timeout");
 
-    _isInvalidating = _manager.isOwner(_id);
+    if (_manager.isOwner(_id)) {
+      _state = _state.toInvalidating();
+    }
 
     invalidate(Logout.TIMEOUT);
   }
@@ -1232,7 +1247,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " invalidate remote");
 
-    _isInvalidating = true;
+    _state = _state.toInvalidating();
     invalidate(Logout.INVALIDATE);
   }
 
@@ -1241,9 +1256,10 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   private void invalidate(Logout logout)
   {
-    if (! _isValid)
+    if (isClosed()) {
       throw new IllegalStateException(L.l("{0}: Can't call invalidate() when session is no longer valid.",
                                           this));
+    }
 
     try {
       // server/017s
@@ -1258,7 +1274,7 @@ public class SessionImpl implements HttpSession, CacheListener {
 
       invalidateImpl(logout);
     } finally {
-      _isValid = false;
+      _state = _state.toClosed();
     }
   }
 
@@ -1268,12 +1284,15 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   private void invalidateImpl(Logout logout)
   {
+    State state = _state;
+    
     boolean invalidateAfterListener = _manager.isInvalidateAfterListener();
-    if (! invalidateAfterListener)
-      _isValid = false;
+    if (! invalidateAfterListener) {
+      _state = _state.toClosing();
+    }
 
     try {
-      if (_isInvalidating && _manager.getSessionStore() != null) {
+      if (state.isInvalidating() && _manager.getSessionStore() != null) {
         boolean isRemove = false;
 
         /*
@@ -1309,7 +1328,7 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   private void invalidateLocal()
   {
-    if (_isValid && ! _isInvalidating) {
+    if (! isClosed() && ! _state.isInvalidating()) {
       if (_manager.isSaveOnlyOnShutdown()) {
         save();
       }
@@ -1323,8 +1342,9 @@ public class SessionImpl implements HttpSession, CacheListener {
    */
   public void unbind()
   {
-    if (_values.size() == 0)
+    if (_values.size() == 0) {
       return;
+    }
 
     // ClusterObject clusterObject = _clusterObject;
 
@@ -1408,4 +1428,81 @@ public class SessionImpl implements HttpSession, CacheListener {
     LRU,
     TIMEOUT
   };
+
+  enum State {
+    active {
+      @Override
+      boolean isValid() { return true; }
+    },
+    invalidating {
+      @Override
+      boolean isClosing() { return true; }
+      @Override
+      boolean isInvalidating() { return true; }
+      @Override
+      State toLru() { return this; }
+    },
+    lru {
+      @Override
+      boolean isClosing() { return true; }
+    },
+    closing {
+      @Override
+      boolean isClosing() { return true; }
+      @Override
+      State toInvalidating() { return this; }
+      @Override
+      State toLru() { return this; }
+    },
+    closed {
+      @Override
+      boolean isClosed() { return true; }
+      @Override
+      State toClosing() { return this; }
+      @Override
+      State toInvalidating() { return this; }
+      @Override
+      State toLru() { return this; }
+    };
+    
+    boolean isValid()
+    {
+      return false;
+    }
+    
+    boolean isClosing()
+    {
+      return false;
+    }
+    
+    boolean isInvalidating()
+    {
+      return false;
+    }
+    
+    boolean isClosed()
+    {
+      return false;
+    }
+    
+    State toClosed()
+    {
+      return State.closed;
+    }
+    
+    State toClosing()
+    {
+      return State.closing;
+    }
+    
+    State toInvalidating()
+    {
+      return State.invalidating;
+    }
+    
+    State toLru()
+    {
+      return State.lru;
+    }
+  }
 }

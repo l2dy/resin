@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,14 +23,20 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Scott Ferguson
  */
+package com.caucho.config.timer;
 
-using System;
 
-namespace Caucho
-{
-  public class Version {
-    public static String VERSION = "Resin/4.0.45";
-    public static String FULL_VERSION = "Resin-4.0.45 (built Thu, 06 Aug 2015 10:20:09 PDT)";
-  }
+/**
+ * Resin EJB timer. This object is mostly an adapter/decorator over the
+ * underlying scheduled task.
+ */
+public interface EjbTimerContainer {
+
+  /**
+   * @param timerTask
+   */
+  void removeTimer(TimerTask timerTask);
 }
