@@ -29,13 +29,26 @@
 
 package com.caucho.jsp;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.servlet.jsp.tagext.TagInfo;
+import javax.servlet.jsp.tagext.TagLibraryInfo;
+
+import org.xml.sax.SAXException;
+
 import com.caucho.config.Config;
 import com.caucho.config.ConfigException;
 import com.caucho.java.JavaCompilerUtil;
 import com.caucho.java.LineMap;
+import com.caucho.jsp.cfg.ImplicitTld;
 import com.caucho.jsp.cfg.JspConfig;
 import com.caucho.jsp.cfg.JspPropertyGroup;
-import com.caucho.jsp.cfg.ImplicitTld;
+import com.caucho.jsp.java.JavaJspBuilder;
 import com.caucho.jsp.java.JspTagSupport;
 import com.caucho.jsp.java.TagTaglib;
 import com.caucho.server.webapp.WebApp;
@@ -43,18 +56,6 @@ import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.PersistentDependency;
 import com.caucho.xml.Xml;
-
-import org.xml.sax.SAXException;
-
-import javax.servlet.jsp.tagext.TagInfo;
-import javax.servlet.jsp.tagext.TagLibraryInfo;
-
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Compilation interface for JSP pages.
@@ -238,9 +239,10 @@ public class JspCompilerInstance {
     
     _parseState.setUriPwd(uriPwd);
 
-    if (_className == null)
+    if (_className == null) {
       _className = JavaCompilerUtil.mangleName("jsp/" + _uri);
-
+    }
+    
     // default to true if ends with x
     if (_uri.endsWith("x"))
       _parseState.setXml(true);
@@ -368,7 +370,7 @@ public class JspCompilerInstance {
                                       taglibManager,
                                       tagFileManager);
 
-    _jspBuilder = new com.caucho.jsp.java.JavaJspBuilder();
+    _jspBuilder = new JavaJspBuilder();
     _jspBuilder.setParseState(_parseState);
     _jspBuilder.setJspCompiler(_jspCompiler);
     _jspBuilder.setJspPropertyGroup(_jspPropertyGroup);
@@ -682,8 +684,9 @@ public class JspCompilerInstance {
         xml.setDtdValidating(true);
         xml.parse(_jspPath);
       }
-      else
+      else {
         _parser.parseTag(_jspPath, _uri);
+      }
 
       _generator = _jspBuilder.getGenerator();
 
