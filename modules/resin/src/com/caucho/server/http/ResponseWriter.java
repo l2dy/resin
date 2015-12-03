@@ -128,6 +128,7 @@ public class ResponseWriter extends AbstractPrintWriter {
   /**
    * Writes a subsection of a string to the output.
    */
+  @Override
   final public void write(String s, int off, int len)
   {
     try {
@@ -139,14 +140,12 @@ public class ResponseWriter extends AbstractPrintWriter {
       while (off < end) {
         int sublen = end - off;
 
-        if (size - writeLength < sublen) {          
+        if (size - writeLength < sublen) {
           if (size == writeLength) {
             writeBuffer = _out.nextCharBuffer(writeLength);
             writeLength = _out.getCharOffset();
 
-            if (size - writeLength < sublen) {
-              sublen = size - writeLength;
-            }
+            sublen = Math.min(sublen, size - writeLength);
           }
           else {            
             sublen = size - writeLength;

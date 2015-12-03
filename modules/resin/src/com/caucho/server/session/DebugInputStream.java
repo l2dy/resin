@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -23,13 +23,52 @@
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Scott Ferguson
  */
 
-#ifndef CSE_VERSION_H
-#define CSE_VERSION_H
+package com.caucho.server.session;
 
-#define VERSION "Resin/4.0.47"
-#define FULL_VERSION "Resin-4.0.47 (built Thu, 03 Dec 2015 10:35:40 PST)"
+import java.io.IOException;
+import java.io.InputStream;
 
-#endif /* CSE_VERSION_H */
+/**
+ * Serializer for session data
+ */
+public class DebugInputStream extends InputStream
+{
+  private InputStream _is;
+  private int _offset;
 
+  public DebugInputStream(InputStream is)
+  {
+    _is = is;
+    System.out.println("DIS: " + is);
+    System.out.print("{{{");
+  }
+  
+  public int read()
+    throws IOException
+  {
+    int ch = _is.read();
+    
+    if (ch < 0) {
+      System.out.println("}}}");
+    }
+    else {
+      System.out.print(Integer.toHexString((ch >> 4) & 0xf)); 
+      System.out.print(Integer.toHexString((ch) & 0xf)); 
+
+      _offset++;
+      
+      if (_offset % 32 == 0) {
+        System.out.println();
+      }
+      else if (_offset % 8 == 0) {
+        System.out.print(" ");
+      }
+    }
+    
+    return ch;
+  }
+}
