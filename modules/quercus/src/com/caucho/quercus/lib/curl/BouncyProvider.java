@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2016 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -24,32 +24,36 @@
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
- * @author Scott Ferguson
+ * @author Nam Nguyen
  */
 
-package com.caucho.boot;
+package com.caucho.quercus.lib.curl;
 
-import com.caucho.env.repository.CommitBuilder;
+import java.security.PrivateKey;
 
-public class DeployLsCommand extends AbstractDeployLsCommand 
+public abstract class BouncyProvider
 {
-  @Override
-  protected void initBootOptions()
+  public abstract PrivateKey getPrivateKey(String str, String password)
+    throws Exception;
+  
+  public static BouncyProvider getBouncy()
   {
-    addValueOption("host", "host", "virtual host to make application available on");
+    try {
+      Class<?> cls = Class.forName("org.bouncycastle.openssl.PEMParser");
+      
+      return new BouncyProvider148();
+    }
+    catch (Exception e) {
+    }
     
-    super.initBootOptions();
-  }
-  
-  @Override
-  public String getDescription()
-  {
-    return "lists deployed web-app files";
-  }
-  
-  @Override
-  protected CommitBuilder createCommitBuilder(WatchdogArgs args)
-  {
-    return DeployCommand.createWebAppCommit(args, null);
+    try {
+      Class<?> cls = Class.forName("org.bouncycastle.openssl.PEMReader");
+      
+      return new BouncyProviderOld();
+    }
+    catch (Exception e) {
+    }
+    
+    return null;
   }
 }
