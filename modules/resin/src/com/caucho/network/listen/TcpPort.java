@@ -1322,6 +1322,8 @@ public class TcpPort
     if (_lifecycle.toStop()) {
       if (_serverSocket != null)
         _serverSocket.listen(0);
+      
+      _launcher.close();
 
       if (_port < 0) {
       }
@@ -1372,7 +1374,7 @@ public class TcpPort
     try {
       SocketLinkThreadLauncher launcher = getLauncher();
 
-      while (! isClosed()) {
+      while (isActive()) {
         Thread.interrupted();
 
         if (_serverSocket.accept(socket)) {
@@ -1775,6 +1777,37 @@ public class TcpPort
    * Shuts the Port down.  The server gives connections 30
    * seconds to complete.
    */
+  public void closeBind()
+  {
+    if (! _lifecycle.toStop())
+      return;
+    
+    disable();
+    
+    _launcher.close();
+  
+    QServerSocket serverSocket = _serverSocket;
+
+    // close the server socket
+    if (serverSocket != null) {
+      try {
+        serverSocket.close();
+      } catch (Throwable e) {
+      }
+
+      try {
+        synchronized (serverSocket) {
+          serverSocket.notifyAll();
+        }
+      } catch (Throwable e) {
+      }
+    }
+  }
+
+  /**
+   * Shuts the Port down.  The server gives connections 30
+   * seconds to complete.
+   */
   public void close()
   {
     if (! _lifecycle.toDestroy())
@@ -1801,6 +1834,10 @@ public class TcpPort
       localPort = serverSocket.getLocalPort();
     }
 
+    if (localPort == 0) {
+      localPort = _port;
+    }
+
     // close the server socket
     if (serverSocket != null) {
       try {
@@ -1816,14 +1853,12 @@ public class TcpPort
       }
     }
 
-    /*
-    if (selectManager != null) {
+    if (_selectManager != null) {
       try {
-        selectManager.onPortClose(this);
+        _selectManager.onPortClose(this);
       } catch (Throwable e) {
       }
     }
-    */
 
     Set<TcpSocketLink> activeSet;
 

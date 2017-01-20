@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999-2004 Caucho Technology.  All rights reserved.
+ * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -19,17 +19,40 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *
- *   Free Software Foundation, Inc.
+ *   Free SoftwareFoundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
+ *
+ * @author Scott Ferguson
  */
 
-#ifndef CSE_VERSION_H
-#define CSE_VERSION_H
+package com.caucho.vfs;
 
-#define VERSION "Resin/4.0.50"
-#define FULL_VERSION "Resin-4.0.50 (built Fri, 20 Jan 2017 02:58:02 PST)"
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-#endif /* CSE_VERSION_H */
+/**
+ * Abstract socket to handle both normal sockets and bin/resin sockets.
+ */
+public class SSLFactoryBase
+{
+  private static final Logger log
+    = Logger.getLogger(SSLFactoryBase.class.getName());
+
+  private static final Class<?> _sslFactoryType;
+  
+  static {
+    Class<?> sslFactoryType = null;
+    
+    try {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+      sslFactoryType = Class.forName("com.caucho.vfs.OpenSSLFactory", false, loader);
+    } catch (Throwable e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
+    _sslFactoryType = sslFactoryType;
+  }
+}
 

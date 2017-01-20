@@ -19,7 +19,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
-*
+ *
  *   Free Software Foundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
@@ -27,19 +27,52 @@
  * @author Scott Ferguson
  */
 
-package com.caucho;
+package com.caucho.cloud.network;
 
-final public class Version {
-  public static final String COPYRIGHT =
-    "Copyright(c) 1998-2012 Caucho Technology.  All rights reserved.";
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
-  public static String FULL_VERSION = "Resin-4.0.50 (built Fri, 20 Jan 2017 02:58:02 PST)";
-  public static String VERSION = "4.0.50";
-  public static String VERSION_DATE = "20170120T025802";
+import com.caucho.env.service.AbstractResinSubSystem;
+import com.caucho.network.listen.TcpPort;
 
-  public static void main(String []argv)
+public class NetworkListenStopSystem extends AbstractResinSubSystem
+{
+  private static final Logger log
+    = Logger.getLogger(NetworkListenStopSystem.class.getName());
+  
+  public static final int START_PRIORITY_AT_BEGIN = 50;
+
+  private NetworkListenSystem _listenSystem;
+
+  NetworkListenStopSystem(NetworkListenSystem listenSystem)
   {
-    System.out.println(FULL_VERSION);
-    System.out.println(COPYRIGHT);
+    _listenSystem = listenSystem;
+  }
+  
+  //
+  // lifecycle
+  //
+
+  @Override
+  public int getStartPriority()
+  {
+    return START_PRIORITY_AT_BEGIN;
+  }
+  
+  /**
+   * Closes the server.
+   */
+  @Override
+  public void stop()
+  {
+    for (TcpPort listener : _listenSystem.getListeners()) {
+      try {
+        if (listener != _listenSystem.getClusterListener()) {
+          listener.close();
+        }
+      } catch (Throwable e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
+    }
   }
 }
