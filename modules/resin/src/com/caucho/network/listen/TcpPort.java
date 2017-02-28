@@ -1810,9 +1810,10 @@ public class TcpPort
    */
   public void close()
   {
-    if (! _lifecycle.toDestroy())
+    if (! _lifecycle.toDestroy()) {
       return;
-
+    }
+    
     if (log.isLoggable(Level.FINE))
       log.fine(this + " closing");
 
@@ -1828,8 +1829,13 @@ public class TcpPort
     _serverSocket = null;
 
     InetAddress localAddress = null;
-    int localPort = 0;
-    if (serverSocket != null) {
+    int localPort = getLocalPort();
+
+    if (_port > 0) {
+	localPort = _port;
+	localAddress = _socketAddress;
+    }
+    else if (serverSocket != null) {
       localAddress = serverSocket.getLocalAddress();
       localPort = serverSocket.getLocalPort();
     }
@@ -1890,7 +1896,7 @@ public class TcpPort
       for (int i = 0; i < idleCount + 10; i++) {
         InetSocketAddress addr;
 
-        if (getIdleThreadCount() == 0)
+        if (getIdleThreadCount() + getStartThreadCount() == 0)
           break;
 
         if (localAddress == null ||

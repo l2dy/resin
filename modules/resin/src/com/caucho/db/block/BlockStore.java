@@ -498,6 +498,10 @@ public class BlockStore {
     _readWrite.writeBlock(0, _allocationTable, 0, _allocationTable.length, isPriority);
 
     _blockCount = 2;
+
+    if (getAllocation(0) != ALLOC_DATA || getAllocation(1) != ALLOC_DATA) {
+      Thread.dumpStack();
+    }
   }
 
   public void init()
@@ -535,6 +539,10 @@ public class BlockStore {
 
       _readWrite.readBlock((long) allocGroup * ALLOC_GROUP_SIZE,
                            _allocationTable, i, len);
+    }
+
+    if (getAllocation(0) != ALLOC_DATA || getAllocation(1) != ALLOC_DATA) {
+      Thread.dumpStack();
     }
   }
 
@@ -816,6 +824,11 @@ public class BlockStore {
                          _allocationTable.length);
         _allocationTable = newTable;
 
+	if (getAllocation(0) != ALLOC_DATA
+	    || getAllocation(1) != ALLOC_DATA) {
+	  Thread.dumpStack();
+	}
+
         long superBlockMax = _allocationTable.length / ALLOC_BYTES_PER_BLOCK;
         for (long index = 0;
              index < superBlockMax;
@@ -924,11 +937,13 @@ public class BlockStore {
   public void deallocateBlock(long blockId)
     throws IOException
   {
-    if (blockId == 0)
+    if (blockId <= 1) {
+      Thread.dumpStack();
       return;
+    }
 
     long index = blockIdToIndex(blockId);
-
+    
     synchronized (_allocationLock) {
       if (getAllocation(index) == ALLOC_FREE) {
         throw new IllegalStateException(L.l("{0} double free of {1}",
@@ -971,6 +986,12 @@ public class BlockStore {
    */
   private void setAllocation(long blockIndex, int code)
   {
+    if (blockIndex <= 1 && code != ALLOC_DATA) {
+      System.out.println("Suspicious change: " + Long.toHexString(blockIndex) + " " + code);
+      Thread.dumpStack();
+      return;
+    }
+    
     int allocOffset = (int) (ALLOC_BYTES_PER_BLOCK * blockIndex);
 
     for (int i = 1; i < ALLOC_BYTES_PER_BLOCK; i++) {
@@ -982,8 +1003,6 @@ public class BlockStore {
     
     if (oldCode != ALLOC_FREE && code != ALLOC_FREE && oldCode != code) {
       System.out.println("Suspicious change: " + Long.toHexString(blockIndex) + " " + oldCode + " " + code);
-      Thread.dumpStack();
-    } else if (blockIndex == 0 && code != ALLOC_DATA) {
       Thread.dumpStack();
     }
 
@@ -1981,6 +2000,11 @@ public class BlockStore {
     close();
   }
   */
+  
+  public void wakeWriter()
+  {
+    _writer.wakeIfPending();
+  }
 
   // debugging stuff.
   /**

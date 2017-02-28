@@ -418,6 +418,8 @@ public class Table extends BlockStore
     _database.addTable(this);
 
     writeStartupTimestamp();
+    
+    wakeWriter();
   }
 
   private void writeStartupTimestamp()
@@ -987,7 +989,7 @@ public class Table extends BlockStore
         if (rowOffset >= 0) {
           insertRow(queryContext, xa, columns, values,
                     block, rowOffset);
-
+          
           block.saveAllocation();
 
           _rowAllocator.freeRowBlockId(blockId);
@@ -1155,7 +1157,7 @@ public class Table extends BlockStore
       return false;
     }
 
-    buffer[rowOffset] = (byte) ((rowState & ~ROW_MASK) | ROW_ALLOC);
+    // buffer[rowOffset] = (byte) ((rowState & ~ROW_MASK) | ROW_ALLOC);
 
     Column []columns = _row.getColumns();
 
