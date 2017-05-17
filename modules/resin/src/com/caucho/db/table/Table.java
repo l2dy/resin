@@ -350,6 +350,10 @@ public class Table extends BlockStore
                             table));
           }
         }
+        
+        if (table.getAllocation(0) != BlockStore.ALLOC_DATA) {
+          throw new IllegalStateException("Invalid table load");
+        }
 
         table.writeStartupTimestamp();
 
@@ -796,7 +800,12 @@ public class Table extends BlockStore
 
       isValid = true;
     } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      if (log.isLoggable(Level.FINE)) {
+        log.log(Level.FINE, e.toString(), e);
+      }
+      else {
+        log.warning(e.toString());
+      }
     } finally {
       if (iter != null)
         iter.free();
@@ -1157,12 +1166,16 @@ public class Table extends BlockStore
       return false;
     }
 
-    // buffer[rowOffset] = (byte) ((rowState & ~ROW_MASK) | ROW_ALLOC);
+    buffer[rowOffset] = (byte) ((rowState & ~ROW_MASK) | ROW_ALLOC);
 
     Column []columns = _row.getColumns();
 
     for (int i = 0; i < columns.length; i++) {
-      columns[i].deleteData(xa, buffer, rowOffset);
+      try {
+        columns[i].deleteData(xa, buffer, rowOffset);
+      } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
+      }
     }
 
     if (isDeleteIndex) {

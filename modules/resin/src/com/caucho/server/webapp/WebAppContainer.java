@@ -733,6 +733,14 @@ public class WebAppContainer
   public void start()
   {
     try {
+      if (_accessLog != null) {
+        _accessLog.start();
+      }
+    } catch (Exception e) {
+      throw ConfigException.create(e);
+    }
+    
+    try {
       _appDeploy.start();
     } catch (Exception e) {
       throw ConfigException.create(e);
@@ -786,7 +794,8 @@ public class WebAppContainer
     boolean isAlwaysModified;
 
     if (webApp != null) {
-      invocation = webApp.buildInvocation(invocation);
+      boolean isTop = _rewriteDispatch == null;
+      invocation = webApp.buildInvocation(invocation, isTop);
       chain = invocation.getFilterChain();
       isAlwaysModified = false;
     }
@@ -828,16 +837,18 @@ public class WebAppContainer
         }
         
         invocation.setWebApp(rootWebApp);
-        
-        // server/1k21 vs server/1kk7
-        // if (rootWebApp != webApp)
-        rewriteChain = rootWebApp.createWebAppFilterChain(rewriteChain, 
-                                                          invocation,
-                                                          true);
-
-        invocation.setFilterChain(rewriteChain);
         isAlwaysModified = false;
       }
+        
+      // server/1k21 vs server/1kk7
+      // if (rootWebApp != webApp)
+      // server/02ex vs server/02ey - false
+      webApp = invocation.getWebApp();
+      rewriteChain = webApp.createWebAppFilterChain(rewriteChain, 
+                                                    invocation,
+                                                    true);
+
+      invocation.setFilterChain(rewriteChain);
     }
 
     if (isAlwaysModified)
