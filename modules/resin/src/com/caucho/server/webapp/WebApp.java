@@ -4463,8 +4463,8 @@ public class WebApp extends ServletContextImpl
         _parent.buildDispatchInvocation(dispatchInvocation);
       }
       else if (! _lifecycle.waitForActive(_activeWaitTime)) {
-        throw new IllegalStateException(L.l("web-app '{0}' is restarting and is not yet ready to receive requests",
-                                            getVersionContextPath()));
+        throw new IllegalStateException(L.l("web-app '{0}' is restarting and is not yet ready to receive requests. state={1}",
+                                            getVersionContextPath(), _lifecycle));
       }
       else {
         buildIncludeInvocation(includeInvocation);
@@ -4518,11 +4518,14 @@ public class WebApp extends ServletContextImpl
       try {
         accessLog.log(req, res, this);
       } catch (Exception e) {
+        log.log(Level.WARNING, e.toString(), e);
+        /*
         log.warning("AccessLog: " + e);
         
         if (log.isLoggable(Level.FINER)) {
           log.log(Level.FINER, "AccessLog: " + e.toString(), e);
         }
+        */
       }
     }
   }
@@ -4896,7 +4899,7 @@ public class WebApp extends ServletContextImpl
   public long getMaxAge(String uri)
   {
     CacheMapping map = _cacheMappingMap.map(uri);
-
+    
     if (map != null)
       return map.getMaxAge();
     else
