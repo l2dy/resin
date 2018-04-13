@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -114,6 +114,11 @@ public interface SocketLink {
    * Returns the cipher suite
    */
   public String getCipherSuite();
+  
+  /**
+   * Returns the cipher suite
+   */
+  public String getSslProtocol();
   
   /***
    * Returns the key size.

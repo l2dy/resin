@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -415,8 +415,12 @@ public final class InjectManager
                         new PersistenceContextHandler(this));
       _injectionMap.put(PersistenceUnit.class,
                         new PersistenceUnitHandler(this));
-      _injectionMap.put(Resource.class,
-                        new ResourceHandler(this));
+      try {
+	  _injectionMap.put(Resource.class,
+			    new ResourceHandler(this));
+      } catch (Throwable e) {
+	  log.log(Level.FINE, e.toString(), e);
+      }
       _injectionMap.put(EJB.class,
                         new EjbHandler(this));
       _injectionMap.put(EJBs.class,
@@ -725,6 +729,9 @@ public final class InjectManager
         }
         else if ((testBean instanceof AbstractIntrospectedBean<?>)
                  && ((AbstractIntrospectedBean<?>) testBean).getAnnotated().isAnnotationPresent(Specializes.class)) {
+        }
+        else if (! bean.getName().startsWith(testBean.getName())
+                 && ! testBean.getName().startsWith(bean.getName())) {
         }
         else {
           throw new ConfigException(L.l("@Named('{0}') is a duplicate name for\n  {1}\n  {2}",

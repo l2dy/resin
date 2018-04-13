@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -36,6 +36,9 @@ public enum BlockState {
   INIT {
     @Override
     public BlockState toValid() { return VALID; }
+    
+    @Override
+    public BlockState toWrite() { return this; }
     
     @Override
     public BlockState toDestroy() { return DESTROYED; }

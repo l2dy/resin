@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -519,7 +519,7 @@ public class HmuxRequest extends AbstractHttpRequest
     if (keySize == null)
       keySize = getHeader("SSL_SECRETKEYSIZE");
     if (keySize != null)
-      request.setAttribute("javax.servlet.request.key_size", keySize);
+      request.setAttribute("javax.servlet.request.key_size", new Integer(keySize));
 
     if (_clientCert.size() == 0)
       return;

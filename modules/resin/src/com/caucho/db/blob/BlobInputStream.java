@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -78,8 +78,10 @@ public class BlobInputStream extends InputStream {
     _inode = inode;
     _inodeOffset = inodeOffset;
 
-    readLong(inode, inodeOffset);
+    // readLong(inode, inodeOffset);
     _offset = 0;
+    
+    Inode.validate(store, inode, inodeOffset);
   }
 
   /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -195,6 +195,7 @@ public class Depend implements PersistentDependency {
   /**
    * Log the reason for modification
    */
+  @Override
   public boolean logModified(Logger log)
   {
     if (_isDigestModified) {

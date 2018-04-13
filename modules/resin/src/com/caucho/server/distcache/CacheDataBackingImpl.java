@@ -262,51 +262,51 @@ public class CacheDataBackingImpl implements CacheDataBacking {
     }
 
     synchronized (mnodeStore) {
-    if (oldEntryEntry == null
-        || oldEntryEntry.isImplicitNull()
-        || oldEntryEntry == MnodeEntry.NULL) {
-      // long now = CurrentTime.getCurrentTime();
-      long lastAccessTime = mnodeUpdate.getLastAccessTime();
-      long lastModifiedTime = mnodeUpdate.getLastAccessTime();
+      if (oldEntryEntry == null
+          || oldEntryEntry.isImplicitNull()
+          || oldEntryEntry == MnodeEntry.NULL) {
+        // long now = CurrentTime.getCurrentTime();
+        long lastAccessTime = mnodeUpdate.getLastAccessTime();
+        long lastModifiedTime = mnodeUpdate.getLastAccessTime();
 
-      if (mnodeStore.insert(key, cacheKey,
-                             mnodeUpdate, 
-                             mnodeEntry.getValueDataId(),
-                             mnodeEntry.getValueDataTime(),
-                             lastAccessTime, lastModifiedTime)) {
-        isSave = true;
+        if (mnodeStore.insert(key, cacheKey,
+                              mnodeUpdate, 
+                              mnodeEntry.getValueDataId(),
+                              mnodeEntry.getValueDataTime(),
+                              lastAccessTime, lastModifiedTime)) {
+          isSave = true;
 
-        addCreateCount();
+          addCreateCount();
+        } else {
+          log.fine(this + " db insert failed due to timing conflict"
+              + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
+        }
       } else {
-        log.fine(this + " db insert failed due to timing conflict"
-                 + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
-      }
-    } else {
-      if (mnodeStore.updateSave(key.getHash(),
-                                cacheKey.getHash(),
-                                mnodeUpdate,
-                                mnodeEntry.getValueDataId(),
-                                mnodeEntry.getValueDataTime(),
-                                mnodeEntry.getLastAccessedTime(),
-                                mnodeEntry.getLastModifiedTime())) {
-       isSave = true;
-     }
-      else if (mnodeStore.insert(key,
-                                  cacheKey,
+        if (mnodeStore.updateSave(key.getHash(),
+                                  cacheKey.getHash(),
                                   mnodeUpdate,
                                   mnodeEntry.getValueDataId(),
                                   mnodeEntry.getValueDataTime(),
                                   mnodeEntry.getLastAccessedTime(),
                                   mnodeEntry.getLastModifiedTime())) {
-        isSave = true;
+          isSave = true;
+        }
+        else if (mnodeStore.insert(key,
+                                   cacheKey,
+                                   mnodeUpdate,
+                                   mnodeEntry.getValueDataId(),
+                                   mnodeEntry.getValueDataTime(),
+                                   mnodeEntry.getLastAccessedTime(),
+                                   mnodeEntry.getLastModifiedTime())) {
+          isSave = true;
 
-        addCreateCount();
+          addCreateCount();
+        }
+        else {
+          log.finer(this + " db update failed due to late version"
+              + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
+        }
       }
-      else {
-        log.finer(this + " db update failed due to late version"
-                 + "(key=" + key + ", version=" + mnodeUpdate.getVersion() + ")");
-      }
-    }
     }
 
     if (isSave && oldEntryEntry != null) {
@@ -366,6 +366,7 @@ public class CacheDataBackingImpl implements CacheDataBacking {
     return _dataStore.loadBlob(valueDataId, valueDataTime);
   }
 
+  @Override
   public DataItem saveData(StreamSource source, int length)
   {
     try {
@@ -566,6 +567,11 @@ public class CacheDataBackingImpl implements CacheDataBacking {
     _createReaperCount = createCount + delta;
   }
 
+  @Override
+  public boolean isClosed()
+  {
+    return _dataStore == null;
+  }
 
   @Override
   public void close()

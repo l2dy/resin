@@ -30,6 +30,7 @@
 package com.caucho.db.io;
 
 import java.io.IOException;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
@@ -904,6 +905,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         int mmapIndex = (int) (address / _mmapChunkSize);
         
         ByteBuffer mmap = _mmap[mmapIndex];
+        Buffer mmapBuf = mmap;
         
         synchronized (mmap) {
           MmapFile mmapFile = _mmapFile[mmapIndex];
@@ -911,8 +913,8 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
           
           int sublen = (int) Math.min(length, mmapFile.getSize() - mmapOffset);
 
-          mmap.limit(mmapOffset + sublen);
-          mmap.position(mmapOffset);
+          mmapBuf.limit(mmapOffset + sublen);
+          mmapBuf.position(mmapOffset);
 
           mmap.put(buffer, offset, sublen);
         

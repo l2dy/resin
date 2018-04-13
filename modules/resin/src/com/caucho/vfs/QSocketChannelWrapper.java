@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -157,6 +157,7 @@ public class QSocketChannelWrapper extends QSocket {
     else
       return sslSocketClass.isAssignableFrom(getSocket().getClass());
   }
+  
   /**
    * Returns the secure cipher algorithm.
    */
@@ -172,6 +173,25 @@ public class QSocketChannelWrapper extends QSocket {
     
     if (sslSession != null)
       return sslSession.getCipherSuite();
+    else
+      return null;
+  }
+  
+  /**
+   * Returns the ssl protocol.
+   */
+  @Override
+  public String getSslProtocol()
+  {
+    if (! (getSocket() instanceof SSLSocket))
+      return super.getCipherSuite();
+
+    SSLSocket sslSocket = (SSLSocket) getSocket();
+    
+    SSLSession sslSession = sslSocket.getSession();
+    
+    if (sslSession != null)
+      return sslSession.getProtocol();
     else
       return null;
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -805,7 +805,7 @@ public class SessionImpl implements HttpSession, CacheListener {
           int size = in.readInt();
 
           // System.out.println("LOAD: " + size + " " + this + " " + _clusterObject + System.identityHashCode(this));
-
+          
           for (int i = 0; i < size; i++) {
             String key = (String) in.readObject();
             Object value = in.readObject();
@@ -828,7 +828,9 @@ public class SessionImpl implements HttpSession, CacheListener {
             }
           }
         } catch (Exception e) {
-          throw IOExceptionWrapper.create(e);
+          log.log(Level.WARNING, e.toString(), e);
+          
+          id = null;
         }
       }
     }

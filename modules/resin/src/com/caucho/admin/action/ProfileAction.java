@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -32,6 +32,7 @@ import java.io.*;
 import java.text.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.config.ConfigException;
@@ -46,6 +47,8 @@ public class ProfileAction implements AdminAction
   private static final L10N L = new L10N(ProfileAction.class);
   
   private AtomicLong _cancelledTime = new AtomicLong(-1);
+
+  private boolean _isProfileDisabled;
   
   public void cancel()
   {
@@ -81,7 +84,21 @@ public class ProfileAction implements AdminAction
                                              activeTime));
     }
     
-    Profile profile = Profile.createProfile();
+    Profile profile = null;
+    
+    try {
+      if (! _isProfileDisabled) {
+        profile = Profile.createProfile();
+      }
+    } catch (Throwable e) {
+      _isProfileDisabled = true;
+      log.warning(e.toString());
+      log.log(Level.FINER, e.toString(), e);
+    }
+    
+    if (profile == null) {
+      return null;
+    }
 
     if (profile.isActive()) {
       throw new ConfigException(L.l("Profile is still active"));

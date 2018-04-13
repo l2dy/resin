@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -155,6 +155,14 @@ abstract public class QSocket {
    * Returns the secure cipher algorithm.
    */
   public String getCipherSuite()
+  {
+    return null;
+  }
+
+  /**
+   * Return the ssl protocol
+   */
+  public String getSslProtocol()
   {
     return null;
   }

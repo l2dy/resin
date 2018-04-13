@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -107,6 +107,7 @@ public class ClassDependency implements PersistentDependency {
   /**
    * Returns true if the underlying resource has changed.
    */
+  @Override
   public boolean logModified(Logger log)
   {
     if (isModified()) {

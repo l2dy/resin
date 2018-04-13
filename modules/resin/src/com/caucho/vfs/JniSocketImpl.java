@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * @author Scott Ferguson
  */
@@ -355,6 +355,17 @@ public final class JniSocketImpl extends QSocket {
   {
     synchronized (this) {
       return getCipher(_socketFd);
+    }
+  }
+
+  /**
+   * Returns the protocol for an ssl connection.
+   */
+  @Override
+  public String getSslProtocol()
+  {
+    synchronized (this) {
+      return getSslProtocol(_socketFd);
     }
   }
 
@@ -742,6 +753,8 @@ public final class JniSocketImpl extends QSocket {
                                        int port);
 
   native String getCipher(long fd);
+
+  native String getSslProtocol(long fd);
 
   native int getCipherBits(long fd);
 

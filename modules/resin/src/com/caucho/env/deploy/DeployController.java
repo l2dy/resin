@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -443,21 +443,27 @@ abstract public class DeployController<I extends DeployInstance>
     }
     
     DeployInstance instance = getDeployInstanceImpl();
-
-    if (instance != null) {
-      Thread thread = Thread.currentThread();
-      ClassLoader loader = thread.getContextClassLoader();
-
-      try {
-        thread.setContextClassLoader(instance.getClassLoader());
+    
+    if (instance == null) {
+      log.info("modified because of missing/closed instance " + this);
       
-        return instance.logModified(log);
-      } finally {
-        thread.setContextClassLoader(loader);
-      }
+      return true;
     }
-    else
+
+    if (DeployMode.MANUAL.equals(getRedeployMode())) {
       return false;
+    }
+
+    Thread thread = Thread.currentThread();
+    ClassLoader loader = thread.getContextClassLoader();
+
+    try {
+      thread.setContextClassLoader(instance.getClassLoader());
+      
+      return instance.logModified(log);
+    } finally {
+      thread.setContextClassLoader(loader);
+    }
   }
 
   protected boolean isControllerModified()

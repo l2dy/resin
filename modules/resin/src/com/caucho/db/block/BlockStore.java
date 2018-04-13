@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -699,6 +699,14 @@ public class BlockStore {
   }
 
   /**
+   * Return true if the block is a row block.
+   */
+  public boolean isMiniFragBlock(long blockAddress)
+  {
+    return getAllocationByAddress(blockAddress) == ALLOC_MINI_FRAG;
+  }
+
+  /**
    * Allocates a new block for a non-row.
    *
    * @return the block id of the allocated block.
@@ -760,6 +768,14 @@ public class BlockStore {
   public boolean isInodePtrBlock(long blockAddress)
   {
     return getAllocationByAddress(blockAddress) == ALLOC_INODE_PTR;
+  }
+
+  /**
+   * Return true if the block is an index block.
+   */
+  public boolean isDataBlock(long blockAddress)
+  {
+    return getAllocationByAddress(blockAddress) == ALLOC_DATA;
   }
 
   /**

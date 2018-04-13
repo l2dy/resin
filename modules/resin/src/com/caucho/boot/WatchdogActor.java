@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -84,6 +84,8 @@ class WatchdogActor
       serverId = _manager.startServer(serverId, argv);
 
       String msg = L.l("{0}: started server '{1}'", this, serverId);
+      
+      log.info(msg);
     
       return new ResultStatus(true, msg);
     } catch (Exception e) {
@@ -132,6 +134,8 @@ class WatchdogActor
 
       String msg = L.l("{0}: stopped server='{1}'", this, serverId);
     
+      log.info(msg);
+      
       result = new ResultStatus(true, msg);
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
@@ -161,6 +165,8 @@ class WatchdogActor
 
       String msg = L.l("{0}: restarted server='{1}'", this, serverId);
     
+      log.info(msg);
+      
       result = new ResultStatus(true, msg);
     } catch (Exception e) {
       log.log(Level.WARNING, e.toString(), e);
@@ -190,6 +196,8 @@ class WatchdogActor
       _manager.killServer(serverId);
 
       String msg = L.l("{0}: killed server='{1}'", this, serverId);
+      
+      log.info(msg);
     
       result = new ResultStatus(true, msg);
     } catch (Exception e) {
@@ -217,7 +225,7 @@ class WatchdogActor
     try {
       String from = " unknown"; // XXX:
       
-      log.info(this + " shutdown from " + from);
+      log.info(this + " shutdown from command");
 
       String msg = L.l("{0}: shutdown", this);
     

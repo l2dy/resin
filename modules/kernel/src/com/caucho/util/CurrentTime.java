@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -67,6 +67,17 @@ public class CurrentTime {
    */
   public static long getCurrentTime()
   {
+    // System.currentTimeMillis is immediate, so the thread is no longer needed
+    if (true) {
+      if (_testTime > 0) {
+        return _testTime;
+      }
+      else {
+        return System.currentTimeMillis();
+      }
+    }
+
+    
     // test avoids extra writes on multicore machines
     if (! _isCurrentTimeUsed) {
       if (_testTime > 0)
@@ -266,6 +277,8 @@ public class CurrentTime {
       // should display for security manager issues
       log().fine("Alarm not started: " + e);
     }
+    
+    currentTimeThread = null;
 
     // _systemLoader = systemLoader;
     _currentTimeThread = currentTimeThread;

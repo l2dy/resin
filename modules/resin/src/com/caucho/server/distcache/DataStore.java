@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -963,7 +963,7 @@ public class DataStore {
     private final long _id;
     private final long _time;
     
-    DataItem(long id, long time)
+    public DataItem(long id, long time)
     {
       _id = id;
       _time = time;

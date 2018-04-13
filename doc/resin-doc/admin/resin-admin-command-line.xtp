@@ -174,7 +174,7 @@ resinctl console [options]
 <example title="Example: starting in console">
 unix> resinctl console
 Resin Professional 4.0.s120731 (built Tue, 31 Jul 2012 03:03:37 PDT)
-Copyright(c) 1998-2012 Caucho Technology.  All rights reserved.
+Copyright(c) 1998-2018 Caucho Technology.  All rights reserved.
 
   1999999.license -- 1 Resin server Caucho
   ...

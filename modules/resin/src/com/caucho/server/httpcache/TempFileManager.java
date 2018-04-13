@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -56,12 +56,12 @@ public class TempFileManager
 
   public TempFileManager(Path path)
   {
+    String name = "temp_file";
+
+    Path storePath = path.lookup(name);
+    
     try {
       path.getParent().mkdirs();
-
-      String name = "temp_file";
-
-      Path storePath = path.lookup(name);
 
       storePath.remove();
 
@@ -78,7 +78,16 @@ public class TempFileManager
       _store.setFlushDirtyBlocksOnCommit(false);
       _store.create();
     } catch (Exception e) {
-      throw ConfigException.create(e);
+      throw ConfigException.create(L.l("While creating temp file {0}, an Exception occurred {1}. Check disk space",
+                                       storePath.getNativePath(),
+                                       e.toString()),
+                                   e);
+    } catch (Error e) {
+      log.warning(L.l("While creating temp file {0}, an Error occurred {1}. Check disk space",
+                                       storePath.getNativePath(),
+                                       e.toString()));
+      
+      throw e;
     }
   }
   

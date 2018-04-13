@@ -117,7 +117,7 @@ proxy_cache_enable : true
 # proxy_cache_size : 256m
 
 # Enable clustered persistent sessions (for failover)
-session_store : true
+session_store : false
 
 # disable the quercus *.php mapping when using Apache for PHP
 # quercus_disable : true
@@ -133,10 +133,6 @@ session_store : true
 # email : admin@example.com
 
 pdf_summary : true
-
-# Set a global password to prevent foreign Resin instances from connecting.
-# Must be identical between web, app, and cache clusters.
-# cluster_system_key : changeme
 
 # Enable remote admin (for remote CLI and for EC2 ext: triad discovery)
 # remote_admin_enable : true

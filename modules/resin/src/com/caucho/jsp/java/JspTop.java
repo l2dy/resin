@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -29,14 +29,15 @@
 
 package com.caucho.jsp.java;
 
+import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.TreeMap;
+
 import com.caucho.jsp.JspParseException;
 import com.caucho.util.L10N;
 import com.caucho.vfs.WriteStream;
 import com.caucho.xml.XmlChar;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Represents the root node.
@@ -48,9 +49,9 @@ public class JspTop extends JspContainerNode implements JspSegmentNode {
   private int _maxFragmentIndex = -1;
   private int _maxStaticFragmentIndex = -1;
 
-  private HashMap<String,String> _namespaceMap = new HashMap<String,String>();
-  private HashMap<String,String> _revNamespaceMap
-    = new HashMap<String,String>();
+  private Map<String,String> _namespaceMap = new TreeMap<String,String>();
+  private Map<String,String> _revNamespaceMap
+    = new TreeMap<String,String>();
 
   /**
    * Adds a text node.

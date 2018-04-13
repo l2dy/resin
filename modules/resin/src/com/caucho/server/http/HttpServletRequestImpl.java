@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -934,9 +934,14 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
         return null;
       }
       
+      SessionManager sessionManager = getSessionManager();
+      
+      if (sessionManager == null) {
+        return null;
+      }
+      
       cookiesIn = request.getCookies();
 
-      SessionManager sessionManager = getSessionManager();
       String sessionCookieName = getSessionCookie(sessionManager);
 
       for (int i = 0; i < cookiesIn.length; i++) {

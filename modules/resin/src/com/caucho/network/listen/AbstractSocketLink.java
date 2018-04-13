@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -180,6 +180,15 @@ public abstract class AbstractSocketLink
    */
   @Override
   public String getCipherSuite()
+  {
+    return null;
+  }
+  
+  /**
+   * Returns the ssl protocol
+   */
+  @Override
+  public String getSslProtocol()
   {
     return null;
   }

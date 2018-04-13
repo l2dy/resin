@@ -1,4 +1,4 @@
-/* * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+/* * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *

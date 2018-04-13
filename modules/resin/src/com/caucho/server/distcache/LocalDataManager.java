@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -268,8 +268,9 @@ public final class LocalDataManager
       if (blob == null) {
         blob = getDataBacking().loadBlob(valueDataId, valueDataTime);
         
-        if (blob != null)
+        if (blob != null) {
           mnodeValue.setBlob(blob);
+        }
       }
 
       if (blob != null) {
@@ -278,22 +279,9 @@ public final class LocalDataManager
         return true;
       }
 
-      /*
-      if (! loadClusterData(key, valueKey, valueIndex, config)) {
-        log.warning(this + " cannot load cluster value " + valueKey);
-
-        // XXX: error?  since we have the value key, it should exist
-
-        // server/0180
-        // return false;
-      }
-
-      if (getDataBacking().loadData(valueKey, valueIndex, out)) {
-        return true;
-      }
-      */
-
-      log.warning(this + " unexpected load failure in readValue key=" + key);
+      log.warning(this + " unexpected load failure in readValue key=" + key
+                  + " dataId=0x" + Long.toHexString(valueDataId)
+                  + " mnodeValue=" + mnodeValue);
 
       // XXX: error?  since we have the value key, it should exist
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -47,6 +47,7 @@ import com.caucho.config.Configurable;
 import com.caucho.config.types.Bytes;
 import com.caucho.config.types.CronType;
 import com.caucho.config.types.Period;
+import com.caucho.network.listen.SocketLink;
 import com.caucho.server.http.AbstractHttpRequest;
 import com.caucho.server.http.AbstractHttpResponse;
 import com.caucho.server.http.CauchoRequest;
@@ -356,6 +357,14 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
         cb.clear();
         if (arg != null)
           _timeFormat = arg;
+        segments.add(new Segment(this, ch, arg));
+        break;
+
+      case 'V':
+        if (cb.length() > 0)
+          segments.add(new Segment(this, Segment.TEXT, cb.toString()));
+        cb.clear();
+
         segments.add(new Segment(this, ch, arg));
         break;
 
@@ -673,13 +682,65 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
       case 'U':
         offset = print(buffer, offset, request.getRequestURI());
         break;
+        
+      case 'V':
+        offset = printVariable(buffer, offset, segment.getArg(), request);
+        break;
 
       default:
-        throw new IOException();
+        throw new IOException(L.l("Unknown code {0}", String.valueOf((char) segment._code)));
       }
     }
 
     return offset;
+  }
+
+  /**
+   * Prints a variable value.
+   */
+  private int printVariable(byte[] buffer, int offset, 
+                            String arg,
+                            HttpServletRequestImpl request)
+  {
+    if (arg == null) {
+      return offset;
+    }
+    
+    if (arg.equals("ssl_protocol")) {
+      SocketLink conn = request.getSocketLink();
+      
+      if (conn == null) {
+        return offset;
+      }
+      
+      String protocol = conn.getSslProtocol();
+      
+      if (protocol != null) {
+        return print(buffer, offset, protocol);
+      }
+      else {
+        return offset;
+      }
+    }
+    else if (arg.equals("ssl_cipher_suite")) {
+      SocketLink conn = request.getSocketLink();
+      
+      if (conn == null) {
+        return offset;
+      }
+      
+      String cipherSuite = conn.getCipherSuite();
+      
+      if (cipherSuite != null) {
+        return print(buffer, offset, cipherSuite);
+      }
+      else {
+        return offset;
+      }
+    }
+    else {
+      return offset;
+    }
   }
 
   /**
@@ -880,6 +941,11 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
           _code = CHAR;
         }
       }
+    }
+    
+    private String getArg()
+    {
+      return _string;
     }
   }
 }

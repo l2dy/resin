@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -486,6 +486,15 @@ public class TcpSocketLink extends AbstractSocketLink
   public String getCipherSuite()
   {
     return _socket.getCipherSuite();
+  }
+  
+  /**
+   * Returns the cipher suite
+   */
+  @Override
+  public String getSslProtocol()
+  {
+    return _socket.getSslProtocol();
   }
   
   /***

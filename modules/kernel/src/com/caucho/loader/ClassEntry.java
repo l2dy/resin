@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -253,6 +253,7 @@ public class ClassEntry implements Dependency {
   /**
    * Returns true if the source file has been modified.
    */
+  @Override
   public boolean logModified(Logger log)
   {
     if (_depend.logModified(log)) {

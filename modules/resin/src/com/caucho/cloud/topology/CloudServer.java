@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -484,7 +484,8 @@ public class CloudServer {
   {
     String address = _address;
     
-    if (CurrentTime.isTest() && address.startsWith("192.168.1.")) {
+    if (CurrentTime.isTest()
+        && (address.startsWith("192.168.1.") || address.startsWith("10."))) {
       address = "192.168.1.x";
     }
     

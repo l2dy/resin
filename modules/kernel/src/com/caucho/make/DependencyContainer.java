@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -312,8 +312,9 @@ public class DependencyContainer implements Dependency
   @Override
   public boolean logModified(Logger log)
   {
-    if (_isModifiedLog)
+    if (_isModifiedLog) {
       return true;
+    }
     
     for (int i = _dependencyList.size() - 1; i >= 0; i--) {
       Dependency dependency = _dependencyList.get(i);
@@ -322,6 +323,14 @@ public class DependencyContainer implements Dependency
         _isModifiedLog = true;
         return true;
       }
+    }
+    
+    if (_isModified) {
+      _isModifiedLog = true;
+      
+      log.info("modified " + this + " for unknown reason");
+      
+      return true;
     }
       
     return false;

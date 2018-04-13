@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -43,13 +43,13 @@ public class DataRemoveActor extends AbstractTaskWorker {
   private final DataStore _dataStore;
   private final String _serverId;
   
-  private final int _queueMax = 8192;
+  private final int _queueMax = 64 * 1024;
   
-  //private final LinkedBlockingQueue<RemoveItem> _queue
-  //  = new LinkedBlockingQueue<RemoveItem>();
+  private final LinkedBlockingQueue<RemoveItem> _queue
+    = new LinkedBlockingQueue<RemoveItem>();
   
-  private final LinkedBlockingQueue<DataItem> _queue
-    = new LinkedBlockingQueue<DataItem>();
+  //private final LinkedBlockingQueue<DataItem> _queue
+  //  = new LinkedBlockingQueue<DataItem>();
   
   DataRemoveActor(DataStore dataStore)
   {
@@ -59,9 +59,9 @@ public class DataRemoveActor extends AbstractTaskWorker {
   
   public void offer(DataItem dataItem)
   {
-    //RemoveItem item = new RemoveItem(dataItem);
+    RemoveItem item = new RemoveItem(dataItem);
     
-    _queue.offer(dataItem);
+    _queue.offer(item);
     
     wake();
   }
@@ -69,17 +69,20 @@ public class DataRemoveActor extends AbstractTaskWorker {
   @Override
   public long runTask()
   {
-    DataItem item;
+    RemoveItem item;
     DataStore dataStore = _dataStore;
     
     long now = CurrentTime.getCurrentTime();
     
     while ((item = _queue.peek()) != null) {
-      /*
+      // wait for a short timeout in case data is being serialized
+      // across the cluster
       if (now < item.getExpireTime() && _queue.size() < _queueMax) {
         return item.getExpireTime() - now;
       }
-      */
+      else if (now < item.getShortExpireTime()) {
+        return item.getShortExpireTime() - now;
+      }
       
       item = _queue.poll();
 
@@ -102,29 +105,43 @@ public class DataRemoveActor extends AbstractTaskWorker {
   }
   
   static final class RemoveItem {
-    private final long _dataId;
+    private final DataItem _dataItem;
+    private final long _shortExpireTime;
     private final long _expireTime;
     
-    RemoveItem(long dataId)
+    RemoveItem(DataItem dataItem)
     {
-      long delta = 120 * 1000L;
+      long delta = 10 * 1000L;
       
       if (CurrentTime.isTest()) {
         delta = 500L;
       }
       
-      _dataId = dataId;
-      _expireTime = CurrentTime.getCurrentTime() + delta;
+      _dataItem = dataItem;
+      long now = CurrentTime.getCurrentTime();
+      
+      _expireTime = now + delta;
+      _shortExpireTime = now + 1000;
     }
     
-    public long getDataId()
+    public long getId()
     {
-      return _dataId;
+      return _dataItem.getId();
+    }
+    
+    public long getTime()
+    {
+      return _dataItem.getTime();
     }
     
     public long getExpireTime()
     {
       return _expireTime;
+    }
+    
+    public long getShortExpireTime()
+    {
+      return _shortExpireTime;
     }
   }
 }

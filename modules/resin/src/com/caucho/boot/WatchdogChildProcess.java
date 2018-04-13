@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -206,7 +206,7 @@ class WatchdogChildProcess
         _processRef.compareAndSet(null, process);
         
         if (process instanceof JniProcess)
-          _pid = ((JniProcess) process).getPid();
+          _pid = ((JniProcess) process).getPidShort();
         else
           _pid = 0;
 
@@ -371,8 +371,9 @@ class WatchdogChildProcess
   {
     _lifecycle.toDestroy();
 
-    if (_watchdogActor != null)
+    if (_watchdogActor != null) {
       _watchdogActor.sendShutdown();
+    }
   }
 
   void kill()
@@ -748,10 +749,12 @@ class WatchdogChildProcess
       }
     }
 
+    /*
     if (! jvmArgs.contains("-d32") && ! jvmArgs.contains("-d64")
         && _watchdog.is64bit() && ! CauchoSystem.isWindows()) {
       jvmArgs.add("-d64");
     }
+    */
 
     String jvmMode = _watchdog.getJvmMode();
     

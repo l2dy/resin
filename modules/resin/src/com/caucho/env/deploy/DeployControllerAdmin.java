@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -46,7 +46,6 @@ import com.caucho.lifecycle.LifecycleNotification;
 import com.caucho.lifecycle.LifecycleState;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.DeployControllerMXBean;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 
 /**
@@ -59,6 +58,9 @@ abstract public class DeployControllerAdmin<C extends EnvironmentDeployControlle
              LifecycleListener,
              java.io.Serializable
 {
+  private static final Logger log
+    = Logger.getLogger(DeployControllerAdmin.class.getName());
+  
   private transient final C _controller;
 
   // XXX: why transient?
@@ -170,6 +172,8 @@ abstract public class DeployControllerAdmin<C extends EnvironmentDeployControlle
   public void start()
     throws Exception
   {
+    log.info(getController() + " starting from admin");
+    
     getController().start();
   }
 
@@ -177,6 +181,8 @@ abstract public class DeployControllerAdmin<C extends EnvironmentDeployControlle
   public void stop()
     throws Exception
   {
+    log.info(getController() + " stopping from admin");
+    
     getController().stop();
   }
 
@@ -184,6 +190,8 @@ abstract public class DeployControllerAdmin<C extends EnvironmentDeployControlle
   public void restart()
     throws Exception
   {
+    log.info(getController() + " restarting from admin");
+    
     getController().stop();
     getController().start();
   }
@@ -199,6 +207,8 @@ abstract public class DeployControllerAdmin<C extends EnvironmentDeployControlle
   public boolean destroy()
     throws Exception
   {
+    log.info(getController() + " destroy from admin");
+    
     return getController().destroy();
   }
 

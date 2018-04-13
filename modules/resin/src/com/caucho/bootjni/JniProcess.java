@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -149,7 +149,7 @@ public class JniProcess extends Process
     return getInputStream();
   }
 
-  public int getPid()
+  public int getPidShort()
   {
     return _pid;
   }

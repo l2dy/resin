@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -111,15 +111,6 @@ public class BasicDependencyContainer
   }
 
   /**
-   * Sets the modified.
-   */
-  public void setModified(boolean isModified)
-  {
-    _isModified = isModified;
-    _lastCheckTime = 0;
-  }
-
-  /**
    * Resets the check interval.
    */
   public void resetDependencyCheckInterval()
@@ -128,18 +119,9 @@ public class BasicDependencyContainer
   }
 
   /**
-   * Clears the modified flag and sets the last check time to now.
-   */
-  public void clearModified()
-  {
-    _isModified = false;
-
-    _lastCheckTime = CurrentTime.getCurrentTime();
-  }
-
-  /**
    * Returns true if the underlying dependencies have changed.
    */
+  @Override
   public boolean isModified()
   {
     synchronized (this) {
@@ -183,13 +165,21 @@ public class BasicDependencyContainer
   /**
    * Log the reason for the modification
    */
+  @Override
   public boolean logModified(Logger log)
   {
     for (int i = _dependencyList.size() - 1; i >= 0; i--) {
       Dependency dependency = _dependencyList.get(i);
 
-      if (dependency.logModified(log))
+      if (dependency.logModified(log)) {
         return true;
+      }
+    }
+    
+    if (_isModified) {
+      log.info("modified " + this + " for unknown reason");
+      
+      return true;
     }
 
     return false;

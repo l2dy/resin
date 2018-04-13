@@ -6,7 +6,28 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.55 - in progress">
+<s2 title="4.0.56 - in progress">
+<ul>
+<li>start: remove -d64 from watchdog launch for jdk10 (rep by Steffan Busch)</li>
+<li>db: restore deletion timeout to avoid deleting session data prematurely</li>
+<li>db: add log warning when db init fails due to filesystem full (#6149)</li>
+<li>ssl: javax.servlet.request.key_size was string (#6151, rep by Mathias Lagerwall)</li>
+<li>db: always validate indexes on startup</li>
+<li>ioc: @Named("red.lion" vs @Named("red.tiger") (#6150, rep by thorbjoern)</li>
+<li>admin/restart: logging reasons for web-app restart</li> 
+<li>db/cache: timing related issues on start/stop</li>
+<li>openssl: add sni support (#6124, %5574)</li>
+<li>log: add %{ssl_protocol}V and %{ssl_cipher_suite}V to access log config (#6113, rep by Steffen Busch)</li>
+<li>servlet: multiple url-pattern in web fragment (#6127)</li>
+<li>gzip: add min-gzip-size based on content-length header (#6112, rep by stbu)</li>
+<li>jdbc: add wrapper methods for JDBC 4.2 (#6082)</li>
+<li>access.log: NPE with logging bad-request (#6123, rep by Steffen Busch)</li>
+<li>pdf: report date and snapshot time need to match (#6114)</li>
+<li>cli: Removed config-deploy because it is too brittle to deploy reliably</li>
+</ul>
+</s2>
+
+<s2 title="4.0.55 - Dec 4, 2017">
 <ul>
 <li>config: simplified resin.xml and resin.properties to remove unused capabilities</li>
 <li>win32: error messages related to permissions for win32 services (#6092)</li>

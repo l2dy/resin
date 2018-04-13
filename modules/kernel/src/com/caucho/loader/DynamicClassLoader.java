@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1337,17 +1337,43 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   /**
    * Logs the reason for modification.
    */
+  @Override
   public final boolean logModified(Logger log)
   {
-    if (_lifecycle.isDestroyed())
+    if (_lifecycle.isDestroyed()) {
+      log.info("modified because " + this + " is closed");
+      
       return true;
+    }
 
     DependencyContainer dependencies = _dependencies;
 
-    if (dependencies != null)
+    if (dependencies == null) {
+      log.info("modified because " + this + " dependencies are missing");
+      
+      return true;
+    }
+    
+    if (_isEnableDependencyCheck) {
       return dependencies.logModified(log);
-    else
-      return false;
+    }
+    else {
+      return logModified(getParent(), log);
+    }
+  }
+
+  /**
+   * Returns true if any of the classes have been modified.
+   */
+  public static boolean logModified(ClassLoader loader, Logger log)
+  {
+    for (; loader != null; loader = loader.getParent()) {
+      if (loader instanceof DynamicClassLoader) {
+        return ((DynamicClassLoader) loader).logModified(log);
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -1914,6 +1940,8 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     }
 
     if (entry.postLoad()) {
+      log().info("modified by failing class entry " + entry);
+      
       _dependencies.add(AlwaysModified.create());
       _dependencies.setModified(true);
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -30,6 +30,7 @@
 package com.caucho.make;
 
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.logging.Logger;
 
 import com.caucho.loader.Environment;
 import com.caucho.util.CurrentTime;
@@ -90,6 +91,19 @@ abstract public class CachedDependency implements Dependency {
     }
 
     return _isModified;
+  }
+  
+  @Override
+  public boolean logModified(Logger log)
+  {
+    if (_isModified) {
+      log.info("modified " + this + " for unknown reason");
+      
+      return true;
+    }
+    else {
+      return false;
+    }
   }
   
   /**

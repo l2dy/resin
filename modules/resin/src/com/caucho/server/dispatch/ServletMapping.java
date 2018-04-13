@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -169,6 +169,8 @@ public class ServletMapping extends ServletConfigImpl {
     
     if (getServletClassName() != null && getServletClassName().indexOf("${") >= 0)
       _isRegexp = true;
+    
+    boolean ifAbsent = _ifAbsent;
 
     for (int i = 0; i < _mappingList.size(); i++) {
       Mapping mapping = _mappingList.get(i);
@@ -190,8 +192,11 @@ public class ServletMapping extends ServletConfigImpl {
           mapper.getServletManager().addServlet(this);
       }
 
-      if (urlPattern != null)
-        mapper.addUrlMapping(urlPattern, getServletName(), this, _ifAbsent);
+      if (urlPattern != null) {
+        if (mapper.addUrlMapping(urlPattern, getServletName(), this, ifAbsent)) {
+          ifAbsent = false;
+        }
+      }
       else
         mapper.addUrlRegexp(urlRegexp, getServletName(), this);
     }

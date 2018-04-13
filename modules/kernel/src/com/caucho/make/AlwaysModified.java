@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -59,8 +59,11 @@ public class AlwaysModified implements PersistentDependency {
   /**
    * Log the reason for modification
    */
+  @Override
   public boolean logModified(Logger log)
   {
+    log.info("modified because of initialization error");
+    
     return true;
   }
 

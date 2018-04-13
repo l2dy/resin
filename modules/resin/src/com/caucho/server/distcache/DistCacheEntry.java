@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -1349,7 +1349,6 @@ public class DistCacheEntry {
         = oldEntryValue != null ? oldEntryValue.getValueHash() : 0;
 
       long oldVersion = oldEntryValue != null ? oldEntryValue.getVersion() : 0;
-      long now = CurrentTime.getCurrentTime();
       
       if (version < oldVersion
           || (version == oldVersion

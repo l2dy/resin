@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -652,7 +652,7 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   }
   
   @Override
-  protected boolean controllerLogModified(Logger log)
+  protected final boolean controllerLogModified(Logger log)
   {
     return _depend.logModified(log);
   }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1998-2012 Caucho Technology -- all rights reserved
+ * Copyright (c) 1998-2018 Caucho Technology -- all rights reserved
  *
  * This file is part of Resin(R) Open Source
  *
@@ -333,9 +333,15 @@ public class Table extends BlockStore
 
         boolean isReadIndex = table.readIndexes();
 
-        if (! table.isShutdownTimestampValid()) {
-          log.info(L.l("{0} validating indexes due to unclean shutdown.",
-                       table));
+        if (true) {
+          if (! table.isShutdownTimestampValid()) {
+            log.info(L.l("{0} validating indexes due to unclean shutdown.",
+                         table));
+          }
+          else {
+            log.fine(L.l("{0} validating indexes",
+                         table));
+          }
 
           if (! isReadIndex || ! table.validateIndexesSafe()) {
             log.warning(L.l("rebuilding indexes for '{0}' because they did not properly validate on startup"
