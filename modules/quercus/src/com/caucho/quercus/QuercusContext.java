@@ -41,7 +41,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.LockSupport;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -62,7 +61,6 @@ import com.caucho.quercus.env.LongValue;
 import com.caucho.quercus.env.NullValue;
 import com.caucho.quercus.env.QuercusClass;
 import com.caucho.quercus.env.SessionArrayValue;
-import com.caucho.quercus.env.StringBuilderValue;
 import com.caucho.quercus.env.StringValue;
 import com.caucho.quercus.env.UnicodeBuilderValue;
 import com.caucho.quercus.env.Value;
@@ -90,11 +88,12 @@ import com.caucho.quercus.program.UndefinedFunction;
 import com.caucho.quercus.servlet.api.QuercusHttpServletRequest;
 import com.caucho.quercus.servlet.api.QuercusHttpServletResponse;
 import com.caucho.quercus.servlet.api.QuercusServletContext;
+import com.caucho.util.Alarm;
+import com.caucho.util.AlarmListener;
 import com.caucho.util.IntMap;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.util.TimedCache;
-import com.caucho.vfs.FilePath;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.ReadStream;
 import com.caucho.vfs.Vfs;
@@ -2170,7 +2169,8 @@ public class QuercusContext
       _quercusTimer = new QuercusTimer();
 
       _envTimeoutThread = new EnvTimeoutThread(this);
-      _envTimeoutThread.start();
+      
+      _envTimeoutThread.handleAlarm(new Alarm(_envTimeoutThread));
     } catch (Exception e) {
       log.log(Level.FINE, e.getMessage(), e);
     }
@@ -2293,7 +2293,7 @@ public class QuercusContext
     }
   }
 
-  static class EnvTimeoutThread extends Thread {
+  static class EnvTimeoutThread implements AlarmListener {
     private volatile boolean _isRunnable = true;
     private long _timeout;
 
@@ -2303,12 +2303,12 @@ public class QuercusContext
 
     EnvTimeoutThread(QuercusContext quercus)
     {
-      super("quercus-env-timeout");
+      //super("quercus-env-timeout");
 
       _quercusRef = new WeakReference<QuercusContext>(quercus);
       _timeout = quercus._envTimeout;
       
-      setDaemon(true);
+      //setDaemon(true);
       //setPriority(Thread.MAX_PRIORITY);
     }
 
@@ -2316,43 +2316,37 @@ public class QuercusContext
     {
       _isRunnable = false;
 
-      LockSupport.unpark(this);
-
-      try {
-        Thread.sleep(ENV_TIMEOUT_UPDATE_INTERVAL * 2);
-      }
-      catch (InterruptedException e) {
-      }
+      updateTimeout();
     }
 
-    public void run()
+    public void handleAlarm(Alarm alarm)
     {
-      while (_isRunnable) {
-        if (_quantumCount >= _timeout) {
-          _quantumCount = 0;
-
-          try {
-            QuercusContext quercus = _quercusRef.get();
-            
-            if (quercus == null) {
-              break;
-            }
-            
-            ArrayList<Env> activeEnv
-              = new ArrayList<Env>(quercus._activeEnvSet.keySet());
-
-            for (Env env : activeEnv) {
-              env.updateTimeout();
-            }
-
-          } catch (Throwable e) {
-          }
+      try {
+        updateTimeout();
+      } finally {
+        if (_isRunnable && _quercusRef.get() != null) {
+          alarm.queue(ENV_TIMEOUT_UPDATE_INTERVAL);
         }
-        else {
-          _quantumCount += ENV_TIMEOUT_UPDATE_INTERVAL;
+      }
+    }
+    
+    private void updateTimeout()
+    {
+      try {
+        QuercusContext quercus = _quercusRef.get();
+            
+        if (quercus == null) {
+          return;
         }
+            
+        ArrayList<Env> activeEnv
+        = new ArrayList<Env>(quercus._activeEnvSet.keySet());
 
-        LockSupport.parkNanos(ENV_TIMEOUT_UPDATE_INTERVAL * 1000000L);
+        for (Env env : activeEnv) {
+          env.updateTimeout();
+        }
+      } catch (Throwable e) {
+        log.log(Level.FINEST, e.toString(), e);
       }
     }
   }

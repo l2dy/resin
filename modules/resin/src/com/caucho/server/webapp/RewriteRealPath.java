@@ -111,8 +111,9 @@ public class RewriteRealPath {
       
       String realPath = program.toRealPath(uri);
 
-      if (realPath != null)
+      if (realPath != null) {
         return _appDir.lookup(realPath).getNativePath();
+      }
     }
 
     return pathMappingToRealPath(uri);
@@ -123,8 +124,9 @@ public class RewriteRealPath {
    */
   private String pathMappingToRealPath(String uri)
   {
-    if (_pathMapping == null)
+    if (_pathMapping == null) {
       return _appDir.lookup("./" + uri).getNativePath();
+    }
 
     ArrayList<String> regexpVars = new ArrayList<String>();
     
@@ -146,14 +148,17 @@ public class RewriteRealPath {
       String tail = uri.substring(match.length());
 
       // hacks to get the trailing '/' correct
-      if (uri.endsWith("/") && ! tail.endsWith("/"))
+      if (uri.endsWith("/") && ! tail.endsWith("/")) {
         tail = tail + '/';
+      }
 
-      if (tail.startsWith("/"))
+      if (tail.startsWith("/")) {
         tail = '.' + tail;
+      }
 
-      if (! tail.equals(""))
+      if (! tail.equals("")) {
         path = path.lookup(tail);
+      }
     }
 
     String nativePath = path.getNativePath();

@@ -103,6 +103,9 @@ r_cookie-config = element cookie-config {
  & (attribute http-only { string }
     | element http-only { string })?
   
+ & (attribute same-site { string }
+    | element same-site { string })?
+  
  & (attribute path { string }
     | element path { string })?
   
@@ -1005,6 +1008,9 @@ r_session-config = element session-config {
   & (attribute cookie-http-only { r_boolean-Type }
      | element cookie-http-only { r_boolean-Type })?
 
+  & (attribute cookie-same-site { r_boolean-Type }
+     | element cookie-same-site { r_boolean-Type })?
+
   & (attribute cookie-length { r_int }
      | element cookie-length { r_int })?
 
@@ -1238,6 +1244,9 @@ r_web-app-Basis =
 
   & (attribute cookie-http-only { r_boolean-Type }
      | element cookie-http-only { r_boolean-Type })?
+
+  & (attribute cookie-same-site { r_boolean-Type }
+     | element cookie-same-site { r_boolean-Type })?
 
   & r_description-Group
 

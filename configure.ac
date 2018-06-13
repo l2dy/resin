@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.56)
+AC_INIT([resin],4.0.57)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -1340,7 +1340,7 @@ AC_ARG_WITH(openssl-include,
 OPENSSL_INCLUDE=${withval}
 ENABLE_SSL=true
 
-if test ! -r "${OPENSSL_INCLUDE}/openssl/ssl23.h"; then
+if test ! -r "${OPENSSL_INCLUDE}/openssl/ssl2.h"; then
   AC_MSG_ERROR([Can't find valid OpenSSL include ${OPENSSL_INCLUDE}])
 fi
 ])
@@ -1418,7 +1418,7 @@ if test "${ENABLE_SSL}" == false; then
   echo "Openssl is not enabled"
 elif test -z "${OPENSSL_INCLUDE}"; then
   echo "Can't find OpenSSL include '${OPENSSL_INCLUDE}'"
-elif test ! -r "${OPENSSL_INCLUDE}/openssl/ssl23.h"; then
+elif test ! -r "${OPENSSL_INCLUDE}/openssl/ssl2.h"; then
   AC_MSG_ERROR([Can't find valid OpenSSL include in ${OPENSSL_INCLUDE}])
 else
   echo "Using openssl include in ... ${OPENSSL_INCLUDE}"

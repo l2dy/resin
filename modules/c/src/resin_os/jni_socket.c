@@ -1029,7 +1029,7 @@ Java_com_caucho_vfs_JniSocketImpl_getCipher(JNIEnv *env,
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_caucho_vfs_JniSocketImpl_SslProtocol(JNIEnv *env,
+Java_com_caucho_vfs_JniSocketImpl_getSslProtocol(JNIEnv *env,
                                             jobject obj,
                                             jlong conn_fd)
 {

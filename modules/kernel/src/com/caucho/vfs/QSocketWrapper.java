@@ -216,7 +216,7 @@ public class QSocketWrapper extends QSocket {
   public String getSslProtocol()
   {
     if (! (_s instanceof SSLSocket))
-      return super.getCipherSuite();
+      return super.getSslProtocol();
 
     SSLSocket sslSocket = (SSLSocket) _s;
     

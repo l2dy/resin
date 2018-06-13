@@ -1,0 +1,50 @@
+<document>
+  <header>
+    <product>resin</product>
+    <title>Resin 4.0.57 Release Notes</title>
+  </header>
+
+<body>
+
+<localtoc/>
+
+<s1 title="Summary">
+
+<p>We encourage people to report 4.0.57 bugs at
+<a href="http://bugs.caucho.com">http://bugs.caucho.com</a>.</p>
+
+<p>4.0.57 is primarily a bug fix release. Please see
+<a href="changes.xtp">changes.xtp</a> for a list of changes.</p>
+
+</s1>
+
+<s1 title="resin.property session_store default change">
+
+<p>session_store in resin.property now defaults to false,
+which disables persistent sessions.</p>
+
+</s1>
+
+<s1 title="OpenSSL SNI">
+
+<p>Multiple host/certificate for OpenSSL is now supported.
+The configuration looks like the following:</p>
+
+<example>
+...
+&lt;openssl>
+  &lt;certificate-file>...
+  ...
+
+  &lt;host id="a.name.com">
+    &lt;certificate-file>keys/host-a.crt&lt;/certificate-file>
+    &lt;certificate-key-file>keys/host-a.key&lt;/certificate-key-file>
+  &lt;/host>
+  ...
+&lt;/openssl>
+</example>
+
+</s1>
+
+</body>
+</document>

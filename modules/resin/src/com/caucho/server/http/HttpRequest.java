@@ -659,6 +659,8 @@ public class HttpRequest extends AbstractHttpRequest
     } catch (Exception e) {
       log.log(Level.FINER, e.toString(), e);
     }
+    
+    request.setAttribute("com.caucho.servlet.request.ssl-protocol", tcpConn.getSslProtocol());
   }
 
   //

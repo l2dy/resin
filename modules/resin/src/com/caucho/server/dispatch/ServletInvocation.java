@@ -334,6 +334,9 @@ public class ServletInvocation {
         if (j < 0) {
           return sb.toString();
         }
+        else if (i > 0 && value.charAt(i - 1) == '/') {
+          i = j;
+        }
         else {
           i = j - 1;
         }

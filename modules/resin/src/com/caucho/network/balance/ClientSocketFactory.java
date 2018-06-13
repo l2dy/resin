@@ -161,7 +161,7 @@ public class ClientSocketFactory implements ClientSocketFactoryApi
     this(address, port, false);
   }
   
-  public ClientSocketFactory(String address, int port, boolean isSecure)
+  private ClientSocketFactory(String address, int port, boolean isSecure)
   {
     this("client", address + ":" + port, null, null, address, port, isSecure); 
   }

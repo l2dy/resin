@@ -247,8 +247,9 @@ public class TaglibManager {
         String mapLocation = _uriLocationMap.get(uri);
 
         if ((location == null || location.equals("")) &&
-            (mapLocation == null || mapLocation.equals("")))
+            (mapLocation == null || mapLocation.equals(""))) {
           return null;
+        }
 
         tldTaglib = _tldManager.parseTld(uri, mapLocation, location);
 

@@ -1404,8 +1404,11 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
         cookie.setSecure(true);
     }
     
-    if (manager.isCookieHttpOnly())
+    if (manager.isCookieHttpOnly()) {
       cookie.setHttpOnly(true);
+    }
+    
+    cookie.setSameSite(manager.getCookieSameSite());
 
     return cookie;
   }

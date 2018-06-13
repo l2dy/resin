@@ -30,12 +30,19 @@ package com.caucho.server.session;
 
 import javax.servlet.http.Cookie;
 
+import com.caucho.config.ConfigException;
+import com.caucho.util.L10N;
+
 /**
  * Extends the cookie.
  */
 public class CookieImpl extends Cookie {
+  private static final L10N L = new L10N(CookieImpl.class);
+  
   // the allowed cookie port
   private String _port;
+  
+  private SameSite _sameSite = SameSite.NONE;
 
   /**
    * Create a new cookie object.
@@ -59,5 +66,57 @@ public class CookieImpl extends Cookie {
   public void setPort(String port)
   {
     _port = port;
+  }
+  
+  /**
+   * Sets the same-site attribute
+   */
+  public void setSameSite(String value)
+  {
+    setSameSite(SameSite.parseValue(value));
+  }
+  
+  /**
+   * Sets the same-site attribute
+   */
+  public void setSameSite(SameSite value)
+  {
+    if (value == null) {
+      _sameSite = SameSite.NONE;
+    }
+    else {
+      _sameSite = value;
+    }
+  }
+  
+  public SameSite getSameSite()
+  {
+    return _sameSite;
+  }
+  
+  
+  public enum SameSite {
+    NONE,
+    LAX,
+    STRICT;
+    
+    public static SameSite parseValue(String value)
+    {
+      if (value == null || value.equals("")) {
+        return SameSite.NONE;
+      }
+      else if (value.equals("Lax")) {
+        return SameSite.LAX;
+      }
+      else if (value.equals("Strict")) {
+        return SameSite.STRICT;
+      }
+      else if (value.equals("None")) {
+        return SameSite.NONE;
+      }
+      else {
+        throw new ConfigException(L.l("cookie sameSite requires Lax or Strict."));
+      }
+    }
   }
 }

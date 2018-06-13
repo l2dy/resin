@@ -436,7 +436,7 @@ public class CloudPod
                                    boolean isAllowExternal)
   {
     CloudServer server;
-    boolean isSSL = false;
+    boolean isSSL = isSecure;
     
     synchronized (_serverList) {
       if (index <= 2)

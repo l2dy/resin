@@ -49,10 +49,13 @@ function admin_init($is_refresh=false, $fragment = false)
 
     $mbean_server = new MBeanServer($g_server_id);
 
-    if ($mbean_server->isConnected() == true)
+    if ($mbean_server->isConnected() == true) {
       echo "<h3 class='fail'>Please register &lt;resin:AdminService/></h3>";
-    else
+    }
+    else {
       echo "<h3 class='fail'>Can't contact $g_server_id</h3>";
+      echo "<p>Dynamic servers can only be contacted from triad servers, not by other dynamic servers.</p>";
+    }
 
     return false;
   }

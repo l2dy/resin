@@ -633,11 +633,13 @@ class WatchdogClient
     if (! _config.hasWatchdogXmx())
       list.add("-Xmx32m");
 
+    /*
     // XXX: can this just be copied from original args?
     if (! list.contains("-d32") && ! list.contains("-d64")
         && is64bit() && ! CauchoSystem.isWindows()) {
       list.add("-d64");
     }
+    */
 
     if (! list.contains("-server")
         && ! list.contains("-client")

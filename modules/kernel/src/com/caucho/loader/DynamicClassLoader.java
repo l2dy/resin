@@ -196,6 +196,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     _isEnableDependencyCheck = enableDependencyCheck;
 
     _dependencies.setCheckInterval(_globalDependencyCheckInterval);
+    
     if (! CurrentTime.isTest()) {
       _dependencies.setAsync(true);
     }

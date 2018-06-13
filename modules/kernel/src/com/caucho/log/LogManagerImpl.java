@@ -53,15 +53,19 @@ public class LogManagerImpl extends LogManager {
   @Override
   public synchronized boolean addLogger(Logger logger)
   {
-    EnvironmentLogger envLogger = addLogger(logger.getName(),
-                                            logger.getResourceBundleName());
+    try {
+      EnvironmentLogger envLogger = addLogger(logger.getName(),
+                                              logger.getResourceBundleName());
     
-    // handle custom logger
-    if (! logger.getClass().equals(Logger.class)) {
-      return envLogger.addCustomLogger(logger);
-    }
+      // handle custom logger
+      if (! logger.getClass().equals(Logger.class)) {
+        return envLogger.addCustomLogger(logger);
+      }
 
-    return false;
+      return false;
+    } catch (Throwable e) {
+      return super.addLogger(logger);
+    }
   }
   
   private synchronized EnvironmentLogger addLogger(String name,

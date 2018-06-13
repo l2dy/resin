@@ -39,7 +39,7 @@ public class QuercusTimer
   private static final Logger log
     = Logger.getLogger(QuercusTimer.class.getName());
 
-  private TimerThread _timerThread;
+  //private TimerThread _timerThread;
 
   private volatile long _currentTime;
   private volatile boolean _isCurrentTimeUsed;
@@ -51,6 +51,7 @@ public class QuercusTimer
   {
     _currentTime = System.currentTimeMillis();
 
+    /*
     TimerThread timerThread = null;
 
     try {
@@ -61,6 +62,7 @@ public class QuercusTimer
     }
 
     _timerThread = timerThread;
+    */
   }
 
   /**
@@ -69,6 +71,7 @@ public class QuercusTimer
    */
   public long getCurrentTime()
   {
+    /*
     // test avoids extra writes on multicore machines
     if (! _isCurrentTimeUsed) {
       if (_timerThread == null)
@@ -83,6 +86,9 @@ public class QuercusTimer
     }
 
     return _currentTime;
+    */
+    //return System.currentTimeMillis();
+    return CurrentTime.getCurrentTime();
   }
 
   /**
@@ -105,7 +111,7 @@ public class QuercusTimer
   {
     _isRunnable = false;
 
-    LockSupport.unpark(_timerThread);
+    //LockSupport.unpark(_timerThread);
 
     try {
       long sleepTime = 200;
@@ -119,6 +125,7 @@ public class QuercusTimer
     }
   }
 
+  /*
   class TimerThread extends Thread {
     TimerThread()
     {
@@ -162,4 +169,5 @@ public class QuercusTimer
       }
     }
   }
+  */
 }

@@ -236,6 +236,7 @@ public class FilePath extends FilesystemPath {
    *
    * @return the selected path
    */
+  @Override
   public Path fsWalk(String userPath,
                         Map<String,Object> attributes,
                         String path)
@@ -309,6 +310,7 @@ public class FilePath extends FilesystemPath {
   /**
    * Returns the native path.
    */
+  @Override
   public String getNativePath()
   {
     if (! isWindows())

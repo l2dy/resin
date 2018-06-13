@@ -186,6 +186,7 @@ import com.caucho.server.security.PermitEmptyRolesConstraint;
 import com.caucho.server.security.SecurityConstraint;
 import com.caucho.server.security.TransportConstraint;
 import com.caucho.server.security.WebResourceCollection;
+import com.caucho.server.session.CookieImpl;
 import com.caucho.server.session.SessionManager;
 import com.caucho.server.util.CauchoSystem;
 import com.caucho.server.webbeans.SessionContextContainer;
@@ -387,6 +388,7 @@ public class WebApp extends ServletContextImpl
   private Path _tempDir;
 
   private boolean _cookieHttpOnly;
+  private CookieImpl.SameSite _cookieSameSite = CookieImpl.SameSite.NONE;
 
   //  private OsgiBundle _osgiBundle;
 
@@ -406,11 +408,13 @@ public class WebApp extends ServletContextImpl
 
   private long _shutdownWaitTime = 15000L;
   private long _activeWaitTime = 60000L;
+  private Object _startLock = new Object();
   private String _activeWaitErrorPage;
 
   private long _idleTime = 2 * 3600 * 1000L;
   
   private boolean _isStartDisabled;
+  
   private boolean _isEnabled = true;
 
   private final Lifecycle _lifecycle;
@@ -1765,6 +1769,23 @@ public class WebApp extends ServletContextImpl
   public boolean getCookieHttpOnly()
   {
     return _cookieHttpOnly;
+  }
+
+  /**
+   * Sets the cookie-http-only
+   */
+  @Configurable
+  public void setCookieSameSite(String value)
+  {
+    _cookieSameSite = CookieImpl.SameSite.parseValue(value);
+  }
+
+  /**
+   * Sets the cookie-http-only
+   */
+  public CookieImpl.SameSite getCookieSameSite()
+  {
+    return _cookieSameSite;
   }
 
   @Override
@@ -3737,7 +3758,7 @@ public class WebApp extends ServletContextImpl
       throw new IllegalStateException(L.l("webApp must be initialized before starting.  Currently in state {0}.", _lifecycle.getStateName()));
     }
     
-    synchronized (this) {
+    synchronized (_startLock) {
       if (_lifecycle.isActive() || _lifecycle.isAfterStopping()) {
         return;
       }
@@ -3748,7 +3769,6 @@ public class WebApp extends ServletContextImpl
 
       task.waitFor(getActiveWaitTime());
     }
-    // asdf: wait
   }
   
   private void startImpl(StartupTask task)

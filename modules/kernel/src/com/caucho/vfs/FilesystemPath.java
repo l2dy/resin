@@ -117,12 +117,14 @@ abstract public class FilesystemPath extends Path {
 
     if (filePath.length() > offset
         && (filePath.charAt(offset) == '/'
-            || filePath.charAt(offset) == _separatorChar))
+            || filePath.charAt(offset) == _separatorChar)) {
       canonicalPath = normalizePath("/", filePath, offset, _separatorChar);
-    else
+    }
+    else {
       canonicalPath = normalizePath(_pathname, filePath, offset,
                                     _separatorChar);
-
+    }
+    
     return fsWalk(userPath, attributes, canonicalPath);
   }
 
@@ -273,6 +275,7 @@ abstract public class FilesystemPath extends Path {
   /**
    * Returns the path portion of the URL.
    */
+  @Override
   public String getPath()
   {
     return _pathname;
@@ -295,6 +298,7 @@ abstract public class FilesystemPath extends Path {
   /**
    * For chrooted filesystems return the real system path.
    */
+  @Override
   public String getFullPath()
   {
     if (_root == this || _root == null)

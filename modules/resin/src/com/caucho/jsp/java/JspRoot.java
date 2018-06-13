@@ -28,15 +28,15 @@
 
 package com.caucho.jsp.java;
 
+import java.io.IOException;
+import java.util.Map;
+import java.util.TreeMap;
+
 import com.caucho.jsp.JspParseException;
 import com.caucho.util.L10N;
 import com.caucho.vfs.WriteStream;
 import com.caucho.xml.QName;
 import com.caucho.xml.XmlChar;
-
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Represents the root node.
@@ -48,11 +48,11 @@ public class JspRoot extends JspContainerNode {
 
   private String _version;
 
-  private HashMap<String,String> _namespaceMap
-    = new HashMap<String,String>();
+  private TreeMap<String,String> _namespaceMap
+    = new TreeMap<String,String>();
 
-  private HashMap<String,String> _revNamespaceMap
-    = new HashMap<String,String>();
+  private TreeMap<String,String> _revNamespaceMap
+    = new TreeMap<String,String>();
 
   /**
    * Sets the versino.

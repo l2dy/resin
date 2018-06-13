@@ -126,7 +126,7 @@ public class CloudServer {
 
     _address = address;
     _port = port;
-    _isSSL = isSSL;
+    _isSSL = false; // isSSL;
     _isStatic = isStatic;
     _isAllowExternal = isAllowExternal;
 
@@ -492,6 +492,7 @@ public class CloudServer {
     return (getClass().getSimpleName() 
             + "[" + _id + "," + _index
             + "," + address + ":" + _port
+            + (isSSL() ? ",secure" : "")
             + "]");
   }
 

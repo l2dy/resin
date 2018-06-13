@@ -1115,6 +1115,19 @@ abstract public class AbstractHttpResponse {
           cb.append(port);
           cb.append("\"");
         }
+        
+        switch (extCookie.getSameSite()) {
+        case NONE:
+          break;
+          
+        case LAX:
+          cb.append("; SameSite=Lax");
+          break;
+          
+        case STRICT:
+          cb.append("; SameSite=Strict");
+          break;
+        }
       }
     }
 

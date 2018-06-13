@@ -731,6 +731,9 @@ r_server-multi = element server-multi {
   & (attribute port { string }
      | element port { string })?
 
+  & (attribute secure { string }
+     | element secure { string })?
+
   & r_server-Content
 }
 

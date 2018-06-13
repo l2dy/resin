@@ -201,7 +201,7 @@ public class InvocationDecoder {
 
     String rawURIString = byteToChar(rawURI, 0, uriLength, "ISO-8859-1");
     invocation.setRawURI(rawURIString);
-    
+
     String decodedURI = normalizeUriEscape(rawURI, 0, uriLength, _encoding);
 
     if (_sessionSuffix != null) {

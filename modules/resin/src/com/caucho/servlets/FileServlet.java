@@ -259,6 +259,10 @@ public class FileServlet extends GenericServlet {
       // only top-level requests are checked
       if (cauchoReq == null || cauchoReq.getRequestDepth(0) != 0) {
       }
+      else if (relPath.startsWith("//")) {
+        res.sendError(HttpServletResponse.SC_NOT_FOUND);
+        return;
+      }
       else if (relPath.regionMatches(true, 0, "/web-inf", 0, 8)
                && (relPath.length() == 8
                    || ! Character.isLetterOrDigit(relPath.charAt(8)))) {
@@ -454,7 +458,7 @@ public class FileServlet extends GenericServlet {
           return;
       }
     }
-
+    
     if (res instanceof CauchoResponse) {
       CauchoResponse cRes = (CauchoResponse) res;
 

@@ -91,7 +91,7 @@ public class DependencyContainer implements Dependency
   
   public boolean isAsync()
   {
-    return _isAsync;
+    return _isAsync && _checkInterval > 0;
   }
   
   public void setAsync(boolean isAsync)

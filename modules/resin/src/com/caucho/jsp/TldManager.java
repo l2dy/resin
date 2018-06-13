@@ -503,10 +503,10 @@ public class TldManager {
               || mapLocation.equals(uri))) {
         if (preload.isJsf()) {
           if (_isFastJsf)
-            jsfTaglib = parseTld(preload.getPath());
+            jsfTaglib = parseTld(uri, preload.getPath());
         }
         else if (taglib == null)
-          taglib = parseTld(preload.getPath());
+          taglib = parseTld(uri, preload.getPath());
       }
     }
 
@@ -518,18 +518,18 @@ public class TldManager {
     else if (taglib != null)
       return taglib;
 
-    return parseTld(location);
+    return parseTld(uri, location);
   }
 
   /**
    * Returns the tld parsed at the given location.
    */
-  TldTaglib parseTld(String location)
+  TldTaglib parseTld(String uri, String location)
     throws JspParseException, IOException
   {
     init();
 
-    TldTaglib tld = findTld(location);
+    TldTaglib tld = findTld(uri, location);
 
     /* XXX: jsp/18n0 handled on init
     if (tld != null) {
@@ -547,11 +547,9 @@ public class TldManager {
   /**
    * Returns the tld parsed at the given location.
    */
-  private TldTaglib findTld(String location)
+  private TldTaglib findTld(String uri, String location)
     throws JspParseException, IOException
   {
-    InputStream is = null;
-
     Path path;
 
     if (location.startsWith("file:")) {
@@ -585,9 +583,9 @@ public class TldManager {
       if (path != null && path.exists()) {
         jar = JarPath.create(path);
         if (jar.lookup("META-INF/taglib.tld").exists())
-          return parseTld(jar.lookup("META-INF/taglib.tld"));
+          return parseTld(uri, jar.lookup("META-INF/taglib.tld"));
         else if (jar.lookup("meta-inf/taglib.tld").exists())
-          return parseTld(jar.lookup("meta-inf/taglib.tld"));
+          return parseTld(uri, jar.lookup("meta-inf/taglib.tld"));
         else
           throw new JspParseException(L.l("can't find META-INF/taglib.tld in `{0}'",
                                           location));
@@ -596,14 +594,15 @@ public class TldManager {
         throw new JspParseException(L.l("Can't find taglib `{0}'.  A taglib uri ending in *.jar must point to an actual jar or match a URI in a .tld file.", location));
       }
     }
-    else if (path.exists() && path.canRead() && path.isFile())
-      return parseTld(path);
+    else if (path.exists() && path.canRead() && path.isFile()) {
+      return parseTld(uri, path);
+    }
 
     if (_loadAllTldException != null)
       throw _loadAllTldException;
     else
-      throw new JspParseException(L.l("Can't find taglib-location `{0}'.  The taglib-location must match a tag library either:\n1) by pointing to a .tld directly, relative to the application's root directory\n2) specified in the web.xml\n3) defined in a jar's .tld in META-INF\n4) defined in a .tld in WEB-INF\n5) predefined by Resin",
-                                      location));
+      throw new JspParseException(L.l("Can't open file for taglib-uri '{0}', taglib-location '{1}' at {2}.  The taglib-location must match a tag library either:\n1) by pointing to a .tld directly, relative to the application's root directory\n2) specified in the web.xml\n3) defined in a jar's .tld in META-INF\n4) defined in a .tld in WEB-INF\n5) predefined by Resin",
+                                      uri, location, path.getNativePath()));
   }
 
   /**
@@ -611,7 +610,7 @@ public class TldManager {
    *
    * @param is the input stream to the taglib
    */
-  private TldTaglib parseTld(Path path)
+  private TldTaglib parseTld(String uri, Path path)
     throws JspParseException, IOException
   {
     SoftReference<TldTaglib> taglibRef = _tldMap.get(path);

@@ -73,6 +73,7 @@ import com.caucho.server.cluster.ServletService;
 import com.caucho.server.distcache.CacheBacking;
 import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.PersistentStoreConfig;
+import com.caucho.server.session.CookieImpl.SameSite;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Alarm;
 import com.caucho.util.AlarmListener;
@@ -216,6 +217,7 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
 
   private final AverageSensor _sessionSaveSample;
   private final Charset UTF_8 = Charset.forName("UTF-8");
+  private SameSite _sameSite;
 
   /**
    * Creates and initializes a new session manager
@@ -940,6 +942,11 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
     return isCookieHttpOnly();
   }
 
+    public void setSameSite(String value)
+  {
+    setCookieSameSite(value);
+  }
+
   @Override
   public void setSecure(boolean secure)
   {
@@ -1107,6 +1114,32 @@ public final class SessionManager implements SessionCookieConfig, AlarmListener
   public void setCookieHttpOnly(boolean httpOnly)
   {
     _isCookieHttpOnly = httpOnly ? SET_TRUE : SET_FALSE;
+  }
+
+  /**
+   * Returns the http-only of the session cookie.
+   */
+  public CookieImpl.SameSite getCookieSameSite()
+  {
+    if (_sameSite != null) {
+      return _sameSite;
+    }
+    else {
+      return getWebApp().getCookieSameSite();
+    }
+  }
+
+  /**
+   * Sets the same-site only of the session cookie.
+   */
+  public void setCookieSameSite(String value)
+  {
+    if (value == null || value.equals("")) {
+      _sameSite = null;
+    }
+    else {
+      _sameSite = CookieImpl.SameSite.parseValue(value);
+    }
   }
 
   /**

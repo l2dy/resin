@@ -6,10 +6,27 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.56 - in progress">
+<s2 title="4.0.57 - In Progress">
+<ul>
+<li>rewrite: added IfProtocolVersion (#6162, rep by stbu)</li>
+<li>session: added cookie-same-site config for JSESSIONID cookies (#6140)</li>
+<li>security: critical security issue related to URL normalization and servlet mapping (#6164)</li>
+<li>resin-admin: clarify that dynamic servers cannot contact other dynamic servers directly (#6128)</li>
+<li>web-app: possible deadlock/delay in startup (#6159, rep by drsskelkar)</li>
+<li>elastic: missing synchronization on cloud update (#6152)</li>
+<li>dependency: dependency-check of 0 forces synchronous check (#6116)</li>
+<li>elastic: elastic server issues with dist-cache pod (#6157)</li>
+<li>logging: default to LogManager.addLogger when EnvironmentLogger creation fails (#6121)</li>
+<li>quercus: use alarm for timeouts instead of spawning new thread (#6156)</li>
+<li>jdk10: removed -d64 from watchdog start</li>
+<li>configure: change openssl test to ssl2.h (#6154, rep by gattu)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.56 - April 16, 2017">
 <ul>
 <li>start: remove -d64 from watchdog launch for jdk10 (rep by Steffan Busch)</li>
-<li>db: restore deletion timeout to avoid deleting session data prematurely</li>
+<li>db: restore deletion timeout to avoid deleting session data prematurely (#6130, #6066)</li>
 <li>db: add log warning when db init fails due to filesystem full (#6149)</li>
 <li>ssl: javax.servlet.request.key_size was string (#6151, rep by Mathias Lagerwall)</li>
 <li>db: always validate indexes on startup</li>

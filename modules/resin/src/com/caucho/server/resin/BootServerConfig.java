@@ -129,6 +129,11 @@ public class BootServerConfig implements SchemaBean
     return _isSecure;
   }
   
+  public void setSecure(boolean isSecure)
+  {
+    _isSecure = isSecure;
+  }
+  
   @Configurable
   public void setRequireExplicitId(boolean isRequire)
   {
