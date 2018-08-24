@@ -926,6 +926,9 @@ r_servlet-Content =
    & (attribute load-on-startup { string }
       | element load-on-startup { string })?
 
+   & (attribute load-on-startup-allow-fail { r_boolean-Type }
+      | element load-on-startup-allow-fail { r_boolean-Type })?
+
    & (attribute enabled { r_boolean-Type }
       | element enabled { r_boolean-Type })?
 

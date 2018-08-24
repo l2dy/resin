@@ -284,7 +284,7 @@ abstract public class AbstractTaskWorker2
                || _state.get() == State.ACTIVE_WAKE
                || isRetry());
     } catch (Throwable e) {
-      System.out.println("EXN: " + e);
+      System.err.println(getClass().getSimpleName() + ": " + e);
       WarningService.sendCurrentWarning(this, e);
       log().log(Level.WARNING, e.toString(), e);
     } finally {
@@ -315,7 +315,8 @@ abstract public class AbstractTaskWorker2
           isValid = true;
         } finally {
           if (! isValid) {
-            System.err.println("Warning: resetting actor." + this);
+            System.err.println("Warning: resetting actor. " + this);
+            log().warning("Warning: resetting actor. " + this);
             
             _state.set(State.IDLE);
           }
@@ -359,10 +360,10 @@ abstract public class AbstractTaskWorker2
     
     ACTIVE {
       @Override
-      State toWake() { return ACTIVE_WAKE; }
+      boolean isActive() { return true; }
       
       @Override
-      boolean isActive() { return true; }
+      State toWake() { return ACTIVE_WAKE; }
       
       @Override
       State toIdle() { return IDLE; }
@@ -370,27 +371,27 @@ abstract public class AbstractTaskWorker2
     
     ACTIVE_WAKE {
       @Override
-      State toWake() { return this; }
-      
-      @Override
       boolean isActive() { return true; }
       
       @Override
       boolean isWake() { return true; }
       
       @Override
-      State toIdle() { return this; }
+      State toWake() { return ACTIVE_WAKE; }
+      
+      @Override
+      State toIdle() { return ACTIVE_WAKE; }
     },
     
     PARK {
+      @Override
+      boolean isPark () { return true; }
+      
       @Override
       State toWake() { return ACTIVE_WAKE; }
       
       @Override
       State toIdle() { return IDLE; }
-      
-      @Override
-      boolean isPark () { return true; }
     },
     
     CLOSED {
@@ -410,7 +411,16 @@ abstract public class AbstractTaskWorker2
     boolean isPark() { return false; }
     boolean isClosed() { return false; }
     
-    State toWake() { return ACTIVE_WAKE; }
-    State toIdle() { throw new UnsupportedOperationException(toString()); }
+    State toWake()
+    { 
+      System.err.println(getClass().getSimpleName() + ": invalid toWake from " + this);
+      throw new UnsupportedOperationException(toString());
+    }
+    
+    State toIdle()
+    { 
+      System.err.println(getClass().getSimpleName() + ": invalid toIdle from " + this);
+      throw new UnsupportedOperationException(toString()); 
+    }
   }
 }

@@ -442,7 +442,7 @@ function display_jmx_data($v)
     foreach ($v as $k => $v) {
       echo "  ";
       if (is_string($k)) {
-        echo htmlspecialchars($v);
+        echo htmlspecialchars($k);
         echo " => ";
       }
 

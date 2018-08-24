@@ -46,6 +46,7 @@ import java.util.logging.Level;
  * A repository for request information gleaned from the uri.
  */
 public class ServletInvocation {
+  private static final L10N L = new L10N(ServletInvocation.class);
   private static final Logger log
     = Logger.getLogger(ServletInvocation.class.getName());
 
@@ -124,7 +125,14 @@ public class ServletInvocation {
    */
   public void setServletPath(String servletPath)
   {
-    _servletPath = stripPathParameters(servletPath);
+    try {
+      _servletPath = stripPathParameters(servletPath);
+    } catch (Exception e) {
+      log.info(L.l("Invalid URI {0}", servletPath));
+      
+      _servletPath = servletPath;
+    }
+
   }
 
   /**
@@ -140,7 +148,13 @@ public class ServletInvocation {
    */
   public void setPathInfo(String pathInfo)
   {
-    _pathInfo = stripPathParameters(pathInfo);
+    try {
+      _pathInfo = stripPathParameters(pathInfo);
+    } catch (Exception e) {
+      log.log(Level.FINE, e.toString(), e);
+      
+      _pathInfo = pathInfo;
+    }
   }
 
   /**
@@ -324,6 +338,10 @@ public class ServletInvocation {
       char ch = value.charAt(i);
       
       if (ch == ';') {
+        if (i > 0 && value.charAt(i - 1) == '/') {
+          throw new IllegalArgumentException(L.l("{0} is an invalid URL.", value));
+        }
+        
         if (sb == null) {
           sb = new StringBuilder();
           sb.append(value, 0, i);

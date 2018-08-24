@@ -159,6 +159,7 @@ public class ServletConfigImpl
 
   private FRAGMENT_MODE _fragmentMode = FRAGMENT_MODE.IN_WEBXML;
   private AnnotatedType<?> _annType;
+  private boolean _isAllowFail;
 
   /**
    * Creates a new servlet configuration object.
@@ -719,6 +720,7 @@ public class ServletConfigImpl
   /**
    * Sets the load-on-startup
    */
+  @Override
   public void setLoadOnStartup(int loadOnStartup)
   {
     _loadOnStartup = loadOnStartup;
@@ -735,6 +737,22 @@ public class ServletConfigImpl
       return 0;
     else
       return Integer.MIN_VALUE;
+  }
+
+  /**
+   * Sets the load-on-startup-allow-fail
+   */
+  public void setLoadOnStartupAllowFail(boolean isAllowFail)
+  {
+    _isAllowFail = isAllowFail;
+  }
+
+  /**
+   * Gets the load-on-startup value.
+   */
+  public boolean isLoadOnStartupAllowFail()
+  {
+    return _isAllowFail;
   }
 
   /**

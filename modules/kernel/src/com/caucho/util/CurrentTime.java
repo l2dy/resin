@@ -262,6 +262,7 @@ public class CurrentTime {
     } catch (Throwable e) {
     }
 
+    /*
     try {
       boolean isAlarmStart = System.getProperty("caucho.alarm.enable") != null;
 
@@ -277,6 +278,7 @@ public class CurrentTime {
       // should display for security manager issues
       log().fine("Alarm not started: " + e);
     }
+    */
     
     currentTimeThread = null;
 

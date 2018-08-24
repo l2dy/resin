@@ -223,7 +223,15 @@ public class ServletMapper {
     ServletMapping servletRegexp = null;
     
     if (_servletMap != null) {
-      String cleanUri = Invocation.stripPathParameters(contextURI);
+      String cleanUri;
+      
+      try {
+        cleanUri = Invocation.stripPathParameters(contextURI);
+      } catch (Exception e) {
+        log.warning(L.l("Invalid URI {0}", contextURI));
+        
+        return new ErrorFilterChain(404);
+      }
       
       ServletMapping servletMap = _servletMap.map(cleanUri, vars);
 

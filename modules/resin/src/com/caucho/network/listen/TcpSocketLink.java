@@ -345,6 +345,11 @@ public class TcpSocketLink extends AbstractSocketLink
   {
     return _requestStateRef.get().isAsyncStarted();
   }
+  
+  public boolean isAsync()
+  {
+    return _requestStateRef.get().isAsyncStarted() || _requestStateRef.get().isAsyncWake();
+  }
 
   public boolean isAsyncComplete()
   {
@@ -1117,7 +1122,7 @@ public class TcpSocketLink extends AbstractSocketLink
 
         // }
 
-        if (_state.isComet()) {
+        if (isAsync()) { // _state.isComet()) {
           if (toSuspend())
             return RequestState.ASYNC;
           else
@@ -1326,7 +1331,7 @@ public class TcpSocketLink extends AbstractSocketLink
 
     getWriteStream().flush();
 
-    if (_state.isCometActive()) {
+    if (isAsync()) { // _state.isCometActive()) {
       if (toSuspend())
         return RequestState.ASYNC;
       else {

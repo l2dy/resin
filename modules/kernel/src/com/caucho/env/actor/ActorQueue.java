@@ -65,7 +65,7 @@ public final class ActorQueue<T extends RingItem>
   
   private final AtomicBoolean _isOfferWaitRef = new AtomicBoolean();
  
-  public ActorQueue(int capacity,
+  ActorQueue(int capacity,
                     RingItemFactory<T> itemFactory,
                     ActorProcessor<? super T> ...processors)
   {

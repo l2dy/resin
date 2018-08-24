@@ -6,7 +6,22 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.57 - In Progress">
+<s2 title="4.0.58 - in progress">
+<ul>
+<li>servlet: AsyncContext timing issues due to back-compat (#6168)</li>
+<li>servlet: add load-on-startup-allow-fail (#6171)</li>
+<li>config: add openssl_protocol and openssl_cipher_suite to resin.properties (#6169)</li>
+<li>quercus: exception wrapping when stack trace is missing or empty</li>
+<li>network: change SocketLinkThreadLauncher to permanent (#6166, rep by samlmax)</li>
+<li>servlet: immutability of getParameterValues (#6172, rep by waiwong)</li>
+<li>classloading: scanning of module-info should be skipped (#6170)</li>
+<li>security: invalid URL detection with filters</li>
+<li>quercus: QuercusContext array extension using wrong variable</li>
+<li>session: added cookie-same-site for version=0 (#6167, rep by stbu)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.57 - July 10, 2018">
 <ul>
 <li>rewrite: added IfProtocolVersion (#6162, rep by stbu)</li>
 <li>session: added cookie-same-site config for JSESSIONID cookies (#6140)</li>
@@ -23,7 +38,7 @@
 </ul>
 </s2>
 
-<s2 title="4.0.56 - April 16, 2017">
+<s2 title="4.0.56 - April 16, 2018">
 <ul>
 <li>start: remove -d64 from watchdog launch for jdk10 (rep by Steffan Busch)</li>
 <li>db: restore deletion timeout to avoid deleting session data prematurely (#6130, #6066)</li>

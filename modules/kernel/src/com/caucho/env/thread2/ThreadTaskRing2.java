@@ -29,48 +29,62 @@
 
 package com.caucho.env.thread2;
 
-import com.caucho.util.RingItemFactory;
-import com.caucho.util.RingQueue;
+import java.util.concurrent.TimeUnit;
 
-public class ThreadTaskRing2 extends RingQueue<ThreadTaskItem2> {
+import com.caucho.util.RingValueQueue;
+
+public class ThreadTaskRing2 {
   private static final int RING_SIZE = 16 * 1024;
+  
+  private final RingValueQueue<TaskItem2> _queue;
   
   public ThreadTaskRing2()
   {
-    super(RING_SIZE, new ThreadTaskItemFactory());
+    _queue = new RingValueQueue<TaskItem2>(RING_SIZE);
   }
   
-  public boolean offer(Runnable task, ClassLoader loader)
+  public final boolean isEmpty()
   {
-    ThreadTaskItem2 item = beginOffer(true);
-    
-    item.init(task, loader);
-    
-    completeOffer(item);
-    
-    return true;
+    return _queue.isEmpty();
   }
   
-  boolean takeAndSchedule(ResinThread2 thread)
+  public final int getSize()
   {
-    ThreadTaskItem2 item = beginPoll();
+    return _queue.size();
+  }
+  
+  public final boolean offer(Runnable task, ClassLoader loader)
+  {
+    return _queue.offer(new TaskItem2(task, loader), 1, TimeUnit.SECONDS);
+  }
+  
+  public final boolean takeAndSchedule(ResinThread2 thread)
+  {
+    TaskItem2 item = _queue.poll();
     
-    if (item == null)
+    if (item == null) {
       return false;
-    
-    item.schedule(thread);
-    
-    completePoll(item);
-    
-    return true;
+    }
+    else {
+      return item.schedule(thread);
+    }
   }
   
-  private static class ThreadTaskItemFactory
-    implements RingItemFactory<ThreadTaskItem2> {
+  private static class TaskItem2 {
+    private final Runnable _task;
+    private final ClassLoader _loader;
     
-    public ThreadTaskItem2 createItem(int index)
+    TaskItem2(Runnable task, ClassLoader loader)
     {
-      return new ThreadTaskItem2(index);
+      _task = task;
+      _loader = loader;
+    }
+
+    final boolean schedule(ResinThread2 thread)
+    {
+      thread.scheduleTask(_task, _loader);
+      
+      return true;
     }
   }
 }

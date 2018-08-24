@@ -30,6 +30,7 @@
 package com.caucho.env.thread2;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
@@ -40,7 +41,6 @@ import com.caucho.env.health.HealthSystemFacade;
 import com.caucho.env.shutdown.ExitCode;
 import com.caucho.env.shutdown.ShutdownSystem;
 import com.caucho.lifecycle.Lifecycle;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
@@ -619,13 +619,13 @@ public class ThreadPool2 implements Executor {
   {
     if (isPriority) {
       if (! _priorityQueue.offer(task, loader)) {
-        System.out.println("PRIORITY_FULL");
+        System.out.println(getClass().getSimpleName() + ": scheduleImpl PRIORITY_FULL");
         return false;
       }
     }
     else {
       if (! _taskQueue.offer(task, loader)) {
-        System.out.println("TASK_FULL");
+        System.out.println(getClass().getSimpleName() + ": scheduleImpl TASK_FULL");
         return false;
       }
     }
@@ -652,8 +652,8 @@ public class ThreadPool2 implements Executor {
       return true;
     }
     
-    if (! _idleThreadRing.offer(thread)) {
-      System.out.println("NOFREE: " + thread);
+    if (! _idleThreadRing.offer(thread, 1, TimeUnit.SECONDS)) {
+      System.out.println(getClass().getSimpleName() + "execute: full queue " + thread);
     }
     
     if (! _priorityQueue.isEmpty() || ! _taskQueue.isEmpty()) {
@@ -779,7 +779,7 @@ public class ThreadPool2 implements Executor {
     @Override
     public long runTask()
     {
-      int loopCount = 2;
+      int loopCount = 4;
       int i;
       
       for (i = 0; i <= loopCount; i++) {
@@ -839,8 +839,10 @@ public class ThreadPool2 implements Executor {
         return true;
       }
 
-      _idleThreadRing.offer(thread);
-       
+      if (! _idleThreadRing.offer(thread, 1, TimeUnit.SECONDS)) {
+        System.out.println(getClass().getSimpleName() + ": filled invokePriorityQueue");
+      }
+
       return false;
     }
     
@@ -867,7 +869,9 @@ public class ThreadPool2 implements Executor {
         return true;
       }
 
-      _idleThreadRing.offer(thread);
+      if (! _idleThreadRing.offer(thread, 1, TimeUnit.SECONDS)) {
+        System.out.println(getClass().getSimpleName() + ": filled invokeIdleQueue");
+      }
        
       return false;
     }

@@ -236,8 +236,9 @@ public class ServletManager {
         }
       }
 
-      if (i == loadOnStartup.size())
+      if (i == loadOnStartup.size()) {
         loadOnStartup.add(config);
+      }
 
       if (config.getRunAt() != null || config.getCron() != null) {
         _cronList.add(config);
@@ -251,8 +252,12 @@ public class ServletManager {
         config.createServlet();
       } catch (ServletException e) {
         // XXX: should JSP failure also cause a system failure?
-        if (config.getJspFile() == null)
+        if (config.isLoadOnStartupAllowFail()) {
+          log.log(Level.WARNING, e.toString(), e);
+        }
+        else if (config.getJspFile() == null) {
           throw e;
+        }
         else {
           log.log(Level.WARNING, e.toString(), e);
         }

@@ -29,6 +29,13 @@
 
 package com.caucho.jsp;
 
+import java.io.IOException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.logging.Logger;
+
+import com.caucho.config.ConfigException;
 import com.caucho.config.types.FileSetType;
 import com.caucho.jsp.cfg.TldFunction;
 import com.caucho.jsp.cfg.TldTaglib;
@@ -38,12 +45,6 @@ import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
-
-import java.io.IOException;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.logging.Logger;
 
 /**
  * Stores the entire information for a tag library.
@@ -112,6 +113,13 @@ public class TaglibManager {
    */
   public void addLocationMap(String uri, String location)
   {
+    String oldLocation = _uriLocationMap.get(uri);
+    
+    if (oldLocation != null && ! oldLocation.equals(location)) {
+      throw new ConfigException(L.l("Conflicting taglib location for uri='{0}'. Old location='{1}' new location='{2}'",
+                                    uri, oldLocation, location));
+    }
+    
     _uriLocationMap.put(uri, location);
   }
 
@@ -164,13 +172,15 @@ public class TaglibManager {
       // jsp/188u
       String mapLocation = _uriLocationMap.get(uri);
 
-      if (mapLocation != null)
+      if (mapLocation != null) {
         location = mapLocation;
+      }
 
       taglib = readTaglib(prefix, uri, location);
 
-      if (taglib != null)
+      if (taglib != null) {
         _taglibMap.put(uri, taglib);
+      }
     }
 
     if (taglib != null)

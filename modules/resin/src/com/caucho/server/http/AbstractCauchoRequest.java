@@ -197,10 +197,21 @@ abstract public class AbstractCauchoRequest implements CauchoRequest {
 
   public final String []getParameterValuesImpl(String name)
   {
-    if (_filledForm == null)
+    if (_filledForm == null) {
       _filledForm = parseQueryImpl();
+    }
 
-    return _filledForm.get(name);
+    String []values = _filledForm.get(name);
+    
+    if (values != null) {
+      String []valueCopy = new String[values.length];
+      
+      System.arraycopy(values, 0, valueCopy, 0, values.length);
+      
+      return valueCopy;
+    }
+    
+    return values;
   }
 
   /**

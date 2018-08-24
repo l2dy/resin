@@ -505,8 +505,9 @@ public class TldManager {
           if (_isFastJsf)
             jsfTaglib = parseTld(uri, preload.getPath());
         }
-        else if (taglib == null)
+        else if (taglib == null) {
           taglib = parseTld(uri, preload.getPath());
+        }
       }
     }
 

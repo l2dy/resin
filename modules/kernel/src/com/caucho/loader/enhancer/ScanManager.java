@@ -195,8 +195,13 @@ public class ScanManager {
         if (! entryName.endsWith(".class"))
           continue;
 
-        if (packagePath != null && ! entryName.startsWith(packagePath))
+        if (packagePath != null && ! entryName.startsWith(packagePath)) {
           continue;
+        }
+        
+        if (entryName.indexOf("-info") > 0) {
+          continue;
+        }
 
         matcher.init();
 

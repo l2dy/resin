@@ -1105,7 +1105,7 @@ abstract public class AbstractHttpResponse {
         cb.append("; Comment=");
         cb.append(cookie.getComment());
       }
-
+      
       if (cookie instanceof CookieImpl) {
         CookieImpl extCookie = (CookieImpl) cookie;
         String port = extCookie.getPort();
@@ -1115,19 +1115,23 @@ abstract public class AbstractHttpResponse {
           cb.append(port);
           cb.append("\"");
         }
+      }
+    }
+
+    if (cookie instanceof CookieImpl) {
+      CookieImpl extCookie = (CookieImpl) cookie;
         
-        switch (extCookie.getSameSite()) {
-        case NONE:
-          break;
+      switch (extCookie.getSameSite()) {
+      case NONE:
+        break;
           
-        case LAX:
-          cb.append("; SameSite=Lax");
-          break;
+      case LAX:
+        cb.append("; SameSite=Lax");
+        break;
           
-        case STRICT:
-          cb.append("; SameSite=Strict");
-          break;
-        }
+      case STRICT:
+        cb.append("; SameSite=Strict");
+        break;
       }
     }
 

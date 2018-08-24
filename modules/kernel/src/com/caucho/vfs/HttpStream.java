@@ -238,7 +238,7 @@ class HttpStream extends StreamImpl {
       s = new Socket(host, port);
       
       if (path instanceof HttpsPath) {
-        SSLContext context = SSLContext.getInstance("TLSv1");
+        SSLContext context = SSLContext.getInstance("TLSv1.2");
 
         javax.net.ssl.TrustManager tm =
           new javax.net.ssl.X509TrustManager() {

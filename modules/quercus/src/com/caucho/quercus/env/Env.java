@@ -4907,14 +4907,17 @@ public class Env
 
     Value value = cls.callNew(this, args);
 
-    StackTraceElement elt = e.getStackTrace()[0];
+    if (e.getStackTrace() != null && e.getStackTrace().length > 0) {
+      StackTraceElement elt = e.getStackTrace()[0];
 
-    value.putField(this, "file", createString(elt.getFileName()));
-    value.putField(this, "line", LongValue.create(elt.getLineNumber()));
-    value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
+      value.putField(this, "file", createString(elt.getFileName()));
+      value.putField(this, "line", LongValue.create(elt.getLineNumber()));
+      value.putField(this, "trace", ErrorModule.debug_backtrace(this, 0, 0));
+    }
 
-    if ((e instanceof QuercusException) && e.getCause() != null)
+    if ((e instanceof QuercusException) && e.getCause() != null) {
       e = e.getCause();
+    }
 
     value.putField(this, "__javaException", wrapJava(e));
 

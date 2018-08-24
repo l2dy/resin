@@ -68,6 +68,12 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
     else
       return super.isEnable();
   }
+  
+  @Override
+  public boolean isPermanent()
+  {
+    return true;
+  }
 
   public void init()
   {

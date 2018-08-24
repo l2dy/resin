@@ -1634,7 +1634,7 @@ public class QuercusContext
       // php/313j
       id = _constantNameMap.size() + 1;
 
-      if (_classDefMap.length <= id) {
+      if (_constantNameList.length <= id) {
         Value []constantMap = new Value[id + 256];
         System.arraycopy(_constantMap, 0,
                          constantMap, 0,

@@ -35,8 +35,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import com.caucho.env.actor.AbstractActorProcessor;
-import com.caucho.env.actor.ActorProcessor;
-import com.caucho.env.actor.ValueActorQueue;
+import com.caucho.env.actor2.ActorQueue2;
 import com.caucho.websocket.WebSocketContext;
 import com.caucho.websocket.WebSocketEncoder;
 
@@ -47,7 +46,7 @@ public class WebSocketBlockingQueue<T> implements BlockingQueue<T>
 {
   private final WebSocketContext _ws;
   private final WebSocketEncoder<T> _encoder;
-  private final ValueActorQueue<T> _queue;
+  private final ActorQueue2<T> _queue;
   
   public WebSocketBlockingQueue(WebSocketContext ws,
                                 WebSocketEncoder<T> encoder,
@@ -62,7 +61,11 @@ public class WebSocketBlockingQueue<T> implements BlockingQueue<T>
     _ws = ws;
     _encoder = encoder;
     
-    _queue = new ValueActorQueue(capacity, 
+    if (true) {
+      throw new UnsupportedOperationException();
+    }
+
+    _queue = new ActorQueue2(capacity, 
                                  new WebSocketWriterActor(_ws, _encoder));
   }
 
