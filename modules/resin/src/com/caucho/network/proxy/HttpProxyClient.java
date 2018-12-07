@@ -126,7 +126,10 @@ public class HttpProxyClient
     try {
       clientOut.print(req.getMethod());
       clientOut.print(' ');
-      clientOut.print(uri);
+      
+      printUtf8(clientOut, uri);
+      //clientOut.print(uri);
+
       clientOut.print(" HTTP/1.1\r\n");
 
       String host = req.getHeader("Host");
@@ -206,6 +209,56 @@ public class HttpProxyClient
       return parseResults(clientIn, req, res);
     } catch (Exception e) {
       return new ProxyResult(ProxyStatus.FAIL, false, e.toString());
+    }
+  }
+  
+  private void printUtf8(WriteStream out, String uri)
+    throws IOException
+  {
+    int len = uri.length();
+    
+    for (int i = 0; i < len; i++) {
+      char ch = uri.charAt(i);
+      
+      if (ch <= 0x20) {
+        printEscape(out, ch);
+      }
+      else if (ch < 0x80) {
+        out.print(ch);
+      }
+      else if (ch < 0x800) {
+        printEscape(out, 0xc0 + ((ch >>> 6) & 0x1f));
+        printEscape(out, 0x80 + (ch & 0x3f));
+      }
+      else if (ch < 0x8000) {
+        printEscape(out, 0xe0 + ((ch >>> 12) & 0xf));
+        printEscape(out, 0x80 + ((ch >>> 6) & 0x3f));
+        printEscape(out, 0x80 + (ch & 0x3f));
+      }
+      else {
+        out.printUtf8(String.valueOf(ch), 0, 1);
+      }
+    }
+  }
+  
+  private void printEscape(WriteStream out, int ch)
+    throws IOException
+  {
+    out.print('%');
+    printHex(out, ch >> 4);
+    printHex(out, ch);
+  }
+  
+  private void printHex(WriteStream out, int d)
+    throws IOException
+  {
+    d = (d & 0xf);
+    
+    if (d < 10) {
+      out.print((char) ('0' + d));
+    }
+    else {
+      out.print((char) ('A' + d - 10));
     }
   }
   

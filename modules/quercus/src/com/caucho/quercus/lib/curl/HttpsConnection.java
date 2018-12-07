@@ -36,11 +36,13 @@ import java.net.Proxy;
 import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.net.URLConnection;
- 
+
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 
 /**
  * Represents a HttpURLConnection wrapper.
@@ -74,33 +76,22 @@ public class HttpsConnection
     if (conn instanceof HttpsURLConnection) {
       httpsConn = (HttpsURLConnection) conn;
       
-      System.err.println("HttpsConnection.init0");
-      
       if (curl.getSslKey() != null && curl.getSslCert() != null) {
-        System.err.println("HttpsConnection.init1");
         httpsConn.setSSLSocketFactory(createSSLContext(curl).getSocketFactory());
       }
       else if (! curl.getIsVerifySSLPeer()) {
-        System.err.println("HttpsConnection.init2");
-
         httpsConn.setSSLSocketFactory(createSSLContextUntrusted(curl).getSocketFactory());
       }
       else if (curl.getCaInfo() != null) {
-        System.err.println("HttpsConnection.init3");
-
         httpsConn.setSSLSocketFactory(createSSLContextCaInfo(curl).getSocketFactory());
       }
       else {
         httpsConn.setSSLSocketFactory(createSSLContextDefault(curl).getSocketFactory());
       }
       
-      System.err.println("HttpsConnection.init4");
-      
       if (! curl.getIsVerifySSLPeer()
           || ! curl.getIsVerifySSLCommonName()
           || ! curl.getIsVerifySSLHostname()) {
-        System.err.println("HttpsConnection.init5");
-        
         HostnameVerifier hostnameVerifier
           = CurlHostnameVerifier.create(curl.getIsVerifySSLPeer(),
                                         curl.getIsVerifySSLCommonName(),
@@ -108,15 +99,9 @@ public class HttpsConnection
         
         httpsConn.setHostnameVerifier(hostnameVerifier);
       }
-      
-      System.err.println("HttpsConnection.init6");
     }
     
-    System.err.println("HttpsConnection.init7");
-
     setConnection(conn);
-    
-    System.err.println("HttpsConnection.init8");
   }
   
   /**
@@ -127,17 +112,9 @@ public class HttpsConnection
     throws ConnectException, ProtocolException, SocketTimeoutException, IOException
   {
     try {
-      System.err.println("HttpsConnection.connect0");
-      
       super.connect(curl);
-
-      System.err.println("HttpsConnection.connect1");
-
       
       ((HttpsURLConnection) getConnection()).getServerCertificates();
-      
-      System.err.println("HttpsConnection.connect2");
-
     }
     catch (SSLPeerUnverifiedException e) {
       if (curl.getIsVerifySSLPeer()) {
@@ -219,13 +196,36 @@ public class HttpsConnection
       String algorithm = curl.getSslVersion();
       
       SSLContext context = SSLContext.getInstance(algorithm);
-      
-      context.init(null, null, null);
+
+      context.init(null, createTrustManagerDefault(), null);
       
       return context;
     }
     catch (Exception e) {
       throw new IOException(e);
     }
+  }
+  
+  private static TrustManager []createTrustManagerDefault()
+  {
+    if (true) {
+      return null;
+    }
+    
+    TrustManager tm =
+      new javax.net.ssl.X509TrustManager() {
+        public java.security.cert.X509Certificate[]
+          getAcceptedIssuers() {
+          return null;
+        }
+        public void checkClientTrusted(
+                                       java.security.cert.X509Certificate[] cert, String foo) {
+        }
+        public void checkServerTrusted(
+                                       java.security.cert.X509Certificate[] cert, String foo) {
+        }
+      };
+      
+    return new TrustManager[] { tm };
   }
 }

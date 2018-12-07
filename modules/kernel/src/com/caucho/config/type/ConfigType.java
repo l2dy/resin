@@ -50,6 +50,8 @@ abstract public class ConfigType<T>
 {
   private static final L10N L = new L10N(ConfigType.class);
   
+  private static Object _introspectLock = new Object();
+  
   private boolean _isEnvBean;
   private boolean _isIntrospected;
   
@@ -58,12 +60,17 @@ abstract public class ConfigType<T>
    */
   abstract public Class<T> getType();
 
+  protected Object getIntrospectLock()
+  {
+    return _introspectLock;
+  }
+  
   public void carefulIntrospect()
   {
     if (_isIntrospected)
       return;
     
-    synchronized (this) {
+    synchronized (getIntrospectLock()) {
       if (! _isIntrospected)
         introspect();
       

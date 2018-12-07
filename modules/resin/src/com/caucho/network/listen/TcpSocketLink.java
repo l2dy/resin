@@ -34,17 +34,16 @@ import java.io.InterruptedIOException;
 import java.net.InetAddress;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.caucho.env.shutdown.ShutdownSystem;
-import com.caucho.env.thread.ThreadPool;
 import com.caucho.inject.Module;
 import com.caucho.inject.RequestContext;
 import com.caucho.loader.Environment;
-import com.caucho.management.server.*;
+import com.caucho.management.server.TcpConnectionInfo;
+import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
@@ -794,11 +793,15 @@ public class TcpSocketLink extends AbstractSocketLink
   {
     if (_requestStateRef.get().toDestroy(_requestStateRef)) {
       if (! getLauncher().offerResumeTask(new DestroyTask(this))) {
-        destroy();
+        if (CurrentTime.isTest()) { // force close if in test
+          destroy();
+        }
       }
     }
     else {
-      closeConnection();
+      if (CurrentTime.isTest()) { // force close if in test
+        closeConnection();
+      }
     }
   }
   

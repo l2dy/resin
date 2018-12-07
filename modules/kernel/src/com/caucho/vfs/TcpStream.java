@@ -36,6 +36,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 import com.caucho.vfs.net.NetworkSystem;
@@ -117,6 +118,14 @@ class TcpStream extends StreamImpl {
         socket = factory.createSocket(socket, path.getHost(), path.getPort(), true);
         
         _s.setSocket(socket);
+        
+        /*
+        SSLSocket sslSocket = (SSLSocket) socket;
+        
+        String id = sslSocket.getSSLParameters().getEndpointIdentificationAlgorithm();
+        
+        System.out.println("ID: " + id);;
+        */
       }
     } catch (IOException e) {
       throw e;

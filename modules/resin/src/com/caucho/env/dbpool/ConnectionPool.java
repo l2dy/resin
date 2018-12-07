@@ -729,15 +729,18 @@ public class ConnectionPool extends AbstractManagedObject
     UserPoolItem userPoolItem = null;
 
     try {
+      UserTransactionImpl transaction = _tm.getUserTransaction();
+      
       while (true){
         userPoolItem = null;
-        UserTransactionImpl transaction = _tm.getUserTransaction();
 
-        if (transaction != null)
+        if (transaction != null) {
           userPoolItem = allocateShared(transaction, mcf, subject, info);
+        }
 
-        if (userPoolItem == null)
+        if (userPoolItem == null) {
           userPoolItem = allocatePoolConnection(mcf, subject, info, null);
+        }
 
         Object userConn;
         
@@ -749,6 +752,7 @@ public class ConnectionPool extends AbstractManagedObject
         }
         
         userPoolItem.close();
+        transaction = null; // #6200 - if sharing failed, do not repeat sharing
       }
     } finally {
       if (userPoolItem != null)
@@ -779,8 +783,9 @@ public class ConnectionPool extends AbstractManagedObject
 
         UserPoolItem item = poolItem.allocateXA(mcf, subject, info);
 
-        if (item != null)
+        if (item != null) {
           return item;
+        }
       }
     }
 

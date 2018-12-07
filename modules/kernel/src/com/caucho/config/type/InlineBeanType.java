@@ -90,8 +90,6 @@ public class InlineBeanType<T> extends ConfigType<T>
   public static final QName TEXT = new QName("#text");
   public static final QName VALUE = new QName("value");
 
-  private static final Object _introspectLock = new Object();
-
   private final Class<T> _beanClass;
   
   private ConcurrentHashMap<QName,Attribute> _nsAttributeMap
@@ -583,7 +581,7 @@ public class InlineBeanType<T> extends ConfigType<T>
   public void introspect()
   {
     // long startTime = System.currentTimeMillis();
-    synchronized (_introspectLock) {
+    synchronized (getIntrospectLock()) {
       if (_isIntrospecting)
         return;
 
@@ -937,7 +935,7 @@ public class InlineBeanType<T> extends ConfigType<T>
    */
   private void introspectInject()
   {
-    synchronized (_introspectLock) {
+    synchronized (getIntrospectLock()) {
       if (_initList != null)
         return;
 

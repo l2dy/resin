@@ -292,11 +292,13 @@ public class TimestampFilter extends StreamImpl {
   /**
    * Flushes the data.
    */
+  @Override
   public void flush()
     throws IOException
   {
-    if (_stream != null)
+    if (_stream != null) {
       _stream.flush();
+    }
   }
 
   /**

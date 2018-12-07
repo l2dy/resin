@@ -212,12 +212,45 @@ public class GitSystem extends AbstractResinSubSystem
       return new String[0];
     }
   }
+  
+  private ArrayList<String> allRefs()
+  {
+    ArrayList<String> refs = new ArrayList<String>();
+    
+    try {
+      allRefs(refs, _root.lookup("refs"));
+    } catch (IOException e) {
+      log.log(Level.FINE, e.toString(), e);
+    }
+    
+    return refs;
+  }
+  
+  private void allRefs(ArrayList<String> refs, Path path)
+    throws IOException
+  {
+    if (path.isFile()) {
+      String name = path.getFullPath();
+      String prefix = _root.lookup("refs").getFullPath();
+      
+      String suffix = name.substring(prefix.length() + 1);
+      
+      if (! refs.contains(suffix)) {
+        refs.add(suffix);
+      }
+    }
+    else if (path.isDirectory()) {
+      for (String file : path.list()) {
+        allRefs(refs, path.lookup(file));
+      }
+    }
+  }
 
   private Path getRefPath(String path)
   {
     return _root.lookup("refs").lookup(path);
   }
-
+  
   /**
    * Parses and returns the commit file specified by the sha1 hash.
    *
@@ -405,12 +438,143 @@ public class GitSystem extends AbstractResinSubSystem
 
   public boolean contains(String hash)
   {
+    return lookup(hash).exists();
+  }
+
+  public Path lookup(String hash)
+  {
     String prefix = hash.substring(0, 2);
     String suffix = hash.substring(2);
 
     Path path = _root.lookup("objects").lookup(prefix).lookup(suffix);
 
-    return path.exists();
+    return path;
+  }
+
+  public boolean remove(String hash)
+  {
+    String prefix = hash.substring(0, 2);
+    String suffix = hash.substring(2);
+
+    Path path = _root.lookup("objects").lookup(prefix).lookup(suffix);
+
+    try {
+      return path.remove();
+    } catch (IOException e) {
+      log.log(Level.FINER, e.toString(), e);
+      
+      return false;
+    }
+  }
+  
+  public void gc(long expireTime)
+  {
+    ArrayList<String> activeList = new ArrayList<String>();
+    
+    for (String ref : allRefs()) {
+      try {
+        activeHashes(getTag(ref), activeList);
+      } catch (IOException e) {
+        log.warning("GC: " + ref + " " + e.toString());
+        log.log(Level.FINER, e.toString(), e);
+        return;
+      }
+    }
+    
+    long now = CurrentTime.getCurrentTimeActual();
+    ArrayList<String> fileList = fileHashes();
+    
+    for (String hash : fileList) {
+      if (activeList.contains(hash)) {
+        continue;
+      }
+      
+      Path path = this.lookup(hash);
+      
+      long delta = now - path.getLastModified();
+
+      if (delta > expireTime) {
+        try {
+          path.remove();
+        } catch (IOException e) {
+          log.warning(this + ": " + path + ": " + e);
+          log.log(Level.FINER, e.toString(), e);
+        }
+      }
+    }
+  }
+  
+  public ArrayList<String> fileHashes()
+  {
+    try {
+      ArrayList<String> hashes = new ArrayList<String>();
+    
+      Path objects = _root.lookup("objects");
+      
+      for (String prefix : objects.list()) {
+        if (prefix.length() != 2) {
+          continue;
+        }
+        
+        for (String suffix : objects.lookup(prefix).list()) {
+          if (suffix.length() > 10) {
+            hashes.add(prefix + suffix);
+          }
+        }
+      }
+      
+      return hashes;
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+  
+  public ArrayList<String> activeHashes(String hash)
+  {
+    try {
+      ArrayList<String> hashes = new ArrayList<String>();
+
+      activeHashes(hash, hashes);
+      
+      return hashes;
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new IllegalStateException(e);
+    }
+  }
+  
+  public void activeHashes(String hash, ArrayList<String> hashes)
+    throws IOException
+  {
+    if (hash == null || hash.length() < 10) {
+      return;
+    }
+    else if (hashes.contains(hash)) {
+      return;
+    }
+    
+    hashes.add(hash);
+    
+    GitType type = objectType(hash);
+
+    if (type == GitType.COMMIT) {
+      GitCommit commit = parseCommit(hash);
+      
+      if (commit != null) {
+        activeHashes(commit.getTree(), hashes);
+        activeHashes(commit.getParent(), hashes);
+      }
+    }
+    else if (type == GitType.TREE) {
+      GitTree tree = parseTree(hash);
+      
+      if (tree != null) {
+        for (GitTree.Entry entry : tree.entries()) {
+          activeHashes(entry.getSha1(), hashes);
+        }
+      }
+    }
   }
 
   /**

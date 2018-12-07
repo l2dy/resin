@@ -2,8 +2,9 @@ default namespace r = "http://caucho.com/ns/resin"
 
 include "env.rnc"
 include "webbeans.rnc"
+include "jcp-beans.rnc"
 
-start = w_beans | compat_beans | r_beans
+start = w_beans | compat_beans | r_beans | jcp_beans
 
 r_beans = element beans {
   r_env-Content

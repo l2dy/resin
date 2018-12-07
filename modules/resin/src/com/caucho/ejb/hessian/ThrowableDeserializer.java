@@ -28,9 +28,10 @@
 
 package com.caucho.ejb.hessian;
 
-import com.caucho.hessian.io.JavaDeserializer;
-
 import java.lang.reflect.Constructor;
+
+import com.caucho.hessian.io.FieldDeserializer2Factory;
+import com.caucho.hessian.io.JavaDeserializer;
 
 /**
  * Serializing an object for known object types.
@@ -40,7 +41,7 @@ public class ThrowableDeserializer extends JavaDeserializer {
   
   public ThrowableDeserializer(Class cl)
   {
-    super(cl);
+    super(cl, FieldDeserializer2Factory.create());
 
     try {
       Constructor zeroArg = cl.getConstructor(new Class[0]);

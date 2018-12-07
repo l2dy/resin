@@ -59,6 +59,7 @@ import com.caucho.server.webapp.WebApp;
 import com.caucho.util.Base64;
 import com.caucho.util.CharBuffer;
 import com.caucho.util.Crc64;
+import com.caucho.util.Html;
 import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.util.QDate;
@@ -505,6 +506,7 @@ public class FileServlet extends GenericServlet {
     throws IOException
   {
     String encUrl;
+    String htmlUrl;
 
     HttpServletResponseImpl resImpl = null;
 
@@ -512,9 +514,12 @@ public class FileServlet extends GenericServlet {
       resImpl = (HttpServletResponseImpl) res;
 
       encUrl = resImpl.encodeAbsoluteRedirect(url);
+      htmlUrl = resImpl.encodeAbsoluteRedirect(Html.escapeHtml(url));
     }
-    else
+    else {
       encUrl = res.encodeRedirectURL(url);
+      htmlUrl = res.encodeRedirectURL(Html.escapeHtml(url));
+    }
 
     try {
       res.reset();
@@ -523,12 +528,12 @@ public class FileServlet extends GenericServlet {
     }
 
     res.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
-    res.setHeader("Location", encUrl);
+    res.setHeader("Location", htmlUrl);
     res.setContentType("text/html; charset=utf-8");
 
     PrintWriter out = res.getWriter();
 
-    out.println("The URL has moved <a href=\"" + encUrl + "\">here</a>");
+    out.println("The URL has moved <a href=\"" + htmlUrl + "\">here</a>");
 
     if (resImpl != null)
       resImpl.close();

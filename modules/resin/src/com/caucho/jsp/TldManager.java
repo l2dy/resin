@@ -212,14 +212,21 @@ public class TldManager {
         continue;
       }
 
+      // skip jre libraries
+      String pathName = subPath.getFullPath();
+      if (pathName.indexOf("/jre/lib/") >= 0) {
+        continue;
+      }
+      
       if (subPath instanceof JarPath) {
-        loadJarTlds(taglibs, ((JarPath) subPath).getContainer(), "META-INF");
+        loadJarTlds(taglibs, ((JarPath) subPath).getContainer(), "");
       }
       else if (subPath.getPath().endsWith(".jar")) {
-        loadJarTlds(taglibs, subPath, "META-INF");
+        loadJarTlds(taglibs, subPath, "");
       }
-      else
+      else {
         loadAllTlds(taglibs, subPath.lookup("META-INF"), 64, "META-INF");
+      }
     }
 
     if (fileSet != null)
@@ -278,7 +285,8 @@ public class TldManager {
 
           String tldPathName = tld.getPath().getPath();
 
-          if (tldPathName.startsWith("/com/caucho")) {
+          if (tldPathName.startsWith("/com/caucho")
+              || tldPathName.startsWith("/META-INF/tlds/com/caucho/")) {
             cauchoTaglibs.add(globalTaglibs.remove(i));
           }
         }
@@ -303,9 +311,7 @@ public class TldManager {
 
       // skip jre libraries
       String pathName = subPath.getFullPath();
-      if (pathName.endsWith("/jre/lib/rt.jar")
-          || pathName.endsWith("/jre/lib/charsets.jar")
-          || pathName.endsWith("/jre/lib/deploy.jar")) {
+      if (pathName.indexOf("/jre/lib/") >= 0) {
         continue;
       }
 
@@ -414,7 +420,7 @@ public class TldManager {
       return;
 
     JarPath jar = JarPath.create(jarBacking);
-
+    
     ArrayList<Path> tldPaths = new ArrayList<Path>();
 
     boolean isValidScan = false;
@@ -841,11 +847,13 @@ public class TldManager {
     
     loader = Environment.getDynamicClassLoader(loader);
 
-    if (loader instanceof DynamicClassLoader)
+    if (loader instanceof DynamicClassLoader) {
       classpath = ((DynamicClassLoader) loader).getClassPath();
-    else
+    }
+    else {
       classpath = CauchoSystem.getClassPath();
-
+    }
+    
     return getClassPath(classpath);
   }
 
@@ -877,8 +885,9 @@ public class TldManager {
       if (! segment.equals("")) {
         Path path = Vfs.lookup(segment);
 
-        if (! list.contains(path))
+        if (! list.contains(path)) {
           list.add(path);
+        }
       }
     }
 

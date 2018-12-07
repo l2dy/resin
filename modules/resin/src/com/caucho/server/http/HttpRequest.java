@@ -766,8 +766,11 @@ public class HttpRequest extends AbstractHttpRequest
   protected void skip()
     throws IOException
   {
+    // #6187
+    /*
     if (getMethod() == "GET")
       return;
+      */
 
     super.skip();
   }

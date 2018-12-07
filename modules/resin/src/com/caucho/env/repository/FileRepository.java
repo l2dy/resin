@@ -41,6 +41,7 @@ import com.caucho.env.git.GitSystem;
 import com.caucho.env.git.GitTree;
 import com.caucho.env.git.GitType;
 import com.caucho.lifecycle.Lifecycle;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
@@ -55,6 +56,8 @@ public class FileRepository extends AbstractRepository
   private AtomicReference<String> _rootHash = new AtomicReference<String>();
   
   private Lifecycle _lifecycle = new Lifecycle();
+  
+  private long _expireTime = CurrentTime.isTest() ? 15 * 1000L : 3600 * 1000L;
   
   public FileRepository()
   {
@@ -160,6 +163,8 @@ public class FileRepository extends AbstractRepository
       _rootHash.set(sha1);
 
       _git.writeTag(getRepositoryTag(), sha1);
+      
+      _git.gc(_expireTime);
     }
   }
 
@@ -351,6 +356,8 @@ public class FileRepository extends AbstractRepository
       return;
     
     super.start();
+    
+    _git.gc(_expireTime);
   }
 
   /**

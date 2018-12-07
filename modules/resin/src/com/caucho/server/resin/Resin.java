@@ -563,7 +563,7 @@ public class Resin
     if (path instanceof MemoryPath) { // QA
       path = WorkDir.getTmpWorkDir().lookup("qa/resin-data");
     }
-
+    
     return path;
   }
   

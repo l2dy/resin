@@ -84,7 +84,7 @@ abstract public class AbstractLogHandler extends Handler {
       System.out.println(this + ": no record");
       return;
     }
-    
+
     //synchronized (this) {
       processPublish(record);
       processFlush();

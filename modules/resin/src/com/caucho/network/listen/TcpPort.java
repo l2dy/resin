@@ -1926,7 +1926,7 @@ public class TcpPort
 
     // cloud/0550
     /*
-    // clearning the select manager must be after the conn.requestDestroy
+    // cleaning the select manager must be after the conn.requestDestroy
     AbstractSelectManager selectManager = _selectManager;
     _selectManager = null;
     */

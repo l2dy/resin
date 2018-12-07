@@ -28,10 +28,16 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.L10N;
-
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
 import java.util.Map;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSession;
+
+import com.caucho.util.L10N;
 
 /**
  * The HTTP scheme.  Currently it supports GET and POST.
@@ -88,17 +94,48 @@ public class HttpsPath extends HttpPath {
   {
     return "https";
   }
+  
+  protected int getDefaultPort()
+  {
+    return 443;
+  }
 
   /**
    * Returns a read stream for a GET request.
    */
+  @Override
   public StreamImpl openReadImpl() throws IOException
   {
+    /*
+    URL url = new URL(getURL());
+    
+    HttpsURLConnection conn = (HttpsURLConnection) url.openConnection();
+    
+    
+    //conn.setHostnameVerifier(getHostnameVerifier());
+    
+    InputStream is = conn.getInputStream();
+    
+    return new VfsStream(is, null);
+    */
+
     HttpStreamWrapper stream = HttpStream.openRead(this);
 
     stream.setSSL(true);
     
     return stream;
+  }
+
+  private HostnameVerifier getHostnameVerifier()
+  {
+    return new HostnameVerifier() {
+      @Override
+      public boolean verify(String hostname, SSLSession session)
+      {
+        return true;
+      }
+      
+    };
   }
 
   /**

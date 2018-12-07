@@ -536,13 +536,10 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
         
         updateThrottle();
 
-        /*
-        if (id == 200) {
-          ThreadDump.create().dumpThreads();
-        }
-        else */ 
-        if (id == 1000) {
-          ThreadDump.create().dumpThreads();
+        if (log.isLoggable(Level.FINER)) {
+          if (id == 1000) {
+            ThreadDump.create().dumpThreads();
+          }
         }
 
         launchChildThread(id);

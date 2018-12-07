@@ -160,7 +160,7 @@ public class CurlResource extends ResourceValue
     String version = _sslVersion;
     
     if (version == null) {
-      version = "TLSv1";
+      version = "TLSv1.2";
     }
     
     return version;

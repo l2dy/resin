@@ -74,7 +74,12 @@ public class HttpPath extends FilesystemPath {
 
     _root = this;
     _host = host;
-    _port = port == 0 ? 80 : port;
+    _port = port == 0 ? getDefaultPort() : port;
+  }
+  
+  protected int getDefaultPort()
+  {
+    return 80;
   }
 
   /**
@@ -219,8 +224,9 @@ public class HttpPath extends FilesystemPath {
       }
     }
 
-    if (port == 0)
-      port = 80;
+    if (port == 0) {
+      port = getDefaultPort();
+    }
 
     HttpPath root = create(host, port);
 

@@ -36,7 +36,6 @@ import java.io.OutputStream;
 import java.net.ConnectException;
 import java.net.Socket;
 import java.net.SocketException;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Locale;
@@ -46,6 +45,7 @@ import java.util.logging.Logger;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManager;
 
 import com.caucho.util.CharBuffer;
 import com.caucho.util.CurrentTime;
@@ -240,25 +240,18 @@ class HttpStream extends StreamImpl {
       if (path instanceof HttpsPath) {
         SSLContext context = SSLContext.getInstance("TLSv1.2");
 
-        javax.net.ssl.TrustManager tm =
-          new javax.net.ssl.X509TrustManager() {
-            public java.security.cert.X509Certificate[]
-              getAcceptedIssuers() {
-              return null;
-            }
-            public void checkClientTrusted(
-                                           java.security.cert.X509Certificate[] cert, String foo) {
-            }
-            public void checkServerTrusted(
-                                           java.security.cert.X509Certificate[] cert, String foo) {
-            }
-          };
+        context.init(null, createTrustManager(), null);
 
-      
-        context.init(null, new javax.net.ssl.TrustManager[] { tm }, null);
         SSLSocketFactory factory = context.getSocketFactory();
-
+        //factory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+        
         SSLSocket sslSock = (SSLSocket) factory.createSocket(s, host, port, true);
+        
+        //sslSock.setEnabledCipherSuites(factory.getSupportedCipherSuites());
+        //sslSock.setEnabledProtocols(new String[] { "TLSv1.2", "TLSv1.1" });
+        
+        
+        sslSock.startHandshake();
         
         s = sslSock;
       }
@@ -276,6 +269,25 @@ class HttpStream extends StreamImpl {
     }
           
     return new HttpStream(path, host, port, s);
+  }
+  
+  private static TrustManager []createTrustManager()
+  {
+    TrustManager tm =
+      new javax.net.ssl.X509TrustManager() {
+        public java.security.cert.X509Certificate[]
+          getAcceptedIssuers() {
+          return null;
+        }
+        public void checkClientTrusted(
+                                       java.security.cert.X509Certificate[] cert, String foo) {
+        }
+        public void checkServerTrusted(
+                                       java.security.cert.X509Certificate[] cert, String foo) {
+        }
+      };
+      
+    return new TrustManager[] { tm };
   }
 
   /**

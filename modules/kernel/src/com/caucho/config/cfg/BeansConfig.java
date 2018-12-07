@@ -84,6 +84,14 @@ public class BeansConfig implements EnvironmentBean {
   public void setSchemaLocation(String schema)
   {
   }
+  
+  public void setVersion(String version)
+  {
+  }
+  
+  public void setBeanDiscoveryMode(String version)
+  {
+  }
 
   /**
    * returns the owning container.

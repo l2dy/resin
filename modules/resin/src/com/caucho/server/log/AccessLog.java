@@ -89,6 +89,8 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
   private boolean _isAutoFlush;
 
   private long _autoFlushTime = 60000;
+  private int _gapUrl = 128;
+  private int _gap = 64;
 
   private Alarm _alarm = new WeakAlarm(this);
   private boolean _isActive;
@@ -591,8 +593,8 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
         sublen = absRequest.getUriLength();
 
         // server/02e9
-        if (buffer.length - offset - 128 < sublen) {
-          sublen = buffer.length - offset - 128;
+        if (buffer.length - offset - _gapUrl < sublen) {
+          sublen = buffer.length - offset - _gapUrl;
           System.arraycopy(data, 0, buffer, offset, sublen);
           offset += sublen;
           buffer[offset++] = (byte) '.';
@@ -762,10 +764,15 @@ public class AccessLog extends AbstractAccessLog implements AlarmListener
     int length = cb.getLength();
 
     // truncate for hacker attacks
-    length = Math.min(length, buffer.length - offset - 256);
+    if (buffer.length - offset - _gap < length) {
+      int space = Math.min(buffer.length - offset,
+                           Math.max(8, buffer.length - offset - _gap));
+      length = Math.min(length, space);
+    }
 
-    for (int i = length - 1; i >= 0; i--)
+    for (int i = length - 1; i >= 0; i--) {
       buffer[offset + i] = (byte) charBuffer[cbOffset + i];
+    }
 
     return offset + length;
   }

@@ -1077,8 +1077,12 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     for (int i = 0; i < path.length(); i++) {
       char ch = path.charAt(i);
 
-      if (ch == '<')
+      if (ch == '<') {
         cb.append("%3c");
+      }
+      else if (ch == '>') {
+        cb.append("%3e");
+      }
       else if (ch == '"') {
         cb.append("%22");
       }

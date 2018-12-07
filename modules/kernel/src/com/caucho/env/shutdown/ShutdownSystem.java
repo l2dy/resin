@@ -283,8 +283,9 @@ public class ShutdownSystem extends AbstractResinSubSystem
     if (haltThread != null)
       haltThread.startShutdown();
 
-    if (exitCode == null)
-      exitCode = ExitCode.FAIL_SAFE_HALT;
+    if (exitCode == null) {
+      exitCode = ExitCode.UNKNOWN;
+    }
     
     _exitCode.compareAndSet(null, exitCode);
 

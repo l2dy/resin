@@ -82,6 +82,7 @@ public class StreamHandler extends AbstractLogHandler {
   /**
    * Publishes the record.
    */
+  @Override
   protected void processPublish(LogRecord record)
   {
     if (! isLoggable(record))
@@ -89,7 +90,7 @@ public class StreamHandler extends AbstractLogHandler {
     
     WriteStream os = _os;
 
-      synchronized (os) {
+    synchronized (os) {
       try {
         if (record == null) {
           os.println("no record");

@@ -6,7 +6,23 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.58 - in progress">
+<s2 title="4.0.59 - Dec 7, 2018">
+<ul>
+<li>database: avoid loop when shared XA connection fails allocation (#6200, rep by Naohisa Ohshima)</li>
+<li>http-proxy: escape utf-8 urls when used in rewrite (#6198, rep by Yoo)</li>
+<li>config: updated resin.properties for http examples</li>
+<li>cluster: cluster .war deployment issues (#6188)</li>
+<li>tcp: only force socket close on shutdown in test mode to avoid threading issues (#6190, rep by Babak Hefezi)</li>
+<li>jsp/embed: jsp taglib detection issues with embedded resin (#6191, rep by Tyson Weihs)</li>
+<li>access.log: truncation of long url in access.log needs matching truncation headers (#6168, rep by Steffen Busch)</li>
+<li>file: redirect needs to encode with HTML encoding (#6184, rep by marc82ch)</li>
+<li>embed: deadlock with ResinEmbed and type introspection (#6177, rep by mikeb01)</li>
+<li>load-balance: cookies losing double quotes (#6181)</li>
+<li>quercus: curl needs to use TLSv1.2 as default</li>
+</ul>
+</s2>
+
+<s2 title="4.0.58 - Aug 27, 2018">
 <ul>
 <li>servlet: AsyncContext timing issues due to back-compat (#6168)</li>
 <li>servlet: add load-on-startup-allow-fail (#6171)</li>
