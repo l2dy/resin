@@ -363,13 +363,21 @@ public class InvocationDecoder {
         while (i + 1 < len) {
           ch = uri.charAt(i + 1);
 
-          if (ch == '/' || ch == '\\')
+          if (ch == '/' || ch == '\\') {
             i++;
-          else if (ch != '.')
+          }
+          else if (ch == ';') {
+            throw new BadRequestException(L.l("The request contains an illegal URL."));
+          }
+          else if (ch != '.') {
             break dots;
+          }
           else if (len <= i + 2
                    || (ch = uri.charAt(i + 2)) == '/' || ch == '\\') {
             i += 2;
+          }
+          else if (ch == ';') {
+            throw new BadRequestException(L.l("The request contains an illegal URL."));
           }
           else if (ch != '.')
             break dots;

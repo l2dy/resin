@@ -141,8 +141,6 @@ public class Resin
   
   private ResinDelegate _resinDelegate;
 
-  private Lifecycle _lifecycle;
-
   private BootConfig _bootConfig;
   private BootResinConfig _bootResinConfig;
   private BootServerConfig _bootServerConfig;
@@ -156,6 +154,8 @@ public class Resin
   private long _startTime;
 
   private ClassLoader _systemClassLoader;
+  
+  private Lifecycle _lifecycle;
 
   private Thread _mainThread;
 
@@ -645,7 +645,7 @@ public class Resin
    */
   public LifecycleState getLifecycleState()
   {
-    return _lifecycle.getState();
+    return _resinSystem.getLifecycleState();
   }
 
   /**
@@ -697,7 +697,7 @@ public class Resin
    */
   public boolean isClosing()
   {
-    return _lifecycle.isDestroying();
+    return _resinSystem.isDestroying();
   }
 
   /**
@@ -705,7 +705,7 @@ public class Resin
    */
   public boolean isClosed()
   {
-    return _lifecycle.isDestroyed();
+    return _resinSystem.isStopped();
   }
 
   public void addStartInfoListener(StartInfoListener listener)

@@ -48,8 +48,8 @@ function meter_display_page($page)
   $columns = $page->columns;
   $graph_count = count($page->meterGraphs);
 
-  $width = 800 / $columns;
-  $height = $width * 0.66;
+  $width = round(800 / $columns);
+  $height = round($width * 0.66);
 
   $count = 0;
   $is_column = false;

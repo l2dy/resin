@@ -341,6 +341,9 @@ public class ServletInvocation {
         if (i > 0 && value.charAt(i - 1) == '/') {
           throw new IllegalArgumentException(L.l("{0} is an invalid URL.", value));
         }
+        else if (i > 0 && value.charAt(i - 1) == '.') {
+          throw new IllegalArgumentException(L.l("{0} is an invalid URL.", value));
+        }
         
         if (sb == null) {
           sb = new StringBuilder();

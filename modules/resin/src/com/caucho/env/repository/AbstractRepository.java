@@ -58,6 +58,7 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
   private static final L10N L = new L10N(AbstractRepository.class);
 
   private String _repositoryTag;
+  private String _repositoryDebugTag;
 
   private RepositoryTagMap _tagMap = new RepositoryTagMap();
   
@@ -67,6 +68,7 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
   protected AbstractRepository()
   {
     _repositoryTag = "resin/repository/root";
+    _repositoryDebugTag = "heads/resin/repository/root";
   }
 
   /**
@@ -95,6 +97,14 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
   protected String getRepositoryTag()
   {
     return _repositoryTag;
+  }
+
+  /**
+   * Returns the .git repository tag
+   */
+  protected String getRepositoryDebugTag()
+  {
+    return _repositoryDebugTag;
   }
 
   /**

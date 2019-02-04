@@ -1,5 +1,7 @@
 <project name="resin" default="compile" basedir=".">
   <import file="build-common.xml"/>
+  <import file="build-maven.xml"/>
+
   <property name="jar.update" value="true"/>
 
   <property name="promodules" location="${basedir}/../pro/modules"/>
@@ -12,7 +14,7 @@
   <property name="eclipse.home" value="${user.home}/eclipse"/>
 
   <target name="compile"
-          depends="init, hessian, javaee, jaxstream, portlet, script, resin-kernel, quercus-dev, resin, ecmascript, cdi, webutil, conf, ext, j2ee-management, resin-eclipselink, gae">
+          depends="init, hessian, javaee, jaxstream, portlet, script, resin-kernel, quercus-dev, resin, ecmascript, cdi, webutil, conf, ext, j2ee-management, resin-eclipselink, junit, gae">
   </target>
 
   <!--
@@ -589,6 +591,15 @@
   </target>
 
   <target name="quercus-dev" depends="init, gae">
+    <copy tofile="modules/quercus/src/manifest"
+          file="modules/quercus/src/manifest.in"
+          preservelastmodified="true"
+          overwrite="true">
+      <filterset>
+        <filter token="VERSION" value="${version}"/>
+      </filterset>
+    </copy>
+
     <antcall target="module" inheritRefs="true">
       <param name="module.name" value="quercus"/>
       <param name="module.dist" value="${lib}"/>
@@ -904,7 +915,7 @@
     <delete dir="${dist}/${dist.name}"/>
   </target>
 
-  <target name="dist" depends="dist.clean, configure, compile, update, junit, eclipselink, artifacts, resin.dist.build, dist.package, quercus.war"/>
+  <target name="dist" depends="dist.clean, configure, compile, update, junit, eclipselink, artifacts, resin.dist.build, dist.package, quercus.war, maven-dist"/>
 
   <target name="configure" depends="init">
      <copy tofile="modules/c/src/resin/Makefile.in"
@@ -944,139 +955,6 @@
      <exec executable="autoconf"/>
   </target>
 
-  <target name="maven-dist" depends="init, compile, artifacts, resin.dist.jar">
-    <property name="maven" value="${maven.root}/com/caucho/"/>
-    
-    <antcall target="maven2-jar" inheritRefs="true">
-      <param name="maven.name" value="resin"/>
-      <param name="jar" value="${dist}/${dist.name}/lib/resin.jar"/>
-      <param name="pom.xml" value="${modules}/resin/maven2/pom.xml"/>
-      <param name="ivy.xml" value="${modules}/resin/maven2/ivy.xml"/>
-    </antcall>
-
-    <antcall target="maven2-jar" inheritRefs="true">
-      <param name="maven.name" value="resin-javaee16"/>
-      <param name="jar" value="${dist}/${dist.name}/lib/javaee-16.jar"/>
-      <param name="pom.xml" value="${modules}/javaee/maven2/pom.xml"/>
-      <param name="ivy.xml" value="${modules}/javaee/maven2/ivy.xml"/>
-    </antcall>
-  	
-    <antcall target="maven2-module" inheritRefs="true">
-      <param name="module.name" value="kernel"/>
-      <param name="jar.name" value="resin-kernel.jar"/>
-      <param name="maven.name" value="resin-kernel"/>
-    </antcall>
-  	
-    <antcall target="quercus-maven2" inheritRefs="true">
-    </antcall>
-<!--
-    <antcall target="maven2-artifact" inheritRefs="true">
-      <param name="module.name" value="ant"/>
-      <param name="jar.name" value="resin-ant.jar"/>
-      <param name="maven.name" value="resin-ant"/>
-    </antcall>
-
-    <antcall target="maven2-artifact" inheritRefs="true">
-      <param name="module.name" value="eclipse"/>
-      <param name="jar.name"
-	     value="com.caucho.resin.eclipse_${version}.jar"/>
-      <param name="maven.name" value="resin-eclipse"/>
-    </antcall>
--->
-    <!--
-    <antcall target="maven2-module" inheritRefs="true">
-      <param name="module.name" value="deploy"/>
-      <param name="jar.name" value="resin-deploy.jar"/>
-      <param name="maven.name" value="resin-deploy"/>
-    </antcall>
-    -->
-
-    <antcall target="maven2-module" inheritRefs="true">
-      <param name="module.name" value="hessian"/>
-      <param name="jar.name" value="hessian.jar"/>
-      <param name="maven.name" value="resin-hessian"/>
-    </antcall>
-<!--
-    <antcall target="maven2-artifact" inheritRefs="true">
-      <param name="module.name" value="maven"/>
-      <param name="jar.name" value="resin-maven-plugin.jar"/>
-      <param name="maven.name" value="resin-maven-plugin"/>
-    </antcall>
--->
-    <!--
-    <antcall target="maven2-artifact" inheritRefs="true">
-      <param name="module.name" value="netbeans"/>
-      <param name="module.ext" value="nbm"/>
-      <param name="jar.name" value="resin-netbeans.nbm"/>
-      <param name="maven.name" value="resin-netbeans"/>
-    </antcall>
--->
-    <!--
-    <antcall target="maven2-artifact" inheritRefs="true">
-      <param name="module.name" value="spring"/>
-      <param name="jar.name" value="resin-spring.jar"/>
-      <param name="maven.name" value="resin-spring"/>
-    </antcall>
-    -->
-
-    <!--
-    <antcall target="maven2-module" inheritRefs="true">
-      <param name="module.name" value="support"/>
-      <param name="jar.name" value="resin-support.jar"/>
-      <param name="maven.name" value="resin-support"/>
-    </antcall>
-    -->
-  </target>
-	
-  <target name="quercus-maven2" depends="init, compile">
-    <property name="module.name" value="quercus"/>
-    <property name="jar.name" value="quercus.jar"/>
-    <property name="maven.name" value="quercus"/>
-
-    <property name="maven" value="${maven.root}/com/caucho/"/>
-  	
-    <property name="module.dir" value="${resin.modules}"/>
-    <property name="module.src" value="${module.dir}/${module.name}/src"/>
-    <property name="jar.name" value="${module.name}.${module.ext}"/>
-    <property name="maven.name" value="resin-${module.name}"/>
-    <property name="maven.dist" value="${maven}/${maven.name}/${maven.version}"/>
-    <property name="jar" value="${dist}/quercus-with-dependencies.jar"/>
-    
-    <jar destfile="${jar}" manifest="${module.dir}/quercus/maven2/META-INF/MANIFEST.MF">
-      <fileset dir="${module.dir}/quercus/classes">
-        <exclude name=".svnignore"/>
-        <exclude name="*~"/>
-        <exclude name="**/.svn/**"/>
-      </fileset>
-      <fileset dir="${module.dir}/kernel/classes">
-        <exclude name=".svnignore"/>
-        <exclude name="*~"/>
-        <exclude name="**/.svn/**"/>
-        <include name="com/caucho/**"/>
-        <exclude name="com/caucho/config/core/**"/>
-      </fileset>
-      <fileset dir="${basedir}">
-        <include name="LICENSE"/>
-      </fileset>
-    </jar>
-    		
-    <mkdir dir="${maven.dist}"/>
-
-    <antcall target="maven2-jar" inheritRefs="true">
-      <param name="pom.xml" value="${module.dir}/quercus/maven2/pom.xml"/>
-      <param name="ivy.xml" value="${module.dir}/quercus/maven2/ivy.xml"/>
-    </antcall>
-  </target>
-
-  <target name="maven-rsync" depends="init,maven-dist">
-    <exec executable="rsync">
-      <arg value="-av"/>
-      <arg value="--rsh=ssh"/>
-      <arg value="${maven.root}"/>
-      <arg value="caucho@weasley.caucho.com:/var/www/hosts/www.caucho.com/webapps/"/>
-    </exec>
-  </target>
-  
   <target name="rest-jar" depends="init, compile">
     <property name="dist.name" value="${shortproduct}-${version}"/>
     <mkdir dir="${dist}/${dist.name}"/>
@@ -1197,7 +1075,7 @@
     <mkdir dir="${dist}/${quercus.dist.name}/WEB-INF/licenses"/>
     <mkdir dir="${dist}/${quercus.dist.name}/WEB-INF/lib"/>
 
-    <jar destfile="${dist}/${quercus.dist.name}/WEB-INF/lib/quercus.jar" manifest="${resindir}/modules/quercus/maven2/META-INF/MANIFEST.MF">
+    <jar destfile="${dist}/${quercus.dist.name}/WEB-INF/lib/quercus.jar" manifest="${resindir}/modules/quercus/src/manifest">
       <fileset dir="${resindir}/modules/quercus/classes">
         <exclude name=".svnignore"/>
         <exclude name="*~"/>

@@ -687,6 +687,14 @@ public final class JniSocketImpl extends QSocket {
 
     nativeCloseFd(_socketFd);
   }
+  
+  @Override
+  public void disconnect()
+  {
+    // can't be locked because of shutdown
+
+    nativeCloseFd(_socketFd);
+  }
 
   /**
    * Closes the socket.
@@ -815,7 +823,7 @@ public final class JniSocketImpl extends QSocket {
 
   private native void nativeCloseFd(long fd);
   private native void nativeClose(long fd);
-
+  
   native long nativeAllocate();
 
   native void nativeFree(long fd);

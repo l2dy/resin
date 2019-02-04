@@ -250,6 +250,7 @@ public class Invocation extends ServletInvocation implements Dependency
   /**
    * Log the reason for modification.
    */
+  @Override
   public boolean logModified(Logger log)
   {
     Dependency depend = _dependency;

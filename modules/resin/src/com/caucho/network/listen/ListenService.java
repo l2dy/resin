@@ -152,7 +152,9 @@ public class ListenService extends AbstractResinSubSystem
   public void stop()
     throws Exception
   {
-    ArrayList<TcpPort> listeners = _listeners;
+    ArrayList<TcpPort> listeners = new ArrayList<TcpPort>(_listeners);
+    _listeners.clear();
+    
     for (int i = 0; i < listeners.size(); i++) {
       TcpPort listener = listeners.get(i);
 

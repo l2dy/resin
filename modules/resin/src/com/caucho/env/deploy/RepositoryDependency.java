@@ -86,10 +86,11 @@ public class RepositoryDependency implements PersistentDependency {
   @Override
   public boolean logModified(Logger log)
   {
-    if (! isModified())
+    if (! isModified()) {
       return false;
+    }
 
-    log.info(_tag + " is modified.");
+    log.info(_tag + " is modified. old-hash=" + _sha1 + " new-hash=" + getRepository().getTagContentHash(_tag));
 
     return true;
   }

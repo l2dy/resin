@@ -796,11 +796,17 @@ public class TcpSocketLink extends AbstractSocketLink
         if (CurrentTime.isTest()) { // force close if in test
           destroy();
         }
+        else {
+          disconnect();
+        }
       }
     }
     else {
       if (CurrentTime.isTest()) { // force close if in test
         closeConnection();
+      }
+      else {
+        disconnect();
       }
     }
   }
@@ -821,6 +827,18 @@ public class TcpSocketLink extends AbstractSocketLink
     _state = _state.toDestroy(this);
 
     closeConnection(state);
+  }
+  
+  private void disconnect()
+  {
+    if (log.isLoggable(Level.FINEST)) {
+      log.finest(this + " disconnecting connection");
+    }
+    
+    try {
+      _socket.disconnect();
+    } catch (Throwable e) {
+    }
   }
 
   @Override
@@ -881,6 +899,11 @@ public class TcpSocketLink extends AbstractSocketLink
       Thread.dumpStack();
       throw new IllegalStateException("old: " + thread
                                       + " current: " + currentThread);
+    }
+    
+    if (_port.isClosed()) {
+      destroy();
+      return;
     }
     
     if (_requestStateRef.get().isDestroyed()) {

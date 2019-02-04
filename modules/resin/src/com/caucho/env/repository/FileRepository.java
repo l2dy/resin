@@ -41,6 +41,8 @@ import com.caucho.env.git.GitSystem;
 import com.caucho.env.git.GitTree;
 import com.caucho.env.git.GitType;
 import com.caucho.lifecycle.Lifecycle;
+import com.caucho.util.Alarm;
+import com.caucho.util.AlarmListener;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 import com.caucho.vfs.Path;
@@ -58,6 +60,8 @@ public class FileRepository extends AbstractRepository
   private Lifecycle _lifecycle = new Lifecycle();
   
   private long _expireTime = CurrentTime.isTest() ? 15 * 1000L : 3600 * 1000L;
+
+  private Alarm _alarm;
   
   public FileRepository()
   {
@@ -163,6 +167,8 @@ public class FileRepository extends AbstractRepository
       _rootHash.set(sha1);
 
       _git.writeTag(getRepositoryTag(), sha1);
+      _git.writeTag(getRepositoryDebugTag(), sha1);
+      _git.setHead(getRepositoryDebugTag());
       
       _git.gc(_expireTime);
     }
@@ -358,6 +364,19 @@ public class FileRepository extends AbstractRepository
     super.start();
     
     _git.gc(_expireTime);
+    
+    _alarm = new Alarm(new GcListener());
+    _alarm.queue(_expireTime);
+  }
+  
+  @Override
+  public void stop()
+  {
+    super.stop();
+    
+    if (_alarm != null) {
+      _alarm.dequeue();
+    }
   }
 
   /**
@@ -371,5 +390,22 @@ public class FileRepository extends AbstractRepository
     } catch (IOException e) {
       throw new RepositoryException(e);
     }
+  }
+  
+  private class GcListener implements AlarmListener {
+    @Override
+    public void handleAlarm(Alarm alarm)
+    {
+      if (isActive()) {
+        try {
+          _git.gc(_expireTime);
+        } finally {
+          if (isActive()) {
+            alarm.queue(_expireTime);
+          }
+        }
+      }
+    }
+    
   }
 }

@@ -397,6 +397,16 @@ public class QSocketWrapper extends QSocket {
   }
 
   @Override
+  public void disconnect()
+  {
+    try {
+      close();
+    } catch (Exception e) {
+      log.log(Level.FINER, e.toString(), e);
+    }
+  }
+  
+  @Override
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _s + "]";

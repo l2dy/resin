@@ -99,22 +99,6 @@
     <property name="product" value="Resin"/>
     <property name="shortproduct" value="resin"/>
     
-    <condition property="maven.version" value="${version}">
-      <isset property="version"/>
-    </condition>
-    <property name="maven.version" value="4.0-SNAPSHOT"/>
-    
-    <condition property="maven.metadata.template" value="release">
-      <isset property="version"/>
-    </condition>
-    <property name="maven.metadata.template" value="snapshot"/>
-    
-    <condition property="maven.m2" value="m2">
-      <isset property="version"/>
-    </condition>
-    <property name="maven.m2" value="m2-snapshot"/>
-    <property name="maven.root" value="${dist}/${maven.m2}"/>
-
     <!--nversion must be a nubmer, used with eclipse-plugin-->
     <condition property="nversion" value="${version}">
       <isset property="version"/>
@@ -1084,98 +1068,6 @@
       <param name="module.name" value="junit"/>
       <param name="module.jar" value="resin-junit.jar"/>
     </antcall>
-  </target>
-
-  <target name="maven2-artifact">
-    <property name="jar.name" value="${module.name}.jar"/>
-    
-    <antcall target="maven2-module" inheritRefs="true">
-      <param name="module.dir" value="${resin.artifacts}"/>
-      <param name="jar" value="${resin.artifacts}/${module.name}/dist/${jar.name}"/>
-    </antcall>
-  </target>
-  
-  <target name="maven2-module">
-    <property name="module.dir" value="${resin.modules}"/>
-    <property name="module.src" value="${module.dir}/${module.name}/src"/>
-    <property name="jar.name" value="${module.name}.${module.ext}"/>
-    <property name="maven.name" value="resin-${module.name}"/>
-    <property name="maven.dist" value="${maven}/${maven.name}/${maven.version}"/>
-    <property name="jar" value="${lib}/${jar.name}"/>
-
-    <mkdir dir="${maven.dist}"/>
-
-    <antcall target="maven2-jar" inheritRefs="true">
-      <param name="pom.xml" value="${module.dir}/${module.name}/maven2/pom.xml"/>
-      <param name="ivy.xml" value="${module.dir}/${module.name}/maven2/ivy.xml"/>
-    </antcall>
-  </target>
-
-  <target name="maven2-jar">
-    <!-- PARAMETERS -->
-    <!--
-         maven.name
-         jar
-         ivy.xml
-         pom.xml
-    -->
-    <property name="maven.dist" value="${maven}/${maven.name}/${maven.version}"/>
-    <property name="module.ext" value="jar"/>
-
-    <copy file="${pom.xml}"
-          tofile="${maven.dist}/${maven.name}-${maven.version}.pom"
-          preservelastmodified="true"
-          overwrite="true">
-      <filterset>
-        <filter token="VERSION" value="${maven.version}"/>
-        <filter token="DATE" value="${date}"/>
-        <filter token="VERSION_DATE" value="${vdate}"/>
-      </filterset>
-    </copy>
-
-    <checksum file="${maven.dist}/${maven.name}-${maven.version}.pom"
-              algorithm="sha1"/>
-    <checksum file="${maven.dist}/${maven.name}-${maven.version}.pom"
-              algorithm="md5"/>
-
-    <copy file="${jar}"
-          tofile="${maven.dist}/${maven.name}-${maven.version}.${module.ext}"
-          preservelastmodified="true"
-          overwrite="true"/>
-
-    <checksum file="${maven.dist}/${maven.name}-${maven.version}.${module.ext}"
-              algorithm="sha1"/>
-    <checksum file="${maven.dist}/${maven.name}-${maven.version}.${module.ext}"
-              algorithm="md5"/>
-
-    <copy file="${ivy.xml}"
-          tofile="${maven.dist}/ivy-${maven.version}.xml"
-          preservelastmodified="true"
-          overwrite="true">
-      <filterset>
-        <filter token="VERSION" value="${maven.version}"/>
-        <filter token="DATE" value="${date}"/>
-        <filter token="VERSION_DATE" value="${vdate}"/>
-      </filterset>
-    </copy>
-
-    <copy file="maven2/${maven.metadata.template}-metadata.xml"
-          tofile="${maven}/${maven.name}/maven-metadata.xml"
-          preservelastmodified="true"
-          overwrite="true">
-      <filterset>
-        <filter token="VERSION" value="${maven.version}"/>
-        <filter token="DATE" value="${date}"/>
-        <filter token="VERSION_DATE" value="${vdate}"/>
-        <filter token="ARTIFACT" value="${maven.name}"/>
-      </filterset>
-    </copy>
-    
-    <checksum file="${maven}/${maven.name}/maven-metadata.xml"
-              algorithm="sha1"/>
-    <checksum file="${maven}/${maven.name}/maven-metadata.xml"
-              algorithm="md5"/>
-
   </target>
 
   <target name="artifact.dist" depends="init">

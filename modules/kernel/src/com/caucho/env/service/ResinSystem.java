@@ -289,6 +289,14 @@ public class ResinSystem
   {
     return _lifecycle.getStateName();
   }
+
+  /**
+   * @return
+   */
+  public LifecycleState getLifecycleState()
+  {
+    return _lifecycle.getState();
+  }
   
   public void addLifecycleListener(LifecycleListener listener)
   {

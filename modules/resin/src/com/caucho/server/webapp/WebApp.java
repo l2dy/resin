@@ -5397,6 +5397,8 @@ public class WebApp extends ServletContextImpl
         _future.get(timeout, TimeUnit.MILLISECONDS);
       } catch (TimeoutException e) {
         log.log(Level.FINER, e.toString(), e);
+        
+        log.info(WebApp.this + " did not start within " + timeout + "ms");
       } catch (Exception e) {
         throw ConfigException.create(e);
       }

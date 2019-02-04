@@ -197,6 +197,35 @@ public class GitSystem extends AbstractResinSubSystem
     }
   }
 
+  public void setHead(String tag)
+  {
+    Path path = getHeadPath();
+
+    try {
+      path.getParent().mkdirs();
+    } catch (IOException e) {
+      log.log(Level.FINEST, e.toString(), e);
+    }
+
+    synchronized (this) {
+      WriteStream out = null;
+      try {
+        out = path.openWrite();
+
+        out.println("ref: refs/" + tag);
+      } catch (IOException e) {
+        log.log(Level.FINE, e.toString(), e);
+      } finally {
+        try {
+          if (out != null)
+            out.close();
+        } catch (Exception e) {
+          log.log(Level.FINEST, e.toString(), e);
+        }
+      }
+    }
+  }
+
   public String []listRefs(String dir)
   {
     try {
@@ -249,6 +278,11 @@ public class GitSystem extends AbstractResinSubSystem
   private Path getRefPath(String path)
   {
     return _root.lookup("refs").lookup(path);
+  }
+
+  private Path getHeadPath()
+  {
+    return _root.lookup("HEAD");
   }
   
   /**

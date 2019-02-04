@@ -305,8 +305,11 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     super.stop();
     
     try {
-      if (_clusterListener != null) {
-        _clusterListener.close();
+      TcpPort port = _clusterListener;
+      _clusterListener = null;
+      
+      if (port != null) {
+        port.close();
       }
     } catch (Throwable e) {
       log.log(Level.WARNING, e.toString(), e);

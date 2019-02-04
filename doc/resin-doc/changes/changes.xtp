@@ -6,6 +6,16 @@
 
 <s1 title="Resin Change Log">
 
+<s2 title="4.0.60 - in progress">
+<ul>
+<li>embed: force close of file descriptors (#6208)</li>
+<li>webapp: add info log when WebApp does not start within active-wait-time starts (#6197)</li>
+<li>hessian: added default blacklist classes</li>
+<li>deploy: added alarm for deployment .git gc</li>
+<li>deploy: .git changes to allow for git clone from resin-data</li>
+</ul>
+</s2>
+
 <s2 title="4.0.59 - Dec 7, 2018">
 <ul>
 <li>database: avoid loop when shared XA connection fails allocation (#6200, rep by Naohisa Ohshima)</li>

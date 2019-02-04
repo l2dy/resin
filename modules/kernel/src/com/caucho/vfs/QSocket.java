@@ -234,6 +234,10 @@ abstract public class QSocket {
   {
   }
   
+  public void disconnect()
+  {
+  }
+  
   public void closeWrite()
     throws IOException
   {
