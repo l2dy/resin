@@ -1066,16 +1066,18 @@ public class WebAppContainer
       return null;
     }
 
+    String rawContextPath = entry.getContextPath();
+    
     // server/1hb1
     WebAppController controller = entry.getController();
-    String contextPath = controller.getContextPath(invocationURI);
+    String cleanContextPath = controller.getContextPath(invocationURI);
     //String contextPath = entry.getContextPath();
 
     // server/108i
     //invocation.setContextPath(invocationURI.substring(0, contextPath.length()));
-    invocation.setContextPath(contextPath);
+    invocation.setContextPath(cleanContextPath);
 
-    String contextUri = invocationURI.substring(contextPath.length());
+    String contextUri = invocationURI.substring(rawContextPath.length());
     invocation.setContextURI(contextUri);
 
     return entry.getController();
@@ -1169,7 +1171,9 @@ public class WebAppContainer
     int p = subURI.lastIndexOf('/');
 
     if (p < 0 || p < length - 1) { // server/26cf
-      WebAppController controller = _appDeploy.findController(subURI);
+      String cleanURI = Invocation.stripPathParameters(subURI);
+      
+      WebAppController controller = _appDeploy.findController(cleanURI);
 
       if (controller != null) {
         entry = new WebAppUriMap(subURI, controller);

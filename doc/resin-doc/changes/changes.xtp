@@ -6,8 +6,10 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.60 - in progress">
+<s2 title="4.0.60 - Feb 6, 2019">
 <ul>
+<li>security: invalid-URL rejection for matrix parameters</li>
+<li>file: redirect must not html convert the location (#6212, rep by stbu)</li>
 <li>embed: force close of file descriptors (#6208)</li>
 <li>webapp: add info log when WebApp does not start within active-wait-time starts (#6197)</li>
 <li>hessian: added default blacklist classes</li>

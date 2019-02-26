@@ -528,7 +528,8 @@ public class FileServlet extends GenericServlet {
     }
 
     res.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
-    res.setHeader("Location", htmlUrl);
+    // server/001x #6184
+    res.setHeader("Location", encUrl);
     res.setContentType("text/html; charset=utf-8");
 
     PrintWriter out = res.getWriter();

@@ -57,6 +57,7 @@ public class ServletInvocation {
   private String _contextPath = "";
 
   private String _contextUri;
+  private String _stripUri;
   private String _servletPath;
   private String _pathInfo;
 
@@ -100,6 +101,7 @@ public class ServletInvocation {
 
   public void setContextURI(String contextURI)
   {
+    _stripUri = stripPathParameters(contextURI);
     _contextUri = contextURI;
     _servletPath = contextURI;
   }
@@ -110,6 +112,14 @@ public class ServletInvocation {
   public final String getContextURI()
   {
     return _contextUri;
+  }
+
+  /**
+   * Returns the URI tail, i.e. everything after the context path.
+   */
+  public final String getStripURI()
+  {
+    return _stripUri;
   }
 
   /**

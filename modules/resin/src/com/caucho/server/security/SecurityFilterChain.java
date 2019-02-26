@@ -87,11 +87,13 @@ public class SecurityFilterChain implements FilterChain {
     CauchoResponse res = (CauchoResponse) response;
 
     AbstractConstraint []constraints = null;
-    if (_methodMap != null)
+    if (_methodMap != null) {
       constraints = _methodMap.get(req.getMethod());
+    }
 
-    if (constraints == null)
+    if (constraints == null) {
       constraints = _constraints;
+    }
 
     AuthorizationResult result = AuthorizationResult.NONE;
 

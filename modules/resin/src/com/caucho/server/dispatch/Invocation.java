@@ -50,6 +50,7 @@ public class Invocation extends ServletInvocation implements Dependency
   private boolean _isSecure;
 
   private String _uri;
+  private String _stripURI;
   private String _sessionId;
 
   private WebApp _webApp;

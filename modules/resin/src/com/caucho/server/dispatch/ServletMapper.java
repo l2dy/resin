@@ -326,10 +326,12 @@ public class ServletMapper {
 
     invocation.setServletPath(servletPath);
 
-    if (servletPath.length() < contextURI.length())
+    if (servletPath.length() < contextURI.length()) {
       invocation.setPathInfo(contextURI.substring(servletPath.length()));
-    else
+    }
+    else {
       invocation.setPathInfo(null);
+    }
 
     if (servletRegexp != null)
       config = servletRegexp;
