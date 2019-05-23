@@ -361,6 +361,8 @@ public class WebApp extends ServletContextImpl
   // List of the ServletContextListeners from the configuration file
   private ArrayList<ServletContextListener> _webAppListeners
     = new ArrayList<ServletContextListener>();
+  
+  private boolean _isAfterWebAppStart;
 
   // List of the ServletRequestListeners from the configuration file
   private ArrayList<ServletRequestListener> _requestListeners
@@ -1929,6 +1931,11 @@ public class WebApp extends ServletContextImpl
 
     return Encoding.getMimeName(locale);
   }
+  
+  public Map<String,String> getLocaleMapping()
+  {
+    return _localeMapping;
+  }
 
   /**
    * Sets the login
@@ -2175,7 +2182,7 @@ public class WebApp extends ServletContextImpl
       if (! hasListener(_webAppListeners, listenerObj.getClass())) {
         _webAppListeners.add(scListener);
       
-        if (isStart) {
+        if (isStart && _isAfterWebAppStart) {
           ServletContextEvent event = new ServletContextEvent(this);
 
           scListener.contextInitialized(event);
@@ -3487,6 +3494,8 @@ public class WebApp extends ServletContextImpl
   private void loadInitializers()
     throws Exception
   {
+    initClassHierarchyScanListener();
+    
     Class<?> cl = ServletContainerInitializer.class;
     
     Enumeration<URL> e;
@@ -3500,24 +3509,29 @@ public class WebApp extends ServletContextImpl
       URL url = e.nextElement();
       
       // might parse to check that the loader has a handles
-      
-      if (_classHierarchyScanListener == null) {
-        _classHierarchyScanListener = new ClassHierarchyScanListener(getClassLoader());
-      
-        getEnvironmentClassLoader().addScanListener(_classHierarchyScanListener);
-      }
+      initClassHierarchyScanListener();
     }
+  }
+  
+  private void initClassHierarchyScanListener()
+  {
+    if (_classHierarchyScanListener == null) {
+      _classHierarchyScanListener = new ClassHierarchyScanListener(getClassLoader());
+    
+      getEnvironmentClassLoader().addScanListener(_classHierarchyScanListener);
+    }
+    
   }
 
   private void callInitializers()
     throws Exception
   {
-    ArrayList<ListenerConfig> listeners = new ArrayList<ListenerConfig>(_listeners);
-    ArrayList<ServletContextListener> webAppListeners
-      = new ArrayList<ServletContextListener>(_webAppListeners);
-    
     ArrayList<ServletContainerInitializer> initList
       = new ArrayList<ServletContainerInitializer>(_cdiManager.loadLocalServices(ServletContainerInitializer.class));
+    
+    if (initList.size() > 0) {
+      initClassHierarchyScanListener();
+    }
     
     Collections.sort(initList, new InitComparator());
 
@@ -3527,11 +3541,12 @@ public class WebApp extends ServletContextImpl
     
     _classHierarchyScanListener = null;
     
+    ArrayList<ListenerConfig> listeners = new ArrayList<ListenerConfig>(_listeners);
+
     for (ListenerConfig listener : listeners) {
       try {
-        // server/10g0
-        // addListenerObject(listener.createListenerObject(), false);
-        addListenerObject(listener.createListenerObject(), true);
+        // server/10g0, server/0300, server/1p08
+        addListenerObject(listener.createListenerObject(), false);
       } catch (Exception e) {
         throw ConfigException.create(e);
       }
@@ -3539,8 +3554,17 @@ public class WebApp extends ServletContextImpl
 
     ServletContextEvent event = new ServletContextEvent(this);
 
+    ArrayList<ServletContextListener> webAppListeners
+    = new ArrayList<ServletContextListener>(_webAppListeners);
+    
+    _isAfterWebAppStart = true;
+
     for (ServletContextListener listener : webAppListeners) {
-      listener.contextInitialized(event);
+      try {
+        listener.contextInitialized(event);
+      } finally {
+        Thread.currentThread().setContextClassLoader(getClassLoader());
+      }
     }
   }
   
@@ -3624,8 +3648,13 @@ public class WebApp extends ServletContextImpl
       if (log.isLoggable(Level.FINER)){
         log.finer("ServletContainerInitializer " + init + " {in " + this + "}");
       }
+
+      try {
+        init.onStartup(null, this);
+      } finally {
+        Thread.currentThread().setContextClassLoader(getClassLoader());
+      }
       
-      init.onStartup(null, this);
       return;
     }
     
@@ -3635,13 +3664,17 @@ public class WebApp extends ServletContextImpl
     
     HashSet<Class<?>> classes 
        = _classHierarchyScanListener.findClasses(handlesTypes.value());
-    
+
     if (classes != null) {
       if (log.isLoggable(Level.FINER)){
         log.finer("ServletContainerInitializer " + init + "(" + classes + ") {in " + this + "}");
       }
       
-      init.onStartup(classes, this);
+      try {
+        init.onStartup(classes, this);
+      } finally {
+        Thread.currentThread().setContextClassLoader(getClassLoader());
+      }
     }
   }
 
@@ -4783,6 +4816,11 @@ public class WebApp extends ServletContextImpl
   public String getMimeTypeImpl(String ext)
   {
     return _mimeMapping.get(ext);
+  }
+  
+  public HashMap<String,String> getMimeMapping()
+  {
+    return _mimeMapping;
   }
 
   /**

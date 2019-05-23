@@ -60,7 +60,7 @@ public final class ServerHeartbeatState {
   {
     _server = server;
     
-    _stateTimestamp.set(CurrentTime.getCurrentTime());
+    updateStateTimestamp();
   }
   
   /**
@@ -84,6 +84,11 @@ public final class ServerHeartbeatState {
     return _stateTimestamp.get();
   }
   
+  public void updateStateTimestamp()
+  {
+    _stateTimestamp.set(CurrentTime.getCurrentTime());
+  }
+  
   public long getLastHeartbeatTime()
   {
     return _lastHeartbeatTime.get();
@@ -100,12 +105,12 @@ public final class ServerHeartbeatState {
 
     State oldState = _heartbeatState.getAndSet(State.ACTIVE);
     
+    updateStateTimestamp();
+
     if (oldState == State.ACTIVE) {
       return false;
     }
     
-    _stateTimestamp.set(now);
-
     if (oldHeartbeatTime > 0) {
       // #5173
       log.warning(this + " notify-heartbeat-start");

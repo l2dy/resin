@@ -73,11 +73,12 @@ public class ConstraintManager extends FilterChainBuilder {
   @Override
   public FilterChain build(FilterChain next, Invocation invocation)
   {
-    String uri = invocation.getStripURI();
-
     WebApp webApp = invocation.getWebApp();
-    if (webApp == null)
+    if (webApp == null) {
       return next;
+    }
+
+    String uri = invocation.getStripURI();
 
     String lower = uri.toLowerCase(Locale.ENGLISH);
 

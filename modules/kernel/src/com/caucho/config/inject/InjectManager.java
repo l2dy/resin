@@ -3627,9 +3627,10 @@ public final class InjectManager
 
     try {
       DynamicClassLoader loader = _classLoader;
-
-      if (loader == null)
+      
+      if (loader == null) {
         return services;
+      }
       
       String serviceName = "META-INF/services/" + serviceApiClass.getName();
       
@@ -3647,8 +3648,9 @@ public final class InjectManager
       while (e.hasMoreElements()) {
         URL url = e.nextElement();
         
-        if (serviceSet.contains(url))
+        if (serviceSet.contains(url)) {
           continue;
+        }
 
         serviceSet.add(url);
 

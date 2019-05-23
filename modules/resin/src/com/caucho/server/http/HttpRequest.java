@@ -1465,6 +1465,7 @@ public class HttpRequest extends AbstractHttpRequest
     super.onCloseConnection();
     
     _uri = null;
+    _headerSize = 0;
     _headerBuffer = null;
     _headerKeys = null;
     _headerValues = null;

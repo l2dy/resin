@@ -1261,7 +1261,8 @@ public final class ClusterServer {
 
   static {
     DECODE = new int[128];
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
       DECODE[(int) convert(i)] = i;
+    }
   }
 }

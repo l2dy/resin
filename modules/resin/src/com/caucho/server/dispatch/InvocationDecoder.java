@@ -50,6 +50,7 @@ public class InvocationDecoder {
     = Logger.getLogger(InvocationDecoder.class.getName());
   private static final L10N L = new L10N(InvocationDecoder.class);
 
+  private static final int MAX_FREE_CAPACITY = 4096;
   private static final FreeList<ByteToChar> _freeConverters
     = new FreeList<ByteToChar>(256);
   
@@ -540,6 +541,8 @@ public class InvocationDecoder {
   
   private static void freeConverter(ByteToChar converter)
   {
-    _freeConverters.free(converter);
+    if (converter.capacity() < MAX_FREE_CAPACITY) {
+      _freeConverters.free(converter);
+    }
   }
 }

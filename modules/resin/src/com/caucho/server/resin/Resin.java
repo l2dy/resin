@@ -131,6 +131,8 @@ public class Resin
   private String _dynamicAddress;
   private int _dynamicPort;
   
+  private String _localHostAddress;
+  
   private String _clusterSystemKey;
   
   private String _stage = "production";
@@ -228,7 +230,7 @@ public class Resin
         displayServerId = "dyn";
       }
       
-      serverId = serverId + "-"+ getDynamicDisplayAddress() + ':' + getDynamicServerPort();
+      serverId = serverId + "-"+ getDynamicServerAddress() + ':' + getDynamicServerPort();
     }
     else {
       serverId = displayServerId;
@@ -489,24 +491,12 @@ public class Resin
   {
     String address = getServerAddress();
 
-    if (address == null) {
+    if (address == null && _bootConfig != null) {
       address = _bootConfig.getBootResin().getElasticServerAddress(_args);
     }
     
     if (address != null)
       return address;
-    else
-      return getLocalHostAddress();
-  }
-  
-  public String getDynamicDisplayAddress()
-  {
-    String address = getServerAddress();
-
-    if (address != null)
-      return address;
-    else if (CurrentTime.isTest())
-      return "192.168.1.x";
     else
       return getLocalHostAddress();
   }
@@ -533,6 +523,27 @@ public class Resin
       return _args.getElasticServerPort();
     else
       return 6830;
+  }
+  
+  public int getDynamicServerIndex()
+  {
+    int index = -1; // getServerIndex();
+    
+    if (index >= 0)
+      return index;
+    else if (_bootConfig != null) {
+      index = _bootConfig.getBootResin().getElasticServerIndex(_args);
+      
+      if (index >= 0)
+        return index;
+    }
+
+    if (_args.getElasticServerIndex() >= 0) {
+      return _args.getElasticServerIndex();
+    }
+    else {
+      return -1;
+    }
   }
 
   public Path getLogDirectory()
@@ -905,6 +916,19 @@ public class Resin
   }
   
   String getLocalHostAddress()
+  {
+    String localHostAddress = _localHostAddress;
+    
+    if (localHostAddress == null) {
+      localHostAddress = getLocalHostAddressImpl();
+      
+      _localHostAddress = localHostAddress;
+    }
+    
+    return localHostAddress;
+  }
+  
+  private String getLocalHostAddressImpl()
   {
     try {
       InetAddress addr = InetAddress.getLocalHost();

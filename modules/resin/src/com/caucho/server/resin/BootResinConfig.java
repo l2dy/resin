@@ -75,9 +75,9 @@ public class BootResinConfig extends AbstractResinConfig
   private ArrayList<BootClusterConfig> _clusters
     = new ArrayList<BootClusterConfig>();
 
-  private int _elasticServerPort;
-
   private String _elasticServerAddress;
+  private int _elasticServerPort;
+  private int _elasticServerIndex = -1;
 
   /**
    * Creates a new resin server.
@@ -185,6 +185,16 @@ public class BootResinConfig extends AbstractResinConfig
     }
     else {
       return _elasticServerAddress;
+    }
+  }
+
+  public int getElasticServerIndex(ResinArgs args)
+  {
+    if (args.getElasticServerIndex() > 0) {
+      return args.getElasticServerIndex();
+    }
+    else {
+      return _elasticServerIndex;
     }
   }
   

@@ -30,14 +30,11 @@
 package com.caucho.config.extension;
 
 import java.lang.annotation.Annotation;
+import java.util.HashSet;
 
-import javax.enterprise.inject.spi.Annotated;
 import javax.enterprise.inject.spi.AnnotatedType;
-import javax.enterprise.inject.spi.Bean;
 import javax.enterprise.inject.spi.BeforeBeanDiscovery;
-import javax.enterprise.inject.spi.ProcessBean;
 
-import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.inject.ManagedBeanImpl;
 import com.caucho.inject.Module;
@@ -92,5 +89,15 @@ public class BeforeBeanDiscoveryImpl implements BeforeBeanDiscovery
   public String toString()
   {
     return getClass().getSimpleName() + "[" + _cdiManager + "]";
+  }
+
+  /* (non-Javadoc)
+   * @see javax.enterprise.inject.spi.BeforeBeanDiscovery#addAnnotatedType(javax.enterprise.inject.spi.AnnotatedType, java.lang.String)
+   */
+  @Override
+  public void addAnnotatedType(AnnotatedType<?> type, String value)
+  {
+    // TODO Auto-generated method stub
+    addAnnotatedType(type);
   }
 }

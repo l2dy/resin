@@ -302,11 +302,23 @@ r_jsse-ssl = element jsse-ssl {
   & (attribute key-store-file { string }
      | element key-store-file { r_string-Group })?
 
+  & (attribute key-store-password { string }
+     | element key-store-password { r_string-Group })?
+
   & (attribute key-store-type { string }
      | element key-store-type { r_string-Group })?
 
   & (attribute key-manager-factory { string }
      | element key-manager-factory { r_string-Group })?
+
+  & (attribute key-manager-algorithm { string }
+     | element key-manager-algorithm { r_string-Group })?
+
+  & (attribute key-manager-password { string }
+     | element key-manager-password { r_string-Group })?
+
+  & (attribute key-manager-provider { string }
+     | element key-manager-provider { r_string-Group })?
 
   & (attribute password { string }
      | element password { r_string-Group })?
@@ -319,6 +331,15 @@ r_jsse-ssl = element jsse-ssl {
 
   & (attribute ssl-context { string }
      | element ssl-context { r_string-Group })?
+
+  & (attribute trust-store-algorithm { string }
+     | element trust-store-algorithm { r_string-Group })?
+
+  & (attribute trust-store-password { string }
+     | element trust-store-password { r_string-Group })?
+
+  & (attribute trust-store-provider { string }
+     | element trust-store-provider  { r_string-Group })?
 
   & (attribute verify-client { string }
      | element verify-client { r_string-Group })?

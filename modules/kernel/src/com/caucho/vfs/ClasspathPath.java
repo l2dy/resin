@@ -29,16 +29,13 @@
 
 package com.caucho.vfs;
 
-import com.caucho.util.Alarm;
-import com.caucho.util.CharBuffer;
-import com.caucho.util.L10N;
-import com.caucho.util.LruCache;
-import com.caucho.util.QDate;
-
-import java.io.*;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Map;
+
+import com.caucho.util.L10N;
 
 /**
  * The classpath scheme.
@@ -46,6 +43,22 @@ import java.util.Map;
 public class ClasspathPath extends FilesystemPath {
   protected static L10N L = new L10N(ClasspathPath.class);
 
+  private ClassLoader _loader;
+  
+  /**
+   * Creates a new classpath sub path.
+   *
+   * @param root the classpath filesystem root
+   * @param userPath the argument to the calling lookup()
+   * @param newAttributes any attributes passed to http
+   * @param path the full normalized path
+   * @param query any query string
+   */
+  public ClasspathPath(ClassLoader loader)
+  {
+    this(null, "", "", loader);
+  }
+  
   /**
    * Creates a new classpath sub path.
    *
@@ -59,10 +72,29 @@ public class ClasspathPath extends FilesystemPath {
                        String userPath,
                        String path)
   {
+    this(root, userPath, path, null);
+  }
+  
+  /**
+   * Creates a new classpath sub path.
+   *
+   * @param root the classpath filesystem root
+   * @param userPath the argument to the calling lookup()
+   * @param newAttributes any attributes passed to http
+   * @param path the full normalized path
+   * @param query any query string
+   */
+  public ClasspathPath(FilesystemPath root,
+                       String userPath,
+                       String path,
+                       ClassLoader loader)
+  {
     super(root, userPath, path);
 
     if (_root == null)
       _root = this;
+    
+    _loader = loader;
   }
   
   /**
@@ -74,11 +106,12 @@ public class ClasspathPath extends FilesystemPath {
    *
    * @return the selected path
    */
+  @Override
   public Path fsWalk(String userPath,
                         Map<String,Object> attributes,
                         String path)
   {
-    return new ClasspathPath(_root, userPath, path);
+    return new ClasspathPath(_root, userPath, path, _loader);
   }
 
   /**
@@ -94,9 +127,21 @@ public class ClasspathPath extends FilesystemPath {
    */
   public boolean exists()
   {
-    ClassLoader loader = Thread.currentThread().getContextClassLoader();
+    ClassLoader loader = getLoader();
     
     return loader.getResource(getPath()) != null;
+  }
+  
+  private ClassLoader getLoader()
+  {
+    ClassLoader loader = _loader;
+    
+    if (loader != null) {
+      return loader;
+    }
+    else {
+      return Thread.currentThread().getContextClassLoader();
+    }
   }
 
   /**
@@ -140,6 +185,7 @@ public class ClasspathPath extends FilesystemPath {
   /**
    * Returns a read stream for a GET request.
    */
+  @Override
   public StreamImpl openReadImpl() throws IOException
   {
     ClassLoader loader = Thread.currentThread().getContextClassLoader();

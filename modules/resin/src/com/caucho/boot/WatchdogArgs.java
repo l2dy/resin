@@ -103,6 +103,7 @@ class WatchdogArgs
   private boolean _isElasticIp;
   private String _elasticAddress;
   private int _elasticPort;
+  private int _elasticIndex = -1;
   
   private ResinBootELContext _resinBootELContext = null;
 
@@ -274,6 +275,11 @@ class WatchdogArgs
   int getDynamicPort()
   {
     return _elasticPort;
+  }
+
+  int getDynamicIndex()
+  {
+    return _elasticIndex;
   }
 
   String getElasticServerId()

@@ -680,6 +680,7 @@ public class ExtensionManager
       _args = args;
     }
 
+    @Override
     public void notify(Object event)
     {
       try {
@@ -701,11 +702,18 @@ public class ExtensionManager
         if (cause instanceof ConfigException)
           throw (ConfigException) cause;
         
-        throw new InjectionException(loc + cause.getMessage(), cause);
+        if (cause instanceof Error) {
+          log.log(Level.WARNING, e.toString(), e);
+        }
+        else {
+          throw new InjectionException(loc + cause.getMessage(), cause);
+        }
       } catch (Exception e) {
         String loc = (_extension + "." + _method.getName() + ": ");
 
         throw new InjectionException(loc + e.getMessage(), e);
+      } catch (Throwable e) {
+        log.log(Level.WARNING, e.toString(), e);
       }
     }
 

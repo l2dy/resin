@@ -8,8 +8,10 @@
   <property name="jdkapi.href" value="http://java.sun.com/javase/6/docs/api"/>
 
   <property name="shell" value="bash"/>
-
+<!--
   <property name="debian.component" value="universe"/>
+-->
+  <property name="debian.component" value="main"/>
 
   <property name="eclipse.home" value="${user.home}/eclipse"/>
 

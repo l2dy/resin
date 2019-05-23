@@ -119,7 +119,7 @@ public class StreamHandler extends AbstractLogHandler {
         if (thrown == null
             && message != null
             && message.indexOf("java.lang.NullPointerException") >= 0) {
-          thrown = new IllegalStateException();
+          thrown = new IllegalStateException("NPE with missing throwable: " + message);
           thrown.fillInStackTrace();
         }
   

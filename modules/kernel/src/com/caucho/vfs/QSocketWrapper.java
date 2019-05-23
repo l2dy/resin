@@ -101,7 +101,7 @@ public class QSocketWrapper extends QSocket {
     /*
     // XXX:
     if (isTcpNoDelay())
-      socket.setTcpNoDelay(true);
+      setTcpNoDelay(true);
     
     if (isTcpKeepalive())
       socket.setKeepAlive(true);

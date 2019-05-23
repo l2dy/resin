@@ -63,6 +63,27 @@ public class FormLoginServlet extends GenericServlet {
 
     WebApp webApp = (WebApp) getServletContext();
     FormLogin login = getFormLogin(webApp.getLogin());
+    
+    if (login == null) {
+      log.warning(L.l("j_security_check requires a form login configuration. URL='{0}' IP='{1}'", 
+                      req.getRequestURI(),
+                      req.getRemoteAddr()));
+                          
+      res.sendError(HttpServletResponse.SC_NOT_FOUND);
+      
+      return;
+    }
+    else if (login.getAuthType() == null) {
+      log.warning(L.l("FormLoginServlet requires a form login auth-type configuration at '{0}' in '{1}' IP='{2}'",
+                      login != null
+                      ? login.getAuthType()
+                      : null,
+                      req.getRequestURI(), req.getRemoteAddr()));
+      
+      res.sendError(HttpServletResponse.SC_NOT_FOUND);
+      
+      return;
+    }
 
     Principal user = login.login(req, res, true);
 
@@ -180,22 +201,16 @@ public class FormLoginServlet extends GenericServlet {
   private FormLogin getFormLogin(Login login)
     throws ServletException
   {
-    if (login == null)
-      throw new ServletException(L.l("j_security_check requires a login"));
-
-    if (login instanceof FormLogin)
+    if (login instanceof FormLogin) {
       return (FormLogin) login;
+    }
     else if (login instanceof LoginList) {
       for (Login subLogin : ((LoginList) login).getLoginList()) {
         if (subLogin instanceof FormLogin)
           return (FormLogin) subLogin;
       }
     }
-
-    throw new ServletException(L.l("FormLoginServlet requires a form login auth-type configuration at '{0}' in '{1}'",
-                                   login != null
-                                   ? login.getAuthType()
-                                   : null,
-                                   getServletContext()));
+    
+    return null;
   }
 }

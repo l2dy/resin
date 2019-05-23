@@ -122,6 +122,12 @@ public class WebAppAdmin extends DeployControllerAdmin<WebAppController>
     return getController().getManifestAttributes();
   }
   
+  @Override
+  public String getApplicationHash()
+  {
+    return getController().getRootHash();
+  }
+  
   //
   // lifecycle statistics
   //

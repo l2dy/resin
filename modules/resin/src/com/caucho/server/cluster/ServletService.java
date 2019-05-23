@@ -672,6 +672,10 @@ public class ServletService
    */
   public void setServerHeader(String server)
   {
+    if ("".equals(server)) {
+      server = null;
+    }
+    
     _serverHeader = server;
   }
 

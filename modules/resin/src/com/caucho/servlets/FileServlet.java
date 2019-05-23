@@ -214,10 +214,11 @@ public class FileServlet extends GenericServlet {
     if (cache == null) {
       cacheUrl = getCacheUrl(req, uri);
 
-      cache = _pathCache.get(cacheUrl);
+      Cache globalCache = _pathCache.get(cacheUrl);
 
-      if (cache != null) {
-        _localCache.put(uri, cache);
+      if (globalCache != null && ! globalCache.isModified()) {
+        _localCache.put(uri, globalCache);
+        cache = globalCache;
       }
     }
 

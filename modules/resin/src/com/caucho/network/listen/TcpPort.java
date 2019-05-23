@@ -39,6 +39,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -1869,7 +1870,7 @@ public class TcpPort
     Set<TcpSocketLink> activeSet;
 
     synchronized (_activeConnectionSet) {
-      activeSet = new HashSet<TcpSocketLink>(_activeConnectionSet.keySet());
+      activeSet = new HashSet<TcpSocketLink>(((Map) _activeConnectionSet).keySet());
     }
 
     for (TcpSocketLink conn : activeSet) {

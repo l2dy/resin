@@ -1,0 +1,38 @@
+<document>
+  <header>
+    <product>resin</product>
+    <title>Resin 4.0.60 Release Notes</title>
+  </header>
+
+<body>
+
+<localtoc/>
+
+<s1 title="Summary">
+
+<p>We encourage people to report 4.0.60 bugs at
+<a href="http://bugs.caucho.com">http://bugs.caucho.com</a>.</p>
+
+<p>4.0.60 includes an important security bug fix related to detection of invalid URLs.</p>
+
+</s1>
+
+<s1 title="Security">
+
+<p>4.0.60 includes an important security bug fix related to detection of invalid URLs.</p>
+
+</s1>
+
+<s1 title="Change Log">
+<ul>
+<li>security: invalid-URL rejection for matrix parameters</li>
+<li>file: redirect must not html convert the location (#6212, rep by stbu)</li>
+<li>embed: force close of file descriptors (#6208)</li>
+<li>webapp: add info log when WebApp does not start within active-wait-time starts (#6197)</li>
+<li>hessian: added default blacklist classes</li>
+<li>deploy: added alarm for deployment .git gc</li>
+<li>deploy: .git changes to allow for git clone from resin-data</li>
+</ul>
+
+</body>
+</document>

@@ -6,10 +6,42 @@
 
 <s1 title="Resin Change Log">
 
+<s2 title="4.0.62 - In Progress">
+<ul>
+<li>distribution: update .jar versions and remove jars with possible conflicts</li>
+<li>cloud: distributed server update issue with .git/refs (#6238, rep by Andrew Thai)</li>
+<li>elastic: cleanup of join server-id and server-address, and timeout (#6236, rep by Chris Daniel)</li>
+<li>ssl: add trust-store-algorithm and trust-store-provider to jsse (#6235)</li>
+<li>ssl: add key-manager-password and key-store-password to jsse (#6233)</li>
+<li>ssl: add key-manager-algorithm and key-manager-provider to jsse (#6234)</li>
+<li>spring: add ClasspathPath to MergePath.addClassPath (#6227)</li>
+<li>websocket: add WebSocketContext.ping (#6228)</li>
+<li>integration: WebApp.getMimeMapping (#6230)</li>
+<li>integration: WebApp.getLocaleMapping (#6231)</li>
+<li>security: setting setServerHeader to null will remove Server header (#6224, rep by Dharanidhar)</li>
+<li>file: cache file updates when webapp-jar changes (#6223, rep by Steffan Busch)</li>
+<li>debian: update debian release</li>
+<li>elastic: add server-timeout to resin:ElasticCloudService (#6218, rep by Naohisa)</li>
+<li>quercus: find interface method if available (#6221)</li>
+<li>elastic: add --elastic-server-index (#6216, rep by Naohisa)</li>
+<li>security: foo.;html produces 500 exception (#6217, rep by Steffan Busch)</li>
+<li>security: j_security_check with no auth should issue warning and 404 instead of 500 (#6219, rep by Steffan Busch)</li>
+<li>servlet: don't reuse form/invocation ByteToChar when very large (#6220, rep by Naohisa)</li>
+<li>embed: add HttpsEmbed (#6193, rep by mikeb01)</li>
+<li>jmx: add application-hash to WebAppMXBean (#6202, rep by Naohisa)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.61 - Feb 28, 2019">
+<ul>
+<li>security: additional invalid-URL rejection for matrix parameters</li>
+<li>file: redirect must not html convert the location (#6212, rep by stbu)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.60 - Feb 6, 2019">
 <ul>
 <li>security: invalid-URL rejection for matrix parameters</li>
-<li>file: redirect must not html convert the location (#6212, rep by stbu)</li>
 <li>embed: force close of file descriptors (#6208)</li>
 <li>webapp: add info log when WebApp does not start within active-wait-time starts (#6197)</li>
 <li>hessian: added default blacklist classes</li>

@@ -84,8 +84,15 @@ public class HttpResponse extends AbstractHttpResponse
     _rawWrite = rawWrite;
 
     ServletService server = request.getServer();
+    
+    String serverHeader = server.getServerHeader();
 
-    _resinServerBytes = ("\r\nServer: " + server.getServerHeader()).getBytes();
+    if (serverHeader != null) {
+      _resinServerBytes = ("\r\nServer: " + server.getServerHeader()).getBytes();
+    }
+    else {
+      _resinServerBytes = new byte[0];
+    }
   }
 
   @Override

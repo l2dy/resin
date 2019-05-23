@@ -144,6 +144,7 @@ public class JarPath extends FilesystemPath {
   /**
    * Returns true if the entry exists in the jar file.
    */
+  @Override
   public boolean exists()
   {
     return getJar().exists(getPath());
@@ -152,6 +153,7 @@ public class JarPath extends FilesystemPath {
   /**
    * Returns true if the entry is a directory in the jar file.
    */
+  @Override
   public boolean isDirectory()
   {
     return getJar().isDirectory(getPath());
@@ -160,26 +162,31 @@ public class JarPath extends FilesystemPath {
   /**
    * Returns true if the entry is a file in the jar file.
    */
+  @Override
   public boolean isFile()
   {
     return getJar().isFile(getPath());
   }
 
+  @Override
   public long getLength()
   {
     return getJar().getLength(getPath());
   }
 
+  @Override
   public long getLastModified()
   {
     return getJar().getLastModified(getPath());
   }
   
+  @Override
   public boolean canRead()
   {
     return getJar().canRead(getPath());
   }
 
+  @Override
   public boolean canWrite()
   {
     return getJar().canWrite(getPath());
@@ -188,6 +195,7 @@ public class JarPath extends FilesystemPath {
   /**
    * Returns a list of the directories in the jar.
    */
+  @Override
   public String []list() throws IOException
   {
     return getJar().list(getPath());
@@ -223,8 +231,9 @@ public class JarPath extends FilesystemPath {
   {
     Jar jar = Jar.getJar(_backing);
 
-    if (jar != null)
+    if (jar != null) {
       jar.close();
+    }
   }
 
   public String toString()

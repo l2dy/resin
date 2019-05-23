@@ -224,6 +224,11 @@ public class LibraryLoader extends JarListLoader {
   @Override
   public String toString()
   {
-    return getClass().getSimpleName() + "[" + _fileSet + "]";
+    if (_fileSet != null) {
+      return getClass().getSimpleName() + "[" + _fileSet + "]";
+    }
+    else {
+      return getClass().getSimpleName() + "[" + _path + "]";
+    }
   }
 }

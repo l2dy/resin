@@ -108,7 +108,7 @@ public class ProxyActor<T> implements Actor
   public void messageError(String to, String from, Serializable payload,
                            BamError error)
   {
-    throw new UnsupportedOperationException(getClass().getName());
+    log.warning(this + ": bam error " + to + " " + from + " " + payload + " " + error);
   }
 
   @Override

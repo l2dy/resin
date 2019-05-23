@@ -52,6 +52,7 @@ public class Form {
   private static final Logger log = Logger.getLogger(Form.class.getName());
 
   private static final FreeList<Form> _freeList = new FreeList<Form>(32);
+  private static final int MAX_FREE_CAPACITY = 64 * 1024;
 
   private final ByteToChar _converter = ByteToChar.create();
 
@@ -68,7 +69,14 @@ public class Form {
 
   public static void free(Form form)
   {
-    _freeList.free(form);
+    if (form.getConverter().capacity() < MAX_FREE_CAPACITY) {
+      _freeList.free(form);
+    }
+  }
+  
+  private ByteToChar getConverter()
+  {
+    return _converter;
   }
   
   /**

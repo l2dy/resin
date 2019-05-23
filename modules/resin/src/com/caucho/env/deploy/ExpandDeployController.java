@@ -182,6 +182,11 @@ abstract public class ExpandDeployController<I extends DeployInstance>
   {
     return _manifest;
   }
+  
+  public String getRootHash()
+  {
+    return _rootHash;
+  }
 
   /**
    * Returns the manifest as an attribute map

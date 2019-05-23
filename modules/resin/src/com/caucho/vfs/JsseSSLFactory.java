@@ -37,6 +37,9 @@ import java.net.ServerSocket;
 import java.security.GeneralSecurityException;
 import java.security.Key;
 import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -49,6 +52,8 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLServerSocket;
 import javax.net.ssl.SSLServerSocketFactory;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 
 import com.caucho.config.ConfigException;
 import com.caucho.env.service.RootDirectorySystem;
@@ -74,8 +79,19 @@ public class JsseSSLFactory implements SSLFactory {
   private String _alias;
   private String _password;
   private String _verifyClient;
+  
+  private String _keyStorePassword;
   private String _keyStoreType = "jks";
+  
   private String _keyManagerFactory = "SunX509";
+  private String _keyManagerAlgorithm;
+  private String _keyManagerProvider;
+  private String _keyManagerPassword;
+  
+  private String _trustStoreAlgorithm;
+  private String _trustStoreProvider;
+  private String _trustStorePassword;
+  
   private String _sslContext = "TLS";
   private String []_cipherSuites;
   private String []_cipherSuitesForbidden;
@@ -183,6 +199,45 @@ public class JsseSSLFactory implements SSLFactory {
   }
 
   /**
+   * Sets the KeyManagerFactory algorithm
+   */
+  public void setKeyManagerAlgorithm(String keyManagerAlgorithm)
+  {
+    if (! "".equals(keyManagerAlgorithm)) {
+      _keyManagerAlgorithm = keyManagerAlgorithm;
+    }
+    else {
+      _keyManagerAlgorithm = null;
+    }
+  }
+
+  /**
+   * Sets the KeyManagerFactory password
+   */
+  public void setKeyManagerPassword(String keyManagerPassword)
+  {
+    if (! "".equals(keyManagerPassword)) {
+      _keyManagerPassword = keyManagerPassword;
+    }
+    else {
+      _keyManagerPassword = null;
+    }
+  }
+
+  /**
+   * Sets the KeyManagerFactory provider
+   */
+  public void setKeyManagerProvider(String keyManagerProvider)
+  {
+    if (! "".equals(keyManagerProvider)) {
+      _keyManagerProvider = keyManagerProvider;
+    }
+    else {
+      _keyManagerProvider = null;
+    }
+  }
+
+  /**
    * Sets the self-signed certificate name
    */
   public void setSelfSignedCertificateName(String name)
@@ -204,6 +259,58 @@ public class JsseSSLFactory implements SSLFactory {
   public void setKeyStoreType(String keyStore)
   {
     _keyStoreType = keyStore;
+  }
+
+  /**
+   * Sets the KeyStore password
+   */
+  public void setKeyStorePassword(String password)
+  {
+    if (! "".equals(password)) {
+      _keyStorePassword = password;
+    }
+    else {
+      _keyStorePassword = null;
+    }
+  }
+
+  /**
+   * Sets the TrustStore type
+   */
+  public void setTrustStoreAlgorithm(String value)
+  {
+    if (! "".equals(value)) {
+      _trustStoreAlgorithm = value;
+    }
+    else {
+      _trustStoreAlgorithm = null;
+    }
+  }
+
+  /**
+   * Sets the TrustStore provider
+   */
+  public void setTrustStoreProvider(String value)
+  {
+    if (! "".equals(value)) {
+      _trustStoreProvider = value;
+    }
+    else {
+      _trustStoreProvider = null;
+    }
+  }
+
+  /**
+   * Sets the TrustStore password
+   */
+  public void setTrustStorePassword(String value)
+  {
+    if (! "".equals(value)) {
+      _trustStorePassword = value;
+    }
+    else {
+      _trustStorePassword = null;
+    }
   }
 
   /**
@@ -234,8 +341,12 @@ public class JsseSSLFactory implements SSLFactory {
   public void init()
     throws ConfigException, IOException, GeneralSecurityException
   {
-    if (_keyStoreFile != null && _password == null)
+    if (_keyStoreFile != null
+        && (_password == null
+            && (_keyStorePassword == null || _keyManagerPassword == null))) {
       throw new ConfigException(L.l("'password' is required for JSSE."));
+    }
+    
     if (_password != null && _keyStoreFile == null)
       throw new ConfigException(L.l("'key-store-file' is required for JSSE."));
 
@@ -250,15 +361,21 @@ public class JsseSSLFactory implements SSLFactory {
     
     _keyStore = KeyStore.getInstance(_keyStoreType);
     
+    String password = _keyStorePassword;
+    
+    if (password == null) {
+      password = _password;
+    }
+    
     InputStream is = _keyStoreFile.openRead();
     try {
-      _keyStore.load(is, _password.toCharArray());
+      _keyStore.load(is, password.toCharArray());
     } finally {
       is.close();
     }
 
     if (_alias != null) {
-      Key key = _keyStore.getKey(_alias, _password.toCharArray());
+      Key key = _keyStore.getKey(_alias, password.toCharArray());
 
       if (key == null)
         throw new ConfigException(L.l("JSSE alias '{0}' does not have a corresponding key.",
@@ -271,9 +388,9 @@ public class JsseSSLFactory implements SSLFactory {
                                   _alias));
 
       _keyStore = KeyStore.getInstance(_keyStoreType);
-      _keyStore.load(null, _password.toCharArray());
+      _keyStore.load(null, password.toCharArray());
 
-      _keyStore.setKeyEntry(_alias, key, _password.toCharArray(), certChain);
+      _keyStore.setKeyEntry(_alias, key, password.toCharArray(), certChain);
     }
   }
 
@@ -288,12 +405,25 @@ public class JsseSSLFactory implements SSLFactory {
     if (_keyStore != null) {
       SSLContext sslContext = SSLContext.getInstance(_sslContext);
 
-      KeyManagerFactory kmf
-        = KeyManagerFactory.getInstance(_keyManagerFactory);
-    
-      kmf.init(_keyStore, _password.toCharArray());
+      KeyManagerFactory kmf;
       
-      sslContext.init(kmf.getKeyManagers(), null, null);
+      if (_keyManagerAlgorithm != null || _keyManagerProvider != null) {
+        kmf = KeyManagerFactory.getInstance(_keyManagerAlgorithm,
+                                            _keyManagerProvider);
+      }
+      else {
+        kmf = KeyManagerFactory.getInstance(_keyManagerFactory);
+      }
+      
+      String password = _keyManagerPassword;
+      
+      if (password == null) {
+        password = _password;
+      }
+    
+      kmf.init(_keyStore, password.toCharArray());
+      
+      sslContext.init(kmf.getKeyManagers(), createTrustStore(), null);
 
       /*
       if (_cipherSuites != null)
@@ -364,6 +494,29 @@ public class JsseSSLFactory implements SSLFactory {
     setHonorCipherOrder(sslServerSocket);
 
     return new QServerSocketWrapper(serverSocket);
+  }
+  
+  private TrustManager []createTrustStore()
+      throws NoSuchAlgorithmException, NoSuchProviderException, KeyStoreException
+  {
+    TrustManagerFactory tmf = null;
+    
+    if (_trustStoreProvider != null) {
+      tmf = TrustManagerFactory.getInstance(_trustStoreAlgorithm,
+                                            _trustStoreProvider);
+    }
+    else if (_trustStoreAlgorithm != null) {
+      tmf = TrustManagerFactory.getInstance(_trustStoreAlgorithm);
+    }
+
+    if (tmf != null) {
+      tmf.init(_keyStore);
+      
+      return tmf.getTrustManagers();
+    }
+    else {
+      return null;
+    }
   }
 
   private void setHonorCipherOrder(SSLServerSocket serverSocket)

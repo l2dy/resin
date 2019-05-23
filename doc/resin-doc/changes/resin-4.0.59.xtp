@@ -1,0 +1,38 @@
+<document>
+  <header>
+    <product>resin</product>
+    <title>Resin 4.0.59 Release Notes</title>
+  </header>
+
+<body>
+
+<localtoc/>
+
+<s1 title="Summary">
+
+<p>We encourage people to report 4.0.59 bugs at
+<a href="http://bugs.caucho.com">http://bugs.caucho.com</a>.</p>
+
+<p>4.0.59 is primarily a bug fix release.</p>
+
+</s1>
+
+<s1 title="Change Log">
+<ul>
+<li>database: avoid loop when shared XA connection fails allocation (#6200, rep by Naohisa Ohshima)</li>
+<li>http-proxy: escape utf-8 urls when used in rewrite (#6198, rep by Yoo)</li>
+<li>config: updated resin.properties for http examples</li>
+<li>cluster: cluster .war deployment issues (#6188)</li>
+<li>tcp: only force socket close on shutdown in test mode to avoid threading issues (#6190, rep by Babak Hefezi)</li>
+<li>jsp/embed: jsp taglib detection issues with embedded resin (#6191, rep by Tyson Weihs)</li>
+<li>access.log: truncation of long url in access.log needs matching truncation headers (#6168, rep by Steffen Busch)</li>
+<li>file: redirect needs to encode with HTML encoding (#6184, rep by marc82ch)</li>
+<li>embed: deadlock with ResinEmbed and type introspection (#6177, rep by mikeb01)</li>
+<li>load-balance: cookies losing double quotes (#6181)</li>
+<li>quercus: curl needs to use TLSv1.2 as default</li>
+</ul>
+
+</s1>
+
+</body>
+</document>

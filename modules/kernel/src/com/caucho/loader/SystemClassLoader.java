@@ -259,7 +259,14 @@ public class SystemClassLoader
                        + "\n  which exists in " + findPath(className)
                        + "\n  check for missing dependencies");
         
-        log().warning(msg);
+        log().fine(msg);
+        
+        if (e instanceof NoClassDefFoundError) {
+          Error exn = new NoClassDefFoundError(msg);
+          exn.initCause(e);
+          
+          throw exn;
+        }
       }
       
       throw e;

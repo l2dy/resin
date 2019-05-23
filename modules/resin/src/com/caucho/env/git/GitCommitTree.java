@@ -78,7 +78,7 @@ public class GitCommitTree {
     _root.addBlobPath(path, mode, sha1);
 
     _sha1ToPathMap.put(sha1, path);
-
+    
     return sha1;
   }
 

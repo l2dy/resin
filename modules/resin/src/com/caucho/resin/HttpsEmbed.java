@@ -36,18 +36,24 @@ import com.caucho.network.listen.TcpPort;
 import com.caucho.server.cluster.ServletService;
 import com.caucho.server.http.HttpProtocol;
 import com.caucho.vfs.JsseSSLFactory;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 /**
  * Embeddable version of a HTTP port
  */
-public class HttpEmbed extends PortEmbed
+public class HttpsEmbed extends PortEmbed
 {
   private TcpPort _port;
+  private String _keyStoreType;
+  private Path _keyStoreFile;
+  private String _alias;
+  private String _password;
   
   /**
    * Creates a new HttpEmbed configuration.
    */
-  public HttpEmbed()
+  public HttpsEmbed()
   {
   }
   
@@ -56,7 +62,7 @@ public class HttpEmbed extends PortEmbed
    *
    * @param port the TCP port of the embedded HTTP port.
    */
-  public HttpEmbed(int port)
+  public HttpsEmbed(int port)
   {
     setPort(port);
   }
@@ -67,7 +73,7 @@ public class HttpEmbed extends PortEmbed
    * @param port the TCP port of the embedded HTTP port.
    * @param address the TCP IP address of the embedded HTTP port.
    */
-  public HttpEmbed(int port, String ipAddress)
+  public HttpsEmbed(int port, String ipAddress)
   {
     setPort(port);
     setAddress(ipAddress);
@@ -85,6 +91,34 @@ public class HttpEmbed extends PortEmbed
       return getPort();
   }
   
+  public HttpsEmbed setKeyStoreFile(String path)
+  {
+    _keyStoreFile = Vfs.lookup(path);
+    
+    return this;
+  }
+  
+  public HttpsEmbed setAlias(String alias)
+  {
+    _alias = alias;
+    
+    return this;
+  }
+  
+  public HttpsEmbed setPassword(String password)
+  {
+    _password = password;
+    
+    return this;
+  }
+  
+  public HttpsEmbed setKeyStoreType(String keyStoreType)
+  {
+    _keyStoreType = keyStoreType;
+    
+    return this;
+  }
+  
   /**
    * Binds the port to the server
    */
@@ -98,7 +132,20 @@ public class HttpEmbed extends PortEmbed
 
       _port.setPort(getPort());
       _port.setAddress(getAddress());
-     
+      
+      JsseSSLFactory jsse = _port.createJsse();
+      
+      jsse.setKeyStoreFile(_keyStoreFile);
+      
+      if (_keyStoreType != null) {
+        jsse.setKeyStoreType(_keyStoreType);
+      }
+      
+      jsse.setAlias(_alias);
+      jsse.setPassword(_password);
+      
+      _port.setJsseSsl(jsse);
+       
       _port.init();
       
       ResinSystem system = server.getResinSystem();

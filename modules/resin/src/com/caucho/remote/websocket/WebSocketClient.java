@@ -445,11 +445,36 @@ public class WebSocketClient implements WebSocketContext, WebSocketConstants {
   }
   
   @Override
+  public void ping(byte []message)
+    throws IOException
+  {
+    OutputStream out = _os;
+    if (out == null)
+      throw new IllegalStateException(L.l("ping cannot be called with a closed context"));
+    
+    byte []bytes = message;
+
+    out.write(0x89);
+    out.write(bytes.length);
+    out.write(bytes);
+    out.flush();
+   }
+  
+  @Override
   public void pong(byte []message)
     throws IOException
   {
-    throw new UnsupportedOperationException(getClass().getName());
-  }
+    OutputStream out = _os;
+    if (out == null)
+      throw new IllegalStateException(L.l("pong cannot be called with a closed context"));
+    
+    byte []bytes = message;
+
+    out.write(0x8a);
+    out.write(bytes.length);
+    out.write(bytes);
+    out.flush();
+   }
   
   @Override
   public String toString()

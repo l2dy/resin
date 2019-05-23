@@ -324,6 +324,7 @@ public class ServletInvocation {
 
     _contextUri = invocation._contextUri;
     _servletPath = invocation._servletPath;
+    _stripUri = invocation._stripUri;
     _pathInfo = invocation._pathInfo;
 
     _queryString = invocation._queryString;
@@ -351,7 +352,7 @@ public class ServletInvocation {
         if (i > 0 && value.charAt(i - 1) == '/') {
           throw new IllegalArgumentException(L.l("{0} is an invalid URL.", value));
         }
-        else if (i > 0 && value.charAt(i - 1) == '.') {
+        else if (i > 1 && value.charAt(i - 1) == '.' && value.charAt(i - 2) == '/') {
           throw new IllegalArgumentException(L.l("{0} is an invalid URL.", value));
         }
         

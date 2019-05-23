@@ -73,6 +73,7 @@ public class ResinArgs
   private String _homeCluster;
   private String _elasticServerAddress;
   private int _elasticServerPort;
+  private int _elasticServerIndex;
   
   private ArrayList<BoundPort> _boundPortList
     = new ArrayList<BoundPort>();
@@ -315,6 +316,11 @@ public class ResinArgs
     return _elasticServerAddress;
   }
   
+  public int getElasticServerIndex()
+  {
+    return _elasticServerIndex;
+  }
+  
   public void setHomeCluster(String homeCluster)
   {
     _homeCluster = homeCluster;
@@ -454,6 +460,13 @@ public class ResinArgs
                    || arg.equals("--elastic-server-port"))) {
         _elasticServerPort = Integer.parseInt(argv[i + 1]);
    
+        i += 2;
+      }
+      else if (i + 1 < len
+          && (arg.equals("--elastic-server-index")
+              || arg.equals("--elastic-server-index"))) {
+        _elasticServerIndex = Integer.parseInt(argv[i + 1]);
+
         i += 2;
       }
       else if (arg.equals("--elastic-dns")) {

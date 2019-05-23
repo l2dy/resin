@@ -127,6 +127,12 @@ public class WebSocketContextStreamImpl
   }
   
   @Override
+  public void ping(byte []bytes)
+  {
+    throw new UnsupportedOperationException(getClass().getName());
+  }
+  
+  @Override
   public void pong(byte []bytes)
   {
     throw new UnsupportedOperationException(getClass().getName());

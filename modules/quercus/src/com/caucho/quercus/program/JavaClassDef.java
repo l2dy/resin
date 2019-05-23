@@ -1378,6 +1378,8 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
 
       if (_isPhpClass && method.getDeclaringClass() == Object.class)
         continue;
+      
+      method = findInterfaceMethod(method, type);
 
       if ("iterator".equals(method.getName())
           && method.getParameterTypes().length == 0
@@ -1435,6 +1437,24 @@ public class JavaClassDef extends ClassDef implements InstanceInitializer {
       introspectMethods(moduleContext, ifc);
     }
     */
+  }
+  
+  private Method findInterfaceMethod(Method method, Class<?> type)
+  {
+    if (type == null) {
+      return method;
+    }
+    
+    for (Class<?> iface : type.getInterfaces()) {
+      for (Method subMethod : iface.getMethods()) {
+        if (subMethod.getName().equals(method.getName())
+            && Arrays.equals(subMethod.getParameterTypes(), method.getParameterTypes())) {
+          return subMethod;
+        }
+      }
+    }
+    
+    return findInterfaceMethod(method, type.getSuperclass());
   }
 
   public JavaMethod getToString()

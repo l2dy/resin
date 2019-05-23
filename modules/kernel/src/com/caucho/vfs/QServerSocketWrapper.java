@@ -122,6 +122,9 @@ public class QServerSocketWrapper extends QServerSocket {
 
     s.init(socket);
     */
+    if (isTcpNoDelay()) {
+      s.setTcpNoDelay(true);
+    }
 
     if (_connectionSocketTimeout > 0) {
       socket.setSoTimeout(_connectionSocketTimeout);

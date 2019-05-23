@@ -65,11 +65,17 @@ public class ByteToChar extends AbstractByteToChar {
   /**
    * Clears the converted
    */
+  @Override
   public void clear()
   {
     super.clear();
     
     _charBuffer.setLength(0);
+  }
+  
+  public int capacity()
+  {
+    return _charBuffer.capacity();
   }
 
   /**

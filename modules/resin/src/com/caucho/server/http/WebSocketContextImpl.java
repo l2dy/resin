@@ -163,6 +163,20 @@ class WebSocketContextImpl
   }
 
   @Override
+  public void ping(byte []value)
+    throws IOException
+  {
+    WriteStream out = _controller.getWriteStream();
+
+    byte []bytes = value;
+
+    out.write(0x89);
+    out.write(bytes.length);
+    out.write(bytes);
+    out.flush();
+  }
+
+  @Override
   public void pong(byte []value)
     throws IOException
   {

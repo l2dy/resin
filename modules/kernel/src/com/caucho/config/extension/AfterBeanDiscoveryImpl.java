@@ -29,19 +29,13 @@
 
 package com.caucho.config.extension;
 
-import java.lang.annotation.Annotation;
-import java.util.logging.Level;
+import java.util.HashSet;
 
 import javax.enterprise.context.spi.Context;
 import javax.enterprise.inject.spi.AfterBeanDiscovery;
-import javax.enterprise.inject.spi.Annotated;
-import javax.enterprise.inject.spi.AnnotatedType;
 import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.inject.spi.BeforeBeanDiscovery;
 import javax.enterprise.inject.spi.ObserverMethod;
-import javax.enterprise.inject.spi.ProcessBean;
 
-import com.caucho.config.ConfigException;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.inject.Module;
 
@@ -55,6 +49,7 @@ public class AfterBeanDiscoveryImpl implements AfterBeanDiscovery
     _cdiManager = cdiManager;
   }
   
+  @Override
   public void addBean(Bean<?> bean)
   {
     _cdiManager.addBeanDiscover(bean);

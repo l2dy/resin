@@ -317,7 +317,7 @@ public class CloudPod
   {
     boolean isAllowExternal = false;
     
-    return createServer(id, id, address, port, isSecure, 
+    return createServer(id, id, address, port, -1, isSecure, 
                         ServerType.STATIC, isAllowExternal);
   }
   /**
@@ -329,7 +329,7 @@ public class CloudPod
                                         boolean isSecure,
                                         boolean isAllowExternal)
   {
-    return createServer(id, id, address, port, isSecure, 
+    return createServer(id, id, address, port, -1, isSecure, 
                         ServerType.STATIC, isAllowExternal);
   }
   
@@ -343,7 +343,7 @@ public class CloudPod
   {
     boolean isAllowExternal = true;
     
-    return createServer(id, id, address, port, isSecure, 
+    return createServer(id, id, address, port, -1, isSecure, 
                         ServerType.EXTERNAL, isAllowExternal);
   }
   
@@ -370,11 +370,12 @@ public class CloudPod
                                          String displayId,
                                          String address,
                                          int port,
+                                         int index,
                                          boolean isSecure)
   {
     boolean isAllowExternal = false;
     
-    return createServer(id, displayId, address, port, isSecure, 
+    return createServer(id, displayId, address, port, index, isSecure, 
                         CloudServer.ServerType.DYNAMIC, isAllowExternal);
   }
   
@@ -386,7 +387,7 @@ public class CloudPod
                                          int port,
                                          boolean isSecure)
   {
-    return createDynamicServer(id, id, address, port, isSecure);
+    return createDynamicServer(id, id, address, port, -1, isSecure);
   }
   
   /**
@@ -396,6 +397,7 @@ public class CloudPod
                                    String displayId,
                                    String address,
                                    int port,
+                                   int dynIndex,
                                    boolean isSecure,
                                    ServerType isStatic,
                                    boolean isAllowExternal)
@@ -414,7 +416,7 @@ public class CloudPod
                                                address, port,
                                                findServer(address, port)));
       
-      index = findFirstFreeIndex();
+      index = findFirstFreeIndex(dynIndex);
    
       server = createServer(index, id, displayId, address, port, isSecure, 
                             isStatic, isAllowExternal);
@@ -439,12 +441,14 @@ public class CloudPod
     boolean isSSL = isSecure;
     
     synchronized (_serverList) {
-      if (index <= 2)
+      if (index <= 2) {
         server = new TriadServer(id, displayId, this, index, address, port, isSSL, 
                                  isStatic, isAllowExternal);
-      else
+      }
+      else {
         server = new CloudServer(id, displayId, this, index, address, port, isSSL, 
                                  isStatic, isAllowExternal);
+      }
       
       _maxIndex = Math.max(_maxIndex, index);
       
@@ -452,8 +456,9 @@ public class CloudPod
         _serverList.add(null);
       }
       
-      if (_serverList.get(index) != null)
+      if (_serverList.get(index) != null) {
         return null;
+      }
   
       _serverList.set(index, server);
       _servers = _serverList.toArray();
@@ -472,7 +477,7 @@ public class CloudPod
     return server;
   }
   
-  public CloudServer removeDynamicServer(String name)
+  private CloudServer removeDynamicServer(String name)
   {
     CloudServer server = findServer(name);
     
@@ -487,12 +492,13 @@ public class CloudPod
     CloudServer removedServer = null;
     
     synchronized (_serverList) {
-      if (_serverList.size() <= index)
+      if (_serverList.size() <= index) {
         return null;
+      }
       
       CloudServer server = _serverList.get(index);
-        
-      if (server.isStatic())
+      
+      if (server != null && server.isStatic())
         throw new IllegalStateException(L.l("{0} must be dynamic for removeDynamicServer",
                                             server));
           
@@ -573,11 +579,18 @@ public class CloudPod
     }
   }
   
-  private int findFirstFreeIndex()
+  private int findFirstFreeIndex(int dynIndex)
   {
+    if (dynIndex > 0
+        && (_servers.length <= dynIndex 
+             || _servers[dynIndex] == null)) {
+      return dynIndex;
+    }
+    
     for (int i = 0; i <= _maxIndex; i++) {
-      if (_servers[i] == null)
+      if (_servers[i] == null) {
         return i;
+      }
     }
     
     return _maxIndex + 1;

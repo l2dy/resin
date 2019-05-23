@@ -529,7 +529,7 @@
       <meter>Resin|Http|Session Save Count</meter>
     </graph>
       
-    <graph name="Request Time">
+    <graph name="Request Time (ms)">
       <meter>Resin|Http|Request Time</meter>
       <meter>Resin|Http|Request Time Max</meter>
     </graph>
@@ -547,7 +547,7 @@
       <meter>Resin|Port|Throttle Disconnect Count</meter>
     </graph>
 
-    <graph name="Http Ping Time">
+    <graph name="Http Ping Time (ms)">
       <meter>Resin|Http|Ping Time</meter>
       <meter>Resin|Http|Ping Time Max</meter>
     </graph>
@@ -608,7 +608,7 @@
       <meter>JVM|Compilation|Compilation Time</meter>
     </graph>
 
-    <graph name="Garbage Collection Time">
+    <graph name="Garbage Collection Time (ms)">
       <meter>JVM|Memory|GC Time|PS MarkSweep</meter>
       <meter>JVM|Memory|GC Time|PS Scavenge</meter>
       <meter>JVM|Memory|GC Time|ParNew</meter>
@@ -663,7 +663,7 @@
       <meter>Resin|Database|Connection Active</meter>
     </graph>
       
-    <graph name="Database Query Time">
+    <graph name="Database Query Time (ms)">
       <meter>Resin|Database|Query Time</meter>
       <meter>Resin|Database|Query Time Max</meter>
     </graph>

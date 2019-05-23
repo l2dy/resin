@@ -29,13 +29,13 @@
 
 package com.caucho.vfs;
 
-import com.caucho.loader.DynamicClassLoader;
-import com.caucho.make.DependencyList;
-import com.caucho.server.util.CauchoSystem;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Map;
+
+import com.caucho.loader.DynamicClassLoader;
+import com.caucho.make.DependencyList;
+import com.caucho.server.util.CauchoSystem;
 
 /**
  * A merging of several Paths used like a CLASSPATH.  When the MergePath
@@ -243,6 +243,8 @@ public class MergePath extends FilesystemPath {
     else
       classpath = CauchoSystem.getClassPath();
 
+    addMergePath(new ClasspathPath(loader));
+    
     addClassPath(classpath);
   }
 
@@ -260,6 +262,8 @@ public class MergePath extends FilesystemPath {
     else
       classpath = CauchoSystem.getClassPath();
 
+    addMergePath(new ClasspathPath(loader));
+    
     addClassPath(classpath);
   }
 

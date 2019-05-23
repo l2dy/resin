@@ -944,6 +944,10 @@ public class MnodeStore {
           long modifiedTimeout = rs.getLong(9);
           
           _lastOid = Math.max(_lastOid, oid);
+          
+          if (key == null) {
+            continue;
+          }
 
           if (accessTime + 1.25 * accessTimeout < now
               || modifiedTime + modifiedTimeout < now) {
@@ -1197,6 +1201,11 @@ public class MnodeStore {
                  long dataTime)
     {
       super(oid);
+      
+      if (key == null) {
+        throw new NullPointerException();
+      }
+      
       _key = key;
       _cacheHash = cacheHash;
       _dataId = dataId;

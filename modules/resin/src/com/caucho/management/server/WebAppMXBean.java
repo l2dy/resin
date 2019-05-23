@@ -84,6 +84,13 @@ public interface WebAppMXBean extends DeployControllerMXBean {
    */
   @Description("The manifest attributes from the .war file")
   public Map<String,String> getManifestAttributes();
+  
+  /**
+   * Returns the hash of the war file.
+   */
+  @Description("The .war hash")
+  public String getApplicationHash();
+  
 
   //
   // Status attributes

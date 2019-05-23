@@ -40,6 +40,7 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import com.caucho.java.WorkDir;
+import com.caucho.util.CurrentTime;
 import com.caucho.util.IoUtil;
 import com.caucho.util.L10N;
 import com.caucho.vfs.JarPath;
@@ -169,6 +170,13 @@ public class GitCommitJar {
      
       if (path.isFile()) {
         ZipEntry entry = new ZipEntry(subPath);
+        
+        if (CurrentTime.isTest()) {
+          entry.setTime(CurrentTime.getCurrentTime());
+        }
+        else {
+          entry.setTime(path.getLastModified());
+        }
 
         zos.putNextEntry(entry);
         

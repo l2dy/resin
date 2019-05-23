@@ -102,6 +102,7 @@ To do this, you can add the debian repository as follows:
 </p>
 <example>
 unix# add-apt-repository http://caucho.com/download/debian
+unix# apt-key adv --fetch-keys http://caucho.com/download/debian/archive.key
 </example>
 <p>
 After adding this line, update your local repository cache by running:

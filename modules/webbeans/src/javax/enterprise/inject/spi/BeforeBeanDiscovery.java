@@ -73,4 +73,7 @@ public interface BeforeBeanDiscovery
 
   public void addStereotype(Class<? extends Annotation> stereotype,
                             Annotation... stereotypeDef);
+  
+  // compat
+  public void addAnnotatedType(AnnotatedType<?> type, String value);
 }

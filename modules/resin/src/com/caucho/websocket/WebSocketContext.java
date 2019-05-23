@@ -97,6 +97,12 @@ public interface WebSocketContext {
   public void close(int code, String message);
 
   /**
+   * sends a ping message
+   */
+  public void ping(byte[] value)
+    throws IOException;
+
+  /**
    * sends a pong message
    */
   public void pong(byte[] value)
