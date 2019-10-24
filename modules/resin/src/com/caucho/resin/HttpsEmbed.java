@@ -144,6 +144,8 @@ public class HttpsEmbed extends PortEmbed
       jsse.setAlias(_alias);
       jsse.setPassword(_password);
       
+      jsse.init();
+      
       _port.setJsseSsl(jsse);
        
       _port.init();

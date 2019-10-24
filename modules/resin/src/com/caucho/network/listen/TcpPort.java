@@ -190,7 +190,7 @@ public class TcpPort
   private AbstractSelectManager _selectManager;
 
   // active set of all connections
-  private ConcurrentHashMap<TcpSocketLink,TcpSocketLink> _activeConnectionSet
+  private Map<TcpSocketLink,TcpSocketLink> _activeConnectionSet
     = new ConcurrentHashMap<TcpSocketLink,TcpSocketLink>();
 
   private final AtomicInteger _activeConnectionCount = new AtomicInteger();
@@ -1080,7 +1080,7 @@ public class TcpPort
 
       _url = url.toString();
     }
-
+    
     return _url;
   }
 

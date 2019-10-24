@@ -29,14 +29,11 @@
 
 package com.caucho.naming;
 
-import javax.naming.NamingException;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import com.caucho.loader.*;
+import com.caucho.loader.EnvironmentClassLoader;
+import com.caucho.loader.EnvironmentLocal;
 
 /**
  * Environment based model for JNDI.
@@ -48,7 +45,7 @@ public class EnvironmentModelRoot
 
   private final ClassLoader _loader;
   
-  private ConcurrentHashMap<String,EnvironmentModel> _map
+  private Map<String,EnvironmentModel> _map
     = new ConcurrentHashMap<String,EnvironmentModel>();
 
   /**

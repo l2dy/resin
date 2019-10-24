@@ -50,8 +50,7 @@ import com.caucho.vfs.Path;
  * Loads resources.
  */
 abstract public class Loader {
-  protected static final Logger log
-    = Logger.getLogger(Loader.class.getName());
+  private static Logger _log;
   
   private DynamicClassLoader _loader;
 
@@ -152,7 +151,7 @@ abstract public class Loader {
       try {
         return new URL(path.getURL());
       } catch (Exception e) {
-        log.log(Level.FINER, e.toString(), e);
+        log().log(Level.FINER, e.toString(), e);
       }
     }
 
@@ -227,7 +226,7 @@ abstract public class Loader {
       return new CodeSource(new URL(path.getURL()),
                             (Certificate []) path.getCertificates());
     } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      log().log(Level.WARNING, e.toString(), e);
 
       return null;
     }
@@ -264,5 +263,14 @@ abstract public class Loader {
    */
   protected void destroy()
   {
+  }
+  
+  private Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(Loader.class.getName());
+    }
+    
+    return _log;
   }
 }

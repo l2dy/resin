@@ -29,11 +29,9 @@
 
 package com.caucho.server.distcache;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import javax.sql.DataSource;
-
-import com.caucho.config.ConfigException;
 import com.caucho.env.service.AbstractResinSubSystem;
 import com.caucho.env.service.ResinSystem;
 import com.caucho.loader.Environment;
@@ -48,7 +46,7 @@ public class DistCacheSystem extends AbstractResinSubSystem
   
   public static final int START_PRIORITY = START_PRIORITY_CACHE_SERVICE;
 
-  private ConcurrentHashMap<String,CacheManagerImpl> _managerMap
+  private Map<String,CacheManagerImpl> _managerMap
     = new ConcurrentHashMap<String,CacheManagerImpl>(); 
   
   private CacheStoreManager _distCacheManager;

@@ -30,6 +30,7 @@
 package com.caucho.config.inject;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.enterprise.inject.spi.AnnotatedMethod;
@@ -44,7 +45,7 @@ public class AnnotatedOverrideMap
   private static final EnvironmentLocal<AnnotatedOverrideMap> _localMap 
     = new EnvironmentLocal<AnnotatedOverrideMap>();
   
-  private ConcurrentHashMap<Method,AnnotatedMethod<?>> _methodMap
+  private Map<Method,AnnotatedMethod<?>> _methodMap
     = new ConcurrentHashMap<Method,AnnotatedMethod<?>>();
 
   public static AnnotatedOverrideMap create()

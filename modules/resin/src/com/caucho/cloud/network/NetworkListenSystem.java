@@ -112,6 +112,11 @@ public class NetworkListenSystem extends AbstractResinSubSystem
 
   public void addListener(TcpPort listener)
   {
+    if (listener.getPort() <= 0) {
+      log.fine(listener + " skipping because port is 0.");
+      return;
+    }
+    
     try {
       if (! _listeners.contains(listener))
         _listeners.add(listener);

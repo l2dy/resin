@@ -32,6 +32,7 @@ package com.caucho.ejb.cfg;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.sql.DataSourceDefinition;
@@ -92,7 +93,7 @@ public class EjbConfig {
   private HashMap<Class<?>,ApplicationExceptionConfig> _appExceptionConfig
     = new HashMap<Class<?>,ApplicationExceptionConfig>(); 
 
-  private ConcurrentHashMap<Class<?>,AppExceptionItem> _appExceptionMap
+  private Map<Class<?>,AppExceptionItem> _appExceptionMap
     = new ConcurrentHashMap<Class<?>,AppExceptionItem>();
   
   private ArrayList<AnnotatedType<?>> _bindTypes

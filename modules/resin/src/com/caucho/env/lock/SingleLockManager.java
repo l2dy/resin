@@ -29,6 +29,7 @@
 
 package com.caucho.env.lock;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.Lock;
 
@@ -37,7 +38,7 @@ import java.util.concurrent.locks.Lock;
  * Manages the distributed lock
  */
 public class SingleLockManager extends AbstractLockManager {
-  private ConcurrentHashMap<String,SingleLock> _lockMap
+  private Map<String,SingleLock> _lockMap
     = new ConcurrentHashMap<String,SingleLock>();
 
   public SingleLockManager()

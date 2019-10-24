@@ -30,6 +30,7 @@
 package com.caucho.server.host;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -44,9 +45,9 @@ import com.caucho.lifecycle.Lifecycle;
 import com.caucho.loader.EnvironmentClassLoader;
 import com.caucho.make.AlwaysModified;
 import com.caucho.server.cluster.ServletService;
-import com.caucho.server.dispatch.InvocationBuilder;
 import com.caucho.server.dispatch.ErrorFilterChain;
 import com.caucho.server.dispatch.Invocation;
+import com.caucho.server.dispatch.InvocationBuilder;
 import com.caucho.server.e_app.EarConfig;
 import com.caucho.server.rewrite.RewriteDispatch;
 import com.caucho.server.webapp.AccessLogFilterChain;
@@ -87,7 +88,7 @@ public class HostContainer implements InvocationBuilder {
     = new DeployContainer<HostController>(HostController.class);
   
   // Cache of hosts
-  private ConcurrentHashMap<String,HostController> _hostMap
+  private Map<String,HostController> _hostMap
     = new ConcurrentHashMap<String,HostController>();
 
   // Regexp host

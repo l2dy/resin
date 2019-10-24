@@ -516,7 +516,9 @@ abstract public class AbstractThreadLauncher2 extends AbstractTaskWorker2 {
     
     _threadIdleExpireTime.set(now + _idleTimeout);
     
-    wake();
+    if (_lifecycle.isActive()) {
+      wake();
+    }
   }
 
   /**

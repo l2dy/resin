@@ -125,7 +125,7 @@ public class QuercusContext
   private static LruCache<String, ConstStringValue> _stringMap
     = new LruCache<String, ConstStringValue>(8 * 1024);
 
-  private HashMap<String, ModuleInfo> _modules
+  private Map<String, ModuleInfo> _modules
     = new HashMap<String, ModuleInfo>();
 
   private ArrayList<ModuleInfo> _moduleInitList
@@ -140,13 +140,13 @@ public class QuercusContext
   private HashSet<String> _extensionSetLowerCase
   = new HashSet<String>();
 
-  private HashMap<StringValue, AbstractFunction> _funMap
+  private Map<StringValue, AbstractFunction> _funMap
     = new HashMap<StringValue, AbstractFunction>();
 
-  private HashMap<StringValue, AbstractFunction> _lowerFunMap
+  private Map<StringValue, AbstractFunction> _lowerFunMap
     = new HashMap<StringValue, AbstractFunction>();
 
-  private ConcurrentHashMap<String, JavaClassDef> _javaClassWrappers
+  private Map<String, JavaClassDef> _javaClassWrappers
     = new ConcurrentHashMap<String, JavaClassDef>();
 
   private LruCache<String, String> _classNotFoundCache
@@ -199,7 +199,7 @@ public class QuercusContext
   //private LruCache<String, SessionArrayValue> _sessionMap
   //  = new LruCache<String, SessionArrayValue>(4096);
 
-  private ConcurrentHashMap<String, Object> _specialMap
+  private Map<String, Object> _specialMap
     = new ConcurrentHashMap<String, Object>();
 
   private String _scriptEncoding;
@@ -215,10 +215,10 @@ public class QuercusContext
 
   private DataSource _database;
 
-  private ConcurrentHashMap<String,DataSource> _databaseMap
+  private Map<String,DataSource> _databaseMap
     = new ConcurrentHashMap<String,DataSource>();
 
-  private ConcurrentHashMap<Env,Env> _activeEnvSet
+  private Map<Env,Env> _activeEnvSet
     = new ConcurrentHashMap<Env,Env>();
 
   private long _staticId;

@@ -36,8 +36,8 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -66,7 +66,6 @@ import com.caucho.ejb.manager.EjbManager;
 import com.caucho.ejb.server.AbstractContext;
 import com.caucho.ejb.server.EjbInjectionTarget;
 import com.caucho.ejb.server.SingletonInjectionTarget;
-import com.caucho.util.Alarm;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.L10N;
 
@@ -82,7 +81,7 @@ public class StatefulManager<X> extends AbstractSessionManager<X>
   private long _idleTimeout = 10 * 60 * 1000L;
   private AtomicLong _sequence = new AtomicLong(CurrentTime.getCurrentTime());
   
-  private ConcurrentHashMap<String,StatefulProxy> _sessionMap;
+  private Map<String,StatefulProxy> _sessionMap;
   //   = new ConcurrentHashMap<String,StatefulProxy>();
   
   private Object _decoratorClass;

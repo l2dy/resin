@@ -810,7 +810,7 @@ warning, notice, info, debug. The default is <i>info</i>.</p>
 
 </s1> <!-- java.util.logging  -->
 
-<s1 title="Log rotation and archiving">
+<s1 title="Log rotation and archiving" name="rollover">
 
 <p>Log rotation are a way stop your log files from getting too large,
 and to archive log files on a weekly or daily basis. When a rollover is

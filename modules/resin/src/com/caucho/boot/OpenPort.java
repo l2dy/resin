@@ -191,6 +191,13 @@ public class OpenPort
   public void addBuilderProgram(ConfigProgram program)
   {
   }
+  
+  @Override
+  public String toString()
+  {
+    return (getClass().getSimpleName()
+            + "[" + getProtocolName() + ":" + getAddress() + ":" + getPort() + "]");
+  }
 
   public static class DummyOpenSSLFactory implements SSLFactory {
     public void addBuilderProgram(ConfigProgram program)

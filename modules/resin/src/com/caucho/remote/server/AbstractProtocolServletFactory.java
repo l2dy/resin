@@ -30,6 +30,8 @@
 package com.caucho.remote.server;
 
 import java.lang.annotation.Annotation;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import javax.ejb.Remote;
 import javax.enterprise.inject.spi.Annotated;
@@ -45,6 +47,9 @@ import com.caucho.remote.ServiceException;
 abstract public class AbstractProtocolServletFactory
   implements ProtocolServletFactory
 {
+  private static final Logger log
+    = Logger.getLogger(AbstractProtocolServletFactory.class.getName());
+  private static Class<?> _webServiceClass;
   /**
    * Sets the ServiceType annotation
    */
@@ -82,24 +87,16 @@ abstract public class AbstractProtocolServletFactory
       if (ifc.isAnnotationPresent(Remote.class))
         return ifc;
     }
-    
-    WebService webService
-      = (WebService) serviceClass.getAnnotation(WebService.class);
-
-    if (webService != null && ! "".equals(webService.endpointInterface())) {
-      ClassLoader loader = Thread.currentThread().getContextClassLoader();
-
-      try {
-        Class<?> api = Class.forName(webService.endpointInterface(),
-                                     false, loader);
-
-        return api;
-      } catch (Exception e) {
-        throw ConfigException.create(e);
-      }
-    }
 
     Class<?> remoteAPI = null;
+    
+    if (_webServiceClass != null) {
+      remoteAPI = getWebService(serviceClass);
+    
+      if (remoteAPI != null) {
+        return remoteAPI;
+      }
+    }
     
     for (Class<?> ifc : serviceClass.getInterfaces()) {
       if (ifc.getName().startsWith("java.io"))
@@ -119,5 +116,39 @@ abstract public class AbstractProtocolServletFactory
       return remoteAPI;
     else
       return serviceClass;
+  }
+  
+  private Class<?> getWebService(Class<?> serviceClass)
+  {
+    WebService webService
+      = (WebService) serviceClass.getAnnotation(WebService.class);
+
+    if (webService != null && ! "".equals(webService.endpointInterface())) {
+      ClassLoader loader = Thread.currentThread().getContextClassLoader();
+
+      try {
+        Class<?> api = Class.forName(webService.endpointInterface(),
+                                     false, loader);
+
+        return api;
+      } catch (Exception e) {
+        throw ConfigException.create(e);
+      }
+    }
+    
+    return null;
+  }
+  
+  static {
+    String webService = "javax.ws.WebService";
+    Class<?> webServiceClass = null;
+    
+    try {
+      webServiceClass = Class.forName(webService);
+    } catch (Throwable e) {
+      log.log(Level.FINEST, e.toString(), e);
+    }
+
+    _webServiceClass = webServiceClass;
   }
 }

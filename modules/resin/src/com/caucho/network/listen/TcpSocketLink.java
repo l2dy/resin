@@ -1087,7 +1087,9 @@ public class TcpSocketLink extends AbstractSocketLink
   RequestState handleKeepaliveTimeoutTask()
     throws IOException
   {
-    _state = _state.toActiveNoKeepalive(this);
+    // #6268
+    _state = _state.toKillKeepalive(this);
+    // _state = _state.toActiveNoKeepalive(this);
     
     close();
     
@@ -1469,8 +1471,8 @@ public class TcpSocketLink extends AbstractSocketLink
       
       // keepalive to select manager succeeds
       if (_port.getSelectManager().keepalive(this)) {
-        if (log.isLoggable(Level.FINE))
-          log.fine(dbgId() + " keepalive (select)");
+        if (log.isLoggable(Level.FINER))
+          log.finer(dbgId() + " keepalive (select)");
         
         getPort().addLifetimeKeepaliveSelectCount();
 
@@ -1488,8 +1490,8 @@ public class TcpSocketLink extends AbstractSocketLink
   
   private RequestState threadKeepalive()
   {
-    if (log.isLoggable(Level.FINE))
-      log.fine(dbgId() + " keepalive (thread)");
+    if (log.isLoggable(Level.FINER))
+      log.finer(dbgId() + " keepalive (thread)");
 
     // long timeout = getPort().getKeepaliveTimeout();
     

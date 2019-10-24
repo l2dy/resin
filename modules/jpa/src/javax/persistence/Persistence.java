@@ -57,9 +57,6 @@ public class Persistence {
   private static WeakHashMap<ClassLoader,String[]>
     _providerMap = new WeakHashMap<ClassLoader,String[]>();
 
-  private static final String AMBER_PROVIDER
-    = "com.caucho.amber.manager.AmberPersistenceProvider";
-
   @Deprecated
   protected static final java.util.Set<PersistenceProvider> providers
     = new HashSet<PersistenceProvider>();
@@ -124,14 +121,6 @@ public class Persistence {
       return loadProviders(providerClassNames);
 
     ArrayList<String> list = new ArrayList<String>();
-
-    try {
-      Class<?> cl = Class.forName(AMBER_PROVIDER, false, loader);
-
-      list.add(cl.getName());
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-    }
 
     try {
       Enumeration<URL> e = loader.getResources(SERVICE);

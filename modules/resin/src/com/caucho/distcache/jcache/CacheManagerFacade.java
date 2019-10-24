@@ -30,6 +30,7 @@
 package com.caucho.distcache.jcache;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -40,7 +41,6 @@ import com.caucho.cache.CacheManager;
 import com.caucho.cache.Configuration;
 import com.caucho.cache.OptionalFeature;
 import com.caucho.cache.Status;
-import com.caucho.config.ConfigException;
 import com.caucho.server.distcache.CacheConfig;
 import com.caucho.server.distcache.CacheImpl;
 import com.caucho.server.distcache.CacheManagerImpl;
@@ -54,7 +54,7 @@ public class CacheManagerFacade implements CacheManager
 {
   private CacheManagerImpl _manager;
   
-  private ConcurrentHashMap<String,Cache<?,?>> _cacheMap
+  private Map<String,Cache<?,?>> _cacheMap
     = new ConcurrentHashMap<String,Cache<?,?>>();
   
   public CacheManagerFacade(String name, 

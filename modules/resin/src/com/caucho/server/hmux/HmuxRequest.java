@@ -459,6 +459,10 @@ public class HmuxRequest extends AbstractHttpRequest
     try {
       if (_method.getLength() == 0)
         throw new RuntimeException("HTTP protocol exception, expected method");
+      
+      if (! getServer().waitForActive(5000)) {
+        return sendBusyResponse();
+      }
 
       Invocation invocation;
 

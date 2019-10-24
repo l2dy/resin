@@ -44,6 +44,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -107,7 +108,7 @@ public class DynamicClassLoader extends java.net.URLClassLoader
   private ArrayList<Path> _nativePath = new ArrayList<Path>();
 
   // List of cached classes
-  private ConcurrentHashMap<String,ClassEntry> _entryCache
+  private Map<String,ClassEntry> _entryCache
     = new ConcurrentHashMap<String,ClassEntry>(8);
 
   private TimedCache<String,URL> _resourceCache;

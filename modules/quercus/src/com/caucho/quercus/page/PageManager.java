@@ -29,6 +29,13 @@
 
 package com.caucho.quercus.page;
 
+import java.io.IOException;
+import java.lang.ref.SoftReference;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import com.caucho.quercus.QuercusContext;
 import com.caucho.quercus.parser.QuercusParser;
 import com.caucho.quercus.program.QuercusProgram;
@@ -37,11 +44,6 @@ import com.caucho.util.L10N;
 import com.caucho.util.LruCache;
 import com.caucho.vfs.IOExceptionWrapper;
 import com.caucho.vfs.Path;
-
-import java.io.IOException;
-import java.lang.ref.SoftReference;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.*;
 
 /**
  * Each "page" refers to a quercus file.
@@ -62,7 +64,7 @@ public class PageManager
 
   private boolean _isRequireSource = true;
 
-  private ConcurrentHashMap<String,Object> _programLockMap
+  private Map<String,Object> _programLockMap
     = new ConcurrentHashMap<String,Object>();
 
   protected LruCache<Path,SoftReference<QuercusProgram>> _programCache

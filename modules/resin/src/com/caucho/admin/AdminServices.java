@@ -13,6 +13,9 @@ import javax.annotation.PostConstruct;
 import javax.ejb.Startup;
 import javax.inject.Singleton;
 
+import com.caucho.lifecycle.Lifecycle;
+import com.caucho.loader.EnvironmentLocal;
+import com.caucho.server.admin.AdminService;
 import com.caucho.server.admin.DeployService;
 import com.caucho.server.admin.ManagerService;
 
@@ -26,10 +29,27 @@ public class AdminServices
   private static final Logger log
     = Logger.getLogger(AdminServices.class.getName());
   
+  private static final EnvironmentLocal<AdminServices> _localManager
+    = new EnvironmentLocal<AdminServices>(AdminService.class.getName());
+  
+  private Lifecycle _lifecycle = new Lifecycle();
+  
   @PostConstruct
   public void init()
   {
-    AdminServices services = this;
+    if (_localManager.get() == null) {
+      _localManager.set(this);
+    }
+    
+    AdminServices services = _localManager.get();
+    
+    if (services != this) {
+      return;
+    }
+    
+    if (! _lifecycle.toInit()) {
+      return;
+    }
     
     try {
       Class<?> proCl = Class.forName("com.caucho.admin.ProAdminServices");

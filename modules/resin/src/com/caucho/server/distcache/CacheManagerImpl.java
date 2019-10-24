@@ -30,6 +30,7 @@
 package com.caucho.server.distcache;
 
 import java.io.Closeable;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import com.caucho.distcache.jcache.CacheManagerFacade;
@@ -51,7 +52,7 @@ public class CacheManagerImpl implements Closeable
   private DistCacheSystem _cacheSystem;
   private String _name;
   private String _guid;
-  private ConcurrentHashMap<String,CacheImpl> _cacheMap;
+  private Map<String,CacheImpl> _cacheMap;
   
   private CacheManagerFacade _facade;
 

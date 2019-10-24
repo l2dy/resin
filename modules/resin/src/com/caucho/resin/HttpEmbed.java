@@ -105,7 +105,14 @@ public class HttpEmbed extends PortEmbed
       NetworkListenSystem listenService 
         = system.getService(NetworkListenSystem.class);
       
+      if (_port.getPort() <= 0) {
+        _port.bind();
+      }
+      
       listenService.addListener(_port);
+      
+      _port.start(); // 
+      
       
       // server.addPort(_port);
     } catch (Exception e) {

@@ -29,6 +29,7 @@
 
 package com.caucho.rewrite;
 
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.servlet.http.HttpServletRequest;
@@ -42,7 +43,7 @@ public class IfThrottle implements RequestPredicate
 {
   private static final long DAY = 24 * 3600 * 1000L;
   
-  private ConcurrentHashMap<String,Long> _map = new ConcurrentHashMap<String,Long>();
+  private Map<String,Long> _map = new ConcurrentHashMap<String,Long>();
   
   private long _period = 60 * 1000;
   

@@ -62,7 +62,7 @@ abstract public class AbstractRepository implements Repository, RepositorySpi
 
   private RepositoryTagMap _tagMap = new RepositoryTagMap();
   
-  private ConcurrentHashMap<String,CopyOnWriteArrayList<RepositoryTagListener>>
+  private Map<String,CopyOnWriteArrayList<RepositoryTagListener>>
   _tagListenerMap = new ConcurrentHashMap<String,CopyOnWriteArrayList<RepositoryTagListener>>();
 
   protected AbstractRepository()

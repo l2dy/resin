@@ -235,10 +235,10 @@ public final class InjectManager
   // self configuration
   //
 
-  private ConcurrentHashMap<Class<?>,ArrayList<TypedBean>> _selfBeanMap
+  private Map<Class<?>,ArrayList<TypedBean>> _selfBeanMap
     = new ConcurrentHashMap<Class<?>,ArrayList<TypedBean>>();
 
-  private ConcurrentHashMap<String,ArrayList<Bean<?>>> _selfNamedBeanMap
+  private Map<String,ArrayList<Bean<?>>> _selfNamedBeanMap
     = new ConcurrentHashMap<String,ArrayList<Bean<?>>>();
 
   private HashMap<String,Bean<?>> _selfPassivationBeanMap
@@ -251,7 +251,7 @@ public final class InjectManager
   private HashMap<String,WebComponent> _beanMap
     = new HashMap<String,WebComponent>();
 
-  private ConcurrentHashMap<String,ArrayList<Bean<?>>> _namedBeanMap
+  private Map<String,ArrayList<Bean<?>>> _namedBeanMap
     = new ConcurrentHashMap<String,ArrayList<Bean<?>>>();
 
   private HashMap<Type,Bean<?>> _newBeanMap
@@ -293,7 +293,7 @@ public final class InjectManager
   private boolean _isUpdateNeeded = true;
   private boolean _isAfterValidationNeeded = true;
 
-  private ConcurrentHashMap<Path, List<Path>> _beansXMLOverrides 
+  private Map<Path, List<Path>> _beansXMLOverrides 
     = new ConcurrentHashMap<Path, List<Path>>();
   
   private ArrayList<AnnotatedType<?>> _pendingAnnotatedTypes
@@ -311,22 +311,22 @@ public final class InjectManager
   private ArrayList<ConfigProgram> _globalProgram
     = new ArrayList<ConfigProgram>();
   
-  private ConcurrentHashMap<Bean<?>,ReferenceFactory<?>> _refFactoryMap
+  private Map<Bean<?>,ReferenceFactory<?>> _refFactoryMap
     = new ConcurrentHashMap<Bean<?>,ReferenceFactory<?>>();
   
-  private ConcurrentHashMap<String,ReferenceFactory<?>> _namedRefFactoryMap
+  private Map<String,ReferenceFactory<?>> _namedRefFactoryMap
   = new ConcurrentHashMap<String,ReferenceFactory<?>>();
   
-  private ConcurrentHashMap<Member,AtomicBoolean> _staticMemberMap
+  private Map<Member,AtomicBoolean> _staticMemberMap
   = new ConcurrentHashMap<Member,AtomicBoolean>();
 
   private ThreadLocal<CreationalContextImpl<?>> _proxyThreadLocal
     = new ThreadLocal<CreationalContextImpl<?>>();
   
-  private ConcurrentHashMap<Class<?>,ManagedBeanImpl<?>> _transientMap
+  private Map<Class<?>,ManagedBeanImpl<?>> _transientMap
     = new ConcurrentHashMap<Class<?>,ManagedBeanImpl<?>>();
   
-  private ConcurrentHashMap<Long,InjectionTarget<?>> _xmlTargetMap
+  private Map<Long,InjectionTarget<?>> _xmlTargetMap
     = new ConcurrentHashMap<Long,InjectionTarget<?>>();
 
   private boolean _isBeforeBeanDiscoveryComplete;
@@ -411,16 +411,15 @@ public final class InjectManager
       addContext(_singletonScope);
       addContext(_dependentContext);
 
-      _injectionMap.put(PersistenceContext.class,
-                        new PersistenceContextHandler(this));
-      _injectionMap.put(PersistenceUnit.class,
-                        new PersistenceUnitHandler(this));
+      initPersistence();
+      
       try {
-	  _injectionMap.put(Resource.class,
-			    new ResourceHandler(this));
+        _injectionMap.put(Resource.class,
+                          new ResourceHandler(this));
       } catch (Throwable e) {
-	  log.log(Level.FINE, e.toString(), e);
+        log.log(Level.FINE, e.toString(), e);
       }
+      
       _injectionMap.put(EJB.class,
                         new EjbHandler(this));
       _injectionMap.put(EJBs.class,
@@ -455,6 +454,19 @@ public final class InjectManager
       Environment.addEnvironmentListener(this, _classLoader);
     } finally {
       thread.setContextClassLoader(oldLoader);
+    }
+  }
+  
+  private void initPersistence()
+  {
+    try {
+      _injectionMap.put(PersistenceContext.class,
+                        new PersistenceContextHandler(this));
+      _injectionMap.put(PersistenceUnit.class,
+                        new PersistenceUnitHandler(this));
+    } catch (Throwable e) {
+      log.finer("InjectManager: " + e);
+      log.log(Level.FINEST, e.toString(), e);
     }
   }
 
@@ -806,7 +818,7 @@ public final class InjectManager
   protected ArrayList<Bean<?>> findByName(String name)
   {
     // #3334 - shutdown timing issues
-    ConcurrentHashMap<String,ArrayList<Bean<?>>> namedBeanMap = _namedBeanMap;
+    Map<String,ArrayList<Bean<?>>> namedBeanMap = _namedBeanMap;
 
     if (namedBeanMap == null)
       return null;
@@ -1337,8 +1349,9 @@ public final class InjectManager
       
       bean = getExtensionManager().processProducerField(fieldBean);
     }
-    else
+    else {
       bean = getExtensionManager().processBean(bean, ann);
+    }
 
     addBean(bean, ann);
   }
@@ -1365,8 +1378,9 @@ public final class InjectManager
    */
   public synchronized <T> void addBeanImpl(Bean<T> bean, Annotated ann)
   {
-    if (bean == null)
+    if (bean == null) {
       return;
+    }
     
     if (_specializedMap.containsKey(bean.getBeanClass())) {
       return;

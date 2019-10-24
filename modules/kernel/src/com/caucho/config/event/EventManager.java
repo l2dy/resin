@@ -37,6 +37,7 @@ import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
@@ -68,13 +69,13 @@ public class EventManager
   
   private InjectManager _cdiManager;
 
-  private ConcurrentHashMap<Class<?>,ObserverMap> _extObserverMap
+  private Map<Class<?>,ObserverMap> _extObserverMap
     = new ConcurrentHashMap<Class<?>,ObserverMap>();
   
-  private ConcurrentHashMap<Class<?>,ObserverMap> _observerMap
+  private Map<Class<?>,ObserverMap> _observerMap
     = new ConcurrentHashMap<Class<?>,ObserverMap>();
 
-  private ConcurrentHashMap<EventKey,Set<ObserverMethod<?>>> _observerMethodCache
+  private Map<EventKey,Set<ObserverMethod<?>>> _observerMethodCache
     = new ConcurrentHashMap<EventKey,Set<ObserverMethod<?>>>();
   
   public EventManager(InjectManager cdiManager)
@@ -281,7 +282,7 @@ public class EventManager
     fireLocalEvent(_extObserverMap, event, eventType, qualifiers);
   }
 
-  private void fireLocalEvent(ConcurrentHashMap<Class<?>,ObserverMap> localMap,
+  private void fireLocalEvent(Map<Class<?>,ObserverMap> localMap,
                               Object event, Annotation... bindings)
   {
     // ioc/0062 - class with type-param handled specially
@@ -289,7 +290,7 @@ public class EventManager
     fireLocalEvent(localMap, event, eventType, bindings);
   }
   
-  private void fireLocalEvent(ConcurrentHashMap<Class<?>,ObserverMap> localMap,
+  private void fireLocalEvent(Map<Class<?>,ObserverMap> localMap,
                               Object event, BaseType eventType,
                               Annotation... qualifiers)
   {
@@ -301,7 +302,7 @@ public class EventManager
     }
   }
 
-  private void fillLocalObserverList(ConcurrentHashMap<Class<?>,ObserverMap> localMap,
+  private void fillLocalObserverList(Map<Class<?>,ObserverMap> localMap,
                                      Set<ObserverMethod<?>> list,
                                      BaseType eventType,
                                      Annotation []qualifiers)
@@ -418,7 +419,7 @@ public class EventManager
    * @param observer the observer object
    * @param bindings the binding set for the event
    */
-  private void addObserver(ConcurrentHashMap<Class<?>,ObserverMap> observerMap,
+  private void addObserver(Map<Class<?>,ObserverMap> observerMap,
                            ObserverMethod<?> observer,
                            BaseType eventBaseType,
                            Annotation... bindings)

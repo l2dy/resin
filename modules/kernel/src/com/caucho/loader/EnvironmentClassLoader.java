@@ -81,7 +81,7 @@ public class EnvironmentClassLoader extends DynamicClassLoader
   private EnvironmentBean _owner;
 
   // Class loader specific attributes
-  private ConcurrentHashMap<String,Object> _attributes
+  private Map<String,Object> _attributes
     = new ConcurrentHashMap<String,Object>(8);
 
   private ArrayList<ScanListener> _scanListeners;

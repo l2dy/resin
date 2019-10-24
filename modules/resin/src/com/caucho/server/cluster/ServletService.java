@@ -1556,6 +1556,14 @@ public class ServletService
   }
 
   /**
+   * Returns true if the server is currently active and accepting requests
+   */
+  public boolean waitForActive(long timeout)
+  {
+    return _lifecycle.waitForActive(timeout);
+  }
+
+  /**
    * Clears the catch by matching the invocation.
    */
   public void clearCacheByPattern(String hostPattern, String uriPattern)

@@ -28,10 +28,12 @@
 
 package com.caucho.filters;
 
-import com.caucho.config.types.Period;
-import com.caucho.loader.EnvironmentLocal;
-import com.caucho.util.IntMap;
-import com.caucho.util.L10N;
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -40,11 +42,11 @@ import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
+
+import com.caucho.config.types.Period;
+import com.caucho.loader.EnvironmentLocal;
+import com.caucho.util.IntMap;
+import com.caucho.util.L10N;
 
 /**
  * Throttles the filter to only a limited number of requests.
@@ -59,7 +61,7 @@ public class ThrottleFilter implements Filter {
 
   private IntMap _throttleCache = new IntMap();
   
-  private ConcurrentHashMap<String,String> _poisonedIpMap
+  private Map<String,String> _poisonedIpMap
     = new ConcurrentHashMap<String,String>();
   
   private boolean _isPoisonedIp;

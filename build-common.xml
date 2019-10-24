@@ -515,18 +515,20 @@
       <fileset dir="${resin.modules}/jca/classes">
         <exclude name="**/.*"/>
       </fileset>
-      
+
       <fileset dir="${resin.modules}/jcache/classes">
         <exclude name="**/.*"/>
       </fileset>
-      
+
       <fileset dir="${resin.modules}/jms/classes">
         <exclude name="**/.*"/>
       </fileset>
-      
+
+      <!--
       <fileset dir="${resin.modules}/jpa/classes">
         <exclude name="**/.*"/>
       </fileset>
+      -->
       
       <fileset dir="${resin.modules}/servlet16/classes">
         <exclude name="**/.*"/>
@@ -555,6 +557,12 @@
       </fileset>
     </jar>
 
+
+    <jar destfile="${dist.build}/lib/jpa-16.jar">
+      <fileset dir="${resin.modules}/jpa/classes">
+        <exclude name="**/.*"/>
+      </fileset>
+    </jar>
 
     <!--
        - resin.jar

@@ -412,12 +412,19 @@ public class BeanELResolver extends ELResolver {
             continue;
 
           String propName;
-          if (name.startsWith("get"))
+          if (name.startsWith("get")) {
             propName = Introspector.decapitalize(name.substring(3));
-          else if (name.startsWith("is"))
+          }
+          else if (name.startsWith("is")) {
             propName = Introspector.decapitalize(name.substring(2));
-          else
+          }
+          else {
             continue;
+          }
+          
+          if (propName.length() == 0) {
+            continue;
+          }
 
           // jsp/30ci
           BeanProperty oldProp = _propMap.get(propName);

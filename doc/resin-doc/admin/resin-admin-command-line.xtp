@@ -56,6 +56,10 @@ the /resin-admin page.</p>
       <th>Description</th>
     </tr>
   <tr>
+    <td>console</td>
+    <td>runs the server in foreground mode</td>
+  </tr>
+  <tr>
     <td>deploy</td>
     <td>deploys an application archive</td>
   </tr>
@@ -67,57 +71,69 @@ the /resin-admin page.</p>
     <td>deploy-list</td>
     <td>lists all applications deployed on a server</td>
   </tr>
-  <tr>
-    <td>deploy-copy</td>
-    <td>copies an application from one context to another</td>
-  </tr>
-  <tr>
-    <td>start-webapp</td>
-    <td>starts web application context</td>
-  </tr>
-  <tr>
-    <td>stop-webapp</td>
-    <td>stops web application context</td>
-  </tr>
-  <tr>
-    <td>restart-webapp</td>
-    <td>restarts web application context</td>
-  </tr>
     <tr>
       <td>heap-dump</td>
       <td>produces heap dump</td>
     </tr>
     <tr>
-      <td>thread-dump</td>
-      <td>produces thread dump</td>
-    </tr>
-    <tr>
-      <td>profile</td>
-      <td>turn profiling and displays results after sampling completes</td>
-    </tr>
-    <tr>
-      <td>jmx-list</td>
-      <td>lists MBeans, attributes and operations</td>
-    </tr>
-    <tr>
-      <td>jmx-dump</td>
-      <td>dump all MBean attributes and values</td>
-    </tr>
-    <tr>
-      <td>jmx-set</td>
-      <td>sets value of a jmx attribute</td>
-    </tr>
-    <tr>
-      <td>jmx-call</td>
-      <td>calls MBean's method</td>
+      <td>help</td>
+      <td>lists available commands and arguments for each command</td>
     </tr>
     <tr>
       <td>log-level</td>
       <td>changes log-level</td>
     </tr>
     <tr>
+      <td>password-encrypt</td>
+      <td>encrypts a password for a config file</td>
+    </tr>
+    <tr>
       <td>pdf-report</td>
       <td>generates pdf report</td>
+    </tr>
+    <tr>
+      <td>profile</td>
+      <td>turn profiling and displays results after sampling completes</td>
+    </tr>
+  <tr>
+    <td>restart</td>
+    <td>restarts a Resin server</td>
+  </tr>
+  <tr>
+    <td>restart-webapp</td>
+    <td>restarts web application context</td>
+  </tr>
+  <tr>
+    <td>shutdown</td>
+    <td>shuts down the watchdog and all servers</td>
+  </tr>
+  <tr>
+    <td>start</td>
+    <td>starts a Resin server</td>
+  </tr>
+  <tr>
+    <td>start-webapp</td>
+    <td>starts web application context</td>
+  </tr>
+  <tr>
+    <td>stop</td>
+    <td>stops a Resin server</td>
+  </tr>
+  <tr>
+    <td>stop-webapp</td>
+    <td>stops web application context</td>
+  </tr>
+    <tr>
+      <td>thread-dump</td>
+      <td>produces thread dump</td>
+    </tr>
+    <tr>
+      <td>undeploy</td>
+      <td>undeploys a webapp</td>
+    </tr>
+    <tr>
+      <td>version</td>
+      <td>prints the Resin version</td>
     </tr>
   </deftable>
   <p>
@@ -203,6 +219,21 @@ Copyright(c) 1998-2018 Caucho Technology.  All rights reserved.
   <tr>
     <td>--elastic-server</td>
     <td>start as a dynamic server joining a cluster</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>--elastic-server-address</td>
+    <td>TCP/IP clustering address to bind as a dynamic server</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>--elastic-server-index</td>
+    <td>Resin clustering index for the dynamic server</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>--elastic-server-port</td>
+    <td>TCP/IP clustering port to bind as a dynamic server</td>
     <td></td>
   </tr>
   <tr>

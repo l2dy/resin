@@ -51,10 +51,10 @@ public abstract class AbstractStartCommand extends AbstractBootCommand
                   "join a cluster as an elastic server (pro)");
     addValueOption("elastic-server-address", "ip", 
                    "cluster IP address for an elastic server");
-    addIntValueOption("elastic-server-port", "port",
-                      "cluster port for an elastic server");
     addIntValueOption("elastic-server-index", "index",
         "cluster index for an elastic server");
+    addIntValueOption("elastic-server-port", "port",
+                      "cluster port for an elastic server");
     addValueOption("cluster", 
                    "id", "cluster to join as an elastic server (pro)");
     addValueOption("join-cluster", 

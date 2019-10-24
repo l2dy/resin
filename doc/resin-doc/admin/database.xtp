@@ -502,7 +502,7 @@ connection.</p>
 
 <example title="Example: Obtaining a DataSource">
 import javax.sql.*;
-import javax.webbeans.*;
+import javax.inject.*;
 
 public class .... {
   @Named("jdbc/test") DataSource _pool;
@@ -531,7 +531,7 @@ the <code>close()</code>.  Because the <code>close()</code> is in a finally bloc
 will happen even if the code using the connection throws an exception.</p>
 
 <example title="Example: Getting a connection from the DataSource">
-package javax.webbeans.*;
+package javax.inject.*;
 package javax.sql.*;
 
 public class MyBean()

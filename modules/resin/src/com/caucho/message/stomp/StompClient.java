@@ -32,6 +32,7 @@ package com.caucho.message.stomp;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -60,7 +61,7 @@ public class StompClient
   
   private StompClientReceiver _receiver;
   
-  private ConcurrentHashMap<String,StompClientSubscriber> _subscriptions
+  private Map<String,StompClientSubscriber> _subscriptions
     = new ConcurrentHashMap<String,StompClientSubscriber>();
   
   private int _subId;

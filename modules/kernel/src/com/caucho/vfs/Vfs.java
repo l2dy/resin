@@ -444,9 +444,9 @@ public final class Vfs {
     DEFAULT_SCHEME_MAP.put("stderr", stderr.getPath());
     VfsStream nullStream = new VfsStream(null, null);
     DEFAULT_SCHEME_MAP.put("null", new ConstPath(null, nullStream));
-    DEFAULT_SCHEME_MAP.put("jndi", new JndiPath());
+    //DEFAULT_SCHEME_MAP.put("jndi", new JndiPath());
     
-    DEFAULT_SCHEME_MAP.put("datastore", new DatastorePath("/"));
+    //DEFAULT_SCHEME_MAP.put("datastore", new DatastorePath("/"));
     
     /*
     DEFAULT_SCHEME_MAP.put("config", new ConfigPath());

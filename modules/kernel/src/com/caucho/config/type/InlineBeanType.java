@@ -92,7 +92,7 @@ public class InlineBeanType<T> extends ConfigType<T>
 
   private final Class<T> _beanClass;
   
-  private ConcurrentHashMap<QName,Attribute> _nsAttributeMap
+  private Map<QName,Attribute> _nsAttributeMap
     = new ConcurrentHashMap<QName,Attribute>();
   
   private HashMap<String,Attribute> _attributeMap

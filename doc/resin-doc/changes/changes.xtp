@@ -6,7 +6,30 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.62 - In Progress">
+<s2 title="4.0.63 - Oct 24, 2019">
+<ul>
+<li>port: thread launchers were started before initialization (#6287, rep by A. Thai)</li>
+<li>session: SessionImpl should not clear _isModified on no-change load (#6289, rep by alpor9)</li>
+<li>jdk: use Map.keySet() instead of ConcurrentHashMap.keySet() for linking issues (#6288, rep by A. Thai)</li>
+<li>server: on HMUX requests, wait for server start</li>
+<li>server: keepalive timeout needs to killKeepalive not turn to active (#6268, rep by M. Shimomura)</li>
+<li>http: HttpsEmbed missing jsse.init() (#6282, rep by mikeb01)</li>
+<li>jdk-compat: jdk init with -javaagent cannot use logging from appendToClassPathForInstrumentation (#6279, rep by M. Shimomura)</li>
+<li>http: HttpProxy encoding issue with ch>0x8000 (#6276)</li>
+<li>admin: added resin.admin.heap-dump.file system property for heap-dump directory (#6242 rep by Oneshin)</li>
+<li>hessian: close of Hessian proxy stream when result is inputstream (#3655, rep by Mattias Jiderhamn)</li>
+<li>config: add health_log_expire_timeout (#6271, rep by K. Ng)</li>
+<li>jsp-el: issues with bean getters and get() (#6269, rep by Mitsue Shimomura)</li>
+<li>remote: allow JDK11 w/o WebService class (#6266, rep by Matt S)</li>
+<li>jdk-compat: TcpPort.close() exception on JDK6/7 (#6254)</li>
+<li>mod_caucho: handling of https forwarding</li>
+<li>file: add default-content-type to FileServlet (#6237, rep by stbu)</li>
+<li>config: add openssl_chain_file to cluster-default.xml (#6253)</li>
+<li>dist: split out jpa-16.jar from javaee-16.jar</li>
+</ul>
+</s2>
+
+<s2 title="4.0.62 - May 22, 2019">
 <ul>
 <li>distribution: update .jar versions and remove jars with possible conflicts</li>
 <li>cloud: distributed server update issue with .git/refs (#6238, rep by Andrew Thai)</li>

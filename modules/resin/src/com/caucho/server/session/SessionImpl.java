@@ -365,8 +365,9 @@ public class SessionImpl implements HttpSession, CacheListener {
 
   void setModified()
   {
-    if (_values.size() > 0)
+    if (_values.size() > 0) {
       _isModified = true;
+    }
   }
 
   /**
@@ -460,8 +461,9 @@ public class SessionImpl implements HttpSession, CacheListener {
       oldValue = _values.remove(name);
     }
 
-    if (oldValue != null)
+    if (oldValue != null) {
       _isModified = true;
+    }
 
     notifyValueUnbound(name, oldValue);
   }
@@ -574,6 +576,7 @@ public class SessionImpl implements HttpSession, CacheListener {
     _lastUseTime = CurrentTime.getCurrentTime();
 
     _useCount.incrementAndGet();
+
     /*
     synchronized (this) {
       if (_isClosing)
@@ -687,7 +690,7 @@ public class SessionImpl implements HttpSession, CacheListener {
       if (cache == null) {
         return ! isNew;
       }
-
+      
       // server/015m
       if (! isNew && _manager.isSaveOnShutdown()) {
         return true;
@@ -723,7 +726,7 @@ public class SessionImpl implements HttpSession, CacheListener {
 
         entry.updateAccessTime();
 
-        _isModified = false;
+        // #6289 _isModified = false;
 
         return true;
       }

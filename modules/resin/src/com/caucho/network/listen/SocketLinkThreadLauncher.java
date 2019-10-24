@@ -126,7 +126,7 @@ class SocketLinkThreadLauncher extends AbstractThreadLauncher
   String generateThreadName()
   {
     String address = _listener.getAddress();
-    int port = _listener.getPort();
+    int port = _listener.getLocalPort();
 
     if (address != null) {
       return ("resin-port-" + address + ":" + port);

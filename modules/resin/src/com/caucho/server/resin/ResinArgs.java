@@ -444,6 +444,11 @@ public class ResinArgs
 
         i += 2;
       }
+      else if (arg.equals("--license-directory")) {
+        _licenseDirectory = Vfs.lookup(argv[i + 1]);
+
+        i += 2;
+      }
       else if (arg.equals("--elastic-server")) {
         _isElasticServer = true;
         i += 1;

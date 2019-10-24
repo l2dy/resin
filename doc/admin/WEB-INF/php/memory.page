@@ -100,7 +100,13 @@ if ($heap_dump_cl->isAvailable()) {
 
 $is_heap_available_heap = false;
 
-$heap_file = "/tmp/java.hprof";
+$heap_file = java_class("java.lang.System")->getProperty("resin.admin.heap-dump.file");
+
+if (! $heap_file) {
+  $heap_file = "/tmp/java.hprof";
+}
+
+
 
 if ($heap) {
   echo "<h2>";

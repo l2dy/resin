@@ -29,14 +29,18 @@
 
 package com.caucho.server.admin;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.management.MBeanServerConnection;
 
-import com.caucho.config.*;
+import com.caucho.config.ConfigException;
 import com.caucho.loader.EnvironmentLocal;
-import com.caucho.util.*;
+import com.caucho.util.L10N;
 
 /**
  * Proxy implementation for Hessian clients.  Applications will generally
@@ -52,7 +56,7 @@ public class RemoteMBeanConnectionFactory {
   private static EnvironmentLocal<RemoteMBeanConnectionFactory> _localFactory
     = new EnvironmentLocal<RemoteMBeanConnectionFactory>();
   
-  private ConcurrentHashMap<String,MBeanServerConnection> _connMap
+  private Map<String,MBeanServerConnection> _connMap
     = new ConcurrentHashMap<String,MBeanServerConnection>();
   
   public static MBeanServerConnection create(String serverId)

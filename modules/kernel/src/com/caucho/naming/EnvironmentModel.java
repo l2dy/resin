@@ -29,15 +29,16 @@
 
 package com.caucho.naming;
 
-import com.caucho.util.L10N;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.naming.NameNotFoundException;
 import javax.naming.NamingException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map.Entry;
-import java.util.concurrent.ConcurrentHashMap;
+
+import com.caucho.util.L10N;
 
 /**
  * Environment based model for JNDI.
@@ -49,7 +50,7 @@ public class EnvironmentModel extends AbstractModel
   private final EnvironmentModelRoot _root;
   private String _name;
   
-  private ConcurrentHashMap<String,Object> _children
+  private Map<String,Object> _children
     = new ConcurrentHashMap<String,Object>(8);
 
   /**

@@ -29,24 +29,36 @@
 
 package com.caucho.jsp;
 
-import com.caucho.bytecode.*;
-import com.caucho.util.L10N;
-
-import javax.annotation.Resource;
-import javax.annotation.PostConstruct;
-import javax.ejb.EJB;
-import javax.ejb.EJBs;
-import javax.inject.Inject;
-import javax.persistence.PersistenceContext;
-import javax.persistence.PersistenceUnit;
-import javax.servlet.jsp.tagext.*;
 //import javax.xml.ws.WebServiceRef;
 import java.io.InputStream;
+import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.annotation.Resource;
+import javax.ejb.EJB;
+import javax.ejb.EJBs;
+import javax.inject.Inject;
+import javax.servlet.jsp.tagext.BodyTag;
+import javax.servlet.jsp.tagext.BodyTagSupport;
+import javax.servlet.jsp.tagext.IterationTag;
+import javax.servlet.jsp.tagext.JspTag;
+import javax.servlet.jsp.tagext.Tag;
+import javax.servlet.jsp.tagext.TagSupport;
+import javax.servlet.jsp.tagext.TryCatchFinally;
+
+import com.caucho.bytecode.ByteCodeParser;
+import com.caucho.bytecode.CodeAttribute;
+import com.caucho.bytecode.CodeVisitor;
+import com.caucho.bytecode.JClass;
+import com.caucho.bytecode.JavaClass;
+import com.caucho.bytecode.JavaMethod;
+import com.caucho.bytecode.MethodRefConstant;
+import com.caucho.util.L10N;
 
 /**
  * Analyzes the class for tag.
@@ -68,7 +80,9 @@ public class TagAnalyzer
   private static final Logger log
     = Logger.getLogger(TagAnalyzer.class.getName());
   
-  static final L10N L = new L10N(TagAnalyzer.class);
+  private static final L10N L = new L10N(TagAnalyzer.class);
+  private static Class<Annotation> _persistenceContext;
+  private static Class<Annotation> _persistenceUnit;
 
   private HashMap<Class<?>,AnalyzedTag> _analyzedTags =
     new HashMap<Class<?>,AnalyzedTag>();
@@ -299,8 +313,8 @@ public class TagAnalyzer
           && (method.isAnnotationPresent(Resource.class)
               || method.isAnnotationPresent(EJB.class)
               || method.isAnnotationPresent(Inject.class)
-              || method.isAnnotationPresent(PersistenceContext.class)
-              || method.isAnnotationPresent(PersistenceUnit.class))) {
+              || _persistenceContext != null && method.isAnnotationPresent(_persistenceContext)
+              || _persistenceUnit != null && method.isAnnotationPresent(_persistenceUnit))) {
         tag.setHasInjection(true);
       }
       else if (method.isAnnotationPresent(PostConstruct.class)) {
@@ -312,8 +326,8 @@ public class TagAnalyzer
       if (field.isAnnotationPresent(Resource.class)
           || field.isAnnotationPresent(EJB.class)
           || field.isAnnotationPresent(Inject.class)
-          || field.isAnnotationPresent(PersistenceContext.class)
-          || field.isAnnotationPresent(PersistenceUnit.class)) {
+          || _persistenceContext != null && field.isAnnotationPresent(_persistenceContext)
+          || _persistenceUnit != null && field.isAnnotationPresent(_persistenceUnit)) {
         tag.setHasInjection(true);
       }
     }
@@ -822,5 +836,19 @@ public class TagAnalyzer
         break;
       }
     }
+  }
+  
+  static {
+    Class<Annotation> persistenceContext = null;
+    Class<Annotation> persistenceUnit = null;
+    
+    try {
+      persistenceContext = (Class<Annotation>) Class.forName("javax.persistence.PersistenceContext");
+      persistenceUnit = (Class<Annotation>) Class.forName("javax.persistence.PersistenceUnit");
+    } catch (ClassNotFoundException e) {
+    }
+    
+    _persistenceContext = persistenceContext;
+    _persistenceUnit = persistenceUnit;
   }
 }

@@ -95,6 +95,7 @@ public class FileServlet extends GenericServlet {
   private boolean _isEnableRange = true;
   private boolean _isGenerateSession;
   private String _characterEncoding;
+  private String _defaultContentType;
 
   public FileServlet()
   {
@@ -121,6 +122,11 @@ public class FileServlet extends GenericServlet {
     _characterEncoding = encoding;
   }
 
+  public void setDefaultContentType(String contentType)
+  {
+    _defaultContentType = contentType;
+  }
+  
   /**
    * Flag to disable the "Range" header.
    */
@@ -177,6 +183,11 @@ public class FileServlet extends GenericServlet {
     String encoding = getInitParameter("character-encoding");
     if (encoding != null && ! "".equals(encoding))
       _characterEncoding = encoding;
+
+    String contentType = getInitParameter("default-content-type");
+    if (contentType != null && ! "".equals(contentType)) {
+      _defaultContentType = contentType;
+    }
   }
 
   @Override
@@ -435,6 +446,9 @@ public class FileServlet extends GenericServlet {
     
     if (mime != null) {
       res.setContentType(mime);
+    }
+    else if (_defaultContentType != null) {
+      res.setContentType(_defaultContentType);
     }
 
     if (method.equalsIgnoreCase("HEAD")) {

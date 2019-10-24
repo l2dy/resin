@@ -536,6 +536,11 @@ public final class ClusterServer {
     applyPortDefaults(listener);
 
     protocolPort.getConfigProgram().configure(listener);
+    
+    if (listener.getPort() <= 0) {
+      log.fine(listener + " skipping because port is 0.");
+      return;
+    }
 
     _listeners.add(listener);
   }

@@ -53,7 +53,7 @@ import com.caucho.util.CharBuffer;
  * FilePath implements the native filesystem.
  */
 public class FilePath extends FilesystemPath {
-  private static Logger log = Logger.getLogger(FilePath.class.getName());
+  private static Logger _log;
 
   // The underlying Java File object.
   private static byte []NEWLINE = getNewlineString().getBytes();
@@ -360,7 +360,7 @@ public class FilePath extends FilesystemPath {
       else
         return getFile().exists();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return false;
     }
@@ -390,7 +390,7 @@ public class FilePath extends FilesystemPath {
     try {
       return getFile().isDirectory();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return false;
     }
@@ -404,7 +404,7 @@ public class FilePath extends FilesystemPath {
       else
         return getFile().isFile();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return false;
     }
@@ -416,8 +416,8 @@ public class FilePath extends FilesystemPath {
     try {
       return isLinkImpl();
     } catch (Throwable e) {
-      if (log.isLoggable(Level.FINEST)) {
-        log.finest(e.toString());
+      if (log().isLoggable(Level.FINEST)) {
+        log().finest(e.toString());
       }
       return false;
     }
@@ -434,7 +434,7 @@ public class FilePath extends FilesystemPath {
     try {
       return getFile().length();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return -1;
     }
@@ -445,7 +445,7 @@ public class FilePath extends FilesystemPath {
     try {
       return getFile().lastModified();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return -1;
     }
@@ -467,7 +467,7 @@ public class FilePath extends FilesystemPath {
       else
         return file.canRead();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return false;
     }
@@ -483,7 +483,7 @@ public class FilePath extends FilesystemPath {
       else
         return file.canWrite();
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
 
       return false;
     }
@@ -500,7 +500,7 @@ public class FilePath extends FilesystemPath {
       if (list != null)
         return list;
     } catch (AccessControlException e) {
-      log.finer(e.toString());
+      log().finer(e.toString());
     }
 
     return new String[0];
@@ -750,6 +750,15 @@ public class FilePath extends FilesystemPath {
     return false;
   }
   
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(FilePath.class.getName());
+    }
+    
+    return _log;
+  }
+  
   private class FileChannelFactoryImpl implements FileChannelFactory
   {
     @Override
@@ -762,7 +771,7 @@ public class FilePath extends FilesystemPath {
         
         return (FileChannel) _fileChannelOpen.invoke(null, jdkPath, options);
       } catch (Exception e) {
-        log.finer(e.toString());
+        log().finer(e.toString());
       
         return null;
       }

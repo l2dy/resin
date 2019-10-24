@@ -224,19 +224,24 @@ public class HttpProxyClient
         printEscape(out, ch);
       }
       else if (ch < 0x80) {
-        out.print(ch);
+        switch (ch) {
+        // case '%':
+        case '#':
+          printEscape(out, ch);
+          break;
+        default:
+          out.print(ch);
+          break;
+        }
       }
       else if (ch < 0x800) {
         printEscape(out, 0xc0 + ((ch >>> 6) & 0x1f));
         printEscape(out, 0x80 + (ch & 0x3f));
       }
-      else if (ch < 0x8000) {
+      else {
         printEscape(out, 0xe0 + ((ch >>> 12) & 0xf));
         printEscape(out, 0x80 + ((ch >>> 6) & 0x3f));
         printEscape(out, 0x80 + (ch & 0x3f));
-      }
-      else {
-        out.printUtf8(String.valueOf(ch), 0, 1);
       }
     }
   }

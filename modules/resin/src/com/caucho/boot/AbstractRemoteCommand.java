@@ -126,7 +126,7 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
     }
     
     if (port <= 0) {
-      throw new ConfigException(L.l("Cannot find live Resin server for deployment at {0}:{1} was not found",
+      throw new ConfigException(L.l("Cannot find live Resin server for deployment. {0}:{1} was not found",
                                     address, port));
     }
     
@@ -288,8 +288,10 @@ public abstract class AbstractRemoteCommand extends AbstractBootCommand {
   private int findPort(WatchdogClient client)
   {
     for (OpenPort openPort : client.getConfig().getPorts()) {
-      if ("http".equals(openPort.getProtocolName()))
+      if ("http".equals(openPort.getProtocolName())
+          && openPort.getPort() > 0) {
         return openPort.getPort();
+      }
     }
     
     return 0;

@@ -4726,6 +4726,51 @@ attribute.</p>
 
 </defun>
 
+<defun title="&lt;health:LogService>" name="health:LogService">
+<javadoc class="com.caucho.admin.LogService"/>
+<description>
+<p>
+  Stores high-priority log messages in a database for resin-admin
+  and PDF reports.
+</p>
+</description>
+
+<attributes>
+  <tr>
+    <th>Attribute</th>
+    <th>Description</th>
+    <th>Type</th>
+    <th>Default</th>
+  </tr>
+  
+  <tr>
+    <td>level</td>
+    <td>minimum log level to store</td>
+    <td>fine, finer, finest, config, info, warning</a></td>
+    <td>info</td>
+  </tr>
+  
+  <tr>
+    <td>expire-timeout</td>
+    <td>time to keep database records before purging</td>
+    <td>period</a></td>
+    <td>14d</td>
+  </tr>
+</attributes>
+
+
+<example title="LogService configuration">
+&lt;resin xmlns="http://caucho.com/ns/resin"
+       xmlns:health="urn:java:com.caucho.health">
+   
+  &lt;health:LogService level="info" expire-timeout="14d"/>
+
+  ...
+&lt;/resin>
+</example>
+
+</defun>
+
 <defun title="&lt;health:MemoryPermGenHealthCheck>" name="health:MemoryPermGenHealthCheck">
 
 <parents>cluster</parents>
@@ -7240,7 +7285,7 @@ with the other logging configuration.</p>
 <tr>
   <td>archive-format</td>
   <td>the format for the archive filename when a rollover occurs,
-        see <a config-tag="rollover">Rollovers</a>.
+        see <a href="admin/logging.xtp#rollover">Rollovers</a>.
     </td>
   <td>see below</td>
 </tr>
@@ -7262,13 +7307,13 @@ the output.</td>
 </tr>
 <tr>
   <td>level</td>
-  <td>The <a config-tag="Log-Levels">log level</a> for the handler.  Typically,
+  <td>The <a href="admin/logging.xtp#Loglevels">log level</a> for the handler.  Typically,
 the handler's level will be finer than the logger's level</td>
   <td>info</td>
 </tr>
 <tr>
   <td>mbean-name</td>
-  <td>an mbean name, see <a config-tag="mbean">MBean control</a>.</td>
+  <td>an mbean name.</td>
   <td>no mbean name, no mbean registration</td>
 </tr>
 <tr>
@@ -7280,7 +7325,7 @@ The handler will be registered with the Logger with the matching name.</td>
 <tr>
   <td>path</td>
   <td>Output path for the log messages, see 
-       <a config-tag="path">"Log Paths"</a>
+       <a href="admin/logging.xtp#path">"Log Paths"</a>
     </td>
   <td>required</td>
 </tr>
@@ -7291,7 +7336,7 @@ The handler will be registered with the Logger with the matching name.</td>
 </tr>
 <tr>
   <td>timestamp</td>
-  <td>a timestamp <a config-tag="timestamp">format string</a> 
+  <td>a timestamp <a href="admin/logging.xtp#log-handlertimestamp">format string</a> 
         to use at the beginning of each log line.
     </td>
   <td>"[%Y/%m/%d %H:%M:%S.%s] "</td>
@@ -7299,7 +7344,7 @@ The handler will be registered with the Logger with the matching name.</td>
 <tr>
   <td>rollover-count</td>
   <td>maximum number of rollover files before the oldest ones get overwritten.
-        See <a config-tag="rollover">Rollovers</a>. 
+        See <a href="admin/logging.xtp#rollover">Rollovers</a>. 
     </td>
   <td>none</td>
 </tr>
@@ -7311,7 +7356,7 @@ The handler will be registered with the Logger with the matching name.</td>
 <tr>
   <td>rollover-period</td>
   <td>how often to rollover the log.  Specify in days (15D), weeks (2W), 
-        months (1M), or hours (1h). See <a config-tag="rollover">Rollovers</a>. 
+        months (1M), or hours (1h). See <a href="admin/logging.xtp#rollover">Rollovers</a>. 
     </td>
   <td>none</td>
 </tr>
@@ -7319,7 +7364,7 @@ The handler will be registered with the Logger with the matching name.</td>
   <td>rollover-size</td>
   <td>maximum size of the file before a rollover occurs, in bytes (50000), 
         kb (128kb), or megabytes (10mb).  
-        See <a config-tag="rollover">Rollovers</a>.
+        See <a href="admin/logging.xtp#rollover">Rollovers</a>.
     </td>
   <td>1mb</td>
 </tr>
@@ -7971,6 +8016,110 @@ element multipart-form {
   &amp; upload-max?
 }
 </schema>
+
+</defun>
+
+<defun title="&lt;openssl>" version="Resin 3.1">
+<parents>http, protocol, cluster-port</parents>
+
+<p>&lt;openssl> configures the port to use OpenSSL for SSL
+support (requires Resin Professional).  OpenSSL is a fast C implementation
+of SSL security used by Apache.  Resin's configuration is OpenSSL
+follows Apache's configuration, so any documentation on installing
+SSL certificates can use documentation for Apache.</p>
+
+<p>
+The <a href="admin/security.xtp">SSL</a> section of the Security documentation provides a comprehensive overview of SSL.
+</p>
+
+<attributes>
+<tr>
+  <th>Attribute</th>
+  <th>Description</th>
+  <th>Default</th>
+</tr>
+
+<tr>
+  <td>ca-certificate-file</td>
+  <td>Path to a CA certificate file for intermediate CA support</td>
+  <td>optional</td>
+</tr>
+<tr>
+  <td>ca-certificate-path</td>
+  <td>Path to a directory of CA certificates for intermediate CA support</td>
+  <td>optional</td>
+</tr>
+<tr>
+  <td>ca-revocation-file</td>
+  <td>Path to a list of revoked CA certificates</td>
+  <td>optional</td>
+</tr>
+<tr>
+  <td>ca-revocation-path</td>
+  <td>Path to a directory of revoked CA certificates</td>
+  <td>optional</td>
+</tr>
+<tr>
+  <td>certificate-file</td>
+  <td>Path to the server's SSL certificate</td>
+  <td>required</td>
+</tr>
+<tr>
+  <td>certificate-chain-file</td>
+  <td>Path to the certificate chains for client validation.</td>
+  <td>optional</td>
+</tr>
+<tr>
+  <td>certificate-key-file</td>
+  <td>Path to the server's SSL private key certificate</td>
+  <td>required</td>
+</tr>
+<tr>
+  <td>cipher-suite</td>
+  <td>Additions and restrictions to the allowed cryptography ciphers</td>
+  <td>see openssl-tags</td>
+</tr>
+<tr>
+  <td>cipher-suites-forbidden</td>
+  <td>Additions and restrictions to the allowed cryptography ciphers</td>
+  <td>see openssl-tags</td>
+</tr>
+<tr>
+  <td>password</td>
+  <td>Password protecting the public key</td>
+  <td>see openssl-tags</td>
+</tr>
+<tr>
+  <td>protocol</td>
+  <td>Optional restrictions on the SSL protocol</td>
+  <td>see openssl-tags</td>
+</tr>
+<tr>
+  <td>session-cache</td>
+  <td>Boolean enabling caching of SSL sessions for performance</td>
+  <td>false</td>
+</tr>
+<tr>
+  <td>session-cache-timeout</td>
+  <td>Timeout for session cache values</td>
+  <td>30s</td>
+</tr>
+<tr>
+  <td>unclean-shutdown</td>
+  <td>Flag indicating that openssl sockets can be shutdown uncleanly</td>
+  <td>false</td>
+</tr>
+<tr>
+  <td>verify-client</td>
+  <td>Options for client validation</td>
+  <td>none</td>
+</tr>
+<tr>
+  <td>verify-depth</td>
+  <td>Depth of the client certificate chains to validate</td>
+  <td>unlimited</td>
+</tr>
+</attributes>
 
 </defun>
 
@@ -10793,15 +10942,6 @@ The following example shows the usage of the <code>jndi-env</code> configuration
   &lt;/cluster>
 &lt;/resin>
 </example>
-</defun>
-
-<defun title="&lt;resin:LogService>" name="resin:LogService">
-<javadoc class="com.caucho.admin.LogService"/>
-<description>
-<p>
-  Stores high-priority log messages in a database.
-</p>
-</description>
 </defun>
 
 <defun title="&lt;resin:MemoryQueue>" name="resin:MemoryQueue">

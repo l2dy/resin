@@ -741,16 +741,23 @@ write_added_headers(stream_t *s, request_rec *r)
     if (! headers[i].key || ! headers[i].val)
       continue;
 
+    /*
     if (! strcmp(headers[i].key, "HTTPS") &&
 	! strcmp(headers[i].val, "on")) {
       cse_write_string(s, CSE_IS_SECURE, "");
     }
-    else if (! r->user && ! strcmp(headers[i].key, "SSL_CLIENT_DN"))
+    else
+    */
+    if (! r->user && ! strcmp(headers[i].key, "SSL_CLIENT_DN")) {
       cse_write_string(s, CSE_REMOTE_USER, headers[i].val);
-      
+    }
 
     cse_write_string(s, HMUX_HEADER, headers[i].key);
     cse_write_string(s, HMUX_STRING, headers[i].val);
+  }
+
+  if (! strcmp(ap_http_scheme(r), "HTTPS")) {
+    cse_write_string(s, CSE_IS_SECURE, "");
   }
 
   if (r->prev) {
