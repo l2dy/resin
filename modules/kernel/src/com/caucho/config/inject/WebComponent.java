@@ -136,8 +136,9 @@ public class WebComponent {
 
     for (BeanEntry beanEntry : _beanList) {
       if (beanEntry.isMatch(type, qualifiers)) {
-        if (beans == null)
+        if (beans == null) {
           beans = new LinkedHashSet<Bean<?>>();
+        }
         
         if (isVariable && ! beanEntry.getType().isGenericVariable()) {
           // ioc/024k
@@ -145,7 +146,9 @@ public class WebComponent {
           beans.clear();
         }
 
-        beans.add(beanEntry.getBean());
+        if (! beans.contains(beanEntry.getBean())) {
+          beans.add(beanEntry.getBean());
+        }
       }
     }
 

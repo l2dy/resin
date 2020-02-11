@@ -1122,7 +1122,11 @@ abstract public class AbstractHttpResponse {
       CookieImpl extCookie = (CookieImpl) cookie;
         
       switch (extCookie.getSameSite()) {
+      case UNSET:
+        break;
+        
       case NONE:
+        cb.append("; SameSite=None");
         break;
           
       case LAX:

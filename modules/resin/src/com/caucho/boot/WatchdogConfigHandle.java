@@ -51,6 +51,7 @@ class WatchdogConfigHandle
   private int _serverPort;
   
   private ContainerProgram _program = new ContainerProgram();
+  private boolean _isAllowNonReservedIp;
 
   WatchdogConfigHandle(BootClusterConfig cluster,
                        WatchdogArgs args,
@@ -118,6 +119,11 @@ class WatchdogConfigHandle
   public int getPort()
   {
     return _serverPort;
+  }
+  
+  public boolean isAllowNonReservedIp()
+  {
+    return _isAllowNonReservedIp;
   }
 
   /**

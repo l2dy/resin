@@ -403,6 +403,7 @@ abstract public class DeployController<I extends DeployInstance>
       return true;
     }
     
+    /* server/1d4l */
     if (DeployMode.MANUAL.equals(getRedeployMode())) {
       return false;
     }
@@ -413,7 +414,22 @@ abstract public class DeployController<I extends DeployInstance>
     
     return instance.isModified();
   }
+  
+  public boolean isModifiedImpl()
+  {
+    DeployInstance instance = getDeployInstanceImpl();
 
+    if (instance == null) {
+      return true;
+    }
+    
+    if (isControllerModified()) {
+      return true;
+    }
+    
+    return instance.isModifiedImpl();
+  }
+  
   /**
    * Returns true if the entry is modified.
    */
@@ -600,8 +616,9 @@ abstract public class DeployController<I extends DeployInstance>
   @Override
   public final I request()
   {
-    if (_lifecycle.isDestroyed())
+    if (_lifecycle.isDestroyed()) {
       return null;
+    }
     else if (_strategy != null) {
       I instance = _strategy.request(this);
 
@@ -637,10 +654,30 @@ abstract public class DeployController<I extends DeployInstance>
    */
   final I restartImpl()
   {
-    if (_lifecycle.isAllowStopFromRestart())
+    if (_lifecycle.isAllowStopFromRestart()) {
       stopImpl();
+    }
 
     return startImpl();
+  }
+
+  /**
+   * Restarts the instance
+   *
+   * @return the new instance
+   */
+  final I updateImpl()
+  {
+    synchronized (this) {
+      if (_lifecycle.isAllowStopFromRestart()) {
+        if (isModifiedImpl() || getState().isError()) {
+          logModified(log);
+          stopImpl();
+        }
+      }
+
+      return startImpl();
+    }
   }
 
   /**
@@ -653,8 +690,9 @@ abstract public class DeployController<I extends DeployInstance>
     if (DynamicClassLoader.isModified(_parentLoader)) {
       I instance = _deployInstanceRef.getAndSet(null);
       
-      if (instance != null)
+      if (instance != null) {
         instance.destroy();
+      }
       
       return null;
     }

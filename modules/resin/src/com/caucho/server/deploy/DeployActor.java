@@ -281,8 +281,9 @@ public class DeployActor
     
     TreeMap<String,String> commitMetaData = new TreeMap<String,String>();
     
-    if (attributes != null)
+    if (attributes != null) {
       commitMetaData.putAll(attributes);
+    }
     
     commitMetaData.put("server", server);
     

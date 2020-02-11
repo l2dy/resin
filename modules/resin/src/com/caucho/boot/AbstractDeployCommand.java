@@ -137,10 +137,12 @@ abstract public class AbstractDeployCommand extends AbstractRepositoryCommand {
     if (version != null)
       DeployClient.fillInVersion(commit, version);
 
-    if (path.isDirectory())
+    if (path.isDirectory()) {
       deployClient.commitPath(commit, path, timeout);
-    else
+    }
+    else {
       deployClient.commitArchive(commit, path, path.getTail(), timeout);
+    }
 
     System.out.println("Deployed " + commit.getId() + " from " + path + " to "
                        + deployClient.getUrl());

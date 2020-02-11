@@ -220,6 +220,13 @@ public class NetworkClusterSystem extends AbstractResinSubSystem
     }
   }
   
+  public void notifyLinkOpen(Object payload)
+  {
+    for (ClusterLinkListener listener : _linkListeners) {
+      listener.onLinkOpen(payload);
+    }
+  }
+  
   public void addClusterExtensionProtocol(int id, Protocol protocol)
   {
     _clusterProtocol.putExtension(id, protocol);

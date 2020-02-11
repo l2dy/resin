@@ -282,7 +282,7 @@ public class MBeanView {
       // If the queryName has a '*' in the properties, then check
       // the queryName properties to see if they match
       
-      Hashtable<String,String> map = queryName.getKeyPropertyList();
+      Map<String,String> map = queryName.getKeyPropertyList();
       Iterator<String> iter = map.keySet().iterator();
       while (iter.hasNext()) {
         String key = iter.next();

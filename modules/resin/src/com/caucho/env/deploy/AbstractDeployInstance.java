@@ -71,6 +71,12 @@ abstract public class AbstractDeployInstance implements DeployInstance {
   {
     return isModifiedNow();
   }
+  
+  @Override
+  public boolean isModifiedImpl()
+  {
+    return isModified();
+  }
 
   /**
    * Returns true if the deployment is modified, forcing a check.

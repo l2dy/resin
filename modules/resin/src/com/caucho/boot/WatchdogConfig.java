@@ -104,6 +104,8 @@ class WatchdogConfig
 
   private String _elasticServerCluster;
 
+  private boolean _isAllowNonReservedIp;
+
   WatchdogConfig(String id,
                  BootClusterConfig cluster,
                  WatchdogArgs args,
@@ -476,6 +478,16 @@ class WatchdogConfig
   public boolean isRequireExplicitId()
   {
     return _isRequireExplicitId;
+  }
+
+  public void setAllowNonReservedIp(boolean isAllow)
+  {
+    _isAllowNonReservedIp = isAllow;
+  }
+
+  public boolean isAllowNonReservedIp()
+  {
+    return _isAllowNonReservedIp;
   }
   
   /**

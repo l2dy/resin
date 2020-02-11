@@ -52,6 +52,11 @@ public interface DeployInstance extends Dependency {
   public boolean isModifiedNow();
 
   /**
+   * Returns true if the deployment is modified, ignoring settings.
+   */
+  public boolean isModifiedImpl();
+
+  /**
    * Logs the reason for modification
    */
   public boolean logModified(Logger log);

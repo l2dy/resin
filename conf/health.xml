@@ -19,7 +19,7 @@
 
   <resin:if test="${health_log_level!=null}">
     <health:LogService level="${health_log_level?:info}"
-                       expire-timeout="${health_log_expire_timeout?:14d"/>
+                       expire-timeout="${health_log_expire_timeout?:'14D'}"/>
   </resin:if>
   
   <health:Restart>

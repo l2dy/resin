@@ -43,6 +43,7 @@ import com.caucho.hemp.servlet.ServerLinkActor;
 class HmtpLinkActor extends ServerLinkActor {
   private Object _linkClosePayload;
   private NetworkClusterSystem _clusterService;
+  private boolean _isClosed;
   
   public HmtpLinkActor(Broker toLinkBroker,
                        ClientStubManager clientManager,
@@ -56,15 +57,22 @@ class HmtpLinkActor extends ServerLinkActor {
   {
     super.onClose();
 
-    NetworkClusterSystem clusterService = _clusterService;
-    _clusterService = null;
+    NetworkClusterSystem clusterService;
+    Object linkClosePayload;
     
-    Object linkClosePayload = _linkClosePayload;
-    _linkClosePayload = null;
+    synchronized (this) {
+      _isClosed = true;
+      
+      clusterService = _clusterService;
+      _clusterService = null;
+    
+      linkClosePayload = _linkClosePayload;
+      _linkClosePayload = null;
+    }
     
     if (linkClosePayload != null) {
       clusterService.notifyLinkClose(linkClosePayload);
-    }  
+    }
   }
   
   /**
@@ -78,13 +86,15 @@ class HmtpLinkActor extends ServerLinkActor {
     
     int p = address.indexOf('@');
     
-    if (p > 0)
+    if (p > 0) {
       address = address.substring(p + 1);
+    }
     
     ClusterServer clusterServer = findServerByAddress(address);
     
-    if (clusterServer != null)
+    if (clusterServer != null) {
       clusterServer.getClusterSocketPool().wake();
+    }
   }
 
   private ClusterServer findServerByAddress(String address)
@@ -118,7 +128,13 @@ class HmtpLinkActor extends ServerLinkActor {
     if (clusterService == null)
       throw new IllegalStateException(getClass().getSimpleName());
     
-    _clusterService = clusterService;
-    _linkClosePayload = registerMessage.getPayload();
+    synchronized (this) {
+      if (! _isClosed) {
+        _clusterService = clusterService;
+        _linkClosePayload = registerMessage.getPayload();
+
+        clusterService.notifyLinkOpen(_linkClosePayload);
+      }
+    }
   }
 }

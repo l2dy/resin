@@ -390,7 +390,7 @@ public class WebApp extends ServletContextImpl
   private Path _tempDir;
 
   private boolean _cookieHttpOnly;
-  private CookieImpl.SameSite _cookieSameSite = CookieImpl.SameSite.NONE;
+  private CookieImpl.SameSite _cookieSameSite = CookieImpl.SameSite.UNSET;
 
   //  private OsgiBundle _osgiBundle;
 
@@ -439,6 +439,7 @@ public class WebApp extends ServletContextImpl
   private List<WebAppFragmentConfig> _webFragments;
   private boolean _isApplyingWebFragments = false;
   private ClassHierarchyScanListener _classHierarchyScanListener;
+  private DependencyContainer _repositoryDependency;
 
   /**
    * Creates the webApp with its environment loader.
@@ -558,17 +559,21 @@ public class WebApp extends ServletContextImpl
       }
       */
 
+      _repositoryDependency = new DependencyContainer();
+      
       _invocationDependency = new DependencyContainer();
       _invocationDependency.add(this);
-
+      _invocationDependency.add(_repositoryDependency);
+      
       if (_controller.getRepository() != null) {
         String tag = _controller.getId();
         String tagValue = _controller.getRepository().getTagContentHash(tag);
 
-        _invocationDependency.add(new RepositoryDependency(tag, tagValue));
+        _repositoryDependency.add(new RepositoryDependency(tag, tagValue));
         
-        if (_controller.getVersionDependency() != null)
+        if (_controller.getVersionDependency() != null) {
           _invocationDependency.add(_controller.getVersionDependency());
+        }
       }
       
       _invocationDependency.add(_controller);
@@ -2785,6 +2790,7 @@ public class WebApp extends ServletContextImpl
       _classLoader.setId("web-app:" + getId());
 
       _invocationDependency.setCheckInterval(getEnvironmentClassLoader().getDependencyCheckInterval());
+      _repositoryDependency.setCheckInterval(getEnvironmentClassLoader().getDependencyCheckInterval());
 
       if (_tempDir == null) {
         _tempDir = (Path) Environment.getLevelAttribute("caucho.temp-dir");
@@ -3834,9 +3840,11 @@ public class WebApp extends ServletContextImpl
       long interval = _classLoader.getDependencyCheckInterval();
       _invocationDependency.setCheckInterval(interval);
 
+      /* server/6b0o, #6313 
       if (_parent != null) {
         _invocationDependency.add(_parent.getWebAppGenerator());
       }
+      */
 
       // Sets the last modified time so the app won't immediately restart
       _invocationDependency.clearModified();
@@ -3969,6 +3977,9 @@ public class WebApp extends ServletContextImpl
     else if (DeployMode.MANUAL.equals(_controller.getRedeployMode())) {
       return false;
     }
+    else if (_repositoryDependency.isModified()) {
+      return true;
+    }
     else if (_classLoader.isModified()) {
       return true;
     }
@@ -3983,13 +3994,23 @@ public class WebApp extends ServletContextImpl
   public boolean isModifiedNow()
   {
     // force check
-    _classLoader.isModifiedNow();
     _invocationDependency.isModifiedNow();
+    _repositoryDependency.isModifiedNow();
+    _classLoader.isModifiedNow();
+    
+    return isModifiedImpl();
+  }
+  
+  public boolean isModifiedImpl()
+  {
 
     if (_lifecycle.isAfterStopping()) {
       return true;
     }
-    else if (_classLoader.isModifiedNow()) {
+    else if (_repositoryDependency.isModified()) {
+      return true;
+    }
+    else if (_classLoader.isModified()) {
       return true;
     }
     else {
@@ -4009,8 +4030,12 @@ public class WebApp extends ServletContextImpl
       // closed web-apps don't modify (XXX: errors?)
       return true;
     }
-    else
+    else if (_repositoryDependency.logModified(log)) {
+      return true;
+    }
+    else {
       return _classLoader.logModified(log);
+    }
   }
 
   /**

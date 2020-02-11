@@ -48,8 +48,7 @@ import java.util.logging.Logger;
  */
 @Configurable
 public class SimpleLoader extends Loader {
-  private static final Logger log
-    = Logger.getLogger(SimpleLoader.class.getName());
+  private static Logger _log;
   
   // The class directory
   private Path _path;
@@ -225,7 +224,7 @@ public class SimpleLoader extends Loader {
       _codeSource = new CodeSource(new URL(_path.getURL()),
                                    (Certificate []) null);
     } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
     
     super.init();
@@ -278,6 +277,15 @@ public class SimpleLoader extends Loader {
 
     if (path != null && ! pathList.contains(path))
       pathList.add(path);
+  }
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(SimpleLoader.class.getName());
+    }
+    
+    return _log;
   }
 
   /**

@@ -63,7 +63,7 @@ import com.caucho.util.LruCache;
  * of the Jar entries.
  */
 public class Jar implements CacheListener {
-  private static final Logger log = Logger.getLogger(Jar.class.getName());
+  private static Logger _log;
   private static final L10N L = new L10N(Jar.class);
   
   private static LruCache<Path,Jar> _jarCache;
@@ -257,7 +257,7 @@ public class Jar implements CacheListener {
         }
       }
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
 
     _isSigned = Boolean.FALSE;
@@ -331,7 +331,7 @@ public class Jar implements CacheListener {
         closeJarFile(jarFile);
       }
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
 
       return null;
     } finally {
@@ -358,7 +358,7 @@ public class Jar implements CacheListener {
 
       return entry != null;
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
 
     return false;
@@ -376,9 +376,9 @@ public class Jar implements CacheListener {
 
       return entry != null && entry.isDirectory();
     } catch (FileNotFoundException e) {
-      log.log(Level.FINEST, e.toString(), e);
+      log().log(Level.FINEST, e.toString(), e);
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
 
     return false;
@@ -396,7 +396,7 @@ public class Jar implements CacheListener {
 
       return entry != null && ! entry.isDirectory();
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
 
     return false;
@@ -416,9 +416,9 @@ public class Jar implements CacheListener {
 
       return entry != null ? entry.getTime() : -1;
     } catch (FileNotFoundException e) {
-      log.log(Level.FINEST, e.toString(), e);
+      log().log(Level.FINEST, e.toString(), e);
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     }
 
     return  -1;
@@ -439,11 +439,11 @@ public class Jar implements CacheListener {
       
       return length;
     } catch (FileNotFoundException e) {
-      log.log(Level.FINEST, e.toString(), e);
+      log().log(Level.FINEST, e.toString(), e);
       
       return -1;
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
     
       return -1;
     }
@@ -459,11 +459,11 @@ public class Jar implements CacheListener {
 
       return entry != null && ! entry.isDirectory();
     } catch (FileNotFoundException e) {
-      log.log(Level.FINEST, e.toString(), e);
+      log().log(Level.FINEST, e.toString(), e);
 
       return false;
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
 
       return false;
     }
@@ -627,8 +627,8 @@ public class Jar implements CacheListener {
           */
     }
     catch (IOException ex) {
-      if (log.isLoggable(Level.FINE)) {
-        log.log(Level.FINE, L.l("Error opening jar file '{0}'", _backing.getNativePath()));
+      if (log().isLoggable(Level.FINE)) {
+        log().log(Level.FINE, L.l("Error opening jar file '{0}'", _backing.getNativePath()));
       }
 
       throw ex;
@@ -643,7 +643,7 @@ public class Jar implements CacheListener {
       if (jarFile != null)
         jarFile.close();
     } catch (IOException e) {
-      log.log(Level.FINER, e.toString(), e);
+      log().log(Level.FINER, e.toString(), e);
     }
   }
 
@@ -663,7 +663,7 @@ public class Jar implements CacheListener {
     if (zipFile != null)
       return zipFile;
 
-    if (_backingIsFile) {
+    if (_backingIsFile && _backing.canRead()) {
       try {
         zipFile = new ZipFile(_backing.getNativePath());
 
@@ -675,12 +675,10 @@ public class Jar implements CacheListener {
         */
       }
       catch (IOException ex) {
-        if (log.isLoggable(Level.FINE)) {
-          log.log(Level.FINE, L.l("Error opening jar file '{0}'", _backing.getNativePath()));
+        if (log().isLoggable(Level.FINE)) {
+          log().log(Level.FINE, L.l("Error opening jar file '{0}'", _backing.getNativePath()));
         }
         
-        Thread.dumpStack();
-
         throw ex;
       }
 
@@ -706,7 +704,7 @@ public class Jar implements CacheListener {
       
       zipFile.close();
     } catch (IOException e) {
-      log.log(Level.WARNING, e.toString(), e);
+      log().log(Level.WARNING, e.toString(), e);
     }
   }
   
@@ -823,7 +821,16 @@ public class Jar implements CacheListener {
   {
     return _backing.toString();
   }
-
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(Jar.class.getName());
+    }
+    
+    return _log;
+  }
+  
   /**
    * StreamImpl to read from a ZIP file.
    */

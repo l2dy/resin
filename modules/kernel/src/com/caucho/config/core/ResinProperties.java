@@ -196,8 +196,9 @@ public class ResinProperties extends ResinControl implements FlowBean
         p = line.indexOf(':');
         int q = line.indexOf('=');
         
-        if (p < 0 || q >= 0 && q < p)
+        if (p < 0 || q >= 0 && q < p) {
           p = q;
+        }
         
         if (p < 0) {
           throw new ConfigException(L.l("invalid line in {0}\n  {1}",

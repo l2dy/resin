@@ -32,6 +32,7 @@ package com.caucho.loader;
 import java.io.File;
 import java.io.IOException;
 import java.security.AllPermission;
+import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
@@ -174,8 +175,12 @@ public class SystemClassLoader
 
     for (String extDir : extDirPath.split(File.pathSeparator, 512)) {
       Path dir = Vfs.lookup(extDir);
+      
+      String []fileNames = dir.list();
+      
+      Arrays.sort(fileNames);
 
-      for (String fileName : dir.list()) {
+      for (String fileName : fileNames) {
         Path root = dir.lookup(fileName);
 
         try {

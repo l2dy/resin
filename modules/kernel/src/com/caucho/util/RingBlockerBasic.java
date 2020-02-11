@@ -40,8 +40,7 @@ import com.caucho.util.CurrentTime;
  * Ring blocking algorithm.
  */
 public class RingBlockerBasic implements RingBlocker {
-  private static final Logger log
-    = Logger.getLogger(RingBlockerBasic.class.getName());
+  private static Logger _log;
 
   private final AtomicLong _offerWaitSequence = new AtomicLong();
   private final AtomicLong _offerWakeSequence = new AtomicLong();
@@ -82,7 +81,7 @@ public class RingBlockerBasic implements RingBlocker {
         } catch (Exception e) {
           Thread.interrupted();
 
-          log.log(Level.FINER, e.toString(), e);
+          log().log(Level.FINER, e.toString(), e);
         }
       }
     }
@@ -151,7 +150,7 @@ public class RingBlockerBasic implements RingBlocker {
           _pollWaitSequence.wait(millis);
         } catch (Exception e) {
           Thread.interrupted();
-          log.log(Level.FINER, e.toString(), e);
+          log().log(Level.FINER, e.toString(), e);
         }
       }
     }
@@ -185,6 +184,15 @@ public class RingBlockerBasic implements RingBlocker {
   public final void close()
   {
 
+  }
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(RingBlockerBasic.class.getName());
+    }
+    
+    return _log;
   }
 
   /*

@@ -6,6 +6,16 @@
 
 <s1 title="Resin Change Log">
 
+<s2 title="4.0.64 - in progress">
+<ul>
+<li>config: add jvm_classpath to cluster-default.xml (#6311)</li>
+<li>config: add access_log_format (#6302, rep by T. DeHaan)</li>
+<li>jdk: TcpPort._activeConnectionSet.keySet() must use Map api (#6294, rep by Y. Guedj)</li>
+<li>jdk: getAttribute should not wrap AttributeNotFound (#6297)</li>
+<li>jdk-compat: dynamic Logging during initialization (#6293)</li>
+</ul>
+</s2>
+
 <s2 title="4.0.63 - Oct 24, 2019">
 <ul>
 <li>port: thread launchers were started before initialization (#6287, rep by A. Thai)</li>

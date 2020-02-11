@@ -45,8 +45,7 @@ import java.util.logging.Logger;
 public class FileReadStream extends StreamImpl
     implements LockableStream
 {
-  private static final Logger log
-    = Logger.getLogger(FileRandomAccessStream.class.getName());
+  private static Logger _log;
 
   private FileInputStream _is;
 
@@ -206,7 +205,7 @@ public class FileReadStream extends StreamImpl
 
       return _fileLock != null;
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
       return false;
     }
   }
@@ -225,9 +224,17 @@ public class FileReadStream extends StreamImpl
 
       return false;
     } catch (IOException e) {
-      log.log(Level.FINE, e.toString(), e);
+      log().log(Level.FINE, e.toString(), e);
       return false;
     }
   }
 
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(FileRandomAccessStream.class.getName());
+    }
+    
+    return _log;
+  }
 }

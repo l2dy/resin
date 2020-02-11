@@ -134,6 +134,8 @@ public class IntrospectionMBean implements DynamicMBean {
         throw new ReflectionException((Exception) e.getCause());
       else
         throw (Error) e.getCause();
+    } catch (AttributeNotFoundException e) {
+      throw e;
     } catch (Throwable e) {
       throw new RuntimeException(e);
     }

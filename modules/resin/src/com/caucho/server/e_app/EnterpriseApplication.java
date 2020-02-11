@@ -336,6 +336,14 @@ public class EnterpriseApplication
   }
 
   /**
+   * Returns true if it's modified.
+   */
+  public boolean isModifiedImpl()
+  {
+    return _loader.isModified();
+  }
+
+  /**
    * Log the reason for modification.
    */
   public boolean logModified(Logger log)

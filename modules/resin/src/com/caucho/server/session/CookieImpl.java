@@ -42,7 +42,7 @@ public class CookieImpl extends Cookie {
   // the allowed cookie port
   private String _port;
   
-  private SameSite _sameSite = SameSite.NONE;
+  private SameSite _sameSite = SameSite.UNSET;
 
   /**
    * Create a new cookie object.
@@ -82,7 +82,7 @@ public class CookieImpl extends Cookie {
   public void setSameSite(SameSite value)
   {
     if (value == null) {
-      _sameSite = SameSite.NONE;
+      _sameSite = SameSite.UNSET;
     }
     else {
       _sameSite = value;
@@ -96,6 +96,7 @@ public class CookieImpl extends Cookie {
   
   
   public enum SameSite {
+    UNSET,
     NONE,
     LAX,
     STRICT;
@@ -103,7 +104,7 @@ public class CookieImpl extends Cookie {
     public static SameSite parseValue(String value)
     {
       if (value == null || value.equals("")) {
-        return SameSite.NONE;
+        return SameSite.UNSET;
       }
       else if (value.equals("Lax")) {
         return SameSite.LAX;
@@ -115,7 +116,7 @@ public class CookieImpl extends Cookie {
         return SameSite.NONE;
       }
       else {
-        throw new ConfigException(L.l("cookie sameSite requires Lax or Strict."));
+        throw new ConfigException(L.l("cookie sameSite requires Lax, Strict, or None."));
       }
     }
   }

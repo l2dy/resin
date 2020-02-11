@@ -774,6 +774,15 @@ public class Host
   /**
    * Returns true if the host is modified.
    */
+  @Override
+  public boolean isModifiedImpl()
+  {
+    return isModified();
+  }
+
+  /**
+   * Returns true if the host is modified.
+   */
   public boolean isModifiedNow()
   {
     return (_lifecycle.isDestroyed() || _classLoader.isModifiedNow());

@@ -667,9 +667,10 @@ abstract public class ExpandDeployController<I extends DeployInstance>
     _depend = new DependencyContainer();
     _depend.setCheckInterval(_dependencyCheckInterval);
     
-    if (getArchivePath() != null)
+    if (getArchivePath() != null) {
       _depend.add(new Depend(getArchivePath()));
-
+    }
+    
     if (_repositorySpi != null) {
       String value = _repositorySpi.getTagContentHash(getId());
       _depend.add(new RepositoryDependency(getId(), value));

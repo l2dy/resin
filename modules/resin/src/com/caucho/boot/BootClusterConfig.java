@@ -213,7 +213,7 @@ public class BootClusterConfig {
       
       /*
       if (isAllowNonReservedIp) {
-        server.setAllowNonReservedIp(true);
+        serverHandle.setAllowNonReservedIp(true);
       }
       */
       
@@ -225,11 +225,9 @@ public class BootClusterConfig {
 
       
       // server.setExternalAddress(isExternal);
-      /*
       if (isAllowNonReservedIp) {
         server.setAllowNonReservedIp(true);
       }
-      */
     }
   }
   

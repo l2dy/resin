@@ -1025,10 +1025,12 @@ public class WebAppContainer
       if (controller != null) {
         WebApp webApp;
 
-        if (isTopRequest)
+        if (isTopRequest) {
           webApp = controller.request();
-        else
+        }
+        else {
           webApp = controller.subrequest();
+        }
 
         if (webApp == null) {
           return null;

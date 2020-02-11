@@ -398,9 +398,6 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     if (_lifecycle.isDestroyed())
       throw new IllegalStateException(L().l("can't add loaders after initialization"));
 
-    if (log().isLoggable(Level.FINEST))
-      log().finest(this + " adding loader " + loader);
-
     _loaders.add(offset, loader);
 
     if (loader.getClassLoader() == null)
@@ -427,6 +424,18 @@ public class DynamicClassLoader extends java.net.URLClassLoader
     }
 
     _hasNewLoader = true;
+
+    logFinest(this + " adding loader " + loader);
+  }
+  
+  private void logFinest(String msg)
+  {
+    try {
+      if (_log != null && log().isLoggable(Level.FINEST))
+        log().finest(msg);
+    } catch (Throwable e) {
+      
+    }
   }
 
   public ArrayList<Loader> getLoaders()

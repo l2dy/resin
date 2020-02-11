@@ -102,15 +102,15 @@ public class StartAutoRedeployAutoStrategy
       controller.startImpl();
     }
     else if (state.isError()) {
-      controller.restartImpl();
+      controller.updateImpl();
     }
     else if (controller.isModifiedNow()) {
       controller.logModified(controller.getLog());
       // 1d1n, 1d1o
-      controller.restartImpl();
+      controller.updateImpl();
     }
     else if (controller.isIdleTimeout()) {
-      controller.restartImpl();
+      controller.updateImpl();
     }
     else { /* active */
     }
@@ -140,7 +140,7 @@ public class StartAutoRedeployAutoStrategy
     else if (controller.isModified()) {
       controller.logModified(controller.getLog());
       // server/1d1i
-      I instance = controller.restartImpl();
+      I instance = controller.updateImpl();
 
       return instance;
     }
@@ -193,17 +193,17 @@ public class StartAutoRedeployAutoStrategy
   void alarm(DeployController<I> controller)
   {
     LifecycleState state = controller.getState();
-    
+
     if (state.isStopped()) {
       // server/1d12
     }
     else if (state.isIdle()) {
       // server/1d18
     }
-    else if (controller.isModified()) {
+    else if (controller.isModifiedNow()) {
       // server/1d1k
       controller.logModified(controller.getLog());
-      controller.restartImpl();
+      controller.updateImpl();
     }
   }
 }

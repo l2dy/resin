@@ -98,9 +98,10 @@ public class CloudServer {
                      ServerType isStatic,
                      boolean isAllowExternal)
   {
-    if (id.equals(""))
+    if (id.equals("") || id == null) {
       throw new IllegalArgumentException();
-    
+    }
+
     _id = id;
     _displayId = displayId;
     
@@ -119,8 +120,6 @@ public class CloudServer {
     if (! isStatic.isStatic() && index == 0)
       throw new IllegalArgumentException(L.l("The first server must be static."));
     
-    if (id == null)
-      throw new NullPointerException();
     if (pod == null)
       throw new NullPointerException();
 

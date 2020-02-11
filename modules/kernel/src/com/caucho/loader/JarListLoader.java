@@ -50,8 +50,8 @@ import com.caucho.vfs.Path;
  * picks up new jars.
  */
 abstract public class JarListLoader extends Loader implements Dependency {
-  private static final Logger log
-    = Logger.getLogger(JarListLoader.class.getName());
+  private static Logger _log;
+   
   
   // list of the jars in the directory
   protected ArrayList<JarEntry> _jarList = new ArrayList<JarEntry>();
@@ -138,12 +138,12 @@ abstract public class JarListLoader extends Loader implements Dependency {
   protected void addJar(Path jar)
   {
     if (! jar.exists()) {
-      log.fine(jar.getTail() + " does not exist"
+      log().fine(jar.getTail() + " does not exist"
                   + " (path=" + jar.getNativePath() + ")");
       return;
     }
     else if (! jar.canRead()) {
-      log.warning(jar.getTail() + " is unreadable"
+      log().warning(jar.getTail() + " is unreadable"
                   + " (uid=" + jar.getUser() + " mode="
                   + String.format("%o", jar.getMode())
                   + " path=" + jar.getNativePath() + ")");
@@ -155,7 +155,7 @@ abstract public class JarListLoader extends Loader implements Dependency {
     try {
       jarPath.getCertificates();
     } catch (Exception e) {
-      log.log(Level.FINEST, e.toString(), e);
+      log().log(Level.FINEST, e.toString(), e);
     }
     
     JarEntry jarEntry = new JarEntry(jarPath);
@@ -240,7 +240,7 @@ abstract public class JarListLoader extends Loader implements Dependency {
             return createEntry(name, pathName, jarEntry, filePath);
           }
         } catch (IOException e) {
-          log.log(Level.FINER, e.toString(), e);
+          log().log(Level.FINER, e.toString(), e);
         }
       }
     }
@@ -295,7 +295,7 @@ abstract public class JarListLoader extends Loader implements Dependency {
           if (! vector.contains(url))
             vector.add(url);
         } catch (Exception e) {
-          log.log(Level.WARNING, e.toString(), e);
+          log().log(Level.WARNING, e.toString(), e);
         }
       }
     }
@@ -313,7 +313,7 @@ abstract public class JarListLoader extends Loader implements Dependency {
             if (! vector.contains(url))
               vector.add(url);
           } catch (Exception e) {
-            log.log(Level.WARNING, e.toString(), e);
+            log().log(Level.WARNING, e.toString(), e);
           }
         }
       }
@@ -377,6 +377,14 @@ abstract public class JarListLoader extends Loader implements Dependency {
         jarPath.closeJar();
       }
     }
+  }
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(JarListLoader.class.getName());
+    }
+    
+    return _log;
   }
 
   @Override

@@ -93,10 +93,10 @@ public class StartManualRedeployManualStrategy
       controller.startImpl();
     }
     else if (state.isError()) {
-      controller.restartImpl();
+      controller.updateImpl();
     }
     else if (controller.isModifiedNow()) {
-      controller.restartImpl();
+      controller.updateImpl();
     }
     else { /* active */
     }

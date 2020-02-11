@@ -212,7 +212,7 @@ and REST administration.</p>
 <defun title="accept_thread_max">
 
 <p><em>accept_thread_max</em> limits the maximum threads waiting for
-a new connection on the port. Higher values are more resiliant to
+a new connection on the port. Higher values are more resilient to
 connection spikes because the idle threads are ready and waiting.</p>
 
 <p>In general, the default value is reasonable and does not usually

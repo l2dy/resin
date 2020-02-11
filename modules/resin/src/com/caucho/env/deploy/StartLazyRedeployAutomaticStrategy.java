@@ -135,11 +135,11 @@ public class StartLazyRedeployAutomaticStrategy
     }
     else if (state.isError()) {
       // server/1d13
-      return controller.restartImpl();
+      return controller.updateImpl();
     }
     else if (controller.isModified()) {
       // server/1d0i
-      return controller.restartImpl();
+      return controller.updateImpl();
     }
     else { /* active */
       // server/1d0c
@@ -170,7 +170,7 @@ public class StartLazyRedeployAutomaticStrategy
     }
     else if (state.isError() && controller.isModified()) {
       // server/1d0x
-      return controller.restartImpl();
+      return controller.updateImpl();
     }
     else if (controller.isModified()) {
       // server/1d0j

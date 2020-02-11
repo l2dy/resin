@@ -51,8 +51,7 @@ import com.caucho.vfs.Path;
  */
 class JarEntry {
   private static final L10N L = new L10N(JarEntry.class);
-  private static final Logger log
-    = Logger.getLogger(JarEntry.class.getName());
+  private static Logger _log;
 
   private Manifest _manifest;
   private boolean _isManifestRead;
@@ -114,7 +113,7 @@ class JarEntry {
           addManifestPackage(pkg, attr);
         }
       } catch (IOException e) {
-        log.log(Level.WARNING, e.toString(), e);
+        log().log(Level.WARNING, e.toString(), e);
       } finally {
         _isManifestRead = true;
       }
@@ -192,7 +191,7 @@ class JarEntry {
       Package pkg = Package.getPackage(name);
 
       if (pkg == null) {
-        log.warning(L.l("package {0} is missing.  {1} requires package {0}.",
+        log().warning(L.l("package {0} is missing.  {1} requires package {0}.",
                         name, manifestName));
         continue;
       }
@@ -204,11 +203,11 @@ class JarEntry {
 
       if (pkg.getSpecificationVersion() == null ||
           pkg.getSpecificationVersion().equals("")) {
-        log.warning(L.l("installed {0} is not compatible with version `{1}'.  {2} requires version {1}.",
+        log().warning(L.l("installed {0} is not compatible with version `{1}'.  {2} requires version {1}.",
                      name, version, manifestName));
       }
       else if (! pkg.isCompatibleWith(version)) {
-        log.warning(L.l("installed {0} is not compatible with version `{1}'.  {2} requires version {1}.",
+        log().warning(L.l("installed {0} is not compatible with version `{1}'.  {2} requires version {1}.",
                      name, version, manifestName));
       }
     }
@@ -254,7 +253,7 @@ class JarEntry {
 
       return new CodeSource(url, certificates);
     } catch (Exception e) {
-      log.log(Level.WARNING, e.toString(), e);
+      log().log(Level.WARNING, e.toString(), e);
 
       return null;
     }
@@ -272,6 +271,15 @@ class JarEntry {
     JarEntry entry = (JarEntry) o;
 
     return _jarPath.equals(entry._jarPath);
+  }
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(JarEntry.class.getName());
+    }
+    
+    return _log;
   }
 
   @Override

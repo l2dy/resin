@@ -472,10 +472,12 @@ public class DeployClient implements Repository
     
     HashMap<String,String> attributeCopy;
 
-    if (attributes != null)
+    if (attributes != null) {
       attributeCopy = new HashMap<String,String>(attributes);
-    else
+    }
+    else {
       attributeCopy = new HashMap<String,String>();
+    }
     
     return _deployProxy.putTag(tag, contentHash, attributeCopy);
   }

@@ -32,6 +32,7 @@ package com.caucho.cloud.network;
 import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -121,6 +122,9 @@ public final class ClusterServer {
   
   private AtomicReference<SocketPool> _loadBalanceSocketPool
     = new AtomicReference<SocketPool>();
+  
+  private AtomicInteger _connectionCount = new AtomicInteger();
+  
 
   private final ServerHeartbeatState _heartbeatState;
 
@@ -1092,6 +1096,16 @@ public final class ClusterServer {
   {
     return _heartbeatState.getHeartbeatState();
   }
+  
+  public void onConnectionOpen()
+  {
+    _connectionCount.incrementAndGet();
+  }
+  
+  public int onConnectionClose()
+  {
+    return _connectionCount.decrementAndGet();
+  }
 
   /**
    * Notify that a start event has been received.
@@ -1133,10 +1147,12 @@ public final class ClusterServer {
       return false;
     }
     
-    if (_clusterSystem.isActive())
+    if (_clusterSystem.isActive()) {
       log.warning(this + " notify-heartbeat-stop");
-    else
+    }
+    else {
       log.fine(this + " notify-heartbeat-stop");
+    }
     
     _cloudServer.onHeartbeatStop();
 

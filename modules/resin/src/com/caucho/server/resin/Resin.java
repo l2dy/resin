@@ -495,10 +495,12 @@ public class Resin
       address = _bootConfig.getBootResin().getElasticServerAddress(_args);
     }
     
-    if (address != null)
+    if (address != null) {
       return address;
-    else
+    }
+    else {
       return getLocalHostAddress();
+    }
   }
   
   public int getServerPort()
@@ -936,6 +938,7 @@ public class Resin
       if (addr.isLinkLocalAddress() || addr.isLoopbackAddress()) {
         addr = findLocalHost();
       }
+      
       return addr.getHostAddress();
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -952,8 +955,9 @@ public class Resin
       while (eInet.hasMoreElements()) {
         InetAddress iAddr = eInet.nextElement();
 
-        if (! iAddr.isLinkLocalAddress() && ! iAddr.isLoopbackAddress())
+        if (! iAddr.isLinkLocalAddress() && ! iAddr.isLoopbackAddress()) {
           return iAddr;
+        }
       }
     }
     

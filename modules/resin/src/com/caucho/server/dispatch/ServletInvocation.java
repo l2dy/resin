@@ -344,7 +344,7 @@ public class ServletInvocation {
     StringBuilder sb = null;
     int i = 0;
     int length = value.length();
-    
+
     for (; i < length; i++) {
       char ch = value.charAt(i);
       
@@ -362,8 +362,13 @@ public class ServletInvocation {
         }
         
         int j = value.indexOf('/', i);
+        int eq = value.indexOf('=', i);
         
-        if (j < 0) {
+        if (false && (j < 0 || eq < j)) {
+          // #6308, but disabling because of potential security issues, and regressions
+          sb.append(ch);
+        }
+        else if (j < 0) {
           return sb.toString();
         }
         else if (i > 0 && value.charAt(i - 1) == '/') {

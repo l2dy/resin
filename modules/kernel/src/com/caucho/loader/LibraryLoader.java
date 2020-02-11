@@ -29,6 +29,7 @@
 package com.caucho.loader;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.logging.Logger;
 
 import javax.annotation.PostConstruct;
@@ -197,6 +198,8 @@ public class LibraryLoader extends JarListLoader {
     _jarList.clear();
 
     _fileSet.getPaths(_pathList);
+    
+    Collections.sort(_pathList);
 
     for (int i = 0; i < _pathList.size(); i++) {
       Path jar = _pathList.get(i);

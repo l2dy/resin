@@ -36,8 +36,7 @@ import java.util.logging.Logger;
  * Class for keeping track of modifications.
  */
 public class Depend implements PersistentDependency {
-  private static final Logger log
-    = Logger.getLogger(Depend.class.getName());
+  private static Logger _log;
   
   private final Path _source;
   private final long _lastModified;
@@ -98,8 +97,8 @@ public class Depend implements PersistentDependency {
     else if (! requireSource && newDigest == -1) {
     }
     else if (newDigest == -1) {
-      if (log.isLoggable(Level.FINE))
-        log.fine(_source.getNativePath() + " source is deleted.");
+      if (log().isLoggable(Level.FINE))
+        log().fine(_source.getNativePath() + " source is deleted.");
       
       _isDigestModified = true;
     }
@@ -161,8 +160,8 @@ public class Depend implements PersistentDependency {
   public boolean isModified()
   {
     if (_isDigestModified) {
-      if (log.isLoggable(Level.FINE))
-        log.fine(_source.getNativePath() + " digest is modified.");
+      if (log().isLoggable(Level.FINE))
+        log().fine(_source.getNativePath() + " digest is modified.");
 
       return true;
     }
@@ -175,16 +174,16 @@ public class Depend implements PersistentDependency {
       return false;
     // if the length changed
     else if (sourceLength != _length) {
-      if (log.isLoggable(Level.FINE))
-        log.fine(_source.getNativePath() + " length is modified (" +
+      if (log().isLoggable(Level.FINE))
+        log().fine(_source.getNativePath() + " length is modified (" +
                  _length + " -> " + sourceLength + ")");
 
       return true;
     }
     // if the source is newer than the old value
     else if (sourceLastModified != _lastModified) {
-      if (log.isLoggable(Level.FINE))
-        log.fine(_source.getNativePath() + " time is modified.");
+      if (log().isLoggable(Level.FINE))
+        log().fine(_source.getNativePath() + " time is modified.");
       
       return true;
     }
@@ -257,6 +256,15 @@ public class Depend implements PersistentDependency {
   {
     return ("new com.caucho.vfs.Depend(com.caucho.vfs.Vfs.lookup(\"" +
             _source.getPath() + "\"), " + _source.getCrc64() + "L)");
+  }
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(Depend.class.getName());
+    }
+    
+    return _log;
   }
 
   /**

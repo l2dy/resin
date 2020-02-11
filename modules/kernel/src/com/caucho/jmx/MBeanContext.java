@@ -67,14 +67,14 @@ public class MBeanContext
   private ClassLoader _loader;
 
   private String _domain = "resin";
-  private LinkedHashMap<String,String> _properties
+  private Map<String,String> _properties
     = new LinkedHashMap<String,String>();
 
   private ClassLoaderRepositoryImpl _classLoaderRepository
     = new ClassLoaderRepositoryImpl();
   
   // map of all mbeans
-  private Hashtable<ObjectName,MBeanWrapper> _mbeans
+  private Map<ObjectName,MBeanWrapper> _mbeans
     = new Hashtable<ObjectName,MBeanWrapper>();
 
   private ArrayList<Listener> _listeners = new ArrayList<Listener>();

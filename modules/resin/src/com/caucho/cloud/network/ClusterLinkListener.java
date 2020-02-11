@@ -35,6 +35,11 @@ package com.caucho.cloud.network;
 public interface ClusterLinkListener {
 
   /**
+   * Notification that a cluster link has opened.
+   */
+  void onLinkOpen(Object payload);
+
+  /**
    * Notification that a cluster link has closed.
    */
   void onLinkClose(Object payload);

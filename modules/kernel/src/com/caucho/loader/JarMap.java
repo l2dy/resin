@@ -47,8 +47,7 @@ import com.caucho.vfs.ZipScanner;
  * picks up new jars.
  */
 public class JarMap {
-  private static final Logger log
-    = Logger.getLogger(JarMap.class.getName());
+  private static Logger _log;
   
   private static final AtomicReference<JarList> _key
     = new AtomicReference<JarList>();
@@ -137,7 +136,7 @@ public class JarMap {
           isValidScan = true;
         }
       } catch (Exception e) {
-        log.log(Level.FINER, e.toString(), e);
+        log().log(Level.FINER, e.toString(), e);
 
         isScan = false;
       }
@@ -165,9 +164,9 @@ public class JarMap {
       }
     } catch (IOException e) {
       if (jar.canRead())
-        log.log(Level.WARNING, e.toString(), e);
+        log().log(Level.WARNING, e.toString(), e);
       else
-        log.log(Level.FINER, e.toString(), e);
+        log().log(Level.FINER, e.toString(), e);
     } finally {
       if (scan != null)
         scan.close();
@@ -230,6 +229,15 @@ public class JarMap {
     for (int i = 0; i < _entries.length; i++) {
       _entries[i] = null;
     }
+  }
+  
+  private static Logger log()
+  {
+    if (_log == null) {
+      _log = Logger.getLogger(JarMap.class.getName());
+    }
+    
+    return _log;
   }
 
   static final class JarList {

@@ -264,8 +264,9 @@ public class HempBroker extends AbstractManagedBroker
       _actorStreamMap.remove(address);
     }
 
-    if (log.isLoggable(Level.FINE))
+    if (log.isLoggable(Level.FINE)) {
       log.fine(this + " removeActor address=" + address + " " + mailbox);
+    }
   }
 
   /**
