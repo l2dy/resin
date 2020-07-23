@@ -6,13 +6,39 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.64 - in progress">
+<s2 title="4.0.65 - in progress">
 <ul>
+<li>redirect: escape urls for resin:MovedPermanently (#6348, rep by stbu)</li>
+<li>jsp: JspPrecompileListener can't use more than one thread because of shared tags (#6350, rep by Mitsuo)</li>
+<li>websocket: flush() was called on output stream because normal servlet request flush wasn't disabled (#6339)</li>
+<li>log: update access log to support long content length (#6355, rep by stbu)</li>
+<li>form: update int/long to handle large uploads (#6349, rep by stbu)</li>
+<li>cloud: improve debug message for connection failure (#6352)</li>
+<li>anomaly: add auto thread dump for anomalous request time (#6318, rep by Mitsuo)</li>
+<li>webapp: startup logging in webapp (#6346, rep by R. Mann)</li>
+<li>admin: manage tag ids with special characters (#6341, rep by stbu)</li>
+<li>thread: add timestamp for low-level ThreadPool (#6338)</li>
+<li>openssl: add +/tlsv1.3 (#6314, rep by O. Aiken)</li>
+<li>class-scan: catch and continue from .class parse exceptions</li>
+<li>access-log: add %{param}p for parameter (#6305, rep by Yoo)</li>
+<li>websocket: avoid wrapping IOException in IllegalStateException (#6326, rep by James Byatt)</li>
+<li>jdk: EventManager need to use ConcurrentHashMap.putIfAbsent, not Map.putIfAbsent (#6331, rep by alis)</li>
+<li>config: openssl-protocol, openssl-cipher-suite, openssl-chain-file (#6316)</li>
+<li>health: avoid reporting time outside window as downtime (#6300, rep by M. Shimomura)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.64 - Feb 7, 2020">
+<ul>
+<li>cluster: fix heartbeat close</li>
+<li>deploy: fix duplicate remote deploy</li>
 <li>config: add jvm_classpath to cluster-default.xml (#6311)</li>
 <li>config: add access_log_format (#6302, rep by T. DeHaan)</li>
 <li>jdk: TcpPort._activeConnectionSet.keySet() must use Map api (#6294, rep by Y. Guedj)</li>
 <li>jdk: getAttribute should not wrap AttributeNotFound (#6297)</li>
 <li>jdk-compat: dynamic Logging during initialization (#6293)</li>
+<li>session: add option for same-site cookie None value (#6320, rep by Park)</li>
+<li>ssl: JSSE should fall back to password if key-store-password is not set (#6325, rep by S. Busch)</li>
 </ul>
 </s2>
 

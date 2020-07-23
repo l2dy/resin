@@ -225,7 +225,16 @@ public class HttpProxyClient
       }
       else if (ch < 0x80) {
         switch (ch) {
-        // case '%':
+        // server/2s0e vs server/2s0c
+         case '%':
+           if (len <= i + 2 || ! isHex(uri.charAt(i + 1)) || ! isHex(uri.charAt(i + 2))) {
+             printEscape(out, ch);
+           }
+           else {
+             out.print(ch);;
+           }
+           break;
+           
         case '#':
           printEscape(out, ch);
           break;
@@ -244,6 +253,13 @@ public class HttpProxyClient
         printEscape(out, 0x80 + (ch & 0x3f));
       }
     }
+  }
+  
+  private boolean isHex(int ch)
+  {
+    return ('0' <= ch && ch <= '9'
+            || 'a' <= ch && ch <= 'f'
+            || 'A' <= ch && ch <= 'F');
   }
   
   private void printEscape(WriteStream out, int ch)

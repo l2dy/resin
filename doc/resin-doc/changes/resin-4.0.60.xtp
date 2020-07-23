@@ -33,6 +33,7 @@
 <li>deploy: added alarm for deployment .git gc</li>
 <li>deploy: .git changes to allow for git clone from resin-data</li>
 </ul>
+</s1>
 
 </body>
 </document>

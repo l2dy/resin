@@ -3868,6 +3868,10 @@ public class WebApp extends ServletContextImpl
       WebAppEnv env = new WebAppEnv();
       env.init();
 
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(this +" starting classLoader " + _classLoader);
+      }
+      
       _classLoader.start();
 
       // configuration exceptions discovered by resources like
@@ -3887,6 +3891,10 @@ public class WebApp extends ServletContextImpl
 
       _jspApplicationContext.addELResolver(new CandiElResolver());
 
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(this +" starting initializers");
+      }
+
       callInitializers();
 
       //jsp/18n7
@@ -3894,6 +3902,10 @@ public class WebApp extends ServletContextImpl
 
       //Servlet 3.0
       initAnnotated();
+
+      if (log.isLoggable(Level.FINE)) {
+        log.fine(this +" starting servlets");
+      }
 
       try {
         _filterManager.init();

@@ -125,7 +125,8 @@
 
   <cluster id="web">
     <!-- define the servers in the cluster -->
-    <server-multi id-prefix="web-" address-list="${web_servers}" port="6810"/>
+    <server-multi id-prefix="web-" address-list="${web_servers}"
+                  port="6810" watchdog-port="${watchdog_port}"/>
 
     <host id="" root-directory="web">
       <web-app id="">

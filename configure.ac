@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.64)
+AC_INIT([resin],4.0.65)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -235,10 +235,10 @@ AC_SUBST(JAVA_EXE)
 
 JAVA_ARGS=
 
-$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
-if test $? = "0"; then
-  JAVA_ARGS="-d64"
-fi
+#$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
+#if test $? = "0"; then
+#  JAVA_ARGS="-d64"
+#fi
 
 AC_SUBST(JAVA_ARGS)
 
@@ -781,12 +781,16 @@ fi
 #
 # 64bit heuristics
 #
-echo $ECHO_N "checking if ${JAVA_EXE} is 64-bit... "
+#echo $ECHO_N "checking if ${JAVA_EXE} is 64-bit... "
 
-$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
-if test $? = "0"; then
-   b64_jni=true
+if test -z "$b64_jni"; then
+  b64_jni=true
 fi
+
+#$JAVA_EXE -d64 -version 1>/dev/null 2>/dev/null
+#if test $? = "0"; then
+#   b64_jni=true
+#fi
 
 # Require user to use --enable-64bit if the version is optional in the javac
 

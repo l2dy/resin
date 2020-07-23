@@ -70,7 +70,7 @@ echo " </tr>\n";
 echo " </table>\n";
 echo "<script language='javascript'>\n";
 echo ("var sessions = jQuery.parseJSON('$sessions_json');\n");
-echo ("var table = $('#${session_table_id}');\n");
+echo ("var table = $('table[id=\"${session_table_id}\"]');\n");
 echo ("var data = '';\n");
 echo ("for (var i = 0; i < sessions.length; i++)\n");
 echo ("{\n");

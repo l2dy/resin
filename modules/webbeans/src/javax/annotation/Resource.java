@@ -19,58 +19,32 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with Resin Open Source; if not, write to the
- *
- *   Free Software Foundation, Inc.
+ *   Free SoftwareFoundation, Inc.
  *   59 Temple Place, Suite 330
  *   Boston, MA 02111-1307  USA
  *
  * @author Scott Ferguson
  */
 
-package com.caucho.remote.websocket;
+package javax.annotation;
 
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import static java.lang.annotation.ElementType.TYPE;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+import java.lang.annotation.Documented;
 
 /**
- * WebSocketOutputStream writes a single WebSocket packet.
- *
- * <code><pre>
- * </pre></code>
+ * The resource annotation.
  */
-public class WebSocketPrintWriter extends PrintWriter
-{
-  private static final Logger log
-    = Logger.getLogger(WebSocketPrintWriter.class.getName());
-  private final WebSocketWriter _out;
-  
-  public WebSocketPrintWriter(WebSocketWriter out)
-    throws IOException
-  {
-    super(out);
-    
-    _out = out;
-  }
-
-  @Override
-  public void close()
-  {
-    // WebSocketPrintWriter is reused
-    /*
-    WebSocketWriter out = _out;
-    _out = null;
-    
-    if (out != null) {
-      out.close();
-    }
-    */
-
-    try {
-      _out.close();
-    } catch (Exception e) {
-      log.log(Level.FINE, e.toString(), e);
-    }
-  }
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({TYPE})
+public @interface Resource {
+  String description();
+  String lookup();
+  String mappedName();
+  String name();
+  boolean shareable();
+  Class type();
 }

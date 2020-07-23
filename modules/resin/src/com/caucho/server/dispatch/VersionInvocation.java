@@ -121,8 +121,13 @@ public class VersionInvocation extends Invocation
     if (sessionId == null)
       sessionId = _invocation.getSessionId();
 
-    if (sessionId == null)
+    if (sessionId == null) {
       return _invocation;
+    }
+    
+    if (_oldWebApp.isClosed()) {
+      return _invocation;
+    }
 
     SessionManager oldSessionManager = _oldWebApp.getSessionManager();
 

@@ -33,9 +33,10 @@
   Resin Pro is looking for licenses in the following locations
 </p>
 <ol>
+<li><code>licenses</code> directory in configuration directory, e.g. <code>/etc/resin/licenses</code>.</li>
+<li><code>licenses</code> directory in deployment directory, e.g. <code>${resin.home}/licenses</code>.</li>
 <li>Directory specified with <code>-Dresin.license.dir</code> JVM parameter</li>
 <li><code>licenses</code> directory in your working directory, i.e. <code>System.getProperty("user.dir")</code></li>
-<li><code>licenses</code> directory in Resin Configuration directory (typically <code>/etc/resin</code> on Unix).</li>
 </ol>
 
 </s1>

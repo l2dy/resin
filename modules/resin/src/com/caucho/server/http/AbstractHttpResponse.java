@@ -840,7 +840,7 @@ abstract public class AbstractHttpResponse {
   /**
    * Returns the number of bytes sent to the output.
    */
-  public int getContentLength()
+  public long getContentLength()
   {
     return _responseStream.getContentLength();
   }
@@ -1352,6 +1352,9 @@ abstract public class AbstractHttpResponse {
       else if (_request.getRequestFacade().isAsyncStarted()
                && _responseStream.getContentLength() == 0) {
 
+      }
+      else if (_request.getRequestFacade().isDuplex()) {
+        // #6339
       }
       else {
         _responseStream.flush();

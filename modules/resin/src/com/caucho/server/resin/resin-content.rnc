@@ -895,6 +895,9 @@ r_server-Content =
   & (attribute watchdog-jvm-arg { string }
      | element watchdog-jvm-arg { string })*
 
+  & (attribute watchdog-jvm-arg-line { string }
+     | element watchdog-jvm-arg-line { string })*
+
   & r_watchdog-log?
 
   & (attribute watchdog-password { string }

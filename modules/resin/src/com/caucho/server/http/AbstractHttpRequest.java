@@ -1873,8 +1873,9 @@ public abstract class AbstractHttpRequest extends AbstractProtocolConnection
       _requestFacade = null;
       _responseFacade = null;
 
-      if (requestFacade != null)
+      if (requestFacade != null) {
         requestFacade.finishRequest();
+      }
 
       // server/0219, but must be freed for GC
       _response.finishRequest();

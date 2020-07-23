@@ -104,7 +104,7 @@ class MultipartFormParser {
         TempBuffer tempBuffer = TempBuffer.allocate();
         byte []buf = tempBuffer.getBuffer();
 
-        int totalLength = 0;
+        long totalLength = 0;
 
         try {
           int len;

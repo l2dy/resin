@@ -78,6 +78,7 @@ setuid_group  :
 # Arg passed directly to the JVM
 # jvm_args  : -Xmx2048m -XX:MaxPermSize=256m
 # jvm_mode    : -server
+# watchdog_jvm_args  :
 
 # This classpath has priority over the default classpath, like when you want to
 # use a third party library like Hibernate's JPA

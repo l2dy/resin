@@ -165,8 +165,10 @@ in.</p>
     <td>response header <var>xxx</var></td></tr>
 <tr><td>%{<var>xxx</var>}c</td>
     <td>cookie value <var>xxx</var></td></tr>
-<tr><td>%n</td>
+<tr><td>%{<var>xxx</var>}n</td>
     <td>request attribute</td></tr>
+<tr><td>%{<var>xxx</var>}p</td>
+    <td>request parameter</td></tr>
 <tr><td>%r</td>
     <td>request URL</td></tr>
 <tr><td>%s</td>
@@ -4746,14 +4748,14 @@ attribute.</p>
   <tr>
     <td>level</td>
     <td>minimum log level to store</td>
-    <td>fine, finer, finest, config, info, warning</a></td>
+    <td>fine, finer, finest, config, info, warning</td>
     <td>info</td>
   </tr>
   
   <tr>
     <td>expire-timeout</td>
     <td>time to keep database records before purging</td>
-    <td>period</a></td>
+    <td>period</td>
     <td>14d</td>
   </tr>
 </attributes>
@@ -8076,11 +8078,6 @@ The <a href="admin/security.xtp">SSL</a> section of the Security documentation p
 </tr>
 <tr>
   <td>cipher-suite</td>
-  <td>Additions and restrictions to the allowed cryptography ciphers</td>
-  <td>see openssl-tags</td>
-</tr>
-<tr>
-  <td>cipher-suites-forbidden</td>
   <td>Additions and restrictions to the allowed cryptography ciphers</td>
   <td>see openssl-tags</td>
 </tr>

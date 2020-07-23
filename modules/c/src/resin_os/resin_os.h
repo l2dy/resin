@@ -208,6 +208,7 @@ struct server_socket_t {
 #define ALG_TLS1 0x04
 #define ALG_TLS1_1 0x08
 #define ALG_TLS1_2 0x10
+#define ALG_TLS1_3 0x20
 
 #define Q_VERIFY_NONE 0
 #define Q_VERIFY_OPTIONAL_NO_CA 1

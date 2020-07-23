@@ -19,10 +19,6 @@
         </a>
         option first.
       </p>
-      <note>
-        Note: isapi_srun.dll should only be used with versions of IIS that do not
-        provide integration with .NET.
-      </note>
     </s1>
 
     <localtoc/>

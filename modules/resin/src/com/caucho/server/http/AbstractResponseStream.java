@@ -234,7 +234,7 @@ public abstract class AbstractResponseStream
   /**
    * Returns the written content length
    */
-  public int getContentLength()
+  public long getContentLength()
   {
     return 0;
   }

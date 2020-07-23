@@ -361,6 +361,11 @@ public class JsseSSLFactory implements SSLFactory {
   public void init()
     throws ConfigException, IOException, GeneralSecurityException
   {
+    String keyStorePassword = _keyStorePassword;
+    if (keyStorePassword == null) {
+      keyStorePassword = _password;
+    }
+    
     if (_keyStore == null) {
       if (_keyStoreFile != null
           && _password == null
@@ -380,7 +385,7 @@ public class JsseSSLFactory implements SSLFactory {
       if (_keyStoreFile == null)
         return;
       
-      _keyStore = createKeyStore(_keyStoreType, _keyStoreFile, _keyStorePassword);
+      _keyStore = createKeyStore(_keyStoreType, _keyStoreFile, keyStorePassword);
     }
 
     if (_alias != null) {      
@@ -402,7 +407,7 @@ public class JsseSSLFactory implements SSLFactory {
                                   _alias));
 
       _keyStore = KeyStore.getInstance(_keyStoreType);
-      _keyStore.load(null, getPasswordChars(_keyStorePassword));
+      _keyStore.load(null, getPasswordChars(keyStorePassword));
 
       _keyStore.setKeyEntry(_alias, key, getPasswordChars(keyPassword), certChain);
     }

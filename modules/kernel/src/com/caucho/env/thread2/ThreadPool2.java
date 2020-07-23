@@ -44,6 +44,7 @@ import com.caucho.lifecycle.Lifecycle;
 import com.caucho.util.CurrentTime;
 import com.caucho.util.Friend;
 import com.caucho.util.L10N;
+import com.caucho.util.QDate;
 import com.caucho.util.RingValueQueue;
 
 /**
@@ -619,13 +620,13 @@ public class ThreadPool2 implements Executor {
   {
     if (isPriority) {
       if (! _priorityQueue.offer(task, loader)) {
-        System.out.println(getClass().getSimpleName() + ": scheduleImpl PRIORITY_FULL");
+        logFail("scheduleImpl PRIORITY_FULL");
         return false;
       }
     }
     else {
       if (! _taskQueue.offer(task, loader)) {
-        System.out.println(getClass().getSimpleName() + ": scheduleImpl TASK_FULL");
+        logFail("scheduleImpl TASK_FULL");
         return false;
       }
     }
@@ -653,7 +654,7 @@ public class ThreadPool2 implements Executor {
     }
     
     if (! _idleThreadRing.offer(thread, 1, TimeUnit.SECONDS)) {
-      System.out.println(getClass().getSimpleName() + "execute: full queue " + thread);
+      logFail("execute: full queue " + thread);
     }
     
     if (! _priorityQueue.isEmpty() || ! _taskQueue.isEmpty()) {
@@ -661,6 +662,12 @@ public class ThreadPool2 implements Executor {
     }
     
     return false;
+  }
+  
+  private void logFail(String msg)
+  {
+    System.out.println(QDate.formatLocal(System.currentTimeMillis())
+                       + ": " + getClass().getSimpleName() + ": " + msg);
   }
   
   public void wakeScheduler()

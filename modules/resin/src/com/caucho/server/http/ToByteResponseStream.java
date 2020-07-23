@@ -489,7 +489,7 @@ public abstract class ToByteResponseStream extends AbstractResponseStream {
   }
 
   @Override
-  public int getContentLength()
+  public long getContentLength()
   {
     try {
       // server/05e8

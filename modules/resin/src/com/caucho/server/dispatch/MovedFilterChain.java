@@ -28,14 +28,17 @@
 
 package com.caucho.server.dispatch;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.PrintWriter;
+
+import com.caucho.server.http.HttpServletResponseImpl;
 
 /**
  * Represents the final servlet in a filter chain.
@@ -76,6 +79,7 @@ public class MovedFilterChain implements FilterChain {
    *
    * @since Servlet 2.3
    */
+  @Override
   public void doFilter(ServletRequest request,
                        ServletResponse response)
     throws ServletException, IOException
@@ -94,6 +98,8 @@ public class MovedFilterChain implements FilterChain {
       url = res.encodeURL(_url + '?' + queryString);
     else
       url = res.encodeURL(_url);
+    
+    url = HttpServletResponseImpl.escapeUrl(url, req.getCharacterEncoding());
 
     res.setHeader("Location", url);
 

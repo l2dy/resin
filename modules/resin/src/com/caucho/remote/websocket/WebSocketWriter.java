@@ -81,6 +81,7 @@ public class WebSocketWriter extends Writer
 
   @Override
   public void write(int ch)
+    throws IOException
   {
     if (! _state.isActive())
       throw new IllegalStateException(String.valueOf(_state));
@@ -91,8 +92,9 @@ public class WebSocketWriter extends Writer
       complete(false);
     }
 
-    if (ch < 0x80)
+    if (ch < 0x80) {
       buffer[_offset++] = (byte) ch;
+    }
     else if (ch < 0x800) {
       if (buffer.length <= _offset + 1) {
         complete(false);
@@ -132,6 +134,7 @@ public class WebSocketWriter extends Writer
 
   @Override
   public void write(char []buffer, int offset, int length)
+    throws IOException
   {
     if (! _state.isActive())
       throw new IllegalStateException(String.valueOf(_state));
@@ -184,80 +187,74 @@ public class WebSocketWriter extends Writer
 
   @Override
   public void flush()
+    throws IOException
   {
-    try {
-      complete(false);
+    complete(false);
 
-      _os.flush();
-    } catch (IOException e) {
-      throw new IllegalStateException(e);
-    }
+    _os.flush();
   }
 
   @Override
   public void close()
+    throws IOException
   {
     if (_state == MessageState.IDLE) {
       return;
     }
 
-    try {
-      complete(true);
+    complete(true);
     
-      _state = MessageState.IDLE;
+    _state = MessageState.IDLE;
     
-      if (_isAutoFlush) {
-        _os.flush();
-      }
-    } catch (IOException e) {
-      throw new IllegalStateException(e);
+    if (_isAutoFlush) {
+      _os.flush();
     }
   }
 
   private void complete(boolean isFinal)
+    throws IOException
   {
-    try {
-      byte []buffer = _buffer;
+    byte []buffer = _buffer;
 
-      int offset = _offset;
-      _offset = 4;
-      int length = offset - 4;
-      
-      // don't flush empty chunk
-      if (length == 0 && ! isFinal)
-        return;
+    int offset = _offset;
+    _offset = 4;
+    int length = offset - 4;
 
-      int code1;
+    // don't flush empty chunk
+    if (length == 0 && ! isFinal) {
+      return;
+    }
 
-      if (_state == MessageState.FIRST)
-        code1 = OP_TEXT;
-      else
-        code1 = OP_CONT;
+    int code1;
 
-      _state = MessageState.CONT;
-      
-      if (isFinal)
-        code1 |= FLAG_FIN;
-      
-      //System.out.println(Thread.currentThread().getName() + ": code=" + 
-      //    Integer.toHexString(code1) + " len=" + length);
+    if (_state == MessageState.FIRST) {
+      code1 = OP_TEXT;
+    }
+    else {
+      code1 = OP_CONT;
+    }
 
-      if (length < 0x7e) {
-        buffer[2] = (byte) code1;
-        buffer[3] = (byte) length;
+    _state = MessageState.CONT;
 
-        _os.write(buffer, 2, offset - 2);
-      }
-      else {
-        buffer[0] = (byte) code1;
-        buffer[1] = (byte) 0x7e;
-        buffer[2] = (byte) (length >> 8);
-        buffer[3] = (byte) (length);
+    if (isFinal)
+      code1 |= FLAG_FIN;
 
-        _os.write(buffer, 0, offset);
-      }
-    } catch (IOException e) {
-      throw new IllegalStateException(e);
+    //System.out.println(Thread.currentThread().getName() + ": code=" + 
+    //    Integer.toHexString(code1) + " len=" + length);
+
+    if (length < 0x7e) {
+      buffer[2] = (byte) code1;
+      buffer[3] = (byte) length;
+
+      _os.write(buffer, 2, offset - 2);
+    }
+    else {
+      buffer[0] = (byte) code1;
+      buffer[1] = (byte) 0x7e;
+      buffer[2] = (byte) (length >> 8);
+      buffer[3] = (byte) (length);
+
+      _os.write(buffer, 0, offset);
     }
   }
   

@@ -406,8 +406,11 @@ function display_health_availability()
     echo "<tr>\n";
     $et = $downtime->ET/1000;
     if ($downtime->isDataAbsent()) {
-      $note = gettext('* No data: using report start time');
-    } else if ($downtime->isEstimated()) {
+      // #6300
+      // $note = gettext('* No data: using report start time');
+      continue;
+    }
+    else if ($downtime->isEstimated()) {
       $note = gettext('* Approximate');
     } else {
       $note = '';

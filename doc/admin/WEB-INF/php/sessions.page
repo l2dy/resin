@@ -179,7 +179,7 @@ function display_sessions($webapp, $host)
 
   echo <<<END
 <script language="javascript">
-  var showLink = $("#sessions-refresh-${manager_suffix}");
+  var showLink = $('a[id="sessions-refresh-${manager_suffix}"]');
   showLink.click(function(context, event)
    {
     var parent = showLink.parent();

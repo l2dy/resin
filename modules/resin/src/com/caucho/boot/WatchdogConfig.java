@@ -425,7 +425,16 @@ class WatchdogConfig
   {
     addWatchdogJvmArg(arg);
   }
-  
+
+  @Configurable
+  public void addWatchdogJvmArgLine(String argLine)
+  {
+    for (String arg : argLine.split("\\s+")) {
+      if (! "".equals(arg))
+        addWatchdogJvmArg(arg);
+    }
+  }
+
   public void addWatchdogJvmArg(String arg)
   {
     _watchdogJvmArgs.add(arg);

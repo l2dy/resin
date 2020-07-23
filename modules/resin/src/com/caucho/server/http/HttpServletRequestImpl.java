@@ -1657,12 +1657,14 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     WebSocketContextImpl webSocket;
     
-    if (isMasked)
+    if (isMasked) {
       webSocket = new WebSocketContextImpl(this, _response, listener,
                                            new MaskedFrameInputStream());
-    else
+    }
+    else {
       webSocket = new WebSocketContextImpl(this, _response, listener,
                                            new UnmaskedFrameInputStream());
+    }
     
     SocketLinkDuplexController controller = _request.startDuplex(webSocket);
     webSocket.setController(controller);

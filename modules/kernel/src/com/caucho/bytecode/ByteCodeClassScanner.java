@@ -356,8 +356,9 @@ public class ByteCodeClassScanner {
         
         length -= 3;
       }
-      else
-        throw new IllegalStateException();
+      else {
+        throw error("invalid UTF-8 code: 0x" + Integer.toHexString(d1));
+      }
       
       if (isIdentifier && isJavaIdentifier[ch]) {
         buffer[offset++] = ch;
@@ -518,7 +519,7 @@ public class ByteCodeClassScanner {
       }
       return;
     default:
-      throw new IllegalStateException("unknown code: " + (char) code);
+      throw error("unknown code: " + (char) code);
     }
   }
   
@@ -572,7 +573,7 @@ public class ByteCodeClassScanner {
    */
   private IllegalStateException error(String message)
   {
-    return new IllegalStateException(_className + ": " + message);
+    return new IllegalStateException(_className + ": " + message + " [" + _is + "]");
   }
   
   static {

@@ -1060,17 +1060,24 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
   
   public String encodeAbsoluteRedirect(String url)
   {
+    return encodeAbsoluteRedirect(url, getCharacterEncoding());
+  }
+  
+  public String encodeAbsoluteRedirect(String url, String encoding)
+  {
     String path = getAbsolutePath(url);
 
-    // Bug #3051
-    String encoding = getCharacterEncoding();
-
+    return escapeUrl(path, encoding);
+  }
+  
+  public static String escapeUrl(String path, String encoding)
+  {
     boolean isLatin1 = "iso-8859-1".equals(encoding);
 
     return escapeUrl(path, isLatin1);
   }
   
-  private String escapeUrl(String path, boolean isLatin1)
+  public static String escapeUrl(String path, boolean isLatin1)
   {
     StringBuilder cb = new StringBuilder();
 
@@ -1197,7 +1204,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     }
   }
 
-  private void addHex(StringBuilder cb, int hex)
+  private static void addHex(StringBuilder cb, int hex)
   {
     int d1 = (hex >> 4) & 0xf;
     int d2 = (hex) & 0xf;

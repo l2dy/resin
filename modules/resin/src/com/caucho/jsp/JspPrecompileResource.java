@@ -63,7 +63,7 @@ public class JspPrecompileResource {
 
   private final Lifecycle _lifecycle = new Lifecycle();
 
-  private int _threadCount = 2;
+  private int _threadCount = 1;
 
   private int _completeCount;
   
@@ -103,10 +103,14 @@ public class JspPrecompileResource {
    */
   public void setThreadCount(int count)
   {
+    // #6350 - can't have more than 1 threads because of compiling shared 
+    // tags.
+    /*
     if (count < 1)
       count = 1;
     
     _threadCount = count;
+    */
   }
   
   /**
@@ -200,6 +204,7 @@ public class JspPrecompileResource {
       _compiler.setWebApp(_webApp);
     }
 
+    @Override
     public void run()
     {
       try {

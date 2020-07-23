@@ -72,7 +72,7 @@ public class EventManager
   private Map<Class<?>,ObserverMap> _extObserverMap
     = new ConcurrentHashMap<Class<?>,ObserverMap>();
   
-  private Map<Class<?>,ObserverMap> _observerMap
+  private ConcurrentHashMap<Class<?>,ObserverMap> _observerMap
     = new ConcurrentHashMap<Class<?>,ObserverMap>();
 
   private Map<EventKey,Set<ObserverMethod<?>>> _observerMethodCache

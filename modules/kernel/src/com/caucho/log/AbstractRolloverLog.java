@@ -523,7 +523,9 @@ public class AbstractRolloverLog implements Closeable {
 
           savedPath = getSavedPath(lastPeriodEnd - 1);
         }
-        else if (path != null && getRolloverSize() <= path.getLength()) {
+        else if (path != null 
+                && (getRolloverSize() <= path.getLength()
+                    || path.getLength() < 0)) {
           closeLogStream();
 
           savedPath = getSavedPath(now);
@@ -542,7 +544,7 @@ public class AbstractRolloverLog implements Closeable {
       
       _flushWorker.wake();
       
-      _rolloverListener.requeue(_rolloverAlarm);
+      // _rolloverListener.requeue(_rolloverAlarm);
     }
   }
   

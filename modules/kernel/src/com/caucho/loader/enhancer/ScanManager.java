@@ -147,8 +147,9 @@ public class ScanManager {
         return;
       }
 
-      if (! path.getPath().endsWith(".class"))
+      if (! path.getPath().endsWith(".class")) {
         return;
+      }
 
       matcher.init(root, path);
 
@@ -161,7 +162,8 @@ public class ScanManager {
       } finally {
         is.close();
       }
-    } catch (IOException e) {
+    } catch (Exception e) {
+      log.info(e.toString());
       log.log(Level.FINE, e.toString(), e);
     }
   }
@@ -205,20 +207,29 @@ public class ScanManager {
 
         matcher.init();
 
-        ReadStream is = Vfs.openRead(zipFile.getInputStream(entry));
+        ReadStream is = null;
         try {
+          is = Vfs.openRead(zipFile.getInputStream(entry));
           classScanner.init(entryName, is, matcher);
 
-          if (classScanner.scan())
+          if (classScanner.scan()) {
             isScanMatch = true;
+          }
+        } catch (Exception e1) {
+          log.info(e1.toString());
+          log.log(Level.FINE, e1.toString(), e1);
         } finally {
-          is.close();
+          if (is != null) {
+            is.close();
+          }
         }
       }
       
-      if (! isScanMatch)
+      if (! isScanMatch) {
         addNullScanPath(path);
-    } catch (IOException e) {
+      }
+    } catch (Exception e) {
+      log.info(e.toString());
       log.log(Level.FINE, e.toString(), e);
     } finally {
       jar.closeZipFile(zipFile);
@@ -330,8 +341,14 @@ public class ScanManager {
         if (listener == null)
           continue;
 
-        ScanClass scanClass = listener.scanClass(_root, _packageRoot, 
-                                                 className, modifiers);
+        ScanClass scanClass = null;
+        
+        try {
+          scanClass = listener.scanClass(_root, _packageRoot, 
+                                         className, modifiers);
+        } catch (Exception e) {
+          log.log(Level.FINER, e.getMessage(), e);
+        }
 
         if (scanClass != null) {
           activeCount++;

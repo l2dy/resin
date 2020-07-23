@@ -28,6 +28,7 @@
 <li>security: invalid-URL rejection for matrix parameters</li>
 <li>file: redirect must not html convert the location (#6212, rep by stbu)</li>
 </ul>
+</s1>
 
 </body>
 </document>

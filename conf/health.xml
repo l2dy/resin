@@ -91,6 +91,7 @@
     <health:Or>
       <health:IfHealthWarning healthCheck="${cpuHealthCheck}" time="2m"/>
       <health:IfHealthEvent regexp="caucho.thread"/>
+      <health:IfHealthEvent regexp="caucho.http"/>
     </health:Or>
     
     <health:IfNotRecent time="15m"/>
@@ -479,6 +480,8 @@
 
   <health:AnomalyAnalyzer>
     <meter>Resin|Http|Request Time</meter>
+    <health-event>caucho.http.anomaly.request-time</health-event>
+    <min-deviation>4</min-deviation>
   </health:AnomalyAnalyzer>
 
   <health:AnomalyAnalyzer>

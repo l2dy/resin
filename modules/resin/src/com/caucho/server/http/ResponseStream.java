@@ -63,7 +63,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
   private boolean _isDisableAutoFlush;
 
   // bytes actually written
-  private int _contentLength;
+  private long _contentLength;
 
   private boolean _isAllowFlush = true;
   private boolean _isComplete;
@@ -181,7 +181,7 @@ abstract public class ResponseStream extends ToByteResponseStream {
   }
 
   @Override
-  public final int getContentLength()
+  public final long getContentLength()
   {
     // server/05e8
     try {

@@ -743,20 +743,23 @@ public class EnvironmentClassLoader extends DynamicClassLoader
    */
   public void addScanListener(ScanListener listener)
   {
-    if (_scanListeners == null)
+    if (_scanListeners == null) {
       _scanListeners = new ArrayList<ScanListener>();
+    }
 
     int i = 0;
     for (; i < _scanListeners.size(); i++) {
-      if (listener.getScanPriority() < _scanListeners.get(i).getScanPriority())
+      if (listener.getScanPriority() < _scanListeners.get(i).getScanPriority()) {
         break;
+      }
     }
     _scanListeners.add(i, listener);
 
     ArrayList<URL> urlList = new ArrayList<URL>();
     for (URL url : getURLs()) {
-      if (isScanRootAvailable(url))
+      if (isScanRootAvailable(url)) {
         urlList.add(url);
+      }
     }
 
     if (urlList.size() > 0) {
@@ -891,8 +894,9 @@ public class EnvironmentClassLoader extends DynamicClassLoader
         } catch (Exception e) {
           log().log(Level.WARNING, e.toString(), e);
 
-          if (_configException == null)
+          if (_configException == null) {
             _configException = e;
+          }
         }
 
         ScanManager scanManager = new ScanManager(_scanListeners);
