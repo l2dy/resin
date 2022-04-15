@@ -6,7 +6,28 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.65 - in progress">
+<s2 title="4.0.66 - in progress">
+<ul>
+<li>ssl: add certificate-chain-file to sni-host (#6434, rep by Brygid)</li>
+<li>misc: synchronize ScriptStackTrace (#6435, rep by M. Secrett)</li>
+<li>config: add config for watchdog-jvm_args</li>
+<li>database: in XA when a first getConnection() has a sql error, a second getConnection() wasn't properly returning the first (#6407, rep by Mitsuo Shimomura)</li>
+<li>server: HttpRequest header/url expansion isn't correctly recalculating tail (#6391, rep by cyflhn)</li>
+<li>server: LibraryLoader isModified needs synchronization because of shared _newPathList (#6395, rep by Mitsuo)</li>
+<li>config: use access_log_format from resin.properties in cluster-default (#6380, rep by mitsuo)</li>
+<li>ssl: add null check for JNI free of string argument (#6378, rep by J. Blachon)</li>
+<li>health: SendMail connection errors shouldn't force restart (#6374, rep by S. Sampgaonkar)</li>
+<li>ssl: add ssl="true" to HttpProxy (#6343, rep by C.Fernandez)</li>
+<li>ssl: use openssl_cipher_suite from resin.properties (#6369, rep by Kok-Chai)</li>
+<li>servlet: url map syncronization during startup</li>
+<li>http: transfer-encoding chunked has priority over content-length (#6365, rep by shampster)</li>
+<li>watchdog: remove -Xmx limitation on watchdog, instead launching with normal memory (#6329, #6330, rep by M. Shimomura, Gabriel Costea)</li>
+<li>watchdog: update schema cache to use native path</li>
+<li>windows: windows setup.exe fails when reading registry Services (#6400, rep by ahoroviy)</li>
+</ul>
+</s2>
+
+<s2 title="4.0.65 - July 29, 2020">
 <ul>
 <li>redirect: escape urls for resin:MovedPermanently (#6348, rep by stbu)</li>
 <li>jsp: JspPrecompileListener can't use more than one thread because of shared tags (#6350, rep by Mitsuo)</li>

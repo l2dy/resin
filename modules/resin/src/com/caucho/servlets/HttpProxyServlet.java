@@ -116,6 +116,11 @@ public class HttpProxyServlet extends GenericServlet
     _loadBalanceBuilder.setWarmupTime(warmupTime.getPeriod());
   }
   
+  public void setSSL(boolean isSSL)
+  {
+    _loadBalanceBuilder.setSSL(isSSL);
+  }
+  
   public void setStrategy(String strategy)
   {
     if ("round-robin".equalsIgnoreCase(strategy))

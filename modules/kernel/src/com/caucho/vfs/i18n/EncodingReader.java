@@ -103,6 +103,7 @@ abstract public class EncodingReader extends Reader {
    *
    * @return the number of characters read or -1 on end of file.
    */
+  @Override
   public int read(char []cbuf, int off, int len)
     throws IOException
   {

@@ -29,24 +29,21 @@
 
 package com.caucho.config.types;
 
-import com.caucho.config.ConfigException;
-import com.caucho.config.Names;
-import com.caucho.config.inject.InjectManager;
-import com.caucho.config.j2ee.BeanNameLiteral;
-import com.caucho.naming.Jndi;
-import com.caucho.naming.ObjectProxy;
-import com.caucho.util.L10N;
-import com.caucho.vfs.Path;
-import javax.annotation.PostConstruct;
+import java.util.Set;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.enterprise.context.spi.CreationalContext;
 import javax.enterprise.inject.spi.Bean;
 import javax.naming.Context;
 import javax.naming.NamingException;
-import javax.rmi.PortableRemoteObject;
-import java.util.Hashtable;
-import java.util.Set;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.inject.InjectManager;
+import com.caucho.config.j2ee.BeanNameLiteral;
+import com.caucho.naming.Jndi;
+import com.caucho.util.L10N;
+import com.caucho.vfs.Path;
 
 /**
  * Configuration for the ejb-ref.
@@ -402,8 +399,10 @@ public class EjbRef extends BaseRef {
           target = Jndi.lookup(foreignName);
         }
 
-        if (target != null && type != null)
-          return PortableRemoteObject.narrow(target, type);
+        if (target != null && type != null) {
+          return target;
+          // return PortableRemoteObject.narrow(target, type);
+        }
       }
     } catch (Exception e) {
       // log.log(Level.FINER, e.toString(), e);

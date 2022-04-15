@@ -29,15 +29,18 @@
 
 package com.caucho.j2ee.appclient;
 
-import com.caucho.config.ConfigException;
-import com.caucho.naming.*;
-import com.caucho.util.L10N;
-
-import javax.annotation.PostConstruct;
-import javax.naming.*;
-import javax.rmi.PortableRemoteObject;
 import java.util.Hashtable;
 import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.naming.Context;
+import javax.naming.InitialContext;
+import javax.naming.NamingException;
+
+import com.caucho.config.ConfigException;
+import com.caucho.naming.Jndi;
+import com.caucho.naming.ObjectProxy;
+import com.caucho.util.L10N;
 
 /**
  * Configuration for the ejb-ref.
@@ -183,12 +186,16 @@ public class ClientEjbRef implements ObjectProxy {
 
     Object value = context.lookup(Jndi.getFullName(_ejbLink));
 
+    /*
     if (_home != null)
       return PortableRemoteObject.narrow(value, _home);
     else if (_remote != null)
       return PortableRemoteObject.narrow(value, _remote);
     else
       return value;
+      */
+    
+    return value;
   }
 
   public String toString()

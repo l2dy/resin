@@ -402,7 +402,9 @@ public class InvocationDecoder {
 
         while (isWindows && cb.getLength() > 0
                && ((ch = cb.getLastChar()) == '.' || ch == ' ')) {
-          cb.setLength(cb.getLength() - 1);
+          // server/0063
+          // cb.setLength(cb.getLength() - 1);
+          cb.setCharAt(cb.getLength() - 1, '_');
 
           if (cb.getLength() > 0
               && (ch = cb.getLastChar()) == '/' || ch == '\\') {
@@ -420,9 +422,15 @@ public class InvocationDecoder {
         cb.append(ch);
     }
 
+    /*
     while (isWindows && cb.getLength() > 0
            && ((ch = cb.getLastChar()) == '.' || ch == ' ')) {
       cb.setLength(cb.getLength() - 1);
+    }
+    */
+    if (isWindows && cb.getLength() > 0
+           && ((ch = cb.getLastChar()) == '.' || ch == ' ')) {
+      cb.setCharAt(cb.getLength() - 1, '_');
     }
 
     return cb.toString();

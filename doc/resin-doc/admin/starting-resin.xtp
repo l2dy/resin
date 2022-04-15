@@ -38,14 +38,14 @@ are in <em>/etc/resin/resin.properties</em></li>
 put in <em>/var/resin/webapps</em></li>
 <li>Logs are in <em>/var/log/resin</em></li>
 <li>Licenses belong in  <em>/etc/resin/licenses</em></li>
-<li>OpenSSL keys belong in <em>/etc/resin/keys</em></li>
+<li>OpenSSL keys belong in <em>/etc/resin/conf/keys</em></li>
 </ul>
 
 <example title="Unix Directories">
 /etc/resin/resin.properties  # configuration properties
 /etc/resin/resin.xml         # configuration file
 /etc/resin/licenses/         # license location
-/etc/resin/keys/             # openssl keys
+/etc/resin/conf/keys/        # openssl keys
 
 /var/resin/                  # resin.root (content)
 /var/resin/webapps/          # default deployment directory

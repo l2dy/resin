@@ -1322,21 +1322,29 @@ public class Mysqli extends JdbcConnectionResource
 
       _charset = charset;
 
-      stmt = conn.createStatement();
-      stmt.execute("SELECT * FROM information_schema.SESSION_VARIABLES "
-                   + "WHERE VARIABLE_NAME = 'collation_connection'");
+      try {
+        stmt = conn.createStatement();
+        stmt.execute("SELECT * FROM information_schema.SESSION_VARIABLES "
+            + "WHERE VARIABLE_NAME = 'collation_connection'");
 
-      ResultSet rs = stmt.getResultSet();
+        ResultSet rs = stmt.getResultSet();
 
-      if (rs.next()) {
-        String str = rs.getString(2);
+        if (rs.next()) {
+          String str = rs.getString(2);
 
-        _collation = env.createString(str);
-      }
-      else {
+          _collation = env.createString(str);
+        }
+        else {
+          _collation = env.getEmptyString();
+          
+          // XXX: need alternative
+
+          env.warning(L.l("unable to retrieve collation_connection variable"));
+        }
+      } catch (SQLException e) {
         _collation = env.getEmptyString();
-
-        env.warning(L.l("unable to retrieve collation_connection variable"));
+        
+        log.fine("mysql.set_charset: " + e);
       }
 
       return true;

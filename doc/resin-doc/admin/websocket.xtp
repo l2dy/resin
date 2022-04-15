@@ -16,12 +16,18 @@ InputStream/OutputStream for binary messages and a Reader/PrintWriter for text
 messages. HTTP browsers will use text messages, while custom clients like
 phone/pad applications may use binary messages for efficiency.</p>
 
+<p>The servlet resin-web.xml configuration is the same as for a 
+normal servlet. On the initial request, the servlet will dispatch to
+a websocket listener.</p>
+
 <s2 title="WebSocketServletRequest">
 
 <p>The servlet is responsible for detecting websocket requests and attaching
 a listener to that connection.</p>
 
 <example>
+package example;
+
 import com.caucho.websocket.WebSocketListener;
 import com.caucho.websocket.WebSocketServletRequest;
 

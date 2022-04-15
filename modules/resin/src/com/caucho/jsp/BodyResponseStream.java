@@ -257,7 +257,7 @@ public class BodyResponseStream extends AbstractResponseStream {
     }
     
     _in.init(buf, offset, length);
-
+    
     int ch;
     while ((ch = _encodingReader.read()) >= 0) {
       print(ch);

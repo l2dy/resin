@@ -156,9 +156,12 @@ namespace Caucho
 
       foreach (String name in services.GetSubKeyNames())
       {
-        RegistryKey key = services.OpenSubKey(name);
+        RegistryKey key = null;
+        
         try
         {
+          key = services.OpenSubKey(name);
+          
           Object imagePathObj = key.GetValue("ImagePath");
           if (imagePathObj == null && !"".Equals(imagePathObj))
             continue;
@@ -192,7 +195,9 @@ namespace Caucho
         }
         finally
         {
-          key.Close();
+          if (key != null) {
+            key.Close();
+          }
         }
       }
 
@@ -233,13 +238,16 @@ namespace Caucho
 
       foreach (String name in services.GetSubKeyNames())
       {
-        RegistryKey key = services.OpenSubKey(name);
-
-        if (key == null) 
-          continue;
-
+        RegistryKey key = null;
+        
         try
         {
+          key = services.OpenSubKey(name);
+
+          if (key == null) {
+            continue;
+          }
+          
           Object imagePathObj = key.GetValue("ImagePath");
 
           if (imagePathObj == null || "".Equals(imagePathObj))
@@ -312,7 +320,10 @@ namespace Caucho
         }
         finally
         {
-          key.Close();
+          if (key != null)
+          {
+            key.Close();
+          }
         }
       }
 

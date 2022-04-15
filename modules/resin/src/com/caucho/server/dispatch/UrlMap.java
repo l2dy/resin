@@ -85,7 +85,7 @@ public class UrlMap<E> {
     for (int i = _regexps.size() - 1; i >= 0; i--) {
       RegexpEntry<E> regexp = _regexps.get(i);
 
-      if (filter.isMatch(regexp.getValue())) {
+      if (regexp != null && filter.isMatch(regexp.getValue())) {
         return true;
       }
     }
@@ -370,7 +370,7 @@ public class UrlMap<E> {
    * @param value the value for matching the pattern
    * @param isShort if true, this regexp expects to be shorter than others
    */
-  public void addRegexp(int prefixLength, 
+  synchronized public void addRegexp(int prefixLength, 
                         String regexp,
                         String flags,
                         E value,
@@ -422,7 +422,7 @@ public class UrlMap<E> {
    * @param value the value for matching the pattern
    * @param isShort if true, this regexp expects to be shorter than others
    */
-  public void addRegexp(int prefixLength, String pattern,
+  synchronized public void addRegexp(int prefixLength, String pattern,
                         String regexp, String flags,
                         E value, boolean isShort,
                         boolean isIgnore,
@@ -492,6 +492,10 @@ public class UrlMap<E> {
     for (int i = 0; i < _regexps.size(); i++) {
       RegexpEntry<E> entry = _regexps.get(i);
 
+      if (entry == null) {
+        continue;
+      }
+      
       if (isWelcome && ! entry.isSimple())
         continue;
 
@@ -546,6 +550,10 @@ public class UrlMap<E> {
 
     for (int i = 0; i < _regexps.size(); i++) {
       RegexpEntry<E> entry = _regexps.get(i);
+      
+      if (entry == null) {
+        continue;
+      }
 
       String urlPattern = entry.getURLPattern();
 

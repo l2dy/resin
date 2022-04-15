@@ -44,7 +44,12 @@ public class UTF8Reader extends EncodingReader {
   private static final char ERROR = 0xfffd;
   
   private InputStream _is;
+  
   private int _peek = -1;
+  
+  private int _ch1 = -1;
+  private int _ch2 = -1;
+  private int _ch3 = -1;
 
   /**
    * Null-arg constructor for instantiation by com.caucho.vfs.Encoding only.
@@ -77,6 +82,7 @@ public class UTF8Reader extends EncodingReader {
   /**
    * Reads into a character buffer using the correct encoding.
    */
+  @Override
   public int read()
     throws IOException
   {
@@ -86,17 +92,20 @@ public class UTF8Reader extends EncodingReader {
       return peek;
     }
 
-    InputStream is = _is;
-    
-    int ch1 = is.read();
+    int ch1 = isRead();
 
     if (ch1 < 0x80) {
       return ch1;
     }
+    
     if ((ch1 & 0xe0) == 0xc0) {
-      int ch2 = is.read();
+      int ch2 = isRead();
       if (ch2 < 0) {
-        return error("unexpected end of file in utf8 character");
+        // jsp/1dit
+        // return error("unexpected end of file in utf8 character");
+        _ch1 = ch1;
+        
+        return -1;
       }
       else if ((ch2 & 0xc0) != 0x80) {
         return error("utf-8 character conversion error for '{0}' because second byte is invalid at "
@@ -106,11 +115,18 @@ public class UTF8Reader extends EncodingReader {
       return ((ch1 & 0x1f) << 6) + (ch2 & 0x3f);
     }
     else if ((ch1 & 0xf0) == 0xe0) {
-      int ch2 = is.read();
-      int ch3 = is.read();
+      int ch2 = isRead();
+      int ch3 = isRead();
       
-      if (ch2 < 0)
-        return error("unexpected end of file in utf8 character");
+      if (ch2 < 0) {
+        // jsp/1dit
+        // return error("unexpected end of file in utf8 character");
+        
+        _ch1 = ch1;
+        _ch2 = ch2;
+        
+        return -1;
+      }
       else if ((ch2 & 0xc0) != 0x80) {
         return error("illegal utf8 encoding at "
                      + "\\x" + Integer.toHexString(ch1)
@@ -118,8 +134,12 @@ public class UTF8Reader extends EncodingReader {
                      + "\\x" + Integer.toHexString(ch3));
       }
       
-      if (ch3 < 0)
-        return error("unexpected end of file in utf8 character");
+      if (ch3 < 0) {
+        _ch1 = ch1;
+        _ch2 = ch2;
+
+        return -1;
+      }
       else if ((ch3 & 0xc0) != 0x80)
         return error("illegal utf8 encoding at "
                      + "\\x" + Integer.toHexString(ch1)
@@ -136,12 +156,20 @@ public class UTF8Reader extends EncodingReader {
         return ch;
     }
     else if ((ch1 & 0xf0) == 0xf0) {
-      int ch2 = is.read();
-      int ch3 = is.read();
-      int ch4 = is.read();
+      int ch2 = isRead();
+      int ch3 = isRead();
+      int ch4 = isRead();
 
-      if (ch2 < 0)
-        return error("unexpected end of file in utf8 character");
+      if (ch2 < 0) {
+        // jsp/1dit
+        // return error("unexpected end of file in utf8 character");
+        
+        _ch1 = ch1;
+        _ch2 = ch2;
+        _ch3 = ch3;
+        
+        return -1;
+      }
       else if ((ch2 & 0xc0) != 0x80)
         return error("illegal utf8 encoding at 0x" +
                      Integer.toHexString(ch2));
@@ -204,6 +232,23 @@ public class UTF8Reader extends EncodingReader {
     }
 
     return i;
+  }
+  
+  private int isRead()
+    throws IOException
+  {
+    int ch = _ch1;
+    
+    if (ch >= 0) {
+      _ch1 = _ch2;
+      _ch2 = _ch3;
+      _ch3 = -1;
+      
+      return ch;
+    }
+    else {
+      return _is.read();
+    }
   }
   
   private char error(String msg)

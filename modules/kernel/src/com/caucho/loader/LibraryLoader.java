@@ -166,7 +166,7 @@ public class LibraryLoader extends JarListLoader {
    * caller should drop the classpath and create a new one.
    */
   @Override
-  public boolean isModified()
+  synchronized public boolean isModified()
   {
     _newPathList.clear();
 

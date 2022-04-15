@@ -733,9 +733,11 @@ public class HttpRequest extends AbstractHttpRequest
     }
 
     long contentLength = getLongContentLength();
+    boolean isTransferEncoding = (HTTP_1_1 <= getVersion()
+                                  && getHeader("Transfer-Encoding") != null);
 
-    if (contentLength < 0 && HTTP_1_1 <= getVersion()
-        && getHeader("Transfer-Encoding") != null) {
+    // #6365
+    if (isTransferEncoding) {
       _chunkedInputStream.init(rawRead);
       readStream.init(_chunkedInputStream, null);
       return true;
@@ -1381,11 +1383,9 @@ public class HttpRequest extends AbstractHttpRequest
       s.setOffset(readOffset);
     }
     
-    int tail = s.getLength() - s.getOffset();
+    int tail = s.getLength();
     
-    if (_uri.length - uriOffset < tail) {
-      tail = _uri.length - uriOffset;
-    }
+    tail = Math.min(tail, s.getOffset() + _uri.length - uriOffset);
     
     return tail;
   }
@@ -1409,11 +1409,9 @@ public class HttpRequest extends AbstractHttpRequest
       s.setOffset(readOffset);
     }
     
-    int tail = s.getLength() - s.getOffset();
+    int tail = s.getLength();
     
-    if (_headerBuffer.length - headerOffset < tail) {
-      tail = _headerBuffer.length - headerOffset;
-    }
+    tail = Math.min(tail, _headerBuffer.length - headerOffset + s.getOffset());
     
     return tail;
   }

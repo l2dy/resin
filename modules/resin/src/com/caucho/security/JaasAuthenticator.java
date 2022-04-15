@@ -30,8 +30,6 @@ package com.caucho.security;
 
 import java.io.IOException;
 import java.security.Principal;
-import java.security.acl.Group;
-import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Set;
 import java.util.logging.Level;
@@ -137,24 +135,31 @@ public class JaasAuthenticator extends AbstractAuthenticator {
         return null;
       
       Principal userPrincipal = null;
-      Group roles = null;
+      // Group roles = null;
 
       for (Principal loginPrincipal : principals) {
+        /*
         if ("roles".equals(loginPrincipal.getName())
             && loginPrincipal instanceof Group) {
           roles = (Group) loginPrincipal;
         }
         else if (userPrincipal == null)
           userPrincipal = loginPrincipal;
+          */
+        if (userPrincipal == null) {
+          userPrincipal = loginPrincipal;
+        }
       }
       
+      /*
       if (userPrincipal == null && roles != null)
         userPrincipal = roles;
+        */
 
       if (userPrincipal instanceof RolePrincipal)
         return userPrincipal;
       else if (userPrincipal != null)
-        return new JaasPrincipal(userPrincipal, roles);
+        return new JaasPrincipal(userPrincipal, null); // roles);
       else
         return null;
     } catch (RuntimeException e) {
@@ -223,9 +228,10 @@ public class JaasAuthenticator extends AbstractAuthenticator {
   
   private static class JaasPrincipal implements RolePrincipal {
     private Principal _principal;
-    private Group _roles;
+    //private Group _roles;
+    private Object _roles;
     
-    JaasPrincipal(Principal principal, Group roles)
+    JaasPrincipal(Principal principal, Object roles)
     {
       _principal = principal;
       _roles = roles;
@@ -243,6 +249,7 @@ public class JaasAuthenticator extends AbstractAuthenticator {
       if (_roles == null)
         return "user".equals(role);
       
+      /*
       Enumeration<? extends Principal> e = _roles.members();
       while (e.hasMoreElements()) {
         Principal principal = e.nextElement();
@@ -250,6 +257,7 @@ public class JaasAuthenticator extends AbstractAuthenticator {
         if (role.equals(principal.getName()))
           return true;
       }
+      */
       
       return false;
     }

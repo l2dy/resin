@@ -28,19 +28,19 @@
 
 package com.caucho.config.types;
 
-import com.caucho.vfs.Path;
-import com.caucho.vfs.Vfs;
+import java.util.Hashtable;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import javax.annotation.PostConstruct;
+import javax.naming.Context;
+import javax.naming.NamingException;
+
 import com.caucho.naming.Jndi;
 import com.caucho.naming.ObjectProxy;
 import com.caucho.util.L10N;
-
-import javax.annotation.PostConstruct;
-import javax.naming.NamingException;
-import javax.naming.Context;
-import javax.rmi.PortableRemoteObject;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.Hashtable;
+import com.caucho.vfs.Path;
+import com.caucho.vfs.Vfs;
 
 public class MessageDestinationRef
   implements ObjectProxy
@@ -281,8 +281,10 @@ public class MessageDestinationRef
                                       getTagName(), _refName, foreignName));
     }
 
+    /*
     if (type != null)
       target = PortableRemoteObject.narrow(target, type);
+      */
 
     return target;
   }

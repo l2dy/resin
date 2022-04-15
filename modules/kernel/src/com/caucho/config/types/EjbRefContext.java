@@ -29,17 +29,11 @@
 
 package com.caucho.config.types;
 
-import com.caucho.config.ConfigException;
-import com.caucho.naming.*;
-import com.caucho.loader.*;
-import com.caucho.util.L10N;
-
-import javax.annotation.PostConstruct;
-import javax.naming.*;
-import javax.rmi.PortableRemoteObject;
 import java.util.ArrayList;
-import java.util.Hashtable;
-import java.util.logging.Logger;
+
+import javax.naming.NamingException;
+
+import com.caucho.loader.EnvironmentLocal;
 
 /**
  * Configuration for the ejb-ref.

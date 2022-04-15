@@ -204,8 +204,11 @@ public class ManagedConnectionImpl
     if (_connException != null)
       throw _connException;
 
+    // env/11er
+    /*
     if (! ping())
       return null;
+      */
     
     _lastEventTime = CurrentTime.getCurrentTime();
 

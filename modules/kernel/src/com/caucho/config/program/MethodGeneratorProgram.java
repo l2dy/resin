@@ -31,11 +31,9 @@ package com.caucho.config.program;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import javax.enterprise.context.spi.CreationalContext;
-import javax.rmi.PortableRemoteObject;
 
 import com.caucho.config.ConfigException;
 import com.caucho.util.L10N;
@@ -84,6 +82,7 @@ public class MethodGeneratorProgram extends ConfigProgram
     
     try {
       // XXX TCK: ejb30/bb/session/stateless/sessioncontext/descriptor/getBusinessObjectLocal1, needs QA
+      /*
       if (! type.isAssignableFrom(value.getClass())) {
         try {
           value = PortableRemoteObject.narrow(value, getType());
@@ -91,9 +90,7 @@ public class MethodGeneratorProgram extends ConfigProgram
           log.log(Level.FINER, e.toString(), e);
         }
       }
-
-      if (! type.isAssignableFrom(value.getClass())) {
-      }
+      */
 
       _method.invoke(bean, value);
     } catch (InvocationTargetException e) {

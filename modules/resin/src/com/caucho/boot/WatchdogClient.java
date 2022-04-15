@@ -628,10 +628,12 @@ class WatchdogClient
     // #2566
     list.add("-Xrs");
 
+    /*
     if (! _config.hasWatchdogXss())
       list.add("-Xss1m");
     if (! _config.hasWatchdogXmx())
       list.add("-Xmx32m");
+      */
 
     /*
     // XXX: can this just be copied from original args?

@@ -179,8 +179,9 @@ abstract public class ServletELContext extends ELContext
     if (request == null)
       return null;
 
+    // #6419
     HashMap<String,String[]> map
-      = new CaseInsensitiveHashMap<String[]>();
+      = new HashMap<String,String[]>();
     Enumeration e = request.getParameterNames();
 
     while (e.hasMoreElements()) {

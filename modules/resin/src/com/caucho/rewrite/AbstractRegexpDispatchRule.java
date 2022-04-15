@@ -122,7 +122,7 @@ abstract public class AbstractRegexpDispatchRule extends AbstractDispatchRule
     throws ServletException
   {
     Matcher matcher = null;
-
+    
     if (_regexp == null || (matcher = _regexp.matcher(uri)).find()) {
       String target = rewriteTarget(matcher, uri, queryString);
 

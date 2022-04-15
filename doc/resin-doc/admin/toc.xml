@@ -217,10 +217,12 @@
     <item link="hessian.xtp" title="Hessian"
           description="Hessian protocol"/>
        
+<!--
     <item link="advanced-jmx.xtp" title="JMX (MXBeans)"
           description="JMX management"/>
     
     <item link="third-party-seam.xtp" title="Seam"/>
+-->
     
   </item>
     

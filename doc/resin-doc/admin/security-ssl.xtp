@@ -133,6 +133,13 @@ resin&gt; ./configure --with-openssl=/usr/local/ssl
 </example>
 </s2>
 
+<s2 title="OpenSSL Libraries on Windows">
+
+<p>Resin is compiled against the OpenSSL 1.0 libraries. It will not link
+with 1.1 or later libraries.</p>
+
+</s2>
+
 <s2 title="Preparing to use OpenSSL for making keys">
 <p>You can make a <code>keys/</code> subdirectory of $RESIN_HOME to do
 your work from and as a place to store your generated keys.</p>

@@ -737,7 +737,6 @@ public class ConnectionPool extends AbstractManagedObject
         if (transaction != null) {
           userPoolItem = allocateShared(transaction, mcf, subject, info);
         }
-
         if (userPoolItem == null) {
           userPoolItem = allocatePoolConnection(mcf, subject, info, null);
         }
@@ -774,7 +773,7 @@ public class ConnectionPool extends AbstractManagedObject
     
     ArrayList<ManagedXAResource> poolItems = transaction.getXaResources();
     int length = poolItems.size();
-    
+
     for (int i = 0; i < length; i++) {
       ManagedXAResource xaResource = poolItems.get(i);
       

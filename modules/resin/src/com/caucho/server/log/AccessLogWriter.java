@@ -246,8 +246,8 @@ public class AccessLogWriter extends AbstractRolloverLog
     {
       if (value == null) {
         return;
-        
       }
+
       try {
         write(value.getBuffer(), 0, value.getLength());
       } catch (Throwable e) {

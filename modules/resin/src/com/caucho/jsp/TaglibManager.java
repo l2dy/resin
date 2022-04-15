@@ -119,7 +119,7 @@ public class TaglibManager {
       throw new ConfigException(L.l("Conflicting taglib location for uri='{0}'. Old location='{1}' new location='{2}'",
                                     uri, oldLocation, location));
     }
-    
+
     _uriLocationMap.put(uri, location);
   }
 

@@ -251,8 +251,9 @@ class UserPoolItem implements ManagedResource {
   Object allocateUserConnection()
     throws ResourceException
   {
-    if (_userConn == null)
+    if (_userConn == null) {
       _userConn = _sharePoolItem.allocateConnection();
+    }
     
     return _userConn;
   }

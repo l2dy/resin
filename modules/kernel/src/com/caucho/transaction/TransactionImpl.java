@@ -369,8 +369,9 @@ public class TransactionImpl implements Transaction, AlarmListener {
       }
     }
 
-    if (_resourceCount > 0 && flags != XAResource.TMJOIN)
+    if (_resourceCount > 0 && flags != XAResource.TMJOIN) {
       xid = new XidImpl(_xid, _resourceCount + 1);
+    }
 
     try {
       if (_timeout > 0)
@@ -656,18 +657,22 @@ public class TransactionImpl implements Transaction, AlarmListener {
 
     _isSuspended = true;
 
-    for (int i = _resourceCount - 1; i >= 0; i--) {
-      if ((_resourceStates[i] & (RES_ACTIVE | RES_SUSPENDED)) == RES_ACTIVE) {
-        try {
-          XAResource resource = _resources[i];
+    if (_status == Status.STATUS_ACTIVE) {
+      for (int i = _resourceCount - 1; i >= 0; i--) {
+        if ((_resourceStates[i] & (RES_ACTIVE | RES_SUSPENDED)) == RES_ACTIVE) {
+          try {
+            XAResource resource = _resources[i];
 
-          resource.end(_resourceXids[i], XAResource.TMSUSPEND);
-        } catch (Exception e) {
-          setRollbackOnly(e);
+            resource.end(_resourceXids[i], XAResource.TMSUSPEND);
+          
+            _resourceStates[i] |= RES_SUSPENDED;
+          } catch (Exception e) {
+            setRollbackOnly(e);
+          }
         }
       }
     }
-
+    
     if (_userTransaction != null) {
       _suspendState = _userTransaction.userSuspend();
     }
@@ -689,14 +694,18 @@ public class TransactionImpl implements Transaction, AlarmListener {
       _alarm.queue(_timeout + EXTRA_TIMEOUT);
     }
 
-    for (int i = _resourceCount - 1; i >= 0; i--) {
-      if ((_resourceStates[i] & (RES_ACTIVE | RES_SUSPENDED)) == RES_ACTIVE) {
-        try {
-          XAResource resource = _resources[i];
+    if (_status == Status.STATUS_ACTIVE) {
+      for (int i = _resourceCount - 1; i >= 0; i--) {
+        if ((_resourceStates[i] & (RES_ACTIVE | RES_SUSPENDED)) == (RES_ACTIVE|RES_SUSPENDED)) {
+          try {
+            _resourceStates[i] &= ~RES_SUSPENDED;
+          
+            XAResource resource = _resources[i];
 
-          resource.start(_resourceXids[i], XAResource.TMRESUME);
-        } catch (Exception e) {
-          setRollbackOnly(e);
+            resource.start(_resourceXids[i], XAResource.TMRESUME);
+          } catch (Exception e) {
+            setRollbackOnly(e);
+          }
         }
       }
     }

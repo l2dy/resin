@@ -1562,6 +1562,11 @@ under.  The name can be relative to <var>java:comp/env</var>.</td>
   <td></td>
 </tr>
 <tr>
+  <td>min-idle-count</td>
+  <td>A minimum number of connections kept open by Resin.</td>
+  <td>0</td>
+</tr>
+<tr>
   <td>max-active-time</td>
   <td>The maximum time Resin will allow a connection to remain open
 before forcing a close.</td>
@@ -2913,6 +2918,39 @@ switch to a non-root user after binding to port 80.</p>
   &lt;/cluster>
 &lt;/resin>
 </example>
+
+</defun>
+
+<defun title="&lt;header-count-max>" name="header-count-max" occur="?">
+<parents>cluster</parents>
+<default>256 headers</default>
+
+<description>
+<p>&lt;header-count-max> sets the maximum number of HTTP headers allowed.</p>
+
+<p>For security, Resin has a hard limit on the number of HTTP headers
+allowed. Resin will reject the HTTP request if this limit is exceeded.
+If the application requires more headers, this value can be 
+expanded.</p>
+
+</description>
+
+</defun>
+
+<defun title="&lt;header-size-max>" name="header-size-max" occur="?">
+<parents>cluster</parents>
+<default>16k characters</default>
+
+<description>
+<p>&lt;header-size-max> sets the maximum number characters allowed in the HTTP headers.</p>
+
+<p>For security, Resin has a hard limit on the total number characters in
+the HTTP headers allowed. Resin will reject the HTTP request
+ if this limit is exceeded.
+If the application requires more headers, this value can be 
+expanded.</p>
+
+</description>
 
 </defun>
 
@@ -8414,10 +8452,12 @@ Connections idle for longer than &lt;ping-interval> are validated.
 <parents>server</parents>
 <default>6800</default>
 <description>
+
 <p>The server &lt;port> defines the TCP port for Resin
 cluster communication and load balancing.  Most server instances
 will use a common port like 6800, while machines with multiple
 servers may use multiple ports like 6800 and 6801.</p>
+
 </description>
 <example title="multiple servers on a machine ">
 &lt;resin xmlns="http://caucho.com/ns/resin"&gt;
@@ -8439,6 +8479,10 @@ servers may use multiple ports like 6800 and 6801.</p>
 <description>
 <p>Defines default port parameters for all &lt;http>, &lt;protocol>, and
 &lt;cluster-port>.</p>
+
+<p>See the description of <a href="#http">&lt;http&gt;</a>. for the attributes 
+that can be configured.</p>
+
 </description>
 </defun>
 
@@ -11135,6 +11179,50 @@ element resin:otherwise {
 </defun>
 
   
+<defun title="&lt;resin:Password>" name="resin:Password">
+<javadoc class="com.caucho.admin.Password"/>
+<description>
+<p>
+  Decrypts a configuraion password.
+</p>
+</description>
+
+<p>resin:Password allows configuration files to avoid plaintext passwords.
+The password is generated with the command line:</p>
+
+
+<example>
+unix> resinctl password-encrypt -password changeme
+password: {RESIN}DRRIvGLXj/kXSznMYcQxzw==
+</example>
+
+<example title="WEB-INF/resin-web.xml - database">
+&lt;web-app xmlns="http://caucho.com/ns/resin"
+            xmlns:resin="urn:java:com.caucho.resin"
+  ...
+  &lt;database jndi-name="jdbc/test">
+    &lt;driver ...>
+      ...
+      &lt;password>
+        &lt;resin:Password value="{RESIN}DRRIvGLXj/kXSznMYcQxzw=="/>
+      &lt;/password>
+    &lt;/driver>
+     ...
+  ...
+&lt;/web-app>
+</example>
+
+</defun>
+
+<defun title="&lt;resin:PingThread>" name="resin:PingThread">
+<javadoc class="com.caucho.admin.PingThread"/>
+<description>
+<p>
+  Checks status of Resin sutomatically.
+</p>
+</description>
+</defun>
+  
 <defun title="&lt;resin:PingMailer>" name="resin:PingMailer">
 <javadoc class="com.caucho.admin.PingMailer"/>
 <description>
@@ -11148,7 +11236,7 @@ element resin:otherwise {
 <javadoc class="com.caucho.admin.PingThread"/>
 <description>
 <p>
-  Checks status of Resin sutomatically.
+  Checks status of Resin automatically.
 </p>
 </description>
 </defun>

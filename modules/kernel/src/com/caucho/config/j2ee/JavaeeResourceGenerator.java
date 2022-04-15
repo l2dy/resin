@@ -29,29 +29,21 @@
 
 package com.caucho.config.j2ee;
 
+import java.util.HashMap;
+import java.util.Set;
+import java.util.logging.Logger;
+
+import javax.enterprise.context.spi.CreationalContext;
+import javax.enterprise.inject.spi.Bean;
+import javax.naming.NamingException;
+
+import com.caucho.config.ConfigException;
+import com.caucho.config.Names;
 import com.caucho.config.inject.AnyLiteral;
 import com.caucho.config.inject.InjectManager;
 import com.caucho.config.program.ValueGenerator;
-import com.caucho.config.program.ConfigProgram;
-import com.caucho.config.xml.XmlConfigContext;
-import com.caucho.config.ConfigException;
-import com.caucho.config.Names;
-import com.caucho.naming.*;
+import com.caucho.naming.Jndi;
 import com.caucho.util.L10N;
-
-import javax.naming.*;
-import javax.persistence.*;
-import java.lang.reflect.AccessibleObject;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import javax.enterprise.context.spi.CreationalContext;
-import javax.enterprise.inject.Any;
-import javax.enterprise.inject.spi.Bean;
-import javax.enterprise.util.AnnotationLiteral;
-import javax.rmi.*;
-import java.util.*;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 /**
  * Generator for the JavaEE JNDI Resources
@@ -184,6 +176,7 @@ public class JavaeeResourceGenerator extends ValueGenerator {
                                              _jndiName));
   }
 
+  /*
   private Object getJndiValue(Class type)
   {
     if (_jndiName == null || "".equals(_jndiName))
@@ -202,6 +195,7 @@ public class JavaeeResourceGenerator extends ValueGenerator {
       return null;
     }
   }
+  */
 
   public Bean bind(String location, Class type)
   {

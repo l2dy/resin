@@ -102,6 +102,7 @@ public class BodyContentImpl extends AbstractBodyContent {
    * @param off starting offset into the buffer
    * @param len length of valid bytes in the buffer.
    */
+  @Override
   final public void write(char []buf, int off, int len) throws IOException
   {
     _tempStream.write(buf, off, len);
@@ -114,6 +115,7 @@ public class BodyContentImpl extends AbstractBodyContent {
    * @param off starting offset into the buffer
    * @param len length of valid bytes in the buffer.
    */
+  @Override
   final public void write(String s, int off, int len) throws IOException
   {
     _tempStream.write(s, off, len);
@@ -124,6 +126,7 @@ public class BodyContentImpl extends AbstractBodyContent {
    *
    * @param ch character to write.
    */
+  @Override
   final public void write(int ch) throws IOException
   {
     _tempStream.write(ch);
@@ -162,6 +165,7 @@ public class BodyContentImpl extends AbstractBodyContent {
   /**
    * Clears the body contents.
    */
+  @Override
   public void clearBody()
   {
     _tempStream.clearWrite();
@@ -170,6 +174,7 @@ public class BodyContentImpl extends AbstractBodyContent {
   /**
    * Returns a reader to the body content.
    */
+  @Override
   public Reader getReader()
   {
     _charReader = new TempCharReader();
@@ -196,6 +201,7 @@ public class BodyContentImpl extends AbstractBodyContent {
   /**
    * Returns a string representing the body content.
    */
+  @Override
   public String getString()
   {
     TempCharBuffer head = _tempStream.getHead();
@@ -296,6 +302,7 @@ public class BodyContentImpl extends AbstractBodyContent {
   /**
    * Writes the body contents out to the named writer.
    */
+  @Override
   public void writeOut(Writer out) throws IOException
   {
     try {
@@ -306,7 +313,7 @@ public class BodyContentImpl extends AbstractBodyContent {
         int offset = 0;
         int length = head.getLength();
         char []cbuf = head.getBuffer();
-
+        
         if (isFirst && length > 0 && cbuf[0] == 0xfeff) {
           // skip byte-order-mark
           offset = 1;

@@ -29,17 +29,9 @@
 
 package com.caucho.j2ee.appclient;
 
-import com.caucho.config.ConfigException;
-import com.caucho.naming.*;
-import com.caucho.loader.*;
-import com.caucho.util.L10N;
-
-import javax.annotation.PostConstruct;
-import javax.naming.*;
-import javax.rmi.PortableRemoteObject;
 import java.util.ArrayList;
-import java.util.Hashtable;
-import java.util.logging.Logger;
+
+import com.caucho.loader.EnvironmentLocal;
 
 /**
  * Configuration for the ejb-ref.

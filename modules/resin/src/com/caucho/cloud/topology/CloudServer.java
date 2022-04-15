@@ -147,7 +147,8 @@ public class CloudServer {
     _uniqueDomainId = _uniqueClusterId + "." + clusterId.replace('.', '_');
     
     if (! isLocalAddress(getAddress()) && ! isExternal() && ! isAllowExternal()) {
-      throw new ConfigException(L.l("'{0}' is not a valid cluster IP address because it is not a private network IP address.",
+      throw new ConfigException(L.l("'{0}' is not a valid cluster IP address because it is not a private network IP address, and allow-non-reserved-ip is false.\n"
+                                    + " (127.*, 10.*, 192.168.*, 169.254.*, 172.x1*.*,0.*",
                                     getAddress()));
     }
     

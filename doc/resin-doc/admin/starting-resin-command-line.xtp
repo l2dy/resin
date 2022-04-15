@@ -45,7 +45,7 @@
     </tr>
     <tr>
       <td>--enable-ssl</td>
-      <td>Enable OpenSSL, see the <a href="security.xtp#openssl">OpenSSL</a> documentation for details.</td>
+      <td>Enable OpenSSL, see the <a href="security-ssl.xtp">OpenSSL</a> documentation for details.</td>
     </tr>
     <tr>
       <td>--with-apxs=<var>/path/to/apxs</var></td>

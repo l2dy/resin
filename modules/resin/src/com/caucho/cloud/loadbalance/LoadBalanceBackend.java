@@ -46,9 +46,10 @@ public class LoadBalanceBackend
   private long _warmupTime = -1;
   private int _weight = -1;
   
+  private boolean _isSSL;
+  
   public LoadBalanceBackend()
   {
-    
   }
   
   public LoadBalanceBackend(String address)
@@ -229,6 +230,17 @@ public class LoadBalanceBackend
   public boolean hasWeight()
   {
     return _weight >= 0;
+  }
+  
+  @Configurable
+  public void setSSL(boolean isSSL)
+  {
+    _isSSL = isSSL;
+  }
+  
+  public boolean isSSL()
+  {
+    return _isSSL;
   }
   
   public String toString()

@@ -131,14 +131,16 @@ public class ScriptStackTrace {
     try {
       Class cl = loader.loadClass(className);
 
-      LineMap map = _scriptMap.get(cl);
+      synchronized (_scriptMap) {
+        LineMap map = _scriptMap.get(cl);
 
-      if (map == null) {
-        map = loadScriptMap(cl);
-        _scriptMap.put(cl, map);
+        if (map == null) {
+          map = loadScriptMap(cl);
+          _scriptMap.put(cl, map);
+        }
+        
+        return map;
       }
-
-      return map;
     } catch (Throwable e) {
       return null;
     }

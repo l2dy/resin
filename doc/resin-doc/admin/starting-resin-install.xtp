@@ -231,7 +231,7 @@ for Windows in both 32-bit and 64-bit mode.  These libraries provide:
 </p>
 <ul>
   <li>A faster IO library, including massive keepalive support *</li>
-  <li>Support for OpenSSL *</li>
+  <li>Support for OpenSSL 1.0. Resin does not support OpenSSL 1.1 or later. *</li>
   <li>Connector modules for Apache/IIS</li>
 </ul>
 <p>

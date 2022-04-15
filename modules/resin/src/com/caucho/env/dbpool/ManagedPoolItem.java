@@ -150,8 +150,9 @@ class ManagedPoolItem implements ConnectionEventListener, ManagedXAResource {
       log.log(Level.FINE, e.toString(), e);
     }
 
-    if (_xaResource == null)
+    if (_xaResource == null) {
       _isXATransaction = false;
+    }
 
     // Gets the local transaction from the driver
     try {
@@ -744,6 +745,17 @@ class ManagedPoolItem implements ConnectionEventListener, ManagedXAResource {
         }
       }
     }
+    
+    if (flags == TMSUSPEND || flags == TMRESUME) {
+      if (_xaResource != null && _xid != null && _isXATransaction && _localTransaction == null) {
+        if (log.isLoggable(Level.FINER))
+          log.finer("suspend-XA: " + xid + " " + _xaResource);
+
+        _xaResource.start(xid, flags);
+      }
+      
+      return;
+    }
 
     // local transaction optimization
     if (! _isXATransaction
@@ -999,8 +1011,9 @@ class ManagedPoolItem implements ConnectionEventListener, ManagedXAResource {
           log.finer("commit for resource with no XA support: " + this);
       }
     } finally {
-      if (_xaResource != null)
+      if (_xaResource != null) {
         _isXATransaction = true;
+      }
 
       clearXid();
     }
@@ -1015,8 +1028,9 @@ class ManagedPoolItem implements ConnectionEventListener, ManagedXAResource {
     ManagedPoolItem xaPtr = this;
 
     for (; xaPtr != null; xaPtr = xaPtr._xaNext) {
-      if (xaPtr._xaResource != null)
+      if (xaPtr._xaResource != null) {
         xaPtr._xaResource.end(xid, flags);
+      }
     }
   }
 

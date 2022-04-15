@@ -204,7 +204,7 @@ public class TldManager {
     taglibs.addAll(_globalTaglibs);
 
     ArrayList<Path> paths = getClassPath();
-
+    
     for (int i = 0; i < paths.size(); i++) {
       Path subPath = paths.get(i);
 

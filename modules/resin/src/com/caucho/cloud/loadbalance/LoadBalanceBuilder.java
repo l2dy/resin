@@ -127,6 +127,11 @@ public class LoadBalanceBuilder
     _defaults.setWarmupTimeMs(warmupTime);
   }
   
+  public void setSSL(boolean isSSL)
+  {
+    _defaults.setSSL(isSSL);
+  }
+  
   public LoadBalanceBackend getDefaults()
   {
     return _defaults;
@@ -186,7 +191,8 @@ public class LoadBalanceBuilder
     return new SingleLoadBalanceManager(socketFactory, getMeterCategory());
   }
   
-  protected ClientSocketFactory createClientSocketFactory(String address)
+  protected ClientSocketFactory createClientSocketFactory(String address,
+                                                          boolean isSecure)
   {
     int p = address.lastIndexOf(':');
     int q = address.lastIndexOf(']');
@@ -199,8 +205,6 @@ public class LoadBalanceBuilder
     int port = Integer.parseInt(address.substring(p + 1));
 
     ServletService server = ServletService.getCurrent();
-
-    boolean isSecure = false;
 
     ClientSocketFactory factory
       = new ClientSocketFactory(server.getServerId(),
@@ -218,7 +222,8 @@ public class LoadBalanceBuilder
   
   protected ClientSocketFactory createClientSocketFactory(LoadBalanceBackend backend)
   {
-    ClientSocketFactory factory = createClientSocketFactory(backend.getAddress());
+    ClientSocketFactory factory = createClientSocketFactory(backend.getAddress(),
+                                                            _defaults.isSSL());
     applyBackendConfig(factory, backend);
     
     return factory;
@@ -253,7 +258,7 @@ public class LoadBalanceBuilder
       factory.setLoadBalanceWarmupTime(backend.getWarmupTime());
     
     if (backend.hasWeight())
-      factory.setLoadBalanceWeight(backend.getWeight());    
+      factory.setLoadBalanceWeight(backend.getWeight());
   }
 
   @Override

@@ -126,6 +126,7 @@ typedef struct ssl_host_t {
 
   char *id;
   char *certificate_file;
+  char *certificate_chain_file;
   char *key_file;
   char *password;
 } ssl_host_t;

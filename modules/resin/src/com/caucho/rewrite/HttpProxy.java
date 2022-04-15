@@ -162,6 +162,11 @@ public class HttpProxy extends AbstractTargetDispatchRule
   {
     _proxyServlet.setWarmupTime(warmupTime);
   }
+  
+  public void setSSL(boolean isSSL)
+  {
+    _proxyServlet.setSSL(isSSL);
+  }
 
   @PostConstruct
   public void init()

@@ -1133,12 +1133,15 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
     for (int i = 0; i < len; i++) {
       char ch = path.charAt(i);
 
-      if (ch == ':')
+      if (ch == ':') {
         return path;
-      else if (ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z')
+      }
+      else if (ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z') {
         continue;
-      else
+      }
+      else {
         break;
+      }
     }
 
     WebApp webApp = getRequest().getWebApp();
@@ -1157,9 +1160,12 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
 
     if (hostPrefix != null && ! hostPrefix.equals("")) {
     }
-    else if (serverName.startsWith("http:")
-             || serverName.startsWith("https:"))
+    else if (serverName.startsWith("https:")) {
       hostPrefix = serverName;
+    }
+    else if (serverName.startsWith("http:")) {
+      hostPrefix = _request.getScheme() + serverName.substring(4);
+    }
     else if (host != null) {
       hostPrefix = _request.getScheme() + "://" + host;
     }
@@ -1170,7 +1176,7 @@ public final class HttpServletResponseImpl extends AbstractCauchoResponse
           && port != 0 && port != 80 && port != 443)
         hostPrefix += ":" + port;
     }
-
+    
     if (slash == 0)
       return hostPrefix + path;
 

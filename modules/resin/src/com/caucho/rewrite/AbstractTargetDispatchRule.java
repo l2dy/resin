@@ -40,10 +40,15 @@ abstract public class AbstractTargetDispatchRule extends AbstractRegexpDispatchR
   private static final L10N L = new L10N(AbstractTargetDispatchRule.class);
 
   private String _target;
+  private boolean _targetIsAbsolute;
 
   public void setTarget(String target)
   {
     _target = target;
+    
+    if (target != null && target.indexOf("://") >= 0) {
+      _targetIsAbsolute = true;
+    }
   }
 
   public void setAbsoluteTarget(String target)
@@ -65,10 +70,20 @@ abstract public class AbstractTargetDispatchRule extends AbstractRegexpDispatchR
                                  String uri,
                                  String queryString)
   {
-    if (_target == null)
+    if (_target == null) {
       return rewriteDefault(uri, queryString);
-    else if (matcher != null)
+    }
+    else if (matcher != null) {
+      /* server/1krk - can't change because of risk of 
+       * causing problems with existing apps
+       *
+      if (_targetIsAbsolute) {
+        return _target + rewriteDefault(uri, queryString);
+      }
+      */
+
       return matcher.replaceFirst(_target);
+    }
     else
       return _target;
   }

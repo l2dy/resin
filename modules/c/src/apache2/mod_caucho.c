@@ -756,7 +756,7 @@ write_added_headers(stream_t *s, request_rec *r)
     cse_write_string(s, HMUX_STRING, headers[i].val);
   }
 
-  if (! strcmp(ap_http_scheme(r), "HTTPS")) {
+  if (! strcasecmp(ap_http_scheme(r), "HTTPS")) {
     cse_write_string(s, CSE_IS_SECURE, "");
   }
 
