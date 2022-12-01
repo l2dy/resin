@@ -605,53 +605,6 @@
   </target>
 
   <target name="resin.artifacts.dist" depends="init">
-    <!--
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="ant"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    -->
-    
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="cxf"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    
-    <!--
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="maven"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="mule"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    -->
-
-    <!-- XXX: temp
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="spring"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    -->
-    <!-- XXX: temp
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="wicket"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    -->
-<!--    
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="xfire"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
-    -->
-    
-    <antcall target="artifact.dist.macro" inheritRefs="true">
-      <param name="artifact.name" value="xwork2"/>
-      <param name="artifacts" value="${resin.artifacts}"/>
-    </antcall>
   </target>
   
   <target name="resin.dist.build" 
