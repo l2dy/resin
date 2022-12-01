@@ -1,4 +1,4 @@
-AC_INIT([resin],4.0.67)
+AC_INIT([resin],@RESIN_VERSION@)
 AC_CONFIG_AUX_DIR(automake)
 #AC_CONFIG_MACRO_DIR([m4])
 
@@ -6,7 +6,7 @@ AC_CONFIG_AUX_DIR(automake)
 dnl Get os info
 AC_CANONICAL_SYSTEM
 
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([foreign])
 AC_PREFIX_DEFAULT(/usr/local/share)
 
 FULL_VERSION="Resin $PACKAGE_VERSION -- `date`"
@@ -139,14 +139,6 @@ AC_SUBST(initd_dir)
 resin_pro="."
 resin_os="../resin_os"
 is_dev=""
-
-if test -r "modules/c/src/resin/mmap_file.c"; then
-  resin_pro="."
-elif test -r "../pro/modules/c/src/resin/mmap_file.c"; then
-  resin_pro="../pro"
-  resin_os="../../../../../resin/modules/c/src/resin_os"
-  is_dev="true"
-fi
 
 AC_SUBST(resin_os)
 AC_SUBST(resin_pro)
@@ -1113,10 +1105,6 @@ AC_SUBST(BASH)
 # OS which can handle the Resin launcher
 #
 resin_pro_plugin=
-if test -r "${resin_pro}/modules/c/src/resin/mmap_file.c"; then
-   resin_pro_plugin="resin"
-fi
-
 resin_pro_plugins="$resin_pro_plugin"
 
 case "$target_cpu" in
@@ -1584,19 +1572,6 @@ modules/c/src/resin_os/Makefile
 init.d/resin
 bin/resinctl
 ], [])
-
-if test -r "modules/c/src/resin/mmap_file.c"; then
-  AC_OUTPUT([
-    modules/c/src/resin/Makefile
-    modules/c/src/resinssl/Makefile
-  ])
-elif test -r "../pro/modules/c/src/resin/mmap_file.c"; then
-  AC_OUTPUT([
-    ../pro/modules/c/src/Makefile
-    ../pro/modules/c/src/resin/Makefile
-    ../pro/modules/c/src/resinssl/Makefile
-  ])
-fi
 
 #if test -n "${resin_pro_plugins}"; then
 #  AC_OUTPUT([
