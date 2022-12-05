@@ -55,7 +55,7 @@ public class ScoreboardCommand extends AbstractManagementCommand
   @Override
   public boolean isProOnly()
   {
-    return true;
+    return false;
   }
 
   @Override
