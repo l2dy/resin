@@ -20,9 +20,6 @@
             value="${buildDirectory}/prereqErrors.log"/>
   <property name="javacSource" value="1.5"/>
   <property name="javacTarget" value="1.5"/>
-  <condition property="dir_bootclasspath" value="${java.home}/../Classes">
-    <os family="mac"/>
-  </condition>
   <property name="dir_bootclasspath" value="${java.home}/lib"/>
   <path id="path_bootclasspath">
     <fileset dir="${dir_bootclasspath}">
@@ -95,24 +92,24 @@
     <mkdir dir="${temp.folder}/resin-eclipse.jar.bin"/>
     <path id="resin-eclipse.jar.classpath">
       <fileset dir="${eclipse.home}/plugins">
-        <include name="org.eclipse.equinox.common_3.6.0.*.jar"/>
-        <include name="org.eclipse.core.variables_3.2.*.jar"/>
+        <include name="org.eclipse.equinox.common_3.17.0.*.jar"/>
+        <include name="org.eclipse.core.variables_3.5.*.jar"/>
         <include name="org.eclipse.jst.server.generic.core_1.0.*.jar"/>
-        <include name="org.eclipse.core.runtime_3.6.*.jar"/>
-        <include name="org.eclipse.osgi_3.6.*.jar"/>
-        <include name="org.eclipse.emf.common_2.6.0.*.jar"/>
-        <include name="org.eclipse.emf.ecore_2.6.*.jar"/>
-        <include name="org.eclipse.wst.server.core_1.1.*.jar"/>
+        <include name="org.eclipse.core.runtime_3.26.*.jar"/>
+        <include name="org.eclipse.osgi_3.18.*.jar"/>
+        <include name="org.eclipse.emf.common_2.27.0.*.jar"/>
+        <include name="org.eclipse.emf.ecore_2.29.*.jar"/>
+        <include name="org.eclipse.wst.server.core_1.10.*.jar"/>
         <include name="org.eclipse.jst.server.core_1.2.*.jar"/>
-        <include name="org.eclipse.core.resources_3.6.*.jar"/>
-        <include name="org.eclipse.core.jobs_3.5.1.*.jar"/>
-        <include name="org.eclipse.debug.core_3.6.0.*.jar"/>
-        <include name="org.eclipse.jdt.launching_3.5.*.jar"/>
-        <include name="org.eclipse.jface_3.6.1.*.jar"/>
+        <include name="org.eclipse.core.resources_3.18.*.jar"/>
+        <include name="org.eclipse.core.jobs_3.13.*.jar"/>
+        <include name="org.eclipse.debug.core_3.20.0.*.jar"/>
+        <include name="org.eclipse.jdt.launching_3.19.*.jar"/>
+        <include name="org.eclipse.jface_3.28.0.*.jar"/>
         <include name="org.eclipse.jst.server.generic.ui_1.0.*.jar"/>
-        <include name="org.eclipse.swt.*3.6.*.jar"/>
-        <include name="org.eclipse.wst.server.ui_1.1.*.jar"/>
-        <include name="org.eclipse.ui.workbench_3.6.1.*.jar"/>
+        <include name="org.eclipse.swt.*3.122.*.jar"/>
+        <include name="org.eclipse.wst.server.ui_1.5.*.jar"/>
+        <include name="org.eclipse.ui.workbench_3.127.0.*.jar"/>
       </fileset>
 
       <pathelement path="lib/resin.jar"/>

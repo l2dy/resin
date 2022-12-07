@@ -42,7 +42,7 @@ import org.eclipse.wst.server.core.internal.ServerPlugin;
 
 import com.caucho.env.repository.CommitBuilder;
 import com.caucho.env.repository.RepositoryException;
-import com.caucho.server.admin.DeployClient;
+import com.caucho.server.deploy.DeployClient;
 import com.caucho.vfs.Path;
 import com.caucho.vfs.Vfs;
 
