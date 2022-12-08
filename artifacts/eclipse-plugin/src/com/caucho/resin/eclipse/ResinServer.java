@@ -49,6 +49,7 @@ import org.eclipse.jst.server.generic.servertype.definition.Property;
 import org.eclipse.jst.server.generic.servertype.definition.ServerRuntime;
 import org.eclipse.wst.server.core.IRuntime;
 import org.eclipse.wst.server.core.IServer;
+import org.eclipse.wst.server.core.internal.Server;
 
 @SuppressWarnings("restriction")
 public class ResinServer extends GenericServer
@@ -224,5 +225,13 @@ public class ResinServer extends GenericServer
     IRuntime runtime = getServer().getRuntime();
     return (GenericServerRuntime) runtime.loadAdapter(GenericServerRuntime.class,
                                                       null);
+  }
+
+  @Override
+  public void setDefaults(IProgressMonitor monitor) {
+	 super.setDefaults(monitor);
+
+	 setAttribute(Server.PROP_AUTO_PUBLISH_SETTING, Server.AUTO_PUBLISH_RESOURCE);
+	 setAttribute(Server.PROP_AUTO_PUBLISH_TIME, 1);
   } 
 }
