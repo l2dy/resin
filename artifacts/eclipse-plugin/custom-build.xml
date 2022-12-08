@@ -18,27 +18,16 @@
   <property name="compilerArg" value=""/>
   <property name="compilation.prereq.log"
             value="${buildDirectory}/prereqErrors.log"/>
-  <property name="javacSource" value="1.5"/>
-  <property name="javacTarget" value="1.5"/>
-  <property name="dir_bootclasspath" value="${java.home}/lib"/>
-  <path id="path_bootclasspath">
-    <fileset dir="${dir_bootclasspath}">
-      <include name="*.jar"/>
-    </fileset>
-  </path>
-  <property name="bootclasspath" refid="path_bootclasspath"/>
-  <condition property="bundleBootClasspath" value="${J2SE-1.5}">
-    <isset property="J2SE-1.5"/>
+  <property name="javacSource" value="11"/>
+  <property name="javacTarget" value="11"/>
+  <condition property="bundleJavacSource" value="11">
+    <isset property="JavaSE-11"/>
   </condition>
-  <condition property="bundleJavacSource" value="1.5">
-    <isset property="J2SE-1.5"/>
-  </condition>
-  <condition property="bundleJavacTarget" value="1.5">
-    <isset property="J2SE-1.5"/>
+  <condition property="bundleJavacTarget" value="11">
+    <isset property="JavaSE-11"/>
   </condition>
   <property name="bundleJavacSource" value="${javacSource}"/>
   <property name="bundleJavacTarget" value="${javacTarget}"/>
-  <property name="bundleBootClasspath" value="${bootclasspath}"/>
 
   <target name="init" depends="properties">
     <condition property="pluginTemp" value="${buildTempFolder}/plugins">
@@ -116,7 +105,7 @@
     <javac destdir="${temp.folder}/resin-eclipse.jar.bin"
            failonerror="${javacFailOnError}" verbose="${javacVerbose}"
            debug="${javacDebugInfo}" includeAntRuntime="no"
-           bootclasspath="${bundleBootClasspath}" source="${bundleJavacSource}"
+           source="${bundleJavacSource}"
            target="${bundleJavacTarget}">
       <classpath refid="resin-eclipse.jar.classpath"/>
       <src path="src/"/>
