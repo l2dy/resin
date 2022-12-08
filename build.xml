@@ -54,11 +54,6 @@
   </target>
 
   <target name="eclipse2" depends="init">
-    <!--
-      xxx: assumes resin.jar and javaee-16.jar are in eclipse-plugin/lib
-      xxx: ^ fix it!
-    -->
-
     <property name="eclipse.rep"
               value="${basedir}/artifacts/eclipse-site/repository"/>
 

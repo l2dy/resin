@@ -111,10 +111,6 @@
         <include name="org.eclipse.wst.server.ui_1.5.*.jar"/>
         <include name="org.eclipse.ui.workbench_3.127.0.*.jar"/>
       </fileset>
-
-      <pathelement path="lib/resin.jar"/>
-      <pathelement path="lib/javaee-16.jar"/>
-
     </path>
     <!-- compile the source code -->
     <javac destdir="${temp.folder}/resin-eclipse.jar.bin"
@@ -210,7 +206,7 @@
       <param name="target.folder" value="${build.result.folder}"/>
       <param name="projectLocation" value="${basedir}"/>
       <param name="binary.folders"
-             value="${build.result.folder}/resin-eclipse.jar:/Users/alex/Documents/projects/caucho/trunk/resin/artifacts/eclipse-plugin/lib/resin.jar"/>
+             value="${build.result.folder}/resin-eclipse.jar"/>
       <param name="projectName" value="${bundleId}_${bundleVersion}"/>
     </antcall>
     <eclipse.gatherBundle
@@ -244,8 +240,6 @@
         <include name="conf/"/>
         <include name="buildfiles/"/>
         <include name="resin-eclipse.jar"/>
-        <include name="lib/resin.jar"/>
-        <include name="lib/javaee-16.jar"/>
       </fileset>
     </copy>
     <antcall target="apitools.generation">
@@ -253,7 +247,7 @@
              value="${destination.temp.folder}/com.caucho.resin.eclipse_${bundleVersion}"/>
       <param name="projectLocation" value="${basedir}"/>
       <param name="binary.folders"
-             value="${destination.temp.folder}/com.caucho.resin.eclipse_${bundleVersion}/resin-eclipse.jar:/Users/alex/Documents/projects/caucho/trunk/resin/artifacts/eclipse-plugin/lib/resin.jar"/>
+             value="${destination.temp.folder}/com.caucho.resin.eclipse_${bundleVersion}/resin-eclipse.jar"/>
       <param name="projectName" value="${bundleId}_${bundleVersion}"/>
     </antcall>
   </target>
