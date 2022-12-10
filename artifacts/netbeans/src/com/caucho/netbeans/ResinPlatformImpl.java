@@ -28,9 +28,10 @@
  */
 package com.caucho.netbeans;
 
+import org.netbeans.api.j2ee.core.Profile;
 import org.netbeans.api.java.platform.JavaPlatform;
 import org.netbeans.modules.j2ee.deployment.common.api.J2eeLibraryTypeProvider;
-import org.netbeans.modules.j2ee.deployment.devmodules.api.J2eeModule;
+import org.netbeans.modules.j2ee.deployment.devmodules.api.J2eeModule.Type;
 import org.netbeans.modules.j2ee.deployment.plugins.spi.J2eePlatformImpl;
 import org.netbeans.spi.project.libraries.LibraryImplementation;
 import org.openide.util.Utilities;
@@ -49,7 +50,7 @@ public class ResinPlatformImpl
   private static final Logger log = Logger.getLogger(ResinPlatformImpl.class.getName());
   private static final PluginL10N L = new PluginL10N(ResinPlatformImpl.class);
   private static final Set<Object> SUPPORTED_MODULE_TYPES = new LinkedHashSet<Object>();
-  private static final Set<String> SUPPORTED_SPEC_VERSIONS = new LinkedHashSet<String>();
+  private static final Set<Profile> SUPPORTED_PROFILES = new LinkedHashSet<Profile>();
   private static final Set<String> SUPPORTED_JAVA_PLATFORM_VERSIONS = new LinkedHashSet<String>();
   private String _displayName;
   private ResinConfiguration _resinConfiguration;
@@ -117,8 +118,8 @@ public class ResinPlatformImpl
     return SUPPORTED_MODULE_TYPES;
   }
 
-  public Set<String> getSupportedSpecVersions() {
-    return SUPPORTED_SPEC_VERSIONS;
+  public Set<Profile> getSupportedProfiles() {
+    return SUPPORTED_PROFILES;
   }
 
   public Set<String> getSupportedJavaPlatformVersions() {
@@ -130,15 +131,16 @@ public class ResinPlatformImpl
   }
 
   static {
-    SUPPORTED_MODULE_TYPES.add(J2eeModule.WAR);
-    SUPPORTED_MODULE_TYPES.add(J2eeModule.EAR);
-    SUPPORTED_MODULE_TYPES.add(J2eeModule.EJB);
+    SUPPORTED_MODULE_TYPES.add(Type.WAR);
+    SUPPORTED_MODULE_TYPES.add(Type.EAR);
+    SUPPORTED_MODULE_TYPES.add(Type.EJB);
 
-    SUPPORTED_SPEC_VERSIONS.add(J2eeModule.J2EE_13);
-    SUPPORTED_SPEC_VERSIONS.add(J2eeModule.J2EE_14);
-    SUPPORTED_SPEC_VERSIONS.add(J2eeModule.JAVA_EE_5);
+    SUPPORTED_PROFILES.add(Profile.J2EE_13);
+    SUPPORTED_PROFILES.add(Profile.J2EE_14);
+    SUPPORTED_PROFILES.add(Profile.JAVA_EE_5);
+    SUPPORTED_PROFILES.add(Profile.JAVA_EE_6_WEB);
 
-    SUPPORTED_JAVA_PLATFORM_VERSIONS.add("1.5");
-    SUPPORTED_JAVA_PLATFORM_VERSIONS.add("1.6");
+    SUPPORTED_JAVA_PLATFORM_VERSIONS.add("1.7");
+    SUPPORTED_JAVA_PLATFORM_VERSIONS.add("1.8");
   }
 }
