@@ -871,26 +871,9 @@ if test -z "${jni_ld_shlib}"; then
       CFLAGS="$CFLAGS -pthread -fPIC -fno-omit-frame-pointer -O2"
       jni_cflags="$jni_cflags -fPIC"
       jni_ldflags_shlib="-shared -fPIC"
-
-      if test -n "$b64_jni"; then
-        jni_cflags_jni="$jni_cflags_jni -m64 -fPIC"
-        jni_ldflags_shlib="$jni_ldflags_shlib -m64"
-      else
-        jni_cflags="$jni_cflags -m32"
-        jni_ldflags_shlib="$jni_ldflags_shlib -m32"
-      fi
-      
       plugin_cflags_shlib=$jni_cflags_shlib
       plugin_ldflags_shlib=$jni_ldflags_shlib
 
-      if test -n "$b64"; then
-        plugin_cflags_jni="$jni_cflags_jni -m64 -fPIC"
-        plugin_ldflags_shlib="$jni_ldflags_shlib -m64"
-      else
-        plugin_cflags="$jni_cflags -m32"
-        plugin_ldflags_shlib="$jni_ldflags_shlib -m32"
-      fi
-      
       if test "$target_cpu" = "armv6l"; then
         jni_cflags_shlib="-fPIC"
         plugin_cflags_shlib=$jni_cflags_shlib
