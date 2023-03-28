@@ -56,6 +56,8 @@ import com.caucho.env.warning.WarningService;
 import com.caucho.license.LicenseCheck;
 import com.caucho.license.LicenseStore;
 import com.caucho.server.admin.Management;
+import com.caucho.server.admin.PrometheusMeterService;
+import com.caucho.server.admin.PrometheusStatSystem;
 import com.caucho.server.admin.StatSystem;
 import com.caucho.server.cluster.ClusterPod;
 import com.caucho.server.cluster.ServletService;
@@ -77,6 +79,7 @@ public class ResinDelegate
   private final Resin _resin;
   private String _licenseErrorMessage;
   protected LicenseStore _licenseStore;
+  private PrometheusMeterService _prometheusMeterService;
 
   /**
    * Creates a new resin server.
@@ -84,6 +87,8 @@ public class ResinDelegate
   public ResinDelegate(Resin resin)
   {
     _resin = resin;
+
+    _prometheusMeterService = new PrometheusMeterService();
   }
 
   public void init()
@@ -220,6 +225,7 @@ public class ResinDelegate
   protected void addServices()
   {
     TempFileService.createAndAddService();
+    PrometheusStatSystem.createAndAddService();
     
     createManagementMBean();
   }
