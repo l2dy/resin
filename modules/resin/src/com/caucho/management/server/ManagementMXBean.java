@@ -172,6 +172,11 @@ public interface ManagementMXBean extends ManagedObjectMXBean
     String periodStr)
   throws ReflectionException;
 
+  @Description("outputs stats in Prometheus format")
+  @MXAction(value = "metrics", method = "GET")
+  @MXContentType("text/plain; version=0.0.4")
+  public InputStream getMetrics() throws ReflectionException;
+
   @Description("sets JMX Mbean's attribute")
   @MXAction(value = "jmx-set", method = "POST")
   @MXContentType

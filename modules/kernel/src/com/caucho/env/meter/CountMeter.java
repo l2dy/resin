@@ -75,7 +75,7 @@ public final class CountMeter extends AbstractMeter implements CountSensor {
   
   public final double calculate()
   {
-    return _value;
+    return _lastTotal;
   }
   
   /**

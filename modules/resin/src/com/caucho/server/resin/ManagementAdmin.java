@@ -33,6 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -55,20 +56,7 @@ import com.caucho.jmx.MXParam;
 import com.caucho.management.server.AbstractManagedObject;
 import com.caucho.management.server.ManagementMXBean;
 import com.caucho.quercus.lib.reflection.ReflectionException;
-import com.caucho.server.admin.AddUserQueryReply;
-import com.caucho.server.admin.HmuxClientFactory;
-import com.caucho.server.admin.JmxCallQueryReply;
-import com.caucho.server.admin.JmxSetQueryReply;
-import com.caucho.server.admin.JsonQueryReply;
-import com.caucho.server.admin.ListJmxQueryReply;
-import com.caucho.server.admin.ListUsersQueryReply;
-import com.caucho.server.admin.ManagerClient;
-import com.caucho.server.admin.ManagerProxyApi;
-import com.caucho.server.admin.PdfReportQueryReply;
-import com.caucho.server.admin.RemoveUserQueryReply;
-import com.caucho.server.admin.StatServiceValuesQueryReply;
-import com.caucho.server.admin.StringQueryReply;
-import com.caucho.server.admin.WebAppDeployClient;
+import com.caucho.server.admin.*;
 import com.caucho.server.deploy.DeployClient;
 import com.caucho.server.deploy.DeployControllerState;
 import com.caucho.server.deploy.DeployTagResult;
@@ -344,6 +332,17 @@ public class ManagementAdmin extends AbstractManagedObject
     String []meters = metersStr.split(",");
 
     return managerClient.getStats(meters, from, to);
+  }
+
+  @Override
+  public InputStream getMetrics() {
+    PrometheusStatSystem statSystem = PrometheusStatSystem.getCurrent();
+    if (statSystem == null) {
+      return null;
+    }
+
+    String metrics = statSystem.exportMetrics();
+    return new ByteArrayInputStream(metrics.getBytes(StandardCharsets.UTF_8));
   }
 
   @Override
