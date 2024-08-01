@@ -1281,7 +1281,9 @@ public class SessionImpl implements HttpSession, CacheListener {
       Login login = _manager.getWebApp().getLogin();
 
       if (login != null) {
-        login.sessionInvalidate(this, logout == Logout.TIMEOUT);
+        synchronized (this) {
+          login.sessionInvalidate(this, logout == Logout.TIMEOUT);
+        }
       }
 
       _manager.removeSession(this);

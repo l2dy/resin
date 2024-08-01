@@ -338,6 +338,30 @@ public class HessianProxyFactory implements ServiceProxyFactory, ObjectFactory {
 
     return _serializerFactory;
   }
+  
+  /**
+   * Sets whitelist mode
+   */
+  public void setWhitelist(boolean isWhitelist)
+  {
+    getSerializerFactory().setWhitelist(isWhitelist);
+  }
+  
+  /**
+   * Allow a class pattern
+   */
+  public void allow(String pattern)
+  {
+    getSerializerFactory().allow(pattern);
+  }
+  
+  /**
+   * Deny a class pattern
+   */
+  public void deny(String pattern)
+  {
+    getSerializerFactory().deny(pattern);
+  }
 
   protected HessianConnectionFactory createHessianConnectionFactory()
   {

@@ -20,7 +20,7 @@ libresin_os.so	: $(OBJ)
 	$(CC) $(LDFLAGS_SHLIB) -o $@ $(OBJ) $(PROXY_LIBS)
 
 libresin_os.jnilib	: $(OBJ)
-	$(CC) $(LDFLAGS_SHLIB) -framework JavaVM -o $@ $(OBJ) $(PROXY_LIBS)
+	$(CC) $(LDFLAGS_SHLIB) -o $@ $(OBJ) $(PROXY_LIBS)
 
 boot.o		: Makefile resin_os.h
 java.o		: Makefile resin_os.h

@@ -53,6 +53,8 @@ public class MemcachedConnection extends AbstractProtocolConnection
 {
   private static final HashMap<CharBuffer,Command> _commandMap
     = new HashMap<CharBuffer,Command>();
+
+  private static final int METHOD_MAX = 1024;
   
   private MemcachedProtocol _memcache;
   private ClusterCache _cache;
@@ -140,6 +142,9 @@ public class MemcachedConnection extends AbstractProtocolConnection
     
     do {
       _method.append((char) ch);
+      if (_method.length() > METHOD_MAX) {
+	  throw new IOException("invalid request");
+      }
     } while ((ch = is.read()) >= 0 && ! Character.isWhitespace(ch));
     
     Command command = _commandMap.get(_method);

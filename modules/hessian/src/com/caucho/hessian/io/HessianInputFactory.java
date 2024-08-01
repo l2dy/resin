@@ -67,6 +67,30 @@ public class HessianInputFactory
   {
     return _factory.getSerializerFactory();
   }
+  
+  /**
+   * Set whitelist mode
+   */
+  public void setWhitelist(boolean isWhitelist)
+  {
+    _factory.setWhitelist(isWhitelist);
+  }
+  
+  /**
+   * Allow a class pattern
+   */
+  public void allow(String pattern)
+  {
+    _factory.allow(pattern);
+  }
+  
+  /**
+   * Deny a class pattern
+   */
+  public void deny(String pattern)
+  {
+    _factory.deny(pattern);
+  }
 
   public HeaderType readHeader(InputStream is)
     throws IOException

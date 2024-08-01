@@ -38,6 +38,7 @@ import com.caucho.config.ConfigException;
 import com.caucho.config.Configurable;
 import com.caucho.server.dispatch.ForwardAbsoluteFilterChain;
 import com.caucho.server.dispatch.ForwardFilterChain;
+import com.caucho.server.host.Host;
 import com.caucho.server.webapp.WebApp;
 import com.caucho.util.L10N;
 

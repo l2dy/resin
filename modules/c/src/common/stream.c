@@ -1592,7 +1592,7 @@ select_host(cluster_t *cluster, time_t now)
     return -1;
 
   if (cluster->round_robin_index < 0) {
-    srand(65521 * time(0) + getpid() + (int) cluster);
+    srand(65521 * time(0) + getpid() + (int) (long) cluster);
     round_robin = rand();
     if (round_robin < 0)
       round_robin = -round_robin;

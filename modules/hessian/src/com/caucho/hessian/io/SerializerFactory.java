@@ -243,6 +243,30 @@ public class SerializerFactory extends AbstractSerializerFactory
   {
     return _fieldDeserializerFactory;
   }
+  
+  /**
+   * Sets whitelist mode for classes
+   */
+  public void setWhitelist(boolean isWhitelist)
+  {
+    getClassFactory().setWhitelist(isWhitelist);
+  }
+  
+  /**
+   * Adds an allowed class pattern
+   */
+  public void allow(String allow)
+  {
+    getClassFactory().allow(allow);
+  }
+  
+  /**
+   * Adds a denied class pattern
+   */
+  public void deny(String allow)
+  {
+    getClassFactory().deny(allow);
+  }
 
   /**
    * Returns the serializer for a class.

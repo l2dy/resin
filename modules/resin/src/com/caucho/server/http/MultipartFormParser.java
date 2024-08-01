@@ -54,6 +54,8 @@ class MultipartFormParser {
   private static final Logger log
     = Logger.getLogger(MultipartFormParser.class.getName());
   static final L10N L = new L10N(MultipartFormParser.class);
+
+    static long FILE_UPLOAD_MAX = 16L * 1024L * 1024L * 1024L; 
   
   static void parsePostData(HashMapImpl<String,String[]> table,
                             List<Part> parts,
@@ -109,7 +111,12 @@ class MultipartFormParser {
         try {
           int len;
 
-          while ((len = is.read(buf, 0, buf.length)) > 0) {
+	  if (fileUploadMax <= 0) {
+	      fileUploadMax = FILE_UPLOAD_MAX;
+	  }
+
+          while ((len = is.read(buf, 0, buf.length)) > 0 
+		 && totalLength < fileUploadMax) {
             os.write(buf, 0, len);
             totalLength += len;
           }
@@ -119,6 +126,11 @@ class MultipartFormParser {
           TempBuffer.free(tempBuffer);
           tempBuffer = null;
         }
+
+	if (uploadMax < totalLength) {
+          String msg = L.l("multipart form data '{0}' too large",
+                           "" + totalLength);
+	}
 
         long fileLength = tempFile.getLength();
         

@@ -1480,8 +1480,10 @@ public class TcpSocketLink extends AbstractSocketLink
       }
       else {
         log.warning(dbgId() + " failed keepalive (select)");
-        System.out.println("FAILED_KA:");
-        _requestStateRef.get().toWakeKeepalive(_requestStateRef);
+        
+        _requestStateRef.get().toDestroy(_requestStateRef);
+        
+        return RequestState.CLOSED;
       }
     }
 
@@ -1730,7 +1732,7 @@ public class TcpSocketLink extends AbstractSocketLink
     Thread thread = Thread.currentThread();
     
     if (thread != _thread)
-      throw new IllegalStateException(L.l("{0} toComet called from invalid thread",
+      throw new IllegalStateException(L.l("{0} startDuplex called from invalid thread",
                                           this));
     
     _state = _state.toDuplex(this);

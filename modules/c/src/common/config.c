@@ -1264,7 +1264,8 @@ cse_add_config_server(mem_pool_t *pool, config_t *config,
   }
 
   if (*config->work_dir) {
-    sprintf(config->config_path, "%s/%s", config->work_dir,
+    sprintf(config->config_path,
+             "%.256s/%.256s", config->work_dir,
 	    config->config_file);
 
     read_all_config(config);

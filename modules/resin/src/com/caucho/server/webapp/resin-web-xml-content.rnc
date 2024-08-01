@@ -339,6 +339,11 @@ r_jsp = element jsp {
 
  & element tld-file-set { r_fileset }?
 
+ & element tld-jar-file-set { 
+     r_fileset-include*
+     & r_fileset-exclude*
+   }?
+
  & (attribute trim-directive-whitespaces { r_boolean-Type }
     | element trim-directive-whitespaces { r_boolean-Type })?
 

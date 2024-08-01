@@ -64,7 +64,7 @@ public class ForwardAbsoluteFilterChain implements FilterChain {
                        ServletResponse response)
     throws ServletException, IOException
   {
-    ServletContext root = _webApp.getContext("/");
+    ServletContext root = request.getServletContext().getContext("/");
 
     RequestDispatcher disp = root.getRequestDispatcher(_url);
 

@@ -34,6 +34,8 @@
 #endif
 #include "cse.h"
 
+void cse_free(void *);
+
 #define BLOCK_SIZE 32 * 1024
 
 typedef struct pool_block_t {

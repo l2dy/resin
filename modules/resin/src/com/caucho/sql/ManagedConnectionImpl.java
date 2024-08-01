@@ -205,10 +205,8 @@ public class ManagedConnectionImpl
       throw _connException;
 
     // env/11er
-    /*
     if (! ping())
-      return null;
-      */
+      throw new ResourceException(L.l("{0} failed database ping.", this));
     
     _lastEventTime = CurrentTime.getCurrentTime();
 

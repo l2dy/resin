@@ -372,7 +372,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public String getContentType()
   {
     AbstractHttpRequest request = _request;
-    
+
     if (request != null)
       return request.getContentType();
     else
@@ -387,7 +387,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Locale getLocale()
   {
     AbstractHttpRequest request = _request;
-    
+
     if (request != null)
       return request.getLocale();
     else
@@ -421,16 +421,16 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     if (request == null)
       return false;
-    
+
     WebApp webApp = request.getWebApp();
-      
+
     if (webApp != null) {
       Boolean isSecure = webApp.isRequestSecure();
-        
+
       if (isSecure != null)
         return isSecure;
     }
-      
+
     return request.isSecure();
   }
 
@@ -449,7 +449,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Object getAttribute(String name)
   {
     HashMapImpl<String,Object> attributes = _attributes;
-    
+
     if (attributes != null)
       return attributes.get(name);
     else if (isSecure()) {
@@ -462,7 +462,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     else
       return null;
   }
-  
+
   private boolean isAttributesEmpty()
   {
     return _attributes == null;
@@ -489,7 +489,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     else
       return NullEnumeration.create();
   }
-  
+
   /**
    * Sets the value of the named request attribute.
    *
@@ -552,7 +552,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     Object oldValue = attributes.remove(name);
 
     WebApp webApp = getWebApp();
-    
+
     if (webApp == null)
       return;
 
@@ -926,20 +926,20 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   public Cookie []getCookies()
   {
     Cookie []cookiesIn = _cookiesIn;
-    
+
     if (cookiesIn == null) {
       AbstractHttpRequest request = _request;
-      
+
       if (request == null) {
         return null;
       }
-      
+
       SessionManager sessionManager = getSessionManager();
-      
+
       if (sessionManager == null) {
         return null;
       }
-      
+
       cookiesIn = request.getCookies();
 
       String sessionCookieName = getSessionCookie(sessionManager);
@@ -953,7 +953,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
           break;
         }
       }
-      
+
       _cookiesIn = cookiesIn;
 
       /*
@@ -1230,7 +1230,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     if (getSession(false) == null)
       return null;
     */
-    
+
     if (isAttributesEmpty() && ! create) {
       return null;
     }
@@ -1251,7 +1251,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
    */
   @Override
   public void logout()
-  {    
+  {
     Login login = getLogin();
 
     if (login != null) {
@@ -1480,7 +1480,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     if (asyncContext == null) {
       return false;
     }
-    
+
     return asyncContext.isAsyncStarted();
   }
 
@@ -1535,14 +1535,14 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     if (_asyncContext == null) {
       _asyncContext = new AsyncContextImpl(_request);
-      
+
       if (_asyncTimeout > 0)
         _asyncContext.setTimeout(_asyncTimeout);
     }
     else {
       _asyncContext.restart();
     }
-    
+
     _asyncContext.init(request, response, isOriginal);
 
     return _asyncContext;
@@ -1572,12 +1572,12 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
   {
     if (log.isLoggable(Level.FINE))
       log.fine(this + " upgrade HTTP to WebSocket " + listener);
-    
+
     String method = getMethod();
-    
+
     if (! "GET".equals(method)) {
       getResponse().sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
-      
+
       throw new IllegalStateException(L.l("HTTP Method must be 'GET', because the WebSocket protocol requires 'GET'.\n  remote-IP: {0}",
                                           getRemoteAddr()));
     }
@@ -1587,32 +1587,40 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     if (! "WebSocket".equalsIgnoreCase(upgrade)) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
-      
+
       throw new IllegalStateException(L.l("HTTP Upgrade header '{0}' must be 'WebSocket', because the WebSocket protocol requires an Upgrade: WebSocket header.\n  remote-IP: {1}",
                                           upgrade,
                                           getRemoteAddr()));
     }
 
-    if (connection == null 
+    if (connection == null
         || connection.toLowerCase().indexOf("upgrade") < 0) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
-      
+
       throw new IllegalStateException(L.l("HTTP Connection header '{0}' must be 'Upgrade', because the WebSocket protocol requires a Connection: Upgrade header.\n  remote-IP: {1}",
                                           connection,
                                           getRemoteAddr()));
     }
-    
-    String key = getHeader("Sec-WebSocket-Key");
+
+    String key;
+
+    try {
+      key = getHeader("Sec-WebSocket-Key");
+    } catch (Exception e) {
+      getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
+
+      throw e;
+    }
 
     if (key == null) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
-      
+
       throw new IllegalStateException(L.l("HTTP Sec-WebSocket-Key header is required, because the WebSocket protocol requires an Origin header.\n  remote-IP: {0}",
                                           getRemoteAddr()));
     }
     else if (key.length() != 24) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
-      
+
       throw new IllegalStateException(L.l("HTTP Sec-WebSocket-Key header is invalid '{0}' because it's not a 16-byte value.\n  remote-IP: {1}",
                                           key,
                                           getRemoteAddr()));
@@ -1623,40 +1631,40 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
     String requiredVersion = WebSocketConstants.VERSION;
     if (! requiredVersion.equals(version)) {
       getResponse().sendError(HttpServletResponse.SC_BAD_REQUEST);
-      
+
       throw new IllegalStateException(L.l("HTTP Sec-WebSocket-Version header with value '{0}' is required, because the WebSocket protocol requires an Sec-WebSocket-Version header.\n  remote-IP: {1}",
                                           requiredVersion,
                                           getRemoteAddr()));
     }
-    
+
     String extensions = getHeader("Sec-WebSocket-Extensions");
-    
+
     boolean isMasked = true;
-    
+
     if (extensions != null
         && extensions.indexOf("x-unmasked") >= 0) {
       isMasked = false;
     }
-    
+
     String serverExtensions = null;
-    
+
     if (! isMasked)
       serverExtensions = "x-unmasked";
-    
+
     _response.setStatus(101);//, "Switching Protocols");
     _response.setHeader("Upgrade", "websocket");
-    
+
     String accept = calculateWebSocketAccept(key);
-    
+
     _response.setHeader("Sec-WebSocket-Accept", accept);
-    
+
     if (serverExtensions != null)
       _response.setHeader("Sec-WebSocket-Extensions", serverExtensions);
 
     _response.setContentLength(0);
 
     WebSocketContextImpl webSocket;
-    
+
     if (isMasked) {
       webSocket = new WebSocketContextImpl(this, _response, listener,
                                            new MaskedFrameInputStream());
@@ -1665,13 +1673,13 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       webSocket = new WebSocketContextImpl(this, _response, listener,
                                            new UnmaskedFrameInputStream());
     }
-    
+
     SocketLinkDuplexController controller = _request.startDuplex(webSocket);
     webSocket.setController(controller);
-    
+
     try {
       _response.getOutputStream().flush();
-      
+
       webSocket.flush();
 
       webSocket.onStart();
@@ -1683,25 +1691,25 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     return webSocket;
   }
-  
+
   private String calculateWebSocketAccept(String key)
   {
     try {
       MessageDigest md = MessageDigest.getInstance("SHA1");
-      
+
       int length = key.length();
       for (int i = 0; i < length; i++) {
         md.update((byte) key.charAt(i));
       }
-      
+
       String guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
       length = guid.length();
       for (int i = 0; i < length; i++) {
         md.update((byte) guid.charAt(i));
       }
-      
+
       byte []digest = md.digest();
-      
+
       return Base64.encode(digest);
     } catch (Exception e) {
       throw new RuntimeException(e);
@@ -1743,7 +1751,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
       comet.onComplete();
     }
     */
-    
+
     if (async != null) {
       async.onComplete();
     }
@@ -1767,7 +1775,7 @@ public final class HttpServletRequestImpl extends AbstractCauchoRequest
 
     // server/1lg0
     _response.closeImpl();
-    
+
     _cookiesIn = null;
     _request = null;
   }

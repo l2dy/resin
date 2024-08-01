@@ -766,6 +766,11 @@ public class DBPool
 
 
     _dataSource = (DataSource) _connectionPool.init(mcf);
+
+    if (_dataSource == null) {
+	throw new IllegalStateException(L.l("DataSource {0} is unavailable", getName()));
+    }
+
     _connectionPool.start();
 
     _localDataSourceImpl = new EnvironmentLocal<DataSource>("caucho.data-source." + getName());

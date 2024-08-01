@@ -954,7 +954,7 @@ public class ConnectionPool extends AbstractManagedObject
             log.log(Level.FINE, e.toString(), e);
           }
 
-          break;
+          return null;
         }
       }
 

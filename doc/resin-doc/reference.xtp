@@ -9843,7 +9843,7 @@ to the client.
   <td>The target URL to which to forward the request.</td>
 </tr>
 <tr>
-  <td>absolute&#x2011;target</td>
+  <td>absolute-target</td>
   <td>The absolute target URL to which to forward the request. The absolute target is based on the host root, not relative to the webapp.</td>
 </tr>
 </attributes>

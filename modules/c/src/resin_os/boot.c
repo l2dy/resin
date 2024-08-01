@@ -31,6 +31,8 @@
 /* probably system-dependent */
 #include <jni.h>
 
+#include "resin_os.h"
+
 static char *
 get_utf8(JNIEnv *env, jstring jaddr, char *buf, int buflen)
 {
@@ -146,6 +148,7 @@ Java_com_caucho_bootjni_JniProcess_exec(JNIEnv *env,
   int gid = -1;
   int len;
   int i;
+  int result;
   int pipe_fds[2];
   int pid;
   jclass c_jni_process;
@@ -326,11 +329,12 @@ Java_com_caucho_bootjni_JniProcess_exec(JNIEnv *env,
   }
 #endif
 
-  if (gid >= 0)
-    setregid(gid, gid);
+  if (gid >= 0) {
+    result = setregid(gid, gid);
+  }
   
   if (uid >= 0) {
-    setreuid(uid, uid);
+    result = setreuid(uid, uid);
 
     if (getuid() != uid) {
       fprintf(stderr, "Can't setuid to %d, received %d\n", uid, getuid());

@@ -45,6 +45,13 @@ public class JdbcDriverContext
     _defaultDriver = "com.mysql.jdbc.Driver";
     _defaultUrlPrefix = "jdbc:mysql://";
 
+    try {
+	String driver = "com.mysql.cj.jdbc.Driver";
+	Class.forName(driver);
+	_defaultDriver = driver;
+    } catch (Exception e) {
+    }
+
     // php/144b, php/1464, php/1465
     _defaultEncoding = "ISO8859_1";
 

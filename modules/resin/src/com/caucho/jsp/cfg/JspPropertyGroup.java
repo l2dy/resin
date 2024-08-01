@@ -56,7 +56,7 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
   private static int _gId;
 
   private WebApp _webApp;
-  
+
   private String _id;
   private ArrayList<String> _urlPatterns = new ArrayList<String>();
   private String _pageEncoding;
@@ -90,6 +90,7 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
 
   private boolean _recompileOnError = false;
   private FileSetType _tldFileSet;
+  private FileSetType _tldJarFileSet;
 
   private Boolean _isTrimWhitespace = null;
   private Boolean _isDeferredSyntaxAllowedAsLiteral = null;
@@ -108,7 +109,7 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
   {
     _webApp = webApp;
   }
-  
+
   /**
    * Returns the group's identifier.
    */
@@ -275,7 +276,7 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
   @Override
   public String getIsXml()
   {
-    return _isXml == null ? null : _isXml.toString(); 
+    return _isXml == null ? null : _isXml.toString();
   }
 
   /**
@@ -671,6 +672,22 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
   }
 
   /**
+   * Sets the jar fileset.
+   */
+  public void setTldJarFileSet(FileSetType fileSet)
+  {
+    _tldJarFileSet = fileSet;
+  }
+
+  /**
+   * Gets the jar fileset.
+   */
+  public FileSetType getTldJarFileSet()
+  {
+    return _tldJarFileSet;
+  }
+
+  /**
    * Sets a restriction of the tld dir.
    */
   public void setTldDir(Path tldDir)
@@ -724,7 +741,7 @@ public class JspPropertyGroup implements JspPropertyGroupDescriptor {
     if (_webApp != null) {
       ServletMapping mapping = _webApp.createServletMapping();
       mapping.setServletName("jsp-property-group-" + _gId++);
-      
+
       if (Boolean.TRUE.equals(_isXml))
         mapping.setServletClass(JspXmlServlet.class.getName());
       else

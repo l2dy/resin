@@ -52,6 +52,8 @@ import java.io.InputStream;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 
+import com.caucho.hessian.server.*;
+
 /**
  * Proxy class for Hessian services.
  */
@@ -59,7 +61,7 @@ abstract public class AbstractSkeleton {
   private Class _apiClass;
   private Class _homeClass;
   private Class _objectClass;
-  
+
   private HashMap _methodMap = new HashMap();
 
   /**
@@ -69,12 +71,25 @@ abstract public class AbstractSkeleton {
    */
   protected AbstractSkeleton(Class apiClass)
   {
+    this(apiClass, null);
+  }
+
+  protected AbstractSkeleton(Class apiClass, Class []limitClasses)
+  {
+    if (limitClasses == null) {
+      limitClasses = generateLimitClasses(apiClass);
+    }
+
     _apiClass = apiClass;
-    
+
     Method []methodList = apiClass.getMethods();
 
     for (int i = 0; i < methodList.length; i++) {
       Method method = methodList[i];
+
+      if (isLimitMethod(method, limitClasses)) {
+        continue;
+      }
 
       if (_methodMap.get(method.getName()) == null)
         _methodMap.put(method.getName(), methodList[i]);
@@ -82,9 +97,29 @@ abstract public class AbstractSkeleton {
       Class []param = method.getParameterTypes();
       String mangledName = method.getName() + "__" + param.length;
       _methodMap.put(mangledName, methodList[i]);
-      
+
       _methodMap.put(mangleName(method, false), methodList[i]);
     }
+  }
+
+  protected Class<?> []generateLimitClasses(Class<?> apiClass)
+  {
+    return new Class[] {
+      AbstractSkeleton.class,
+      HessianSkeleton.class,
+      HessianServlet.class,
+    };
+  }
+
+  private boolean isLimitMethod(Method method, Class []limitClasses)
+  {
+    for (Class cl : limitClasses) {
+      if (method.getDeclaringClass().isAssignableFrom(cl)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   /**
@@ -155,9 +190,9 @@ abstract public class AbstractSkeleton {
   public static String mangleName(Method method, boolean isFull)
   {
     StringBuffer sb = new StringBuffer();
-    
+
     sb.append(method.getName());
-    
+
     Class []params = method.getParameterTypes();
     for (int i = 0; i < params.length; i++) {
       sb.append('_');

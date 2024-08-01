@@ -47,37 +47,37 @@ import com.caucho.vfs.Path;
 
 /**
  * Filesystem access for a random-access store.
- * 
+ *
  * The store is designed around a single writer thread and multiple
  * reader threads. When possible, it uses mmap.
  */
 public class StoreReadWriteMmapNio implements StoreReadWrite
 {
   private final static L10N L = new L10N(StoreReadWriteMmapNio.class);
-  
-  // private final static long FILE_SIZE_INCREMENT = 32L * 1024 * 1024; 
-  // private final static long FILE_SIZE_INCREMENT = 64 * 1024; 
+
+  // private final static long FILE_SIZE_INCREMENT = 32L * 1024 * 1024;
+  // private final static long FILE_SIZE_INCREMENT = 64 * 1024;
 
   private final Path _path;
 
   private long _fileSize;
-  
+
   private FileChannel _channel;
-  
+
   private long _mmapChunkSize;
-  
+
   private final ConcurrentArrayList<MmapFile> _mmapFiles
     = new ConcurrentArrayList<MmapFile>(MmapFile.class);
-  
+
   private MmapFile []_mmapFileChunks = new MmapFile[0];
-  
+
   private long _mmapCloseTimeout = 1000L;
-  
+
   private final AtomicBoolean _isClosed = new AtomicBoolean();
   // private ServiceManagerAmp _rampManager;
 
   // private StoreFsyncService<MmapFile> _fsyncService;
-  
+
   private FreeList<InStoreImpl> _freeInStore
     = new FreeList<InStoreImpl>(16);
   private FreeList<OutStoreMmapNio> _freeOutStore
@@ -95,24 +95,24 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
   StoreReadWriteMmapNio(StoreBuilder builder)
   {
     _path = builder.getPath();
-    
+
     //_rampManager = builder.getRampManager();
 
     if (_path == null) {
       throw new NullPointerException();
     }
     //Objects.requireNonNull(_rampManager);
-    
+
     /*
     FsyncImpl fsyncImpl = new FsyncImpl();
     StoreFsyncServiceImpl fsyncServiceImpl
       = new StoreFsyncServiceImpl(fsyncImpl);
-    
+
     _fsyncService = getRampManager().service(fsyncServiceImpl)
                                     .as(StoreFsyncService.class);
                                     */
   }
-  
+
   /*
   ServiceManagerAmp getRampManager()
   {
@@ -128,18 +128,18 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
   {
     return _fileSize;
   }
-  
+
   private void setFileSize(long size)
   {
     _fileSize = Math.max(_fileSize, size);
   }
-  
+
   @Override
   public long getChunkSize()
   {
     return FILE_SIZE_INCREMENT;
   }
-  
+
   public long getMmapCloseTimeout()
   {
     return _mmapCloseTimeout;
@@ -163,19 +163,19 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       throw new IOException(L.l("CREATE for path '{0}' failed, because the file already exists.  CREATE can not override an existing table.",
                                 _path.getNativePath()));
     }
-    
+
     _channel = _path.fileChannelFactory()
-                    .openFileChannel(StandardOpenOption.CREATE, 
+                    .openFileChannel(StandardOpenOption.CREATE,
                                      StandardOpenOption.WRITE,
                                      StandardOpenOption.READ);
-    
+
     /*
     try (WriteStream os = _path.openWrite()) {
     }
-    
+
     */
     setFileSize(_path.getLength());
-    
+
     initImpl();
   }
 
@@ -197,24 +197,24 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       setFileSize(os.getLength());
     }
     */
-    
+
     initImpl();
   }
-  
+
   private void initImpl()
     throws IOException
   {
     long fileSize = getFileSize();
-    
+
     long highBit = Long.highestOneBit(fileSize);
-    
+
     int chunkSize = (int) Math.min(highBit >> 3, 0x10000000);
     chunkSize = Math.max(chunkSize, FILE_SIZE_INCREMENT);
-    
+
     _mmapChunkSize = chunkSize;
-    
+
     long offset = 0;
-    
+
     while (offset < fileSize) {
       // long size = Math.min(_mmapChunkSize, fileSize - offset);
 
@@ -238,15 +238,15 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     if (_isClosed.get()) {
       throw new IllegalStateException(L.l("{0} is closed.", this));
     }
-    
+
     if (_fileSize < address + size) {
       throw new IllegalStateException(L.l("Open read of large file {0}:{1}",
                                           Long.toHexString(address), size));
     }
-    
+
     try {
       streamOpen(address, size);
-      
+
       return openReadImpl(address, size);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -262,19 +262,19 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     if (_isClosed.get()) {
       throw new IllegalStateException(L.l("{0} is closed.", this));
     }
-    
+
     if (size <= 0) {
       throw new IllegalArgumentException(L.l("Invalid size: {0}", size));
     }
-    
+
     if (address < 0) {
-      throw new IllegalArgumentException(L.l("Invalid address: {0}", 
+      throw new IllegalArgumentException(L.l("Invalid address: {0}",
                                              Long.toHexString(address)));
     }
 
     try {
       streamOpen(address, size);
-      
+
       return openWriteImpl(address, size);
     } catch (IOException e) {
       throw new RuntimeException(e);
@@ -285,15 +285,15 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
   {
     return new InStoreFacade(address, size);
   }
-  
+
   private InStoreImpl allocateRead()
   {
     InStoreImpl inStore = _freeInStore.allocate();
-    
+
     if (inStore != null && inStore.getSequence() == _storeSequence.get()) {
       return inStore;
     }
-    
+
     return new InStoreImpl();
   }
 
@@ -301,18 +301,18 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
   {
     return new OutStoreFacade(address, size);
   }
-  
+
   private OutStoreMmapNio allocateWrite()
   {
     OutStoreMmapNio outStore = _freeOutStore.allocate();
-    
+
     if (outStore != null && outStore.getSequence() == _storeSequence.get()) {
       return outStore;
     }
-    
+
     return new OutStoreMmapNio();
   }
-  
+
   private MmapFile streamOpen(long address, int size)
     throws IOException
   {
@@ -321,94 +321,94 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     }
 
     int chunkIndex = (int) ((address + size - 1) / _mmapChunkSize);
-    
+
     if (chunkIndex < 0) {
       throw new IllegalStateException(L.l("Invalid stream address: 0x{0} size: 0x{1} chunk: {2}",
                                           Long.toHexString(address),
                                           Long.toHexString(size),
                                           chunkIndex));
     }
-    
+
     synchronized (_mmapFiles) {
       if (chunkIndex < _mmapFileChunks.length) {
         MmapFile mmapFile = _mmapFileChunks[chunkIndex];
-        
+
         /*
         if (address < mmapFile.getAddress()
             || mmapFile.getAddress() + mmapFile.getSize() < address + size) {
           throw new IllegalStateException(L.l("Invalid mmap chunk. Requested <0x{0},0x{1}>. Received <0x{2},0x{3}>",
                                               Long.toHexString(address), Long.toHexString(size),
-                                              Long.toHexString(mmapFile.getAddress()), 
+                                              Long.toHexString(mmapFile.getAddress()),
                                               Long.toHexString(mmapFile.getSize())));
         }
         */
-        
+
         return mmapFile;
       }
-      
+
       long reqSize = Math.max(address + size, _path.getLength());
       long fileSize = extendFileSize(_fileSize, reqSize);
-      
+
       setFileSize(fileSize);
-      
+
       if (fileSize % _mmapChunkSize != 0) {
         throw new IllegalStateException(L.l("file size 0x{0} must be an increment of the chunk size 0x{1}",
                                             Long.toHexString(fileSize),
                                             Long.toHexString(_mmapChunkSize)));
       }
-      
+
       long tailAddress = _mmapFileChunks.length * _mmapChunkSize;
-      
+
       MmapFile mmapFile = null;
 
       while (tailAddress < fileSize) {
         long delta = Math.min(fileSize - tailAddress, Integer.MAX_VALUE / 2);
-        
+
         delta -= delta % _mmapChunkSize;
-      
+
         mmapFile = new MmapFile(_channel, tailAddress, (int) delta);
-      
+
         appendMmapFile(mmapFile);
-        
+
         tailAddress += delta;
       }
-      
+
       _storeSequence.incrementAndGet();
-      
+
       if (mmapFile.getAddress() + mmapFile.getSize() < address + size) {
         throw new IllegalStateException(L.l("Invalid mmap chunk. Requested <0x{0},0x{1}>. Received <0x{2},0x{3}>",
                                             Long.toHexString(address),
                                             Long.toHexString(size),
-                                            Long.toHexString(mmapFile.getAddress()), 
+                                            Long.toHexString(mmapFile.getAddress()),
                                             Long.toHexString(mmapFile.getSize())));
       }
 
       return mmapFile;
     }
   }
-  
+
   private void appendMmapFile(MmapFile mmapFile)
   {
     _mmapFiles.add(mmapFile);
-    
+
     long tail = mmapFile.getAddress() + mmapFile.getSize();
     int index = (int) (mmapFile.getAddress() / _mmapChunkSize);
-    
+
     if (index != _mmapFileChunks.length) {
       throw new IllegalStateException();
     }
-    
+
     MmapFile []newMmapChunks;
     newMmapChunks = new MmapFile[(int) (tail / _mmapChunkSize)];
-    
+
     System.arraycopy(_mmapFileChunks, 0, newMmapChunks, 0, index);
-    
+
     for (int i = index; i < newMmapChunks.length; i++) {
       newMmapChunks[i] = mmapFile;
     }
-   
+
     _mmapFileChunks = newMmapChunks;
-    
+
     for (int i = 1; i < newMmapChunks.length; i++) {
       MmapFile ptr = newMmapChunks[i];
       MmapFile prev = newMmapChunks[i - 1];
@@ -421,44 +421,44 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       }
     }
   }
-  
+
   private long extendFileSize(long oldFileSize, long reqFileSize)
   {
     long newFileSize;
-    
+
     if (reqFileSize <= oldFileSize) {
       newFileSize = oldFileSize;
     }
     else {
       newFileSize = 5 * oldFileSize / 4 + FILE_SIZE_INCREMENT;
     }
-    
+
     long index = Long.highestOneBit(newFileSize);
     long mask = ~(index - 1) >> 3;
 
     newFileSize = Math.max(newFileSize & mask, reqFileSize);
-    
+
     long chunkSize = _mmapChunkSize;
-    
+
     long mod = newFileSize % chunkSize;
     newFileSize -= mod;
-    
+
     if (newFileSize < reqFileSize) {
       newFileSize += chunkSize;
     }
-    
+
     return newFileSize;
   }
-  
+
   @Override
   public void fsync()
   {
     /*
     long sequence = _fsyncService.allocateFsyncSequence();
-          
+
     _fsyncService.fsync(sequence, null, Result.ignore());
     */
-    
+
     for (MmapFile mmapFile : _mmapFiles) {
       mmapFile.fsyncImpl();
     }
@@ -470,12 +470,12 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     if (_isClosed.getAndSet(true)) {
       return;
     }
-    
+
     fsync();
-    
+
     FileChannel channel = _channel;
     _channel = null;
-    
+
     if (channel != null) {
       try {
         channel.close();
@@ -490,7 +490,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
   {
     return getClass().getSimpleName() + "[" + _path + "]";
   }
-  
+
   /*
   private class FsyncImpl implements StoreFsync<MmapFile> {
     @Override
@@ -506,8 +506,8 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         result.complete(Boolean.TRUE);
       }
     }
-    
-    
+
+
     @Override
     public void fsync()
     {
@@ -517,14 +517,14 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     }
   }
   */
-  
+
   private class MmapFile
   {
     private MappedByteBuffer _mmap;
-    
+
     private final long _address;
     private final int _size;
-    
+
     //private final ArrayList<Result<Boolean>> _resultList = new ArrayList<>();
     private final AtomicBoolean _isDirty = new AtomicBoolean();
 
@@ -534,7 +534,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       throws IOException
     {
       _mmap = channel.map(MapMode.READ_WRITE, address, size);
-      
+
       _address = address;
       _size = size;
     }
@@ -550,12 +550,12 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       return _address;
     }
-    
+
     public long getSize()
     {
       return _size;
     }
-    
+
     MappedByteBuffer getByteBuffer()
     {
       return _mmap;
@@ -575,9 +575,9 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         if (mmap != null && _isDirty.compareAndSet(true, false)) {
           ArrayList<Result<Boolean>> resultList = new ArrayList<>(_resultList);
           _resultList.clear();
-          
+
           mmap.force();
-          
+
           for (Result<Boolean> result : resultList) {
             try {
               result.complete(Boolean.TRUE);
@@ -589,7 +589,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         else {
           ArrayList<Result<Boolean>> resultList = new ArrayList<>(_resultList);
           _resultList.clear();
-          
+
           for (Result<Boolean> result : resultList) {
             try {
               result.complete(Boolean.TRUE);
@@ -603,7 +603,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       }
     }
     */
-    
+
     public void fsyncImpl()
     {
       MappedByteBuffer mmap = _mmap;
@@ -620,7 +620,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     public void close()
     {
       // fsyncImpl();
-      
+
       MappedByteBuffer mmap = _mmap;
       _mmap = null;
 
@@ -631,31 +631,31 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       } catch (Throwable e) {
         e.printStackTrace();
       }
-      
+
       try {
         _channel.force(true);
       } catch (Throwable e) {
         e.printStackTrace();
       }
     }
-    
+
     @Override
     public String toString()
     {
       return getClass().getSimpleName() + "[" + Long.toHexString(_fileSize) + "]";
     }
   }
-  
+
   class InStoreFacade implements InStore
   {
     private InStoreImpl _delegate;
     private long _address;
     private int _size;
-    
+
     InStoreFacade(long address, int size)
     {
       _delegate = allocateRead();
-      
+
       _address = address;
       _size = size;
     }
@@ -666,11 +666,11 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
       if (address < _address) {
         throw new IllegalStateException();
       }
-      
+
       if (_address + _size < offset + length) {
         throw new IllegalStateException();
       }
-      
+
       return _delegate.read(address, buffer, offset, length);
     }
 
@@ -685,38 +685,38 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       InStoreImpl delegate = _delegate;
       _delegate = null;
-      
+
       if (delegate != null && delegate.getSequence() == _storeSequence.get()) {
         _freeInStore.free(delegate);
       }
     }
-    
+
   }
 
   class InStoreImpl implements InStore
   {
     private final MmapFile []_mmapFile;
-    
+
     private final ByteBuffer []_mmap;
-    
+
     private final long _sequence;
 
     InStoreImpl()
     {
       _sequence = _storeSequence.get();
       _mmapFile = _mmapFileChunks;
-      
+
       int indexEnd = (int) ((getFileSize() - 1) / _mmapChunkSize);
-      
+
       _mmap = new ByteBuffer[indexEnd + 1];
-      
+
       ByteBuffer lastBuffer = null;
       for (int i = 0; i < _mmap.length; i++) {
         MmapFile mmapFile = _mmapFile[i];
-        
+
         if (lastBuffer != mmapFile.getByteBuffer()) {
           _mmap[i] = mmapFile.getByteBuffer().duplicate();
-          
+
           lastBuffer = mmapFile.getByteBuffer();
         }
         else {
@@ -724,7 +724,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         }
       }
     }
-    
+
     public long getSequence()
     {
       return _sequence;
@@ -735,29 +735,29 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       while (length > 0) {
         int mmapIndex = (int) (address / _mmapChunkSize);
-        
+
         ByteBuffer mmap = _mmap[mmapIndex];
-     
+
         synchronized (mmap) {
           MmapFile mmapFile = _mmapFile[mmapIndex];
           int mmapOffset = (int) (address - mmapFile.getAddress());
-        
+
           int sublen = (int) Math.min(length, mmapFile.getSize() - mmapOffset);
 
           mmap.limit(mmapOffset + sublen);
           mmap.position(mmapOffset);
-      
+
           mmap.get(buffer, offset, sublen);
-        
+
           offset += sublen;
           length -= sublen;
           address += sublen;
         }
       }
-      
+
       return true;
     }
-    
+
     @Override
     public InStore clone()
     {
@@ -769,26 +769,26 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       throw new IllegalStateException();
     }
-    
+
     public String toString()
     {
       return getClass().getSimpleName() + "[" + _path + "]";
     }
   }
-  
+
   class OutStoreFacade implements OutStore
   {
     private OutStoreMmapNio _outStore;
     private long _address;
     private int _size;
-    
+
     OutStoreFacade(long address, int size)
     {
       _outStore = allocateWrite();
       _address = address;
       _size = size;
     }
-    
+
     @Override
     public long getLength()
     {
@@ -804,13 +804,13 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
                                             OutStoreMmapNio.class.getSimpleName(),
                                             Long.toHexString(_address)));
       }
-      
+
       if (_address + _size < address + length) {
         throw new IllegalStateException(L.l("Tail 0x{0} greater than mmap tail 0x{1}",
                                             Long.toHexString(address + length),
                                             Long.toHexString(_address + _size)));
       }
-      
+
 
       return _outStore.write(address, buffer, offset, length);
     }
@@ -818,7 +818,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     @Override
     public OutStore clone()
     {
-      return new OutStoreFacade(_address, _size); 
+      return new OutStoreFacade(_address, _size);
     }
 
     @Override
@@ -826,22 +826,22 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       OutStoreMmapNio outStore = _outStore;
       _outStore = null;
-      
+
       if (outStore != null && outStore.getSequence() == _storeSequence.get()) {
         _freeOutStore.free(outStore);
       }
     }
-    
+
   }
 
   class OutStoreMmapNio implements OutStore
   {
     private final MmapFile []_mmapFile;
     private final ByteBuffer []_mmap;
-    
+
     private final ArrayList<MmapFile> _mmapFileList
       = new ArrayList<MmapFile>();
-    
+
     private final long _sequence;
     //private final AtomicReferenceArray<Boolean> _mmapDirty;
 
@@ -851,20 +851,20 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
 
       synchronized (_mmapFiles) {
         _mmapFile = _mmapFileChunks;
-      
+
         int indexEnd = (int) ((getFileSize() - 1) / _mmapChunkSize);
-      
+
         _mmap = new ByteBuffer[indexEnd + 1];
-      
+
         ByteBuffer lastBuffer = null;
-      
+
         for (int i = 0; i < _mmap.length; i++) {
           long address = i * _mmapChunkSize;
 
           for (int j = 0; j < _mmapFile.length; j++) {
             MmapFile mmapFile = _mmapFile[j];
 
-            if (mmapFile.getAddress() <= address 
+            if (mmapFile.getAddress() <= address
                 && address < mmapFile.getAddress() + mmapFile.getSize()) {
               if (lastBuffer == mmapFile.getByteBuffer()) {
                 _mmap[i] = _mmap[i - 1];
@@ -886,7 +886,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
         }
       }
     }
-    
+
     public long getSequence()
     {
       return _sequence;
@@ -903,23 +903,23 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       while (length > 0) {
         int mmapIndex = (int) (address / _mmapChunkSize);
-        
+
         ByteBuffer mmap = _mmap[mmapIndex];
         Buffer mmapBuf = mmap;
-        
+
         synchronized (mmap) {
           MmapFile mmapFile = _mmapFile[mmapIndex];
           int mmapOffset = (int) (address - mmapFile.getAddress());
-          
+
           int sublen = (int) Math.min(length, mmapFile.getSize() - mmapOffset);
 
           mmapBuf.limit(mmapOffset + sublen);
           mmapBuf.position(mmapOffset);
 
           mmap.put(buffer, offset, sublen);
-        
+
           mmapFile.setDirty();
-        
+
           length -= sublen;
           offset += sublen;
           address += sublen;
@@ -934,7 +934,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     public void fsync()
     {
       long sequence = _fsyncService.allocateFsyncSequence();
-      
+
       _fsyncService.fsync(sequence, getLastMmap());
     }
 
@@ -942,7 +942,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     public void fsync(Result<Boolean> result)
     {
       long sequence = _fsyncService.allocateFsyncSequence();
-      
+
       _fsyncService.fsync(sequence, getLastMmap(), result);
     }
 
@@ -950,16 +950,16 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     public void fsyncSchedule(Result<Boolean> result)
     {
       long sequence = _fsyncService.allocateFsyncSequence();
-      
+
       _fsyncService.scheduleFsync(sequence, getLastMmap(), result);
     }
     */
-    
+
     private MmapFile getLastMmap()
     {
       return _mmapFile[_mmap.length - 1];
     }
-    
+
     @Override
     public OutStore clone()
     {
@@ -971,7 +971,7 @@ public class StoreReadWriteMmapNio implements StoreReadWrite
     {
       throw new IllegalStateException();
     }
-    
+
     public String toString()
     {
       return getClass().getSimpleName() + "[" + _path + "]";

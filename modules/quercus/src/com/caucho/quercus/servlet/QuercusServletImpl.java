@@ -92,8 +92,11 @@ public class QuercusServletImpl extends HttpServlet
 
     checkServletAPIVersion();
 
-    Path pwd = new FilePath(_servletContext.getRealPath("/"));
-    Path webInfDir = new FilePath(_servletContext.getRealPath("/WEB-INF"));
+    //Path pwd = new FilePath(_servletContext.getRealPath("/"));
+    //Path webInfDir = new FilePath(_servletContext.getRealPath("/WEB-INF"));
+
+    Path pwd = Vfs.lookup();
+    Path webInfDir = pwd.lookup(_servletContext.getRealPath("/WEB-INF"));
 
     getQuercus().setPwd(pwd);
     getQuercus().setWebInfDir(webInfDir);

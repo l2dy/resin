@@ -76,7 +76,7 @@ public class HessianSkeleton extends AbstractSkeleton {
     = Logger.getLogger(HessianSkeleton.class.getName());
 
   private boolean _isDebug;
-  
+
   private HessianInputFactory _inputFactory = new HessianInputFactory();
   private HessianFactory _hessianFactory = new HessianFactory();
 
@@ -88,9 +88,24 @@ public class HessianSkeleton extends AbstractSkeleton {
    * @param service the underlying service object.
    * @param apiClass the API interface
    */
-  public HessianSkeleton(Object service, Class<?> apiClass)
+  public HessianSkeleton(Object service,
+                         Class<?> apiClass)
   {
-    super(apiClass);
+    this(service, apiClass, null);
+  }
+
+  /**
+   * Create a new hessian skeleton.
+   *
+   * @param service the underlying service object.
+   * @param apiClass the API interface
+   * @param limitClasses classes to limit the introspection
+   */
+  public HessianSkeleton(Object service,
+                         Class<?> apiClass,
+                         Class []limitClasses)
+  {
+    super(apiClass, limitClasses);
 
     if (service == null)
       service = this;
@@ -112,6 +127,18 @@ public class HessianSkeleton extends AbstractSkeleton {
     super(apiClass);
   }
 
+  /**
+   * Create a new hessian skeleton.
+   *
+   * @param service the underlying service object.
+   * @param apiClass the API interface
+   * @param limitClasses classes to limit the introspection
+   */
+  public HessianSkeleton(Class<?> apiClass, Class []limitClasses)
+  {
+    super(apiClass, limitClasses);
+  }
+
   public void setDebug(boolean isDebug)
   {
     _isDebug = isDebug;
@@ -121,7 +148,7 @@ public class HessianSkeleton extends AbstractSkeleton {
   {
     return _isDebug;
   }
-  
+
   public void setHessianFactory(HessianFactory factory)
   {
     _hessianFactory = factory;
@@ -307,8 +334,8 @@ public class HessianSkeleton extends AbstractSkeleton {
 
       log.log(Level.FINE, this + " " + e1.toString(), e1);
 
-      out.writeFault("ServiceException", 
-                     escapeMessage(e1.getMessage()), 
+      out.writeFault("ServiceException",
+                     escapeMessage(e1.getMessage()),
                      e1);
       out.close();
       return;
@@ -322,18 +349,18 @@ public class HessianSkeleton extends AbstractSkeleton {
 
     out.close();
   }
-  
+
   private String escapeMessage(String msg)
   {
     if (msg == null)
       return null;
-    
+
     StringBuilder sb = new StringBuilder();
-    
+
     int length = msg.length();
     for (int i = 0; i < length; i++) {
       char ch = msg.charAt(i);
-      
+
       switch (ch) {
       case '<':
         sb.append("&lt;");
@@ -352,7 +379,7 @@ public class HessianSkeleton extends AbstractSkeleton {
         break;
       }
     }
-    
+
     return sb.toString();
   }
 
@@ -361,7 +388,7 @@ public class HessianSkeleton extends AbstractSkeleton {
     return (log.isLoggable(Level.FINEST)
             || isDebug() && log.isLoggable(Level.FINE));
   }
-  
+
   /**
    * Creates the PrintWriter for debug output. The default is to
    * write to java.util.Logging.

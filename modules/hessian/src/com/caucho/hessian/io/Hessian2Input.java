@@ -178,11 +178,32 @@ public class Hessian2Input
     return factory;
   }
   
+  /**
+   * Sets class whitelist mode
+   */
+  public void setWhitelist(boolean isWhitelist)
+  {
+    getSerializerFactory().setWhitelist(isWhitelist);
+  }
+  
+  /**
+   * Allow a class pattern
+   */
   public void allow(String pattern)
   {
     ClassFactory factory = getSerializerFactory().getClassFactory();
     
     factory.allow(pattern);
+  }
+  
+  /**
+   * Deny a specified class
+   */
+  public void deny(String pattern)
+  {
+    ClassFactory factory = getSerializerFactory().getClassFactory();
+    
+    factory.deny(pattern);
   }
 
   public void setCloseStreamOnClose(boolean isClose)

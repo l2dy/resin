@@ -86,6 +86,8 @@ public class TldManager {
   private JspParseException _loadAllTldException;
   private String _tldDir;
   private FileSetType _tldFileSet;
+  private FileSetType _tldJarFileSet;
+  private FileSetType _jarFileSet;
 
   private boolean _isFastJsf = false; // ioc/0560
 
@@ -103,8 +105,10 @@ public class TldManager {
 
     if (app != null) {
       JspPropertyGroup jsp = app.getJsp();
-      if (jsp != null)
+      if (jsp != null) {
         _tldFileSet = jsp.getTldFileSet();
+        _tldJarFileSet = jsp.getTldJarFileSet();
+      }
     }
 
     // JSF has a global listener hidden in one of the *.tld which
@@ -118,9 +122,9 @@ public class TldManager {
   {
 
     TldManager manager = null;
-    
+
     ClassLoader loader;
-    
+
     if (webApp != null)
       loader = webApp.getClassLoader();
     else
@@ -160,6 +164,16 @@ public class TldManager {
   public void setTldFileSet(FileSetType tldFileSet)
   {
     _tldFileSet = tldFileSet;
+  }
+
+  public void setTldJarFileSet(FileSetType jarFileSet)
+  {
+    _tldJarFileSet = jarFileSet;
+  }
+
+  public void setJarFileSet(FileSetType jarFileSet)
+  {
+    _jarFileSet = jarFileSet;
   }
 
   /**
@@ -204,7 +218,7 @@ public class TldManager {
     taglibs.addAll(_globalTaglibs);
 
     ArrayList<Path> paths = getClassPath();
-    
+
     for (int i = 0; i < paths.size(); i++) {
       Path subPath = paths.get(i);
 
@@ -217,12 +231,15 @@ public class TldManager {
       if (pathName.indexOf("/jre/lib/") >= 0) {
         continue;
       }
-      
+
       if (subPath instanceof JarPath) {
         loadJarTlds(taglibs, ((JarPath) subPath).getContainer(), "");
       }
       else if (subPath.getPath().endsWith(".jar")) {
-        loadJarTlds(taglibs, subPath, "");
+        if (_tldJarFileSet == null
+            || _tldJarFileSet.isMatchSuffix(subPath.getTail())) {
+          loadJarTlds(taglibs, subPath, "");
+        }
       }
       else {
         loadAllTlds(taglibs, subPath.lookup("META-INF"), 64, "META-INF");
@@ -420,7 +437,7 @@ public class TldManager {
       return;
 
     JarPath jar = JarPath.create(jarBacking);
-    
+
     ArrayList<Path> tldPaths = new ArrayList<Path>();
 
     boolean isValidScan = false;
@@ -448,7 +465,7 @@ public class TldManager {
 
     if (! isValidScan) {
       ZipFile zipFile = jar.getJar().getZipFile();
-      
+
       try {
         Enumeration<? extends ZipEntry> en = zipFile.entries();
         while (en.hasMoreElements()) {
@@ -844,7 +861,7 @@ public class TldManager {
   private ArrayList<Path> getClassPath(ClassLoader loader)
   {
     String classpath = null;
-    
+
     loader = Environment.getDynamicClassLoader(loader);
 
     if (loader instanceof DynamicClassLoader) {
@@ -853,7 +870,7 @@ public class TldManager {
     else {
       classpath = CauchoSystem.getClassPath();
     }
-    
+
     return getClassPath(classpath);
   }
 

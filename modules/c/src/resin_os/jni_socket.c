@@ -159,7 +159,7 @@ resin_tcp_cork(connection_t *conn)
   int result;
 
   if (! conn->tcp_cork || conn->is_cork) {
-    return;
+    return 0;
   }
 
   conn->is_cork = 1;
@@ -182,7 +182,7 @@ resin_tcp_uncork(connection_t *conn)
   int result;
 
   if (! conn->tcp_cork || ! conn->is_cork) {
-    return;
+    return 0;
   }
 
   conn->is_cork = 0;

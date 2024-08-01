@@ -70,6 +70,8 @@ public class XmlParser extends AbstractParser {
   static final QName JSP_NAME = new QName(null, "#jsp", null);
   static final QName WHITESPACE_NAME = new QName(null, "#whitespace", null);
   static final QName JSP_ATTRIBUTE_NAME = new QName("xtp", "jsp-attribute", null);
+  static int MAXLEN = 64 * 1024;
+
   
   QAttributes _attributes;
   QAttributes _nullAttributes;
@@ -966,7 +968,8 @@ public class XmlParser extends AbstractParser {
     if (! XmlChar.isNameChar(ch))
       throw error(L.l("expected name at {0}", badChar(ch)));
 
-    for (; XmlChar.isNameChar(ch); ch = _reader.read())
+    int len = 0;
+    for (; XmlChar.isNameChar(ch) && len++ < MAXLEN; ch = _reader.read())
       name.append((char) ch);
 
     return ch;
@@ -1289,8 +1292,10 @@ public class XmlParser extends AbstractParser {
     else
       end = 0;
 
+    int len = 0;
     while (ch != -1 && (end != 0 && ch != end ||
-                        end == 0 && isAttributeChar(ch))) {
+                        end == 0 && isAttributeChar(ch))
+	   && len++ < MAXLEN) {
       if (end == 0 && ch == '/') {
         ch = _reader.read();
         if (! isWhitespace(ch) && ch != '>') {
@@ -1436,7 +1441,8 @@ public class XmlParser extends AbstractParser {
     if (ch == '\n')
       ch = _reader.read();
 
-    for (; ch != -1; ch = _reader.read()) {
+    int len = 0;
+    for (; ch != -1 && len++ < MAXLEN; ch = _reader.read()) {
       addText((char) ch);
 
       if (_text.endsWith(tail)) {
@@ -1679,7 +1685,8 @@ public class XmlParser extends AbstractParser {
     ch = skipWhitespace(ch);
 
     _text.clear();
-    while (ch != -1) {
+    int len = 0;
+    while (ch != -1 && len++ < MAXLEN) {
       if (ch == '?') {
         if ((ch = _reader.read()) == '>')
           break;
@@ -1722,8 +1729,9 @@ public class XmlParser extends AbstractParser {
     if (! _skipComments)
       _buf.clear();
 
+    int len = 0;
   comment:
-    while (ch != -1) {
+    while (ch != -1 && len < MAXLEN) {
       if (ch == '-') {
         ch = _reader.read();
 

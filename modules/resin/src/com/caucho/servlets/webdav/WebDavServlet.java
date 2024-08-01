@@ -242,6 +242,10 @@ public class WebDavServlet extends GenericServlet {
     HttpServletRequest req = (HttpServletRequest) request;
     HttpServletResponse res = (HttpServletResponse) response;
 
+    if (true) {
+	throw new IllegalStateException("WebDav has been removed");
+    }
+
     if (! _enable) {
       res.sendError(res.SC_FORBIDDEN);
       return;

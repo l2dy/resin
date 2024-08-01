@@ -733,13 +733,20 @@ public class HttpRequest extends AbstractHttpRequest
     }
 
     long contentLength = getLongContentLength();
+    String transferEncoding = getHeader("Transfer-Encoding");
     boolean isTransferEncoding = (HTTP_1_1 <= getVersion()
-                                  && getHeader("Transfer-Encoding") != null);
+                                  && transferEncoding != null
+				  && transferEncoding.equalsIgnoreCase("chunked"));
 
     // #6365
     if (isTransferEncoding) {
       _chunkedInputStream.init(rawRead);
       readStream.init(_chunkedInputStream, null);
+      
+      if (contentLength >= 0) {
+        throw new com.caucho.server.dispatch.BadRequestException("content-length and chunked can't both be specified");
+      }
+      
       return true;
     }
     // Otherwise use content-length

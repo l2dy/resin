@@ -6,8 +6,26 @@
 
 <s1 title="Resin Change Log">
 
-<s2 title="4.0.66 - in progress">
+<s2 title="4.0.67 - in progress">
 <ul>
+<li>security: OpenSSL 3.0 support</li>
+<li>security: add LruCache for mime encoding (rep by Harry)</li>
+<li>security: add length validation for multipart form parsing (rep by liu xuyu)</li>
+<li>security: disable webdav (rep by liuxuyu)</li>
+<li>memcached: throw illegal request for long methods</li>
+<li>http: throw illegal request for content-length and chunked</li>
+<li>hessian: add limit classes to AbstractSkeleton and HessianServlet</li>
+<li>rewrite: ForwardAbsoluteFilterChain root webapp (#6470, rep by M. Lowe)</li>
+<li>websocket: error checking for sec-websocket-key (#6460, rep by knut_forkalsrud)</li>
+<li>http: content-encoding parsing for http input (#6479, rep by shampster)</li>
+<li>dbpool: when poolitem is unexpectedly closed, return null instead of NPE (#6469, rep by M. Shimomura)</li>
+</ul>
+</s2>
+
+
+<s2 title="4.0.66 - Dec 8, 2021">
+<ul>
+<li>security: windows-specific URL file visibility issue.</li>
 <li>ssl: add certificate-chain-file to sni-host (#6434, rep by Brygid)</li>
 <li>misc: synchronize ScriptStackTrace (#6435, rep by M. Secrett)</li>
 <li>config: add config for watchdog-jvm_args</li>

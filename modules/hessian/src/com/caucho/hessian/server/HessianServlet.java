@@ -69,10 +69,11 @@ import com.caucho.hessian.io.Hessian2Input;
 import com.caucho.hessian.io.SerializerFactory;
 import com.caucho.services.server.Service;
 import com.caucho.services.server.ServiceContext;
+import com.caucho.services.server.AbstractSkeleton;
 
 /**
  * Servlet for serving Hessian services.
- * 
+ *
  * Applications can use ServletContext inside a Hessian service to get
  * ServletRequest, ServletResponse and session information.
  */
@@ -80,10 +81,17 @@ import com.caucho.services.server.ServiceContext;
 public class HessianServlet extends HttpServlet {
   private Class<?> _homeAPI;
   private Object _homeImpl;
-  
+
   private Class<?> _objectAPI;
   private Object _objectImpl;
-  
+
+  private Class []_limitClasses = {
+    HessianServlet.class,
+    HttpServlet.class,
+    HessianSkeleton.class,
+    AbstractSkeleton.class,
+  };
+
   private HessianSkeleton _homeSkeleton;
   private HessianSkeleton _objectSkeleton;
 
@@ -155,6 +163,14 @@ public class HessianServlet extends HttpServlet {
   }
 
   /**
+   * Sets the limit classes
+   */
+  public void setLimitClasses(Class []limitClasses)
+  {
+    _limitClasses = limitClasses;
+  }
+
+  /**
    * Sets the serializer factory.
    */
   public void setSerializerFactory(SerializerFactory factory)
@@ -180,7 +196,7 @@ public class HessianServlet extends HttpServlet {
   {
     getSerializerFactory().setSendCollectionType(sendType);
   }
-  
+
   /**
    * Sets whitelist mode for the deserializer
    */
@@ -188,17 +204,17 @@ public class HessianServlet extends HttpServlet {
   {
     getSerializerFactory().getClassFactory().setWhitelist(isWhitelist);
   }
-  
+
   /**
    * Adds an allow rule to the deserializer
-   * 
+   *
    * Examples: "java.util.*", "com.foo.io.Bean"
    */
   public void allow(String pattern)
   {
     getSerializerFactory().getClassFactory().allow(pattern);
   }
-  
+
   /**
    * Adds a deny rule to the deserializer
    */
@@ -229,7 +245,7 @@ public class HessianServlet extends HttpServlet {
     throws ServletException
   {
     super.init(config);
-    
+
     try {
       if (_homeImpl != null) {
       }
@@ -275,10 +291,10 @@ public class HessianServlet extends HttpServlet {
 
         if (_homeAPI == null)
           _homeAPI = _homeImpl.getClass();
-        
+
         _homeAPI = _homeImpl.getClass();
       }
-      
+
       if (_objectImpl != null) {
       }
       else if (getInitParameter("object-class") != null) {
@@ -301,13 +317,13 @@ public class HessianServlet extends HttpServlet {
       else if (_objectImpl != null)
         _objectAPI = _objectImpl.getClass();
 
-      _homeSkeleton = new HessianSkeleton(_homeImpl, _homeAPI);
-      
+      _homeSkeleton = new HessianSkeleton(_homeImpl, _homeAPI, _limitClasses);
+
       if (_objectAPI != null)
         _homeSkeleton.setObjectClass(_objectAPI);
 
       if (_objectImpl != null) {
-        _objectSkeleton = new HessianSkeleton(_objectImpl, _objectAPI);
+        _objectSkeleton = new HessianSkeleton(_objectImpl, _objectAPI, _limitClasses);
         _objectSkeleton.setHomeClass(_homeAPI);
       }
       else
@@ -329,11 +345,11 @@ public class HessianServlet extends HttpServlet {
   {
     // hessian/34d0
     return null;
-    
+
     /*
     if (implClass == null || implClass.equals(GenericService.class))
       return null;
-    
+
     Class []interfaces = implClass.getInterfaces();
 
     if (interfaces.length == 1)
@@ -347,7 +363,7 @@ public class HessianServlet extends HttpServlet {
     throws ClassNotFoundException
   {
     ClassLoader loader = getContextClassLoader();
-    
+
     if (loader != null)
       return Class.forName(className, false, loader);
     else
@@ -369,7 +385,7 @@ public class HessianServlet extends HttpServlet {
     else if (service instanceof Servlet)
       ((Servlet) service).init(getServletConfig());
   }
-  
+
   /**
    * Execute a request.  The path-info of the request selects the bean.
    * Once the bean's selected, it will be applied.
@@ -386,7 +402,7 @@ public class HessianServlet extends HttpServlet {
 
       res.setContentType("text/html");
       out.println("<h1>Hessian Requires POST</h1>");
-      
+
       return;
     }
 
@@ -416,7 +432,7 @@ public class HessianServlet extends HttpServlet {
       ServiceContext.end();
     }
   }
-  
+
   protected void invoke(InputStream is, OutputStream os,
                         String objectId,
                         SerializerFactory serializerFactory)
